@@ -750,10 +750,14 @@ fixture contract must not remain reachable as an alternate execution path.
      failures. Remove embedded-runtime path-to-Pumas fallback resolution such as
      resolving `request.model_path` through Pumas when explicit Pumas identity
      is absent; an absent/invalid Pumas model ref is a typed dependency
-     planning failure, not a path lookup opportunity. Update embedded-runtime
-     README compatibility language in the same gate that removes the exported
-     path-shaped dependency contract so documentation describes the retired
-     path facade as removed rather than preserved.
+     planning failure, not a path lookup opportunity. Retired graph-facing or
+     node-engine path systems must be removed entirely when their canonical
+     replacement lands; do not keep dormant compatibility ports, conversion
+     helpers, facade DTOs, or tests that prove the old path contract still
+     works. Update embedded-runtime README compatibility language in the same
+     gate that removes the exported path-shaped dependency contract so
+     documentation describes the retired path facade as removed rather than
+     preserved.
    - Staging:
      1. Contract-owner gate: add the neutral dependency-planning contract owner
         with README traceability, public serde fixture tests, typed error/
@@ -781,9 +785,18 @@ fixture contract must not remain reachable as an alternate execution path.
         `PumasModelRef`, task id/task type, expected artifact kind when known,
         selected dependency binding ids, optional dependency requirements id,
         selected scheduler/runtime/device facts when those have already been
-        decided, and bounded diagnostics. Add serde fixtures and validation
-        tests proving path-shaped identity is rejected or absent. Do not add a
-        compatibility alias from the successor back to `ModelRefV2`.
+        decided, and bounded diagnostics. This successor is distinct from
+        `DependencyPlanningResult`: host/planner results may contain
+        `PumasArtifactLoadTarget` for backend handoff after planning, but
+        node-engine preflight identity must not receive or re-export that load
+        target. Add a shared typed dependency-planning identity/correlation key
+        in this gate or before the first migration that needs it; the key is
+        built from Pumas model ref, selected artifact identity/kind when known,
+        task facts, runtime/device intent or selection, platform context, and
+        selected dependency bindings, never from local load paths. Add serde
+        fixtures and validation tests proving path-shaped identity is rejected
+        or absent. Do not add a compatibility alias from the successor back to
+        `ModelRefV2`.
      3. Node-engine adapter gate: migrate node-engine request construction to
         build the shared typed request synchronously from graph inputs and to
         return/forward the path-free preflight successor. Decode and validate
@@ -793,7 +806,10 @@ fixture contract must not remain reachable as an alternate execution path.
         through internal dependency-planning APIs when a domain type can encode
         the invariant. Production preflight must not convert
         `DependencyPlanningRequest` back into `ModelDependencyRequest` and must
-        not repair `ModelRefV2.model_path`.
+        not repair `ModelRefV2.model_path`. Replace the canonical preflight use
+        of helpers that insert or repair `model_path` from graph inputs, such
+        as `build_model_ref_v2` and `inputs_with_model_path_from_ref`, instead
+        of wrapping them behind the new request.
      4. Host resolver gate: migrate the resolver trait/adapter boundary to
         consume the shared typed request and return typed planning results/
         diagnostics. The trait may remain async because host/planner
@@ -811,28 +827,41 @@ fixture contract must not remain reachable as an alternate execution path.
         intent, platform context, task kind, and selected dependency bindings,
         never by local load path. Include the frontend dependency-environment
         activity event type and matcher in this gate so backend events and UI
-        correlation use the same typed identity key.
+        correlation use the same typed identity key. Split embedded-runtime
+        dependency identity descriptors from selected backend/worker load-target
+        handoff descriptors so cache/activity/environment identity cannot
+        accidentally reuse executable paths.
      7. Update frontend dependency-environment source discovery, action DTOs,
         auto-run gating, display/status copy, and node tests so the UI discovers
         and submits `pumas_model_ref` plus task/scheduler intent instead of
         `modelPath`/`model_path`. This is a replacement of the path-shaped UI
-        contract, not an alias or compatibility layer.
+        contract, not an alias or compatibility layer. Update frontend mocks,
+        mock workflow backends, saved workflow fixtures, and dependency
+        environment tests in the same gate so test scaffolding does not preserve
+        the retired contract.
      8. Update Puma-Lib execution and dependency-input assembly so canonical
         inference graphs propagate `pumas_model_ref`, task facts, selected
         binding ids, and scheduler intent only. Remove stale path rebinding and
         path-shaped `pumas_model_ref` aliases instead of keeping compatibility
-        shims.
+        shims. Processing nodes or source nodes whose only remaining purpose is
+        graph-facing `model_path` inference identity must be removed entirely or
+        replaced with typed Pumas-ref ports in this migration; do not leave
+        retired path nodes registered as dormant compatibility surfaces.
      9. Update node-engine preflight callers/tests to use the typed
         model-reference request and remove all successful `model_path` preflight
         cases from canonical `llm-inference`.
-     10. Remove the old path-shaped `ModelDependencyRequest` fields or confine
-        any remaining executable paths to backend/worker-local plan handoff
-        types that are not graph/node-engine dependency identity.
+     10. Remove the old path-shaped `ModelDependencyRequest` fields from
+        graph/node-engine dependency identity. Any remaining executable path
+        must move into an explicitly named backend/worker-local plan handoff
+        type produced after scheduler/Pumas planning, not remain as a field on
+        the old request.
      11. Classify every remaining `model_path` use before removal as either
          graph/dependency identity, which must be replaced, or selected
          backend/worker executable load-target handoff, which may remain only
          after scheduler/Pumas planning and must not flow back into graph,
-         cache, activity, or dependency identity.
+         cache, activity, or dependency identity. Retired graph/dependency
+         identity uses are deletion work after the replacement exists, not a
+         long-term compatibility tier.
    - Acceptance: node-engine dependency-preflight tests prove a graph with only
      `pumas_model_ref` and task intent can request dependency planning without
      local path knowledge; stale or unresolved Pumas state fails with typed
@@ -856,6 +885,11 @@ fixture contract must not remain reachable as an alternate execution path.
      Negative acceptance must prove missing/stale/invalid/unavailable Pumas
      state returns the typed dependency-planning diagnostic through the existing
      owned diagnostic channel without adding a parallel diagnostics system.
+     Contract tests prove the path-free preflight successor is not
+     `DependencyPlanningResult`, does not contain `PumasArtifactLoadTarget`, and
+     cannot be converted back into `ModelRefV2`. Frontend and mock-backend tests
+     prove no successful dependency-environment action or activity matcher is
+     keyed by `modelPath`/`model_path`.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
