@@ -797,7 +797,36 @@ fixture contract must not remain reachable as an alternate execution path.
         fixtures and validation tests proving path-shaped identity is rejected
         or absent. Do not add a compatibility alias from the successor back to
         `ModelRefV2`.
-     3. Node-engine adapter gate: migrate node-engine request construction to
+     3. Dependency-environment typed contract gate: before production
+        node-engine preflight migration, add the typed dependency-environment
+        resolve/check/install contracts that replace the remaining
+        `ModelDependencyRequest` check/install use cases. These contracts must
+        reuse `DependencyPlanningIdentityKey`, `DependencyPlanningRequest`,
+        typed dependency override patches, selected binding ids, platform
+        context, and typed diagnostics. They must not carry `model_path`,
+        `modelPath`, `entry_path`, `selected_artifact_path`, local load paths,
+        raw platform JSON, raw mode strings, or path-shaped Pumas aliases as
+        request identity. The environment contracts may report environment
+        readiness, install status, manifest ids, environment refs, and bounded
+        activity facts, but executable Pumas load targets remain host/planner
+        handoff facts and must not become graph/frontend identity. Add serde
+        fixtures and validation tests for resolve, check, install, unavailable,
+        invalid, and path-field rejection states. This gate is option 3 from
+        the node-engine re-plan: dependency-environment and canonical inference
+        preflight receive a complete typed replacement before any production
+        resolver migration, so the old path-shaped resolver does not survive as
+        a temporary canonical branch.
+     4. Resolver boundary replacement gate: replace the old
+        `ModelDependencyResolver` methods that consume `ModelDependencyRequest`
+        and return `ModelRefV2` with typed operations for dependency planning
+        and dependency-environment resolve/check/install. The canonical
+        inference-preflight operation consumes `DependencyPlanningRequest` and
+        returns `DependencyPreflightModelRef` plus typed diagnostics. The
+        dependency-environment operations consume the typed environment request
+        contracts from the previous gate and return typed environment
+        readiness/install results. Do not keep a conversion path from the new
+        request contracts back into `ModelDependencyRequest`.
+     5. Node-engine adapter gate: migrate node-engine request construction to
         build the shared typed request synchronously from graph inputs and to
         return/forward the path-free preflight successor. Decode and validate
         raw JSON graph/input payloads once at the boundary, then pass validated
@@ -810,18 +839,18 @@ fixture contract must not remain reachable as an alternate execution path.
         of helpers that insert or repair `model_path` from graph inputs, such
         as `build_model_ref_v2` and `inputs_with_model_path_from_ref`, instead
         of wrapping them behind the new request.
-     4. Host resolver gate: migrate the resolver trait/adapter boundary to
+     6. Host resolver gate: migrate the resolver trait/adapter boundary to
         consume the shared typed request and return typed planning results/
         diagnostics. The trait may remain async because host/planner
         implementations perform real Pumas/dependency I/O. This gate must keep
         Pumas artifact/load-target resolution in the host/planner side and must
         not add a node-engine path resolver.
-     5. Move Pumas artifact-load-target resolution into the host/planner
+     7. Move Pumas artifact-load-target resolution into the host/planner
         resolver implementation and return typed unavailable diagnostics for
         missing, stale, invalid, not-installed, or unsupported artifacts. Reuse
         the existing `PumasSelectorAccess::resolve_model_artifact_load_target`
         boundary rather than adding another Pumas lookup path.
-     6. Replace dependency descriptor cache keys, install locks, environment
+     8. Replace dependency descriptor cache keys, install locks, environment
         manifest identity, and dependency activity events so they key/correlate
         by Pumas model ref, selected artifact identity/kind, backend/runtime
         intent, platform context, task kind, and selected dependency bindings,
@@ -831,7 +860,7 @@ fixture contract must not remain reachable as an alternate execution path.
         dependency identity descriptors from selected backend/worker load-target
         handoff descriptors so cache/activity/environment identity cannot
         accidentally reuse executable paths.
-     7. Update frontend dependency-environment source discovery, action DTOs,
+     9. Update frontend dependency-environment source discovery, action DTOs,
         auto-run gating, display/status copy, and node tests so the UI discovers
         and submits `pumas_model_ref` plus task/scheduler intent instead of
         `modelPath`/`model_path`. This is a replacement of the path-shaped UI
@@ -839,7 +868,7 @@ fixture contract must not remain reachable as an alternate execution path.
         mock workflow backends, saved workflow fixtures, and dependency
         environment tests in the same gate so test scaffolding does not preserve
         the retired contract.
-     8. Update Puma-Lib execution and dependency-input assembly so canonical
+     10. Update Puma-Lib execution and dependency-input assembly so canonical
         inference graphs propagate `pumas_model_ref`, task facts, selected
         binding ids, and scheduler intent only. Remove stale path rebinding and
         path-shaped `pumas_model_ref` aliases instead of keeping compatibility
@@ -847,15 +876,15 @@ fixture contract must not remain reachable as an alternate execution path.
         graph-facing `model_path` inference identity must be removed entirely or
         replaced with typed Pumas-ref ports in this migration; do not leave
         retired path nodes registered as dormant compatibility surfaces.
-     9. Update node-engine preflight callers/tests to use the typed
+     11. Update node-engine preflight callers/tests to use the typed
         model-reference request and remove all successful `model_path` preflight
         cases from canonical `llm-inference`.
-     10. Remove the old path-shaped `ModelDependencyRequest` fields from
+     12. Remove the old path-shaped `ModelDependencyRequest` fields from
         graph/node-engine dependency identity. Any remaining executable path
         must move into an explicitly named backend/worker-local plan handoff
         type produced after scheduler/Pumas planning, not remain as a field on
         the old request.
-     11. Classify every remaining `model_path` use before removal as either
+     13. Classify every remaining `model_path` use before removal as either
          graph/dependency identity, which must be replaced, or selected
          backend/worker executable load-target handoff, which may remain only
          after scheduler/Pumas planning and must not flow back into graph,
@@ -919,14 +948,14 @@ fixture contract must not remain reachable as an alternate execution path.
      `DependencyPlanningRequest` builder unused creates dead migration code,
      while wiring it into current preflight would require converting the typed
      request back into `ModelDependencyRequest`, which violates the no-fallback
-     rule above. The next implementation slice must move the resolver boundary
-     and canonical preflight together: node-engine builds the shared typed
-     request, the host resolver consumes it, and preflight receives
-     `DependencyPreflightModelRef` rather than `ModelRefV2`. Any remaining
-     dependency-environment check/install path must be explicitly split from
-     inference preflight or migrated in the same vertical slice; it must not
-     keep the old path-shaped resolver contract alive as canonical inference
-     dependency identity.
+     rule above. Decision: use option 3. Before production preflight migration,
+     define the typed dependency-environment resolve/check/install contracts
+     that replace the non-preflight `ModelDependencyRequest` use cases. Then
+     move the resolver boundary, canonical preflight, and dependency-environment
+     check/install consumers onto typed contracts together so the old
+     path-shaped resolver can be removed rather than preserved as a temporary
+     branch. The next implementation slice is the dependency-environment typed
+     contract gate, not a node-engine adapter-only slice.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

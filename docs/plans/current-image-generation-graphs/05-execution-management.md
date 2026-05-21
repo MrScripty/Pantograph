@@ -7846,17 +7846,42 @@ Worker rules:
     by production preflight is dead migration code, and using it only to
     reconstruct the old `ModelDependencyRequest` would preserve the retired
     path-shaped resolver contract.
-  - Required adjustment: the next code slice must move the canonical preflight
-    resolver boundary as a vertical slice. Node-engine should build the shared
-    typed request, the host resolver should consume it, and the preflight result
-    should be `DependencyPreflightModelRef` rather than `ModelRefV2`.
-  - Ownership note: dependency-environment check/install may need a separate
-    typed environment contract or must migrate in the same vertical slice. It
-    cannot keep `ModelDependencyRequest.model_path` as canonical inference
-    dependency identity after preflight moves.
+  - Required adjustment: the next code slice must first add the typed
+    dependency-environment resolve/check/install contracts, then move canonical
+    preflight and dependency-environment consumers together onto typed
+    contracts. Node-engine should build the shared typed request, the host
+    resolver should consume it, and the preflight result should be
+    `DependencyPreflightModelRef` rather than `ModelRefV2`.
+  - Ownership note: dependency-environment check/install must not keep
+    `ModelDependencyRequest.model_path` as canonical inference dependency
+    identity after preflight moves. The old resolver contract is deletion work
+    once the typed replacement is in place, not a compatibility tier.
   - Verification passed: uncommitted node-engine exploration was removed before
     commit; source diff returned clean. Plan-only boundary update will be
     committed separately from implementation work.
+- 2026-05-21 Milestone 5 dependency-environment contract re-plan decision:
+  - Decision: use option 3 for the node-engine adapter boundary. Define the
+    full typed dependency-environment contract before production migration, then
+    migrate canonical inference preflight, resolver operations, and
+    dependency-environment check/install callers off `ModelDependencyRequest`
+    together.
+  - Plan update completed: Milestone 5 staging now adds a
+    dependency-environment typed contract gate before the node-engine adapter
+    gate. The new gate requires typed resolve/check/install request and result
+    DTOs keyed by `DependencyPlanningIdentityKey` and shared planning facts,
+    with no `model_path`, `modelPath`, local load path, `entry_path`,
+    `selected_artifact_path`, raw platform JSON, raw mode strings, or
+    path-shaped Pumas aliases as request identity.
+  - Rejected paths remain rejected: no unused production request-builder slice,
+    no adapter from `DependencyPlanningRequest` back into
+    `ModelDependencyRequest`, no `ModelRefV2` repair path, and no temporary
+    canonical branch that keeps path-shaped dependency identity alive.
+  - Next implementation slice: add the dependency-environment typed contract in
+    `pantograph-dependency-planning` with serde fixtures and validation tests
+    for resolve, check, install, unavailable, invalid, and path-field rejection
+    states. Production resolver migration follows only after that replacement
+    contract exists.
+  - Verification passed for this docs-only update: `git diff --check`.
 
 ### Traceability Links
 
