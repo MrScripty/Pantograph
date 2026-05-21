@@ -7840,6 +7840,23 @@ Worker rules:
     resolver traits to consume the shared request and return
     `DependencyPreflightModelRef`, then move embedded-runtime cache/activity
     and frontend dependency-environment matching to `DependencyPlanningIdentityKey`.
+- 2026-05-21 Milestone 5 node-engine adapter re-plan boundary:
+  - Investigation result: the next production migration cannot be a standalone
+    node-engine `DependencyPlanningRequest` builder. A builder that is not used
+    by production preflight is dead migration code, and using it only to
+    reconstruct the old `ModelDependencyRequest` would preserve the retired
+    path-shaped resolver contract.
+  - Required adjustment: the next code slice must move the canonical preflight
+    resolver boundary as a vertical slice. Node-engine should build the shared
+    typed request, the host resolver should consume it, and the preflight result
+    should be `DependencyPreflightModelRef` rather than `ModelRefV2`.
+  - Ownership note: dependency-environment check/install may need a separate
+    typed environment contract or must migrate in the same vertical slice. It
+    cannot keep `ModelDependencyRequest.model_path` as canonical inference
+    dependency identity after preflight moves.
+  - Verification passed: uncommitted node-engine exploration was removed before
+    commit; source diff returned clean. Plan-only boundary update will be
+    committed separately from implementation work.
 
 ### Traceability Links
 

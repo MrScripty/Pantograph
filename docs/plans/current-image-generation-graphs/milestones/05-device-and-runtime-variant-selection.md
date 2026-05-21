@@ -914,6 +914,19 @@ fixture contract must not remain reachable as an alternate execution path.
      resolver boundaries to consume the shared request and return the path-free
      successor, then replace cache/activity/frontend dependency-environment
      identity with the shared identity key.
+   - 2026-05-21 re-plan boundary: the next node-engine adapter step cannot be
+     a standalone production request-builder slice. Leaving a typed
+     `DependencyPlanningRequest` builder unused creates dead migration code,
+     while wiring it into current preflight would require converting the typed
+     request back into `ModelDependencyRequest`, which violates the no-fallback
+     rule above. The next implementation slice must move the resolver boundary
+     and canonical preflight together: node-engine builds the shared typed
+     request, the host resolver consumes it, and preflight receives
+     `DependencyPreflightModelRef` rather than `ModelRefV2`. Any remaining
+     dependency-environment check/install path must be explicitly split from
+     inference preflight or migrated in the same vertical slice; it must not
+     keep the old path-shaped resolver contract alive as canonical inference
+     dependency identity.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
