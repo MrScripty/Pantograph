@@ -7788,6 +7788,25 @@ Worker rules:
     path-free output. Pumas-approved local load targets must remain host/planner
     handoff facts for backend/worker execution, not node-engine graph identity.
   - Verification passed: docs-only boundary update; `git diff --check`.
+- 2026-05-20 Milestone 5 path-free preflight successor planning:
+  - Decision: use the clean option 4 re-plan. Introduce the path-free
+    preflight/model-reference successor before migrating production node-engine
+    preflight to `DependencyPlanningRequest`.
+  - Plan update completed: Milestone 5 staging now places the successor gate
+    before the node-engine adapter gate. The successor must carry Pumas model
+    identity, task facts, expected artifact kind when known, selected binding
+    ids, optional dependency requirements id, scheduler/runtime/device facts
+    when selected, and typed diagnostics without `model_path`, local load
+    paths, `entry_path`, or `selected_artifact_path` as executable identity.
+  - Rejected paths remain rejected: no adapter shim back into
+    `ModelDependencyRequest`, no fake/blank repaired `model_path`, no Pumas
+    load target in graph/node-engine model identity, and no broad one-slice
+    replacement of request, resolver, frontend, cache, and worker handoff.
+  - Remaining follow-up: implement the successor contract in
+    `pantograph-dependency-planning` with fixtures/tests, then migrate
+    node-engine preflight and host resolver boundaries in separate validated
+    slices.
+  - Verification passed: docs-only update; `git diff --check`.
 
 ### Traceability Links
 

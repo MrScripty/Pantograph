@@ -773,33 +773,33 @@ fixture contract must not remain reachable as an alternate execution path.
         caller context for diagnostics. Source node type must not become a
         runtime-selection input; scheduler/runtime intent remains the only
         graph-originating runtime influence.
-     2. Node-engine adapter gate: migrate node-engine request construction to
-        build the shared typed request synchronously from graph inputs. Decode
-        and validate raw JSON graph/input payloads once at the boundary, then
-        pass validated domain types inward. Node-engine must not pass
-        unvalidated `serde_json::Value`, raw `String` mode/kind values, or
-        filesystem paths through internal dependency-planning APIs when a domain
-        type can encode the invariant.
-        Re-plan boundary found 2026-05-20: this gate cannot cleanly migrate
-        production preflight calls while the resolver still returns
-        `ModelRefV2`, because `ModelRefV2` requires `model_path`. Converting a
-        validated shared request back into `ModelDependencyRequest` or returning
-        `ModelRefV2` with a Pumas-approved load path would preserve the legacy
-        path-shaped node-engine contract. Before this gate changes production
-        preflight, introduce the path-free preflight/model-reference successor
-        from gate 4 and switch the resolver trait to the shared request plus
-        path-free preflight output. Backend/worker local load targets remain a
-        later host/planner handoff concern.
-     3. Host resolver gate: migrate the resolver trait/adapter boundary to
+     2. Path-free preflight/model-reference successor gate: add the successor
+        contract before production preflight migration. The successor replaces
+        `ModelRefV2` for graph/node-engine dependency identity and must not
+        contain `model_path`, local load paths, `entry_path`, or
+        `selected_artifact_path` as executable identity. It carries
+        `PumasModelRef`, task id/task type, expected artifact kind when known,
+        selected dependency binding ids, optional dependency requirements id,
+        selected scheduler/runtime/device facts when those have already been
+        decided, and bounded diagnostics. Add serde fixtures and validation
+        tests proving path-shaped identity is rejected or absent. Do not add a
+        compatibility alias from the successor back to `ModelRefV2`.
+     3. Node-engine adapter gate: migrate node-engine request construction to
+        build the shared typed request synchronously from graph inputs and to
+        return/forward the path-free preflight successor. Decode and validate
+        raw JSON graph/input payloads once at the boundary, then pass validated
+        domain types inward. Node-engine must not pass unvalidated
+        `serde_json::Value`, raw `String` mode/kind values, or filesystem paths
+        through internal dependency-planning APIs when a domain type can encode
+        the invariant. Production preflight must not convert
+        `DependencyPlanningRequest` back into `ModelDependencyRequest` and must
+        not repair `ModelRefV2.model_path`.
+     4. Host resolver gate: migrate the resolver trait/adapter boundary to
         consume the shared typed request and return typed planning results/
         diagnostics. The trait may remain async because host/planner
         implementations perform real Pumas/dependency I/O. This gate must keep
         Pumas artifact/load-target resolution in the host/planner side and must
         not add a node-engine path resolver.
-     4. Replace `ModelRefV2` or introduce a successor graph model-reference
-        contract that does not contain `model_path`. Update validation and
-        output tests so graph identity is explicit Pumas identity, not a
-        filesystem path.
      5. Move Pumas artifact-load-target resolution into the host/planner
         resolver implementation and return typed unavailable diagnostics for
         missing, stale, invalid, not-installed, or unsupported artifacts. Reuse
