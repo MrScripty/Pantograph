@@ -1035,6 +1035,21 @@ fixture contract must not remain reachable as an alternate execution path.
      dependency-environment check/install consumers with the typed contracts,
      then remove `ModelDependencyRequest`, `ModelRefV2` preflight repair, and
      path-shaped cache/activity/frontend dependency-environment identity.
+   - 2026-05-21 re-plan boundary: the resolver boundary replacement gate cannot
+     start with the current dependency-environment result shape alone. Existing
+     dependency-environment consumers need resolved dependency requirements,
+     selected bindings, per-binding check/install status rows, timestamps,
+     code/message fields, and environment refs. Those facts still live in
+     node-engine-owned `ModelDependencyRequirements`, `ModelDependencyStatus`,
+     and `ModelDependencyInstallResult` contracts. Replacing
+     `ModelDependencyResolver` now would require either keeping those
+     node-engine-owned legacy result DTOs on the new resolver boundary or
+     mapping typed dependency-environment results back into them, both of which
+     preserve a legacy resolver contract. Before implementation continues,
+     re-plan the dependency-environment result contract so the shared
+     dependency-planning crate owns the requirements/status/install result
+     payloads needed by node-engine, embedded-runtime, activity events, and the
+     frontend.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

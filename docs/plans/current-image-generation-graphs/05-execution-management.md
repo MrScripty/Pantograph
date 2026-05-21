@@ -7951,6 +7951,26 @@ Worker rules:
     dependency-environment check/install consumers, cache/activity identity, and
     frontend dependency-environment DTOs to these typed contracts, then remove
     `ModelDependencyRequest` and path-shaped resolver/test surfaces.
+- 2026-05-21 Milestone 5 resolver-boundary re-plan trigger:
+  - Investigation result: replacing `ModelDependencyResolver` after the
+    dependency-environment contract slice is not yet standards-compliant. The
+    new `DependencyEnvironmentResult` covers action, readiness, install,
+    validation, failure, diagnostics, and environment refs, but it does not own
+    the resolved requirements and per-binding check/install status payloads that
+    current node-engine, embedded-runtime, activity, and frontend consumers
+    require.
+  - Legacy risk: keeping `ModelDependencyRequirements`,
+    `ModelDependencyStatus`, or `ModelDependencyInstallResult` on the new
+    resolver boundary would leave node-engine-owned legacy DTOs as the
+    canonical dependency-environment result contract. Mapping new typed results
+    back into those old types would be a compatibility shim.
+  - Required re-plan: decide the shared dependency-planning contract for
+    dependency requirements, selected bindings, per-binding status rows,
+    check/install timestamps, code/message diagnostics, and environment refs
+    before replacing `ModelDependencyResolver`.
+  - Stop condition: implementation of the resolver boundary is paused until the
+    result payload ownership is planned. Continuing without that decision would
+    violate the no-fallback/no-legacy rule.
 
 ### Traceability Links
 
