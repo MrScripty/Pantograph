@@ -8082,6 +8082,29 @@ Worker rules:
     shared result payloads and remove the old node-engine-owned
     `ModelDependencyRequirements`, `ModelDependencyStatus`, and
     `ModelDependencyInstallResult` contracts rather than mapping into them.
+- 2026-05-21 Milestone 5 resolver boundary re-plan trigger:
+  - Discovery: the next implementation slice cannot safely replace only
+    `ModelDependencyRequirements`, `ModelDependencyStatus`, and
+    `ModelDependencyInstallResult`. `ModelDependencyResolver` also owns
+    `resolve_model_ref`, which returns `ModelRefV2`; `ModelRefV2` still
+    requires `model_path` and is consumed by node-engine and embedded-runtime
+    preflight paths as a path-shaped model identity/handoff contract.
+  - Why this stops implementation: editing the resolver boundary now without a
+    canonical model-ref/preflight replacement would either keep
+    `ModelDependencyRequest.model_path` and `ModelRefV2.model_path` as legacy
+    compatibility fields, or invent a new handoff contract during a broad code
+    migration. Both violate the no-fallback/no-legacy rule and the plan’s
+    serial contract ownership requirement.
+  - Re-plan needed: decide the canonical replacement for model-ref hydration
+    before node-engine/embedded-runtime resolver migration. Options to evaluate
+    include a separate shared preflight result in `pantograph-dependency-planning`,
+    folding model-ref hydration into dependency-environment results, or
+    removing model-ref hydration from the dependency resolver boundary and
+    letting scheduler/host planning facts own the handoff.
+  - Stop condition: no node-engine, embedded-runtime, frontend, worker, or
+    resolver implementation changes should start until that contract decision is
+    made and recorded.
+  - Verification passed for this docs-only re-plan note: `git diff --check`.
 
 ### Traceability Links
 

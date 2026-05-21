@@ -1151,6 +1151,27 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo check -p pantograph-dependency-planning --all-features`, and
      `cargo check -p pantograph-dependency-planning --no-default-features`.
      Final whitespace verification passed: `git diff --check`.
+   - 2026-05-21 re-plan boundary after shared result payloads: replacing the
+     node-engine resolver boundary now crosses more than the dependency result
+     payloads. `ModelDependencyResolver` still owns four legacy methods:
+     requirements resolve, dependency check, dependency install, and
+     `resolve_model_ref`. The first three can now target
+     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, but
+     `resolve_model_ref` still returns `ModelRefV2`, whose required
+     `model_path` field is a retired path-shaped graph/node-engine identity
+     contract. Continuing directly would require either keeping `ModelRefV2`
+     and `ModelDependencyRequest` as legacy compatibility contracts or
+     inventing a replacement model-ref/preflight handoff during implementation.
+     Stop and plan the canonical replacement for model-ref hydration before
+     editing node-engine or embedded-runtime resolver code.
+   - Required re-plan decision: define whether model-ref hydration becomes a
+     separate shared preflight result contract in `pantograph-dependency-planning`,
+     is folded into dependency-environment results, or is removed from the
+     dependency resolver boundary entirely and replaced by scheduler/host
+     planning facts. The chosen path must remove `ModelRefV2.model_path`,
+     `ModelDependencyRequest.model_path`, and path-shaped cache/activity
+     identity rather than making adapters that translate the new typed payloads
+     back into those old DTOs.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
