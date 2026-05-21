@@ -1111,7 +1111,8 @@ The Milestone 5 dependency-planning replacement was rechecked against
 `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`,
 `DOCUMENTATION-STANDARDS.md`, `TESTING-STANDARDS.md`, `FRONTEND-STANDARDS.md`,
 `INTEROP-STANDARDS.md`, `RUST-API-STANDARDS.md`, and
-`RUST-TOOLING-STANDARDS.md` on 2026-05-20. The following constraints apply to
+`RUST-TOOLING-STANDARDS.md` on 2026-05-20 and refreshed on 2026-05-21 after
+the path-free preflight successor update. The following constraints apply to
 the staged dependency-planning contract work above:
 
 - **Contract crate/module shape:** if the neutral contract owner is a new crate,
@@ -1137,6 +1138,20 @@ the staged dependency-planning contract work above:
   validated domain types. Internal APIs may not continue to accept
   `serde_json::Value`, raw mode strings, local paths, or unvalidated booleans
   where typed ids/enums can encode the invariant.
+- **Contract shape separation:** keep the path-free preflight successor, the
+  host/planner `DependencyPlanningResult` that may carry a Pumas-approved load
+  target, and the shared identity/correlation key as separate named contracts.
+  Do not collapse them into one convenience struct or expose load-target fields
+  on graph/node-engine identity. Each public contract must have serde fixtures
+  that prove required fields, rejected path-shaped fields, enum spellings, and
+  diagnostic states.
+- **Retired surface deletion:** when a path-shaped graph/dependency system is
+  replaced, remove its node registrations, option providers, mock backend
+  metadata, saved workflow fixtures, README references, and success tests in
+  the same slice or in an immediately following serial cleanup slice before the
+  milestone row closes. Retired ports such as graph-facing `model_path` must not
+  remain discoverable through frontend palettes, backend descriptors, test
+  helpers, or compatibility fixtures.
 - **Frontend replacement discipline:** the frontend dependency-environment
   slice must replace `modelPath`/`model_path` actions and matchers with typed
   Pumas identity. It must keep backend-owned dependency/readiness state as
