@@ -1207,6 +1207,15 @@ fixture contract must not remain reachable as an alternate execution path.
      requirement facts, missing dependency-environment identity, invalid
      selected binding ids, unknown-field rejection, path-shaped field
      rejection, and typed diagnostics.
+   - Contract-slice scope clarification: the next contract gate may also touch
+     existing `pantograph-dependency-planning` sibling modules, fixtures, and
+     tests when required to make the shared identity terminology coherent. In
+     particular, replacing or superseding `DependencyPlanningIdentityKey`
+     runtime/device fields may require updates in `environment.rs`,
+     `request.rs`, crate re-exports, and dependency-environment fixtures. Do
+     that as a single contract correction with no alias fields, no accepted
+     legacy field names, and no compatibility adapter back to `ModelRefV2` or
+     `ModelDependencyRequest`.
    - 2026-05-21 standards iteration for the path-free preflight split: the
      next contract gate must extend the existing
      `pantograph-dependency-planning` preflight owner rather than creating a
@@ -1236,6 +1245,16 @@ fixture contract must not remain reachable as an alternate execution path.
      Pumas load targets, package facts, backend-local device strings, worker
      environment variables, scheduler-selected runtime/device/load-target
      decisions, or executable paths.
+   - Nested unknown-field requirement: unknown-field rejection must hold for
+     the complete preflight protocol, not only the top-level wrapper. If the
+     request/result embeds existing shared structs such as
+     `DependencyPlanningRequest`, `SchedulerIntent`,
+     `DependencyPlanningCallerContext`, `DependencyPlanningPlatformContext`,
+     dependency-environment identity, or diagnostics, either those structs must
+     reject unknown fields at the serde boundary or the validated preflight
+     wrapper must recursively reject unknown protocol fields before decoding.
+     Do not rely on serde's default field-dropping behavior for graph, host, or
+     scheduler-facing preflight payloads.
    - Scheduler-intent clarification: explicit runtime/device values in
      preflight are graph/caller intent or scheduler requirements only. If the
      graph explicitly supplies a runtime or device, scheduler/host planning
@@ -1261,6 +1280,17 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo check -p pantograph-dependency-planning --all-features`,
      `cargo check -p pantograph-dependency-planning --no-default-features`,
      and `git diff --check`.
+   - Later migration decomposition requirement: the contract-only slice must
+     stay out of node-engine and embedded-runtime, but later migration slices
+     that touch already-large files must include decomposition work in the same
+     slice or immediately before the behavioral change. Current targets over
+     the standards threshold include
+     `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+     `crates/pantograph-embedded-runtime/src/model_dependencies.rs`, and
+     `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`.
+     Do not add new request projection, scheduler policy, worker handoff, or
+     path-rejection logic to those files without first splitting cohesive
+     helper modules and documenting ownership.
    - 2026-05-21 codebase blast-radius iteration for this split:
      implementation must correct the current ambiguous preflight terminology
      before broader migration. `DependencyPlanningIdentityKey` currently uses
@@ -1295,6 +1325,19 @@ fixture contract must not remain reachable as an alternate execution path.
      record it as a required later removal: scheduler/host execution-plan
      projection must become the only source of executable package/load-target
      facts before Milestone 5 closes.
+   - Dependency ownership requirement for later migration: when
+     embedded-runtime and node-engine stop using the retired model-dependency
+     DTOs, shared contracts must be imported from
+     `pantograph-dependency-planning` directly. Do not keep node-engine as a
+     contract re-export hub for dependency-environment or preflight DTOs after
+     the shared planning crate owns the protocol.
+   - Resolve/check/preflight performance requirement for later migration: do
+     not carry forward the current resolve -> check -> resolve model-ref
+     sequence as three independent descriptor/Pumas lookups. The replacement
+     flow should produce one typed dependency-environment/preflight result per
+     action, reuse already-derived planning facts inside that action, and emit
+     typed diagnostics rather than reparsing graph inputs or rehydrating model
+     paths.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

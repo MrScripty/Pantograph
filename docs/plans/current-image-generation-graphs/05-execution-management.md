@@ -8193,6 +8193,30 @@ Worker rules:
     behavior, `ModelRefV2`, and graph-carried load-target bridges must be
     removed or replaced by canonical contracts as their migration slices land.
   - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
+- 2026-05-21 Milestone 5 preflight contract blast-radius follow-up:
+  - Existing-code findings: the next contract-only slice needs a slightly wider
+    dependency-planning write scope than `preflight.rs` alone because
+    `DependencyPlanningIdentityKey` is consumed by dependency-environment
+    request validation and fixtures. Unknown-field rejection is top-level for
+    several contracts but not guaranteed for nested preflight protocol structs.
+    Later migration targets in node-engine and embedded-runtime already exceed
+    the standards file-size threshold, and the current preflight path performs
+    repeated resolve/check/model-ref hydration work through legacy DTOs.
+  - Plan update completed: Milestone 5 now permits the next contract gate to
+    update dependency-planning sibling modules, fixtures, and tests when needed
+    for the identity terminology correction; requires nested unknown-field
+    rejection for the complete preflight protocol; requires decomposition before
+    adding migration behavior to the large node-engine and embedded-runtime
+    files; requires embedded-runtime/node-engine to import shared DTOs directly
+    from `pantograph-dependency-planning`; and requires later migration to avoid
+    carrying forward the repeated resolve -> check -> resolve model-ref
+    sequence.
+  - No-fallback/no-legacy confirmation: this update still keeps the next slice
+    contract-only and does not authorize node-engine, embedded-runtime,
+    frontend, worker, scheduler, generated DTO, lockfile, or saved-workflow
+    migration. Retired DTOs and path-shaped behavior must be removed or
+    replaced when their migration slices land, not adapted through aliases.
+  - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
 
 ### Traceability Links
 
