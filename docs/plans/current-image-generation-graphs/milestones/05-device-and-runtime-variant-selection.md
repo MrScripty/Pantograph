@@ -1050,6 +1050,29 @@ fixture contract must not remain reachable as an alternate execution path.
      dependency-planning crate owns the requirements/status/install result
      payloads needed by node-engine, embedded-runtime, activity events, and the
      frontend.
+   - 2026-05-21 re-plan decision: use option 2 with option 3 discipline. The
+     next slice extends `pantograph-dependency-planning` with a complete shared
+     dependency-environment result payload for the current lifecycle:
+     requirements, bindings, selected binding ids, per-binding check/install
+     statuses, operation timestamps, status code/message diagnostics,
+     environment refs, and typed readiness/install/validation/failure states.
+     This replaces node-engine-owned dependency-environment result DTOs instead
+     of adapting to them. Option 3 discipline means the contract must remain
+     clearly scoped to dependency-environment resolve/check/install and must not
+     bake in Python-only, package-manager-only, image-only, or runtime-specific
+     assumptions. Requirement definitions, binding/profile facts, environment
+     refs, operation status rows, diagnostics, and future runtime-managed binary
+     or device/toolchain readiness facts must stay separable in the type design
+     so a later full dependency-domain model can split them without another
+     legacy compatibility layer.
+   - Next implementation slice: expand the shared dependency-planning contract
+     with typed dependency requirement, binding, validation-error, binding
+     status, check result, and install result payloads. Add serde fixtures and
+     validation tests for ready, missing, invalid, unavailable, install failed,
+     and no-binding states. Do not migrate `ModelDependencyResolver` until those
+     shared result payloads can replace `ModelDependencyRequirements`,
+     `ModelDependencyStatus`, and `ModelDependencyInstallResult` without
+     mapping back to the old node-engine DTOs.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

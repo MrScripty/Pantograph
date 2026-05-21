@@ -7971,6 +7971,33 @@ Worker rules:
   - Stop condition: implementation of the resolver boundary is paused until the
     result payload ownership is planned. Continuing without that decision would
     violate the no-fallback/no-legacy rule.
+- 2026-05-21 Milestone 5 dependency result re-plan decision:
+  - Decision: use option 2 with option 3 discipline. Expand the shared
+    dependency-environment contract enough to replace the current
+    node-engine-owned requirements/status/install DTOs, but keep the design
+    lifecycle-scoped to dependency-environment resolve/check/install rather than
+    designing the entire future dependency-management subsystem now.
+  - Required shared payload ownership: `pantograph-dependency-planning` must own
+    typed dependency requirements, requirement bindings, validation errors,
+    selected binding ids, per-binding check/install status rows, status
+    code/message diagnostics, operation timestamps, environment refs, and typed
+    readiness/install/validation/failure states before the resolver boundary is
+    replaced.
+  - Option 3 discipline: the new payload types must avoid Python-only,
+    package-manager-only, image-only, or runtime-specific assumptions.
+    Requirement definitions, binding/profile facts, operation status rows,
+    environment refs, diagnostics, and future runtime-managed binary or
+    device/toolchain readiness facts must remain separable so a later full
+    dependency-domain model can split them without another compatibility layer.
+  - Rejected paths: do not keep `ModelDependencyRequirements`,
+    `ModelDependencyStatus`, or `ModelDependencyInstallResult` as canonical
+    resolver outputs, and do not map new typed environment results back into
+    those node-engine DTOs.
+  - Next implementation slice: add the shared dependency result payloads with
+    serde fixtures and validation tests for ready, missing, invalid,
+    unavailable, install failed, and no-binding states. Resolver migration
+    resumes only after those shared payloads can replace the old DTOs directly.
+  - Verification passed for this docs-only plan update: `git diff --check`.
 
 ### Traceability Links
 
