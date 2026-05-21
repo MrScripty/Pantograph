@@ -7998,6 +7998,37 @@ Worker rules:
     unavailable, install failed, and no-binding states. Resolver migration
     resumes only after those shared payloads can replace the old DTOs directly.
   - Verification passed for this docs-only plan update: `git diff --check`.
+- 2026-05-21 Milestone 5 dependency result standards iteration:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `INTEROP-STANDARDS.md`,
+    `TESTING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-TOOLING-STANDARDS.md`.
+  - Blast-radius finding: the old node-engine result DTOs contain trusted
+    cross-layer raw strings for requirement kinds, binding/profile/environment
+    ids, environment kind, status code/message, validation paths, and operation
+    timestamps. Implementing option 2 without tightening those fields would
+    preserve stringly typed protocol state and make future non-Python
+    dependency classes harder to add cleanly.
+  - Plan update completed: the next payload slice now requires validated
+    newtypes or typed enums for trusted ids/states/codes/timestamps, bounded
+    typed identifiers where extension is necessary, Python/package-manager
+    facts isolated behind optional detail structs, `snake_case` serde wire
+    shape, unknown-field rejection, path-field rejection, typed validation
+    errors, public `DependencyPlanningContractError` validation APIs, README
+    and fixture README updates, and focused fixtures/tests for malformed ids,
+    no-binding states, duplicate binding selection, invalid timestamps,
+    failed installs, unavailable requirements, invalid validation errors, and
+    Python-detail containment.
+  - No-fallback/no-legacy confirmation: this standards pass keeps the option 2
+    contract as a replacement path. It does not approve keeping
+    `ModelDependencyRequirements`, `ModelDependencyStatus`, or
+    `ModelDependencyInstallResult` as canonical resolver outputs, mapping typed
+    results back into those DTOs, or using node-engine path-shaped dependency
+    identity as an alternate branch.
+  - Verification passed for this docs-only standards update: `git diff
+    --check`.
 
 ### Traceability Links
 

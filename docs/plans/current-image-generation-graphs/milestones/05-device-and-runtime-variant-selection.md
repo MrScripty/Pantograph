@@ -1073,6 +1073,45 @@ fixture contract must not remain reachable as an alternate execution path.
      shared result payloads can replace `ModelDependencyRequirements`,
      `ModelDependencyStatus`, and `ModelDependencyInstallResult` without
      mapping back to the old node-engine DTOs.
+   - 2026-05-21 standards iteration for dependency result payloads: the shared
+     payload slice must convert trusted cross-layer strings from the old
+     node-engine DTOs into correct-by-construction contract types. Binding ids,
+     profile ids, environment ids, requirement names, status codes, validation
+     field paths, runtime/backend ids, platform keys, and operation timestamps
+     must be validated newtypes or typed enums where the invariant crosses a
+     crate/process boundary. Requirement kind, environment kind, validation
+     state, binding status state, and operation state must be enums or bounded
+     typed identifiers, not free-form `String` fields. Do not flatten
+     Python-only/package-manager-only fields such as `python_requires`,
+     `python_executable_override`, index URLs, wheel/source paths, or pip
+     markers into the generic dependency requirement row. Put runtime or
+     package-manager-specific facts behind clearly named optional typed detail
+     structs so later managed-binary, system-package, runtime-feature,
+     device/toolchain, or non-Python dependency classes can be added without
+     pretending to be Python requirements.
+   - Contract-shape requirements: new shared result DTOs must use
+     `serde(rename_all = "snake_case")`, deny unknown fields on boundary
+     request/result/row structs, validate path-shaped fields out of graph-facing
+     and dependency-environment identity, preserve producer order for selected
+     bindings and diagnostics, and keep Pumas-approved executable load targets
+     out of dependency-environment identity/status rows. Public fallible
+     validation APIs must return `DependencyPlanningContractError`, not
+     `String`. Resolver migration after this gate must return typed result
+     states/diagnostics rather than `Result<T, String>` for expected
+     unavailable/invalid/missing states.
+   - Testing and documentation requirements: add public serde fixtures and
+     validation tests for the shared requirements/status/install payloads,
+     including unknown-field rejection, malformed-id rejection, path-field
+     rejection, Python-detail containment, no-binding selection, duplicate
+     selected binding ids, invalid timestamp, failed install row, unavailable
+     requirements, and invalid validation error states. Update the crate README
+     and fixture README in the same slice. Frontend TypeScript DTOs are not
+     introduced until the frontend migration slice; when they are introduced,
+     they must mirror the Rust serde wire shape in the same commit and use the
+     existing Node test harness plus typecheck. Embedded-runtime tests that
+     touch manifests, temp roots, install locks, caches, sqlite files, or
+     package-manager state must isolate durable state per test or serialize with
+     an explicit guard.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
