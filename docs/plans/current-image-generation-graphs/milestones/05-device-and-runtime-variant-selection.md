@@ -1164,14 +1164,49 @@ fixture contract must not remain reachable as an alternate execution path.
      inventing a replacement model-ref/preflight handoff during implementation.
      Stop and plan the canonical replacement for model-ref hydration before
      editing node-engine or embedded-runtime resolver code.
-   - Required re-plan decision: define whether model-ref hydration becomes a
-     separate shared preflight result contract in `pantograph-dependency-planning`,
-     is folded into dependency-environment results, or is removed from the
-     dependency resolver boundary entirely and replaced by scheduler/host
-     planning facts. The chosen path must remove `ModelRefV2.model_path`,
-     `ModelDependencyRequest.model_path`, and path-shaped cache/activity
-     identity rather than making adapters that translate the new typed payloads
-     back into those old DTOs.
+   - 2026-05-21 re-plan decision: use option 2 with option 3 discipline. Split
+     model-ref/preflight hydration out of dependency-environment resolving
+     instead of folding it into dependency-environment results. The dependency
+     resolver boundary becomes dependency-environment only:
+     resolve/check/install consume `DependencyEnvironmentRequest` and return
+     `DependencyEnvironmentResult` plus typed diagnostics for unavailable,
+     invalid, missing, failed, or not-implemented states. A separate shared
+     path-free preflight contract in `pantograph-dependency-planning` replaces
+     `ModelRefV2` as the graph/node-engine handoff. It carries `PumasModelRef`,
+     canonical task id/task type, optional expected artifact kind, optional
+     typed scheduler intent or explicit scheduler requirement, selected
+     dependency-environment identity, selected binding ids, platform identity,
+     caller context, and diagnostics. It must not carry executable local paths,
+     Pumas load targets, package facts, backend-local device strings, or
+     scheduler-selected runtime/device/load-target decisions.
+   - Option 3 discipline for the split contract: design the new preflight
+     contract as the narrow predecessor of full scheduler/host planning, not as
+     another dependency resolver DTO. Node-engine forwards graph intent and
+     typed preflight facts only. Pumas remains the sole owner of artifact
+     lookup, storage kind, validation state, and local load targets. Scheduler
+     or host planning remains the sole owner of executable backend/runtime/device
+     selection and later worker handoff. The split must make a later full
+     scheduler-owned execution plan able to replace the preflight handoff
+     without another compatibility layer.
+   - Required removal/replacement from this decision: remove
+     `ModelDependencyRequest.model_path`, `ModelRefV2.model_path`,
+     path-derived model id repair, and path-shaped cache/activity identity when
+     their canonical replacements land. Do not add adapters that map
+     `DependencyEnvironmentResult` or the new preflight contract back into
+     `ModelDependencyRequirements`, `ModelDependencyStatus`,
+     `ModelDependencyInstallResult`, or `ModelRefV2`. Tests that mention those
+     retired DTOs after migration must be negative coverage proving rejection,
+     stale diagnostics, or removal.
+   - Next implementation slice after this decision: add the path-free shared
+     preflight request/result contract and fixtures to
+     `pantograph-dependency-planning` only. The slice may update crate docs and
+     tests, but must not migrate node-engine, embedded-runtime, frontend,
+     worker, scheduler, generated DTOs, lockfiles, or saved workflows until the
+     contract gate passes. Focused fixture coverage must include valid
+     path-free preflight, explicit runtime/device intent as scheduler
+     requirement facts, missing dependency-environment identity, invalid
+     selected binding ids, unknown-field rejection, path-shaped field
+     rejection, and typed diagnostics.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

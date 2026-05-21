@@ -8105,6 +8105,40 @@ Worker rules:
     resolver implementation changes should start until that contract decision is
     made and recorded.
   - Verification passed for this docs-only re-plan note: `git diff --check`.
+- 2026-05-21 Milestone 5 resolver boundary re-plan decision:
+  - Decision: use option 2 with option 3 discipline. Split
+    model-ref/preflight hydration out of dependency-environment resolving. The
+    dependency resolver boundary becomes dependency-environment only:
+    resolve/check/install consume `DependencyEnvironmentRequest` and return
+    `DependencyEnvironmentResult` with typed states and diagnostics. A separate
+    shared path-free preflight contract in `pantograph-dependency-planning`
+    replaces `ModelRefV2` as the graph/node-engine handoff.
+  - Required preflight contract shape: `PumasModelRef`, canonical task id/task
+    type, optional expected artifact kind, optional typed scheduler intent or
+    explicit scheduler requirement, dependency-environment identity, selected
+    binding ids, platform identity, caller context, and diagnostics. It must not
+    carry executable local paths, Pumas load targets, package facts,
+    backend-local device strings, or scheduler-selected runtime/device/load
+    decisions.
+  - Option 3 discipline: this is a staging step toward full scheduler/host
+    planning. Node-engine forwards graph intent and typed preflight facts only;
+    Pumas remains authoritative for artifact lookup/load targets; scheduler or
+    host planning remains authoritative for executable backend/runtime/device
+    decisions and worker handoff. The split must not create another DTO that a
+    future scheduler-owned execution plan needs to adapt back through.
+  - No-fallback/no-legacy confirmation: the plan now rejects adapters that map
+    new dependency-environment or preflight contracts back into
+    `ModelDependencyRequirements`, `ModelDependencyStatus`,
+    `ModelDependencyInstallResult`, or `ModelRefV2`. The migration must remove
+    `ModelDependencyRequest.model_path`, `ModelRefV2.model_path`,
+    path-derived model-id repair, and path-shaped cache/activity identity when
+    the canonical replacements land.
+  - Next implementation slice: add only the path-free shared preflight
+    request/result contract and fixtures to `pantograph-dependency-planning`.
+    Do not migrate node-engine, embedded-runtime, frontend, worker, scheduler,
+    generated DTOs, lockfiles, or saved workflows until that contract gate
+    passes.
+  - Verification passed for this docs-only design update: `git diff --check`.
 
 ### Traceability Links
 
