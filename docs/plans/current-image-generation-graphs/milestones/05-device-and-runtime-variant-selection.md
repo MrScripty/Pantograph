@@ -1261,6 +1261,40 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo check -p pantograph-dependency-planning --all-features`,
      `cargo check -p pantograph-dependency-planning --no-default-features`,
      and `git diff --check`.
+   - 2026-05-21 codebase blast-radius iteration for this split:
+     implementation must correct the current ambiguous preflight terminology
+     before broader migration. `DependencyPlanningIdentityKey` currently uses
+     `selected_runtime_id` and `selected_device_id` even though preflight has
+     only graph/caller scheduler intent or hard scheduler requirements. The
+     next contract slice must replace or supersede those names with intent or
+     requirement terminology; reserve "selected" for scheduler/host execution
+     decisions only.
+   - Single projection path requirement: node-engine and embedded-runtime
+     currently build legacy `ModelDependencyRequest` payloads independently.
+     The migration must converge graph input projection through the shared
+     preflight/dependency-environment contracts instead of keeping two
+     request-building paths. Do not preserve node-engine and
+     embedded-runtime-local request normalizers as alternate canonical
+     behavior after the shared contracts land.
+   - Dependency-environment split requirement: environment identity/readiness
+     facts are graph/node-engine-safe, but worker-local launch facts are not.
+     The contract may carry typed environment identity and readiness proof; it
+     must not make manifest paths, Python executable paths, package source
+     paths, or worker environment variables part of preflight identity. Later
+     worker handoff must consume those launch facts through scheduler/host
+     execution planning, not through graph identity.
+   - Workflow-service cleanup requirement: workflow persistence and
+     canonicalization still contain path-only Puma-Lib behavior for stale graph
+     compatibility. When the preflight replacement reaches workflow-service,
+     path-only Puma-Lib state must become removal, rejection, or typed stale
+     diagnostics. Do not preserve path-only Puma-Lib saved-workflow behavior as
+     a compatibility mode.
+   - Execution-plan handoff follow-up: image-generation execution currently
+     consumes graph/input-carried package facts and artifact load targets as an
+     intermediate bridge. Keep this out of the next contract-only slice, but
+     record it as a required later removal: scheduler/host execution-plan
+     projection must become the only source of executable package/load-target
+     facts before Milestone 5 closes.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

@@ -8172,6 +8172,27 @@ Worker rules:
     node-engine-owned dependency result DTOs when their canonical replacements
     land.
   - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
+- 2026-05-21 Milestone 5 codebase blast-radius iteration:
+  - Existing-code findings: shared preflight identity still uses
+    `selected_runtime_id`/`selected_device_id` names before scheduler
+    selection; node-engine and embedded-runtime independently build
+    `ModelDependencyRequest`; embedded-runtime dependency environment emits
+    worker-local manifest and Python executable fields; workflow-service still
+    preserves path-only Puma-Lib state; image generation still consumes
+    graph/input-carried package facts and artifact load targets as an
+    intermediate execution bridge.
+  - Plan update completed: Milestone 5 now requires intent/requirement naming
+    before broader migration, one shared projection path into preflight and
+    dependency-environment contracts, a strict split between environment
+    identity/readiness and worker-local launch facts, workflow-service
+    removal/rejection/stale diagnostics for path-only Puma-Lib state, and a
+    later execution-plan handoff that removes graph/input-carried executable
+    package/load-target facts before Milestone 5 closes.
+  - No-fallback/no-legacy confirmation: these updates do not authorize
+    compatibility modes. Retired request builders, path-only saved workflow
+    behavior, `ModelRefV2`, and graph-carried load-target bridges must be
+    removed or replaced by canonical contracts as their migration slices land.
+  - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
 
 ### Traceability Links
 
