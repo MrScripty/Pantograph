@@ -7,6 +7,7 @@
 
 mod error;
 mod model_ref;
+mod preflight;
 mod request;
 mod result;
 
@@ -15,11 +16,12 @@ pub use model_ref::{
     ModelArtifactKind, ModelRefMigrationDiagnostic, ModelStorageKind, ModelValidationState,
     PumasArtifactEntryPath, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
 };
+pub use preflight::{DependencyPlanningIdentityKey, DependencyPreflightModelRef};
 pub use request::{
     DependencyBindingId, DependencyNodeTypeId, DependencyOverrideFieldsV1,
     DependencyOverridePatchV1, DependencyOverrideScope, DependencyPlanningCallerContext,
     DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyPlatformKey,
-    DependencyTaskId, DeviceIntentId, RuntimeIntentId, SchedulerIntent,
+    DependencyRequirementsId, DependencyTaskId, DeviceIntentId, RuntimeIntentId, SchedulerIntent,
     ValidatedDependencyPlanningRequest,
 };
 pub use result::{

@@ -7807,6 +7807,39 @@ Worker rules:
     node-engine preflight and host resolver boundaries in separate validated
     slices.
   - Verification passed: docs-only update; `git diff --check`.
+- 2026-05-21 Milestone 5 path-free preflight successor contract:
+  - Smallest useful vertical slice: add the contract-only path-free preflight
+    successor and shared identity/correlation key before production
+    node-engine preflight migration.
+  - Allowed write set: `crates/pantograph-dependency-planning/`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - Implementation completed: `DependencyPlanningIdentityKey` now carries the
+    shared Pumas-ref/task/runtime-device/platform/binding identity used by
+    preflight, cache, activity, and frontend correlation without local load
+    paths. `DependencyPreflightModelRef` now carries that key, optional
+    dependency requirements id, and bounded diagnostics as the path-free
+    successor to `ModelRefV2` for graph/node-engine dependency identity. Both
+    new DTOs deny unknown path/load-target fields, and validation rejects
+    `selected_artifact_path` in path-free identity.
+  - No-fallback/no-legacy confirmation: the slice did not migrate production
+    execution, convert the successor back to `ModelRefV2`, add a load target to
+    node-engine identity, or preserve any successful `model_path` contract.
+  - Standards evidence: contract shapes remain in the contract/domain crate,
+    public DTOs are re-exported through `lib.rs`, serde fixtures assert wire
+    shape, and README/fixture documentation records the separation between
+    path-free identity and host/planner load-target results.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo fmt -p pantograph-dependency-planning -- --check`,
+    `cargo check -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    and `cargo check -p pantograph-dependency-planning --no-default-features`.
+  - Remaining follow-up: migrate node-engine request construction and host
+    resolver traits to consume the shared request and return
+    `DependencyPreflightModelRef`, then move embedded-runtime cache/activity
+    and frontend dependency-environment matching to `DependencyPlanningIdentityKey`.
 
 ### Traceability Links
 

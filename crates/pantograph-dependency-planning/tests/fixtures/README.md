@@ -8,9 +8,11 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, runtime/device selection facts, platform, and selected bindings. |
 | `dependency_planning_request.json` | Valid graph/host dependency-planning request keyed by `pumas_model_ref`, including selected binding ids and manual dependency override patches. |
 | `dependency_planning_ready_result.json` | Ready result carrying a Pumas-approved load target for backend handoff. |
 | `dependency_planning_unavailable_result.json` | Unavailable result with a typed Pumas diagnostic and no load target. |
+| `dependency_preflight_model_ref.json` | Path-free successor for graph/node-engine dependency identity after dependency preflight. |
 
 ## Problem
 Serialized contract drift can compile in Rust while breaking frontend,
@@ -19,6 +21,8 @@ shape reviewable and testable.
 
 ## Constraints
 - Request fixtures must not contain local model path identity.
+- Identity and preflight fixtures must not contain `model_path`,
+  `selected_artifact_path`, `entry_path`, local load paths, or load targets.
 - Load paths may appear only in ready result fixtures as Pumas-approved handoff
   targets.
 - Diagnostics must use typed codes and severities.
@@ -39,6 +43,8 @@ cross-layer tests without importing unrelated runtime behavior.
   contract shape.
 - Ready results include exactly one host/planner load target.
 - Unavailable results include diagnostics and no load target.
+- Path-free identity/preflight fixtures stay separate from ready result
+  fixtures so backend handoff facts cannot become graph identity.
 
 ## Revisit Triggers
 - The frontend or worker starts consuming generated fixture copies.

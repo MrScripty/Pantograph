@@ -84,6 +84,7 @@ validated_id!(DependencyTaskId, "task_id");
 validated_id!(RuntimeIntentId, "runtime_id");
 validated_id!(DeviceIntentId, "device_id");
 validated_id!(DependencyBindingId, "dependency_binding_id");
+validated_id!(DependencyRequirementsId, "dependency_requirements_id");
 validated_id!(DependencyNodeTypeId, "node_type");
 validated_id!(DependencyPlatformKey, "platform_key");
 

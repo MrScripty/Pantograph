@@ -1,14 +1,17 @@
 use pantograph_dependency_planning::{
     DependencyPlanningContractError, DependencyPlanningDiagnosticCode,
-    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyPlanningResult,
-    DependencyPlanningState, ModelArtifactKind, PumasArtifactEntryPath,
-    PumasArtifactEntryPathError, PumasArtifactLoadPathKind, ValidatedDependencyPlanningRequest,
+    DependencyPlanningIdentityKey, DependencyPlanningPlatformContext, DependencyPlanningRequest,
+    DependencyPlanningResult, DependencyPlanningState, DependencyPreflightModelRef,
+    ModelArtifactKind, PumasArtifactEntryPath, PumasArtifactEntryPathError,
+    PumasArtifactLoadPathKind, ValidatedDependencyPlanningRequest,
 };
 
 const VALID_REQUEST: &str = include_str!("fixtures/dependency_planning_request.json");
 const READY_RESULT: &str = include_str!("fixtures/dependency_planning_ready_result.json");
 const UNAVAILABLE_RESULT: &str =
     include_str!("fixtures/dependency_planning_unavailable_result.json");
+const IDENTITY_KEY: &str = include_str!("fixtures/dependency_planning_identity_key.json");
+const PREFLIGHT_MODEL_REF: &str = include_str!("fixtures/dependency_preflight_model_ref.json");
 
 #[test]
 fn dependency_planning_request_fixture_decodes_and_validates() {
@@ -149,5 +152,106 @@ fn ready_result_without_target_is_invalid() {
     assert_eq!(
         result.validate().expect_err("ready result requires target"),
         DependencyPlanningContractError::ReadyResultMissingLoadTarget
+    );
+}
+
+#[test]
+fn dependency_planning_identity_key_fixture_decodes_and_validates() {
+    let identity_key: DependencyPlanningIdentityKey =
+        serde_json::from_str(IDENTITY_KEY).expect("identity key fixture should decode");
+
+    identity_key
+        .validate()
+        .expect("path-free identity key should validate");
+    assert_eq!(
+        identity_key.model_ref.model_id,
+        "image/stable-diffusion/tiny-sd"
+    );
+    assert_eq!(
+        identity_key.model_ref.selected_artifact_id.as_deref(),
+        Some("diffusers-bundle")
+    );
+    assert_eq!(identity_key.model_ref.selected_artifact_path, None);
+    assert_eq!(identity_key.task_id.as_str(), "image_generation");
+    assert_eq!(
+        identity_key
+            .selected_runtime_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("pytorch")
+    );
+}
+
+#[test]
+fn dependency_preflight_model_ref_fixture_decodes_and_validates() {
+    let model_ref: DependencyPreflightModelRef =
+        serde_json::from_str(PREFLIGHT_MODEL_REF).expect("preflight fixture should decode");
+
+    model_ref
+        .validate()
+        .expect("path-free preflight model ref should validate");
+    assert_eq!(model_ref.contract_version, 1);
+    assert_eq!(
+        model_ref
+            .dependency_requirements_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("tiny-sd:pytorch:linux-x86_64:torch-diffusers")
+    );
+    assert_eq!(model_ref.diagnostics.len(), 1);
+}
+
+#[test]
+fn dependency_preflight_model_ref_rejects_load_target_fields() {
+    let value = serde_json::json!({
+        "contract_version": 1,
+        "identity_key": {
+            "model_ref": {
+                "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "task_id": "image_generation"
+        },
+        "load_target": {
+            "local_load_path": "/models/tiny-sd"
+        }
+    });
+
+    serde_json::from_value::<DependencyPreflightModelRef>(value)
+        .expect_err("preflight identity must not deserialize load target fields");
+}
+
+#[test]
+fn dependency_planning_identity_key_rejects_model_path_fields() {
+    let value = serde_json::json!({
+        "model_ref": {
+            "model_id": "image/stable-diffusion/tiny-sd"
+        },
+        "task_id": "image_generation",
+        "model_path": "/models/tiny-sd"
+    });
+
+    serde_json::from_value::<DependencyPlanningIdentityKey>(value)
+        .expect_err("identity key must not deserialize model_path fields");
+}
+
+#[test]
+fn dependency_planning_identity_key_rejects_selected_artifact_path_identity() {
+    let identity_key: DependencyPlanningIdentityKey = serde_json::from_value(serde_json::json!({
+        "model_ref": {
+            "model_id": "image/stable-diffusion/tiny-sd",
+            "selected_artifact_path": "image/stable-diffusion/tiny-sd/model_index.json"
+        },
+        "task_id": "image_generation"
+    }))
+    .expect("shape decodes before path-free validation");
+
+    assert_eq!(
+        identity_key
+            .validate()
+            .expect_err("selected artifact path is not path-free identity"),
+        DependencyPlanningContractError::InvalidField {
+            field: "pumas_model_ref.selected_artifact_path",
+            reason: "path-free dependency identity must not carry selected artifact paths"
+        }
     );
 }

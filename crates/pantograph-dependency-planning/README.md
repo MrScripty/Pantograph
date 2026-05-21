@@ -12,6 +12,7 @@ handoff boundaries.
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for dependency-planning consumers. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
+| `src/preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
 | `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `src/result.rs` | Typed dependency-planning result states and diagnostics. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
@@ -57,6 +58,10 @@ instead of parallel artifact DTO families.
   through node-engine.
 - Source node type is bounded caller context for diagnostics, not a runtime
   routing selector.
+- Path-free preflight identity is separate from host/planner load-target
+  results. `DependencyPreflightModelRef` and `DependencyPlanningIdentityKey`
+  must never contain `PumasArtifactLoadTarget`, `model_path`, local load paths,
+  `entry_path`, or `selected_artifact_path`.
 - Pumas load targets are result/handoff facts, not graph identity.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.

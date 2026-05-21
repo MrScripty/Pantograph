@@ -890,6 +890,30 @@ fixture contract must not remain reachable as an alternate execution path.
      cannot be converted back into `ModelRefV2`. Frontend and mock-backend tests
      prove no successful dependency-environment action or activity matcher is
      keyed by `modelPath`/`model_path`.
+   - 2026-05-21 implementation: completed the contract-only path-free
+     preflight successor slice in `pantograph-dependency-planning`.
+     `DependencyPlanningIdentityKey` now provides a shared cache/activity/
+     preflight correlation key built from Pumas model identity, task facts,
+     optional selected runtime/device facts, platform context, expected
+     artifact kind, and selected dependency bindings. `DependencyPreflightModelRef`
+     now provides the graph/node-engine preflight successor and is explicitly
+     separate from host/planner `DependencyPlanningResult` load-target handoff.
+     Both contracts deny unknown path/load-target fields and validation rejects
+     `selected_artifact_path` as path-free dependency identity.
+   - No-fallback/no-legacy confirmation: this slice did not migrate production
+     preflight, did not adapt the new successor back into `ModelRefV2`, did not
+     add `PumasArtifactLoadTarget` to node-engine identity, and did not preserve
+     a path-shaped compatibility DTO.
+   - Verification: `cargo fmt -p pantograph-dependency-planning`,
+     `cargo test -p pantograph-dependency-planning`,
+     `cargo fmt -p pantograph-dependency-planning -- --check`, and
+     `cargo check -p pantograph-dependency-planning`,
+     `cargo check -p pantograph-dependency-planning --all-features`, and
+     `cargo check -p pantograph-dependency-planning --no-default-features`.
+   - Remaining follow-up: migrate node-engine request construction and host
+     resolver boundaries to consume the shared request and return the path-free
+     successor, then replace cache/activity/frontend dependency-environment
+     identity with the shared identity key.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

@@ -12,6 +12,7 @@ frontend state, and scheduler policy.
 | `lib.rs` | Public re-export surface for contract consumers. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
+| `preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
 | `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `result.rs` | Dependency-planning state, diagnostic, and result DTOs. |
 
@@ -31,7 +32,8 @@ semantics or scheduler intent.
 
 ## Decision
 Split the crate into small contract modules: errors, Pumas-facing model/load
-target contracts, requests, and results. `lib.rs` is the only public facade.
+target contracts, path-free preflight identity, requests, and results. `lib.rs`
+is the only public facade.
 
 ## Alternatives Rejected
 - Put all DTOs in `lib.rs`: rejected because request, result, and Pumas mirror
@@ -41,6 +43,8 @@ target contracts, requests, and results. `lib.rs` is the only public facade.
 
 ## Invariants
 - Request identity is `PumasModelRef`, never local path.
+- Preflight identity and host/planner load-target result contracts remain
+  separate so graph/node-engine identity cannot carry executable paths.
 - Load targets are result/handoff facts only.
 - Public fallible validation returns typed errors.
 - Serde fixture tests cover public wire shapes.

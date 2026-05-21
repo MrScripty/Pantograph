@@ -1,0 +1,18 @@
+{
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd",
+    "revision": "main",
+    "selected_artifact_id": "diffusers-bundle"
+  },
+  "task_id": "image_generation",
+  "task_type": "text_to_image",
+  "expected_artifact_kind": "diffusers_bundle",
+  "selected_runtime_id": "pytorch",
+  "selected_device_id": "cuda:0",
+  "platform_context": {
+    "platform_key": "linux-x86_64"
+  },
+  "selected_binding_ids": [
+    "torch-diffusers"
+  ]
+}
