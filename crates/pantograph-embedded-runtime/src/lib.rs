@@ -27,6 +27,7 @@ mod node_execution_diagnostics;
 mod node_execution_ledger;
 mod node_io_artifacts;
 pub mod package_readiness_provider;
+mod planned_inference_host;
 pub mod python_package_readiness_probe;
 pub mod python_runtime;
 mod python_runtime_execution;

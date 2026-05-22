@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::planned_inference_host::EmbeddedPlannedInferenceExecutionHost;
 use crate::task_executor;
-use crate::workflow_execution_plan_projection::project_workflow_execution_plan_to_planned_inference_context;
 use crate::{
     apply_runtime_extensions_for_execution, EmbeddedWorkflowHost,
     InferenceLifecycleWorkflowLedgerSink, NodeExecutionWorkflowLedgerSink,
@@ -338,28 +338,30 @@ pub(crate) async fn run_session_workflow(
                 .await;
         }
     }
+    let inference_lifecycle_sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+        host.workflow_service.clone(),
+        workflow_id.to_string(),
+        workflow_run_id.to_string(),
+        workflow_run_id.to_string(),
+        &graph,
+    )
+    .ok()
+    .map(|sink| Arc::new(sink) as Arc<dyn inference::InferenceRequestLifecycleEventSink>);
     apply_runtime_extensions_for_execution(
         &mut executor,
         &runtime_ext,
         node_execution_sink,
         Some(workflow_run_id.to_string()),
         Some(python_runtime_execution_recorder.clone()),
-        InferenceLifecycleWorkflowLedgerSink::try_new(
-            host.workflow_service.clone(),
-            workflow_id.to_string(),
-            workflow_run_id.to_string(),
-            workflow_run_id.to_string(),
-            &graph,
-        )
-        .ok()
-        .map(|sink| Arc::new(sink) as Arc<dyn inference::InferenceRequestLifecycleEventSink>),
+        inference_lifecycle_sink.clone(),
     );
-    install_planned_inference_context(
+    install_planned_inference_host(
         host,
         &mut executor,
         workflow_execution_session_id,
-        workflow_run_id,
-    )?;
+        &runtime_ext,
+        inference_lifecycle_sink,
+    );
     let mut node_outputs = HashMap::new();
     let run_result = async {
         if replayed_inputs {
@@ -422,38 +424,25 @@ pub(crate) async fn run_session_workflow(
     EmbeddedWorkflowHost::collect_run_outputs(&node_outputs, &output_node_ids, output_targets)
 }
 
-fn install_planned_inference_context(
+fn install_planned_inference_host(
     host: &EmbeddedWorkflowHost,
     executor: &mut WorkflowExecutor,
     workflow_execution_session_id: &str,
-    workflow_run_id: &str,
-) -> Result<(), WorkflowServiceError> {
-    executor
-        .extensions_mut()
-        .remove(node_engine::extension_keys::PLANNED_INFERENCE_DECISIONS);
-    let Some(execution_plan) = host
-        .workflow_service
-        .workflow_execution_session_active_execution_plan(
-            workflow_execution_session_id,
-            workflow_run_id,
-        )?
-    else {
-        return Ok(());
-    };
-
-    let planned_context = project_workflow_execution_plan_to_planned_inference_context(
-        &execution_plan,
-    )
-    .map_err(|error| {
-        WorkflowServiceError::CapabilityViolation(format!(
-            "failed to project workflow execution plan into node runtime context: {error}"
-        ))
-    })?;
-    executor.extensions_mut().set(
-        node_engine::extension_keys::PLANNED_INFERENCE_DECISIONS,
-        Arc::new(planned_context),
+    runtime_extensions: &RuntimeExtensionsSnapshot,
+    inference_lifecycle_sink: Option<Arc<dyn inference::InferenceRequestLifecycleEventSink>>,
+) {
+    let planned_host = EmbeddedPlannedInferenceExecutionHost::new(
+        host.workflow_service.clone(),
+        workflow_execution_session_id.to_string(),
+        host.gateway.clone(),
+        runtime_extensions.clone(),
+        inference_lifecycle_sink,
     );
-    Ok(())
+    executor.extensions_mut().set(
+        node_engine::extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
+        Arc::new(planned_host)
+            as Arc<dyn node_engine::planned_inference::PlannedInferenceExecutionHost>,
+    );
 }
 
 async fn reconcile_session_graph_change(

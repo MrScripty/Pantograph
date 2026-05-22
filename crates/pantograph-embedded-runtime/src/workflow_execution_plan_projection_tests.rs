@@ -4,11 +4,10 @@ use inference::{
     InferenceTaskId,
 };
 use pantograph_workflow_service::{
-    WorkflowExecutionPlan, WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
+    WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
     WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanError,
     WorkflowExecutionPlanNodeDecision, WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
 };
-use pantograph_workflow_service::{WorkflowId, WorkflowRunId};
 use pantograph_workflow_service::{
     WorkflowTechnicalFitDependencyReadinessFact,
     WorkflowTechnicalFitDependencyReadinessResolverOwner,
@@ -16,10 +15,7 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitDependencyReadinessSubjectKind,
 };
 
-use super::{
-    project_workflow_execution_plan_to_planned_inference_context,
-    project_workflow_node_decision_to_backend_execution_decision,
-};
+use super::project_workflow_node_decision_to_backend_execution_decision;
 
 fn workflow_node_decision() -> WorkflowExecutionPlanNodeDecision {
     WorkflowExecutionPlanNodeDecision::new(
@@ -244,27 +240,4 @@ fn workflow_node_decision_projects_diagnostics() {
             .map(|backend_id| backend_id.as_str()),
         Some("pytorch")
     );
-}
-
-#[test]
-fn workflow_execution_plan_projects_to_node_engine_context() {
-    let execution_plan = WorkflowExecutionPlan::new(
-        WorkflowRunId::try_from("run-image-plan".to_string()).expect("workflow run id"),
-        WorkflowId::try_from("workflow-image".to_string()).expect("workflow id"),
-        vec![workflow_node_decision()],
-    )
-    .expect("execution plan");
-
-    let context = project_workflow_execution_plan_to_planned_inference_context(&execution_plan)
-        .expect("planned inference context");
-
-    let decision = context
-        .decision_for_node(
-            "run-image-plan",
-            "image-node-1",
-            InferenceTaskId::ImageGeneration,
-        )
-        .expect("planned node decision");
-    assert_eq!(context.workflow_run_id(), "run-image-plan");
-    assert_eq!(decision.selected_backend_id.as_str(), "pytorch");
 }

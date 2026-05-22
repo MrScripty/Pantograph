@@ -89,11 +89,6 @@ pub mod extension_keys {
     #[cfg(feature = "inference-nodes")]
     pub const INFERENCE_LIFECYCLE_SINK: &str = "inference_lifecycle_sink";
 
-    /// Key for `Arc<crate::planned_inference::PlannedInferenceDecisionContext>` —
-    /// run-scoped scheduler decisions projected by the host runtime.
-    #[cfg(feature = "inference-nodes")]
-    pub const PLANNED_INFERENCE_DECISIONS: &str = "planned_inference_decisions";
-
     /// Key for `Arc<dyn crate::planned_inference::PlannedInferenceExecutionHost>` —
     /// host-owned planned inference execution boundary.
     #[cfg(feature = "inference-nodes")]

@@ -4465,8 +4465,8 @@ Worker rules:
   and side-effect free; `InferenceGateway::generate_image_from_planning_input`
   is the planned gateway boundary; workflow-service owns
   `WorkflowExecutionPlan`; embedded-runtime projects workflow node decisions
-  to inference `BackendExecutionDecision`; node-engine consumes
-  `PlannedInferenceDecisionContext`; PyTorch image worker translation lives in
+  to inference `BackendExecutionDecision`; node-engine consumes only the
+  planned inference host service; PyTorch image worker translation lives in
   focused Rust/Python helper modules with contract-version and unknown-field
   checks.
 - Verification passed before this update: `cargo test -p inference
@@ -8228,11 +8228,10 @@ Worker rules:
     `cargo check -p node-engine --all-features`,
     `cargo check -p node-engine --no-default-features`,
     `cargo fmt -p node-engine -- --check`, and `git diff --check`.
-  - Remaining follow-up: implement the embedded-runtime
-    `PlannedInferenceExecutionHost` projection from `WorkflowExecutionPlan`
-    through Pumas' typed load-target resolver, add the inference gateway
-    launch-handoff API, then delete the old
-    `PlannedInferenceDecisionContext` extension path when no consumer remains.
+  - Follow-up status: the inference gateway launch-handoff API and
+    embedded-runtime planned inference host were completed in subsequent
+    2026-05-22 slices, and the retired node-engine planned-decision extension
+    path was removed.
 - 2026-05-22 Milestone 5 inference gateway launch handoff:
   - Smallest useful vertical slice: add the inference-owned
     image-generation worker-launch handoff and gateway methods that consume it,
@@ -8264,6 +8263,69 @@ Worker rules:
     `PlannedInferenceExecutionHost` to build this handoff from the active
     `WorkflowExecutionPlan` and Pumas typed load-target resolver, then remove
     the old planned-decision extension path when it is no longer consumed.
+- 2026-05-22 Milestone 5 embedded-runtime planned inference host:
+  - Smallest useful vertical slice: install an embedded-runtime
+    `PlannedInferenceExecutionHost` that builds the image-generation launch
+    handoff from the active scheduler execution plan and Pumas' typed artifact
+    load-target resolver, then remove the retired node-engine decision-context
+    extension path.
+  - Allowed write set: `crates/pantograph-embedded-runtime/src/planned_inference_host.rs`,
+    `crates/pantograph-embedded-runtime/src/planned_inference_host_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_execution_session_execution.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_execution_plan_projection.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_execution_plan_projection_tests.rs`,
+    `crates/node-engine/src/planned_inference.rs`,
+    `crates/node-engine/src/extensions.rs`, and Milestone 5 plan notes.
+    Unrelated root proposal markdown files remained ignored.
+  - Implementation completed: session workflow execution now installs
+    `EmbeddedPlannedInferenceExecutionHost` under
+    `PLANNED_INFERENCE_EXECUTION_HOST`; the host reads the active
+    `WorkflowExecutionPlan`, projects the current node decision to
+    `BackendExecutionDecision`, resolves Pumas package facts and a ready
+    Pumas-approved artifact load target, builds
+    `PlannedImageGenerationLaunchHandoff`, and calls the inference gateway
+    launch-handoff API with lifecycle recording when the session sink exists.
+    The retired `PlannedInferenceDecisionContext`,
+    `PLANNED_INFERENCE_DECISIONS` extension key, and plan-to-context
+    projection were removed.
+  - No-fallback/no-legacy confirmation: node-engine no longer receives
+    scheduler decision maps, package facts, artifact load targets, model paths,
+    or executable handoff data. If active plan lookup, node decision
+    projection, selected model ref, Pumas facts, Pumas load-target readiness,
+    handoff validation, or gateway execution fails, image generation fails
+    through typed planned-execution errors instead of falling back to graph
+    fields or path joins.
+  - Decomposition note: new host behavior lives in
+    `planned_inference_host.rs` with tests split into
+    `planned_inference_host_tests.rs`. The existing session executor remains
+    over the preferred line-count threshold, so this slice kept its change to
+    the host-installation call and did not add Pumas or gateway policy there.
+  - Verification passed:
+    `cargo test -p pantograph-embedded-runtime planned_inference_host`,
+    `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection`,
+    `cargo test -p node-engine --features inference-nodes canonical_llm_image_generation`,
+    `cargo test -p node-engine --features inference-nodes build_image_generation_execution_request`,
+    `cargo test -p node-engine --features inference-nodes planned_inference`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --all-features`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`,
+    `cargo check -p node-engine --features inference-nodes`,
+    `cargo check -p node-engine --all-features`,
+    `cargo check -p node-engine --no-default-features`,
+    `cargo fmt -p pantograph-embedded-runtime -p node-engine -- --check`,
+    and `git diff --check`.
+  - Remaining follow-up: continue the resolver/preflight migration by replacing
+    old node-engine and embedded-runtime dependency resolver/preflight
+    contracts with the shared dependency-planning request/result contracts,
+    then remove the legacy request-building helpers instead of adapting them.
+  - Discovered follow-up: `WorkflowExecutionPlan.selected_model_ref` is still a
+    validated string model reference, not the full typed Pumas model-ref
+    contract with selected-artifact fields. The new host therefore relies on
+    Pumas' resolver to fail closed for ambiguous selected artifacts. Resolve
+    this in the typed preflight/execution-plan contract replacement by carrying
+    the canonical Pumas model ref as a typed identity, not by reintroducing
+    local paths or graph-carried artifact load targets.
 - 2026-05-21 Milestone 5 path-free preflight standards iteration:
   - Standards reviewed:
     `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`,

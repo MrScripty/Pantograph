@@ -1353,10 +1353,9 @@ current planned image path.
   `InferenceGateway::generate_image_from_planning_input` is the planned
   gateway boundary; workflow-service owns `WorkflowExecutionPlan`;
   embedded-runtime projects workflow node decisions to inference
-  `BackendExecutionDecision`; node-engine consumes
-  `PlannedInferenceDecisionContext`; PyTorch image worker translation lives in
-  focused Rust/Python helper modules with contract-version and unknown-field
-  checks.
+  `BackendExecutionDecision`; node-engine consumes only the planned inference
+  host service; PyTorch image worker translation lives in focused Rust/Python
+  helper modules with contract-version and unknown-field checks.
 - Verification passed before this update: `cargo test -p inference
   image_generation_planner --lib`, `cargo test -p inference
   image_generation_family_rules --lib`, `cargo check -p inference`, `cargo fmt
@@ -1874,56 +1873,30 @@ Staged Option 3 implementation plan:
      scheduler::store::tests::active_run_records_run_scoped_execution_plan`,
      `cargo check -p pantograph-workflow-service`, and `cargo fmt -p
      pantograph-workflow-service`.
-   - Planned inference context contract (completed 2026-05-15): added
-     node-engine-owned `PlannedInferenceDecisionContext` plus the
-     `PLANNED_INFERENCE_DECISIONS` executor-extension key. The context stores
-     reduced inference `BackendExecutionDecision` values by node id for one
-     workflow run, validates non-empty run/node ids, and fails closed for stale
-     run ids, missing node decisions, or selected-task mismatches. Node-engine
-     still does not import workflow-service execution-plan DTOs or scheduler
-     policy.
-   - Verification result: `cargo test -p node-engine --features
-     inference-nodes planned_inference`, `cargo check -p node-engine
-     --features inference-nodes`, `cargo check -p node-engine`, and `cargo fmt
-     -p node-engine` passed. The featureless `cargo test -p node-engine
-     planned_inference` compiled and filtered out the feature-gated tests as
-     expected.
-   - Embedded-runtime context installation (completed 2026-05-15): added
-     workflow-plan-to-node-engine context projection and installed the
-     resulting `PlannedInferenceDecisionContext` during keep-alive session
-     workflow execution. The warm-session executor now removes the planned
-     inference extension before each run and then installs a freshly projected
-     context only when the active workflow run has an execution plan. This
-     prevents stale plan reuse while keeping workflow-service DTOs out of
-     node-engine.
-   - Verification result: `cargo test -p pantograph-embedded-runtime
-     workflow_execution_plan_projection`, `cargo test -p node-engine
-     --features inference-nodes extensions::tests::test_remove_clears_key`,
-     `cargo check -p pantograph-embedded-runtime`, `cargo check -p
-     node-engine --features inference-nodes`, and `cargo fmt -p node-engine -p
-     pantograph-embedded-runtime` passed.
-   - Thread the execution plan into node execution through a typed runtime
-     context, likely `ExecutorExtensions`, without serializing it into graph
-     inputs.
-   - Node-engine consumes only a minimal inference-facing decision lookup keyed
-     by node id/task id, projected by embedded-runtime from the workflow
-     execution plan. It must not depend on workflow-service execution-plan DTOs.
+   - Planned inference host contract (completed 2026-05-22): node-engine now
+     owns only the path-free `PlannedInferenceExecutionHost` trait and
+     `PlannedImageGenerationRequest`. Embedded-runtime installs the host under
+     `PLANNED_INFERENCE_EXECUTION_HOST` for each session workflow run. The
+     older run-scoped decision-context extension was removed.
+   - Embedded-runtime host execution (completed 2026-05-22): the host reads the
+     active workflow execution plan, projects the current node decision to
+     inference `BackendExecutionDecision`, resolves Pumas package facts and the
+     Pumas-approved artifact load target, builds
+     `PlannedImageGenerationLaunchHandoff`, and calls the inference gateway
+     launch-handoff API. Node-engine never sees executable Pumas paths,
+     package facts, artifact load targets, workflow-service execution-plan
+     DTOs, or scheduler policy.
    - Because session executors and `ExecutorExtensions` are reused across warm
-     runs, every run must install a fresh run-scoped context that carries the
-     current workflow run id, or explicitly clear/replace the old context before
-     execution. Missing or mismatched run id must fail closed to prevent stale
-     plan reuse.
-   - `execute_image_generation_inference` reads the current node's per-node
-     decision, combines it with the existing `ImageGenerationRequest` and
-     Pumas `ResolvedModelPackageFacts`, and calls
-     `generate_image_from_planning_input`.
-   - Missing plan, missing node decision, missing package facts, or failed
-     projection must terminate the workflow task with typed diagnostics.
-   - `ExecutorExtensions` use must remain a typed runtime context only. Do not
-     serialize execution-plan data into graph input maps, saved workflow JSON,
-     frontend DTOs, or worker envelopes. Node-engine may compose the request,
-     package facts, and reduced decision, but it must not own scheduler ranking
-     or retry policy.
+     runs, every run must replace the host extension before node execution.
+     Missing active plan, missing node decision, task mismatch, Pumas
+     unavailable state, failed projection, or failed handoff construction must
+     terminate the workflow task with typed diagnostics.
+   - `ExecutorExtensions` use must remain a typed host-service boundary only.
+     Do not serialize execution-plan data into graph input maps, saved workflow
+     JSON, frontend DTOs, preflight results, dependency-environment results, or
+     worker envelopes. Node-engine composes only the user image request and run
+     correlation identifiers; embedded-runtime owns scheduler/Pumas/gateway
+     handoff projection.
    - Verification: node-engine tests prove successful planned image execution
      and fail-closed behavior for absent/invalid execution-plan decisions. The
      first cross-layer acceptance test must be written before implementing the
@@ -1932,14 +1905,13 @@ Staged Option 3 implementation plan:
      `llm-inference` image inputs plus resolved package facts and assert the
      planned gateway call/output without depending on private scheduler
      internals.
-   - Node-engine planned image consumption (completed 2026-05-15): canonical
+   - Node-engine planned image consumption (completed 2026-05-22): canonical
      `llm-inference` image-generation execution now builds the existing image
-     request, requires the `PLANNED_INFERENCE_DECISIONS` run-scoped context,
-     validates the current workflow run id and node/task decision, requires
-     `resolved_model_package_facts`, and invokes
-     `generate_image_from_planning_input`. The raw typed image-generation
-     gateway path is no longer used for this node path, preserving the
-     no-fallback rule.
+     request, requires the `PLANNED_INFERENCE_EXECUTION_HOST` run-scoped host
+     service, and forwards only workflow_run_id/node_id/request_id plus
+     `ImageGenerationRequest`. The raw typed image-generation gateway path and
+     graph-carried package/load-target path are no longer used for this node
+     path, preserving the no-fallback rule.
    - Embedded-runtime run-id alignment (completed 2026-05-15): keep-alive
      session execution now passes `workflow_run_id` to the core task executor,
      runtime extension execution id, and inference lifecycle ledger sink. This

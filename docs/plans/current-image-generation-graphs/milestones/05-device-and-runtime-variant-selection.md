@@ -1388,11 +1388,7 @@ fixture contract must not remain reachable as an alternate execution path.
    - 2026-05-22 no-fallback/no-legacy confirmation: image generation now fails
      closed when the planned execution host is absent and no longer falls back
      to graph-carried package facts, artifact load targets, model paths, or
-     gateway-local planning. The old run-scoped
-     `PlannedInferenceDecisionContext` remains in the codebase only because
-     embedded-runtime projection still installs it; subsequent handoff slices
-     must remove that retired decision-extension path when embedded-runtime
-     owns `PlannedInferenceExecutionHost`.
+     gateway-local planning.
    - 2026-05-22 decomposition note: the slice touched the over-threshold
      `inference_nodes.rs` and `inference_tests.rs` files as a minimal routing
      change while moving new public boundary logic into `planned_inference.rs`.
@@ -1429,6 +1425,51 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo check -p inference`, `cargo check -p inference --all-features`,
      `cargo check -p inference --no-default-features`,
      `cargo fmt -p inference -- --check`, and `git diff --check`.
+   - 2026-05-22 implementation update: completed the embedded-runtime planned
+     inference host slice. `pantograph-embedded-runtime` now installs an
+     `EmbeddedPlannedInferenceExecutionHost` for session workflow runs. The
+     host resolves the active `WorkflowExecutionPlan` node decision, projects
+     it to inference `BackendExecutionDecision`, resolves Pumas package facts
+     and the Pumas-approved artifact load target, builds
+     `PlannedImageGenerationLaunchHandoff`, and calls the inference gateway
+     launch-handoff API with the existing lifecycle sink when available.
+     Node-engine no longer receives scheduler decision maps or executable
+     package/load-target facts.
+   - 2026-05-22 retired-path removal: removed the source-level
+     `PlannedInferenceDecisionContext`, `PLANNED_INFERENCE_DECISIONS`
+     extension key, and embedded-runtime workflow-plan-to-node-engine context
+     projection. The remaining workflow-plan projection helper is the
+     host-owned per-node decision adapter used to build the launch handoff.
+   - 2026-05-22 no-fallback/no-legacy confirmation: image-generation execution
+     has a single runtime path. Node-engine sends only
+     workflow_run_id/node_id/request_id plus `ImageGenerationRequest` to the
+     host. Pumas facts and filesystem load targets are obtained only by the
+     embedded-runtime host through Pumas' typed resolver; missing plans,
+     missing selected model refs, Pumas unavailable states, task mismatches,
+     projection failures, or gateway failures terminate the task with typed
+     errors instead of falling back to graph-carried facts or path joins.
+   - 2026-05-22 verification passed:
+     `cargo test -p pantograph-embedded-runtime planned_inference_host`,
+     `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection`,
+     `cargo test -p node-engine --features inference-nodes canonical_llm_image_generation`,
+     `cargo test -p node-engine --features inference-nodes build_image_generation_execution_request`,
+     `cargo test -p node-engine --features inference-nodes planned_inference`,
+     `cargo check -p pantograph-embedded-runtime`,
+     `cargo check -p pantograph-embedded-runtime --all-features`,
+     `cargo check -p pantograph-embedded-runtime --no-default-features`,
+     `cargo check -p node-engine --features inference-nodes`,
+     `cargo check -p node-engine --all-features`,
+     `cargo check -p node-engine --no-default-features`,
+     `cargo fmt -p pantograph-embedded-runtime -p node-engine -- --check`,
+     and `git diff --check`.
+   - 2026-05-22 discovered follow-up:
+     `WorkflowExecutionPlan.selected_model_ref` remains a validated string
+     model reference, not the full typed Pumas model-ref contract with
+     selected-artifact fields. The embedded-runtime host therefore relies on
+     Pumas' resolver to fail closed for ambiguous selected artifacts. Resolve
+     this in the typed preflight/execution-plan contract replacement by
+     carrying canonical Pumas model refs as typed identities, not by
+     reintroducing local paths or graph-carried artifact load targets.
    - Historical preflight contract-slice scope clarification: the preflight
      contract gate may also touch existing `pantograph-dependency-planning`
      sibling modules, fixtures, and tests when required to make the shared
