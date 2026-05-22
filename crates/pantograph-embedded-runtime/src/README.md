@@ -38,6 +38,7 @@ packages.
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `model_dependency_activity.rs` | Defines dependency activity event payloads, emitters, and request context projection shared by resolver phases and install streams. |
 | `model_dependency_descriptors.rs` | Resolves stable model identity, cache keys, Pumas execution descriptors, backend aliases, task tags, and requirements ids for dependency preflight. |
+| `model_dependency_operations.rs` | Owns the current async resolve/check/install/model-ref operation flow for the dependency resolver while the resolver boundary is migrated to shared typed contracts. |
 | `model_dependency_python.rs` | Owns Python environment lookup, pip package checks, package install stream capture, binding checks, and per-environment install locks for the dependency resolver. |
 | `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |

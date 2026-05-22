@@ -1324,6 +1324,24 @@ fixture contract must not remain reachable as an alternate execution path.
      `git diff --check`. Line counts after the split:
      `dependency_preflight.rs` 462 lines and
      `dependency_preflight/input_projection.rs` 383 lines.
+   - 2026-05-21 implementation update: completed the embedded-runtime resolver
+     operation decomposition prerequisite before resolver contract migration.
+     Moved the async resolve/check/install/model-ref operation flow from
+     `model_dependencies.rs` into `model_dependency_operations.rs`; the root
+     resolver module now owns shared state, helper boundaries, child-module
+     composition, and trait wiring. This slice did not change resolver behavior
+     or add typed-contract adapters. It also corrected the node-engine
+     all-features import needed by the prior preflight decomposition.
+   - Embedded-runtime decomposition verification:
+     `cargo fmt -p node-engine -p pantograph-embedded-runtime`,
+     `cargo test -p pantograph-embedded-runtime model_dependencies`,
+     `cargo fmt -p node-engine -p pantograph-embedded-runtime -- --check`,
+     `cargo check -p pantograph-embedded-runtime`,
+     `cargo check -p pantograph-embedded-runtime --all-features`,
+     `cargo check -p pantograph-embedded-runtime --no-default-features`, and
+     `git diff --check`. Line counts after the split:
+     `model_dependencies.rs` 278 lines and `model_dependency_operations.rs`
+     371 lines.
    - 2026-05-21 codebase blast-radius iteration for this split:
      implementation must correct ambiguous preflight terminology before broader
      migration. `DependencyPlanningIdentityKey` must carry scheduler intent or

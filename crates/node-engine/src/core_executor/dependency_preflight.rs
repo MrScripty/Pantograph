@@ -4,14 +4,17 @@ use std::sync::Arc;
 #[cfg(feature = "inference-nodes")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "pytorch-nodes")]
+use inference::{
+    resolve_task_registry_entry, BackendCompatibilityOptions, BackendCompatibilityRequest,
+    PyTorchBackend,
+};
 #[cfg(feature = "inference-nodes")]
 use inference::{
-    resolve_task_registry_entry, InferenceCompatibilityIssueSummary,
-    InferenceCompatibilityReportSummary, InferenceLifecyclePhase, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
+    InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary,
+    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink,
 };
-#[cfg(feature = "pytorch-nodes")]
-use inference::{BackendCompatibilityOptions, BackendCompatibilityRequest, PyTorchBackend};
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::error::{NodeEngineError, Result};

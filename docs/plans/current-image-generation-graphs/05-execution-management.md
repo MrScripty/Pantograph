@@ -8268,6 +8268,41 @@ Worker rules:
     `DependencyPreflightRequest`/`DependencyPreflightResult` and
     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then remove
     the legacy projection helpers rather than wrapping them.
+- 2026-05-21 Milestone 5 embedded-runtime resolver decomposition:
+  - Smallest useful vertical slice: split embedded-runtime resolver operations
+    out of the over-threshold resolver module before resolver contract
+    migration.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/model_dependencies.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_operations.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, the node-engine cfg
+    import surfaced by all-features verification, and Milestone 5 plan notes.
+    Root proposal markdown files remained ignored.
+  - Implementation completed: moved the async resolve/check/install/model-ref
+    operation flow into `model_dependency_operations.rs`. The root resolver
+    module now owns shared resolver state, helper boundaries, child-module
+    composition, and trait wiring. The embedded-runtime README now documents
+    the operations module.
+  - No-fallback/no-legacy confirmation: this slice was structural
+    decomposition only. It did not add typed-contract adapters, did not map
+    `DependencyEnvironmentResult` or `DependencyPreflightResult` back into old
+    node-engine DTOs, and did not change resolver behavior.
+  - Standards evidence: line counts after the split are
+    `model_dependencies.rs` 278 and `model_dependency_operations.rs` 371. The
+    remaining resolver contract migration can now change operation behavior
+    without adding new policy to an over-threshold file.
+  - Verification passed:
+    `cargo fmt -p node-engine -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime model_dependencies`,
+    `cargo fmt -p node-engine -p pantograph-embedded-runtime -- --check`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --all-features`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`, and
+    `git diff --check`.
+  - Remaining follow-up: decompose
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`
+    before migrating dependency-environment execution to the shared typed
+    contracts.
 
 ### Traceability Links
 
