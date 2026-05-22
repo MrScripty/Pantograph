@@ -8230,6 +8230,44 @@ Worker rules:
     migration. Retired DTOs and path-shaped behavior must be removed or
     replaced when their migration slices land, not adapted through aliases.
   - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
+- 2026-05-21 Milestone 5 node-engine preflight decomposition:
+  - Smallest useful vertical slice: split node-engine preflight graph-input
+    projection helpers out of the over-threshold preflight module before
+    resolver/preflight behavioral migration.
+  - Allowed write set: `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight/`, and Milestone
+    5 plan notes. Root proposal markdown files remained ignored.
+  - Implementation completed: moved graph-input projection, backend/task
+    inference helpers, package-fact reading, and legacy `ModelRefV2` assembly
+    helpers into
+    `crates/node-engine/src/core_executor/dependency_preflight/input_projection.rs`.
+    Added a directory README that marks the child module as a temporary
+    projection owner and explicitly keeps dependency-planning contracts, Pumas
+    artifact lookup, scheduler policy, and worker load-target handoff outside
+    the module.
+  - No-fallback/no-legacy confirmation: this slice was structural
+    decomposition only. It did not add compatibility adapters, did not adapt
+    `DependencyPreflightRequest` or `DependencyPreflightResult` back into
+    `ModelDependencyRequest`/`ModelRefV2`, and did not preserve path-shaped
+    preflight as a new alternate branch.
+  - Standards evidence: `dependency_preflight.rs` now owns lifecycle
+    enforcement, resolver calls, path repair/rejection, and compatibility
+    lifecycle events; `input_projection.rs` owns projection helpers only. Line
+    counts after the split are `dependency_preflight.rs` 462 and
+    `dependency_preflight/input_projection.rs` 383.
+  - Verification passed:
+    `cargo fmt -p node-engine`,
+    `cargo test -p node-engine`,
+    `cargo fmt -p node-engine -- --check`,
+    `cargo check -p node-engine`,
+    `cargo check -p node-engine --all-features`,
+    `cargo check -p node-engine --no-default-features`, and
+    `git diff --check`.
+  - Remaining follow-up: replace the old node-engine and embedded-runtime
+    resolver/preflight contracts with
+    `DependencyPreflightRequest`/`DependencyPreflightResult` and
+    `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then remove
+    the legacy projection helpers rather than wrapping them.
 
 ### Traceability Links
 

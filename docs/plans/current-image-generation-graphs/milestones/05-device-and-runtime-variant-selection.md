@@ -1307,6 +1307,23 @@ fixture contract must not remain reachable as an alternate execution path.
      Do not add new request projection, scheduler policy, worker handoff, or
      path-rejection logic to those files without first splitting cohesive
      helper modules and documenting ownership.
+   - 2026-05-21 implementation update: completed the node-engine preflight
+     decomposition prerequisite before resolver/preflight behavioral migration.
+     Moved graph-input projection, backend/task inference helpers, package-fact
+     reading, and legacy `ModelRefV2` assembly helpers into
+     `core_executor/dependency_preflight/input_projection.rs` with a directory
+     README documenting that the module is a temporary projection owner, not a
+     contract owner. `dependency_preflight.rs` now owns lifecycle enforcement,
+     path repair/rejection, resolver calls, and compatibility lifecycle events.
+     This slice did not add a new compatibility branch or adapt typed
+     dependency-planning contracts back into legacy DTOs.
+   - Decomposition verification: `cargo fmt -p node-engine`,
+     `cargo test -p node-engine`, `cargo fmt -p node-engine -- --check`,
+     `cargo check -p node-engine`, `cargo check -p node-engine --all-features`,
+     `cargo check -p node-engine --no-default-features`, and
+     `git diff --check`. Line counts after the split:
+     `dependency_preflight.rs` 462 lines and
+     `dependency_preflight/input_projection.rs` 383 lines.
    - 2026-05-21 codebase blast-radius iteration for this split:
      implementation must correct ambiguous preflight terminology before broader
      migration. `DependencyPlanningIdentityKey` must carry scheduler intent or
