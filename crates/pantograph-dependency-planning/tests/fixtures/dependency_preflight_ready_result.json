@@ -9,8 +9,10 @@
     "task_id": "image_generation",
     "task_type": "text_to_image",
     "expected_artifact_kind": "diffusers_bundle",
-    "selected_runtime_id": "pytorch",
-    "selected_device_id": "cuda:0",
+    "scheduler_intent": {
+      "requested_runtime_id": "pytorch",
+      "requested_device_id": "cuda:0"
+    },
     "platform_context": {
       "platform_key": "linux-x86_64"
     },
@@ -18,12 +20,21 @@
       "torch-diffusers"
     ]
   },
+  "readiness_state": "ready",
   "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64:torch-diffusers",
+  "environment_ref": {
+    "environment_id": "python:pytorch:cu124",
+    "manifest_id": "manifest:tiny-sd:pytorch:linux-x86_64"
+  },
   "diagnostics": [
     {
       "code": "artifact_stale",
       "severity": "warning",
-      "message": "Pumas reported stale package facts; host planning must refresh before worker handoff."
+      "message": "Pumas reported stale package facts; host planning must refresh before worker handoff.",
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "runtime_id": "pytorch",
+      "device_id": "cuda:0",
+      "field_path": "identity_key.model_ref"
     }
   ]
 }

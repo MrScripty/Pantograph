@@ -14,7 +14,7 @@ frontend state, and scheduler policy.
 | `environment/` | Child modules for dependency-environment result payload rows that would otherwise make the envelope module too broad. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
-| `preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
+| `preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
 | `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `result.rs` | Dependency-planning state, diagnostic, and result DTOs. |
 

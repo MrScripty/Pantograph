@@ -224,10 +224,7 @@ pub(super) fn validate_diagnostics(
     diagnostics: &[DependencyPlanningDiagnostic],
 ) -> Result<(), DependencyPlanningContractError> {
     for diagnostic in diagnostics {
-        validate_dependency_text("dependency_diagnostic.message", &diagnostic.message)?;
-        if let Some(field_path) = &diagnostic.field_path {
-            validate_validation_field_path("dependency_diagnostic.field_path", field_path)?;
-        }
+        diagnostic.validate()?;
     }
     Ok(())
 }

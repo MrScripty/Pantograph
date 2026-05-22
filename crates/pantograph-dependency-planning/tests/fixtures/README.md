@@ -15,11 +15,13 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 | `dependency_environment_ready_result.json` | Ready dependency-environment check result with typed readiness/install/validation states and environment ref. |
 | `dependency_environment_resolve_request.json` | Typed dependency-environment resolve request that carries planning facts without path identity. |
 | `dependency_environment_unavailable_result.json` | Unavailable dependency-environment resolve result with typed failure state and diagnostic. |
-| `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, runtime/device selection facts, platform, and selected bindings. |
+| `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, scheduler intent, platform, and selected bindings. |
+| `dependency_preflight_ready_result.json` | Ready path-free preflight result with dependency-environment identity and readiness proof. |
+| `dependency_preflight_request.json` | Path-free preflight request with graph intent and dependency-environment identity. |
+| `dependency_preflight_unavailable_result.json` | Unavailable path-free preflight result with ordered typed diagnostics. |
 | `dependency_planning_request.json` | Valid graph/host dependency-planning request keyed by `pumas_model_ref`, including selected binding ids and manual dependency override patches. |
 | `dependency_planning_ready_result.json` | Ready result carrying a Pumas-approved load target for backend handoff. |
 | `dependency_planning_unavailable_result.json` | Unavailable result with a typed Pumas diagnostic and no load target. |
-| `dependency_preflight_model_ref.json` | Path-free successor for graph/node-engine dependency identity after dependency preflight. |
 
 ## Problem
 Serialized contract drift can compile in Rust while breaking frontend,
@@ -54,7 +56,7 @@ cross-layer tests without importing unrelated runtime behavior.
   contract shape.
 - Dependency-environment request fixtures keep `DependencyPlanningIdentityKey`
   and `DependencyPlanningRequest` aligned on model ref, task, artifact kind,
-  platform, selected bindings, runtime, and device facts.
+  platform, selected bindings, and scheduler intent.
 - Dependency-environment result fixtures use typed readiness, install,
   validation, failure, binding status, operation, and validation-error states.
 - Dependency-environment result fixtures keep requirement rows, binding rows,
@@ -69,6 +71,8 @@ cross-layer tests without importing unrelated runtime behavior.
 - Selected binding ids preserve producer order and must be unique.
 - Path-free identity/preflight fixtures stay separate from ready result
   fixtures so backend handoff facts cannot become graph identity.
+- Preflight request/result fixtures reject legacy selected runtime/device
+  fields; runtime/device values in these fixtures are scheduler intent only.
 
 ## Revisit Triggers
 - The frontend or worker starts consuming generated fixture copies.

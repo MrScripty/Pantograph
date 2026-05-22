@@ -1,10 +1,10 @@
 {
-  "action": "resolve",
+  "contract_version": 1,
   "identity_key": {
     "model_ref": {
       "model_id": "image/stable-diffusion/tiny-sd",
       "revision": "main",
-      "selected_artifact_id": "artifact-diffusers"
+      "selected_artifact_id": "diffusers-bundle"
     },
     "task_id": "image_generation",
     "task_type": "text_to_image",
@@ -15,36 +15,28 @@
     },
     "platform_context": {
       "platform_key": "linux-x86_64"
-    }
+    },
+    "selected_binding_ids": [
+      "torch-diffusers"
+    ]
   },
   "readiness_state": "unavailable",
-  "install_state": "blocked",
-  "validation_state": "unavailable",
-  "failure_state": "requirements_unavailable",
-  "requirements": [
-    {
-      "name": "diffusers",
-      "kind": "python_package",
-      "python": {
-        "import_name": "diffusers",
-        "package_manager": "pip"
-      }
-    }
-  ],
-  "operation": {
-    "state": "blocked",
-    "started_at_ms": 1779398400000,
-    "completed_at_ms": 1779398400100
-  },
   "diagnostics": [
+    {
+      "code": "pumas_unavailable",
+      "severity": "error",
+      "message": "Pumas model library is not available to validate dependency preflight.",
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "field_path": "identity_key.model_ref"
+    },
     {
       "code": "runtime_unavailable",
       "severity": "error",
-      "message": "No dependency binding is available for the selected runtime.",
+      "message": "Requested PyTorch dependency environment is not available.",
       "model_id": "image/stable-diffusion/tiny-sd",
       "runtime_id": "pytorch",
       "device_id": "cuda:0",
-      "field_path": "identity_key.selected_binding_ids"
+      "field_path": "identity_key.scheduler_intent.requested_runtime_id"
     }
   ]
 }

@@ -4,6 +4,9 @@ use crate::error::DependencyPlanningContractError;
 use crate::model_ref::{PumasArtifactLoadTarget, PumasModelRef};
 use crate::request::{DeviceIntentId, RuntimeIntentId};
 
+const MAX_DIAGNOSTIC_MESSAGE_LEN: usize = 256;
+const MAX_DIAGNOSTIC_FIELD_PATH_LEN: usize = 256;
+
 /// Normalized planning state returned by host dependency planning.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -67,7 +70,7 @@ pub enum DependencyPlanningSeverity {
 
 /// Structured diagnostic emitted by dependency planning.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyPlanningDiagnostic {
     pub code: DependencyPlanningDiagnosticCode,
     pub severity: DependencyPlanningSeverity,
@@ -82,9 +85,19 @@ pub struct DependencyPlanningDiagnostic {
     pub field_path: Option<String>,
 }
 
+impl DependencyPlanningDiagnostic {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_diagnostic_text("dependency_diagnostic.message", &self.message)?;
+        if let Some(field_path) = &self.field_path {
+            validate_diagnostic_field_path("dependency_diagnostic.field_path", field_path)?;
+        }
+        Ok(())
+    }
+}
+
 /// Dependency planning result returned by the host/planner boundary.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyPlanningResult {
     pub state: DependencyPlanningState,
     pub model_ref: PumasModelRef,
@@ -97,6 +110,9 @@ pub struct DependencyPlanningResult {
 impl DependencyPlanningResult {
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         self.model_ref.validate()?;
+        for diagnostic in &self.diagnostics {
+            diagnostic.validate()?;
+        }
         match (self.state, self.load_target.as_ref()) {
             (DependencyPlanningState::Ready, Some(target)) => target.validate_for_handoff(),
             (DependencyPlanningState::Ready, None) => {
@@ -110,4 +126,56 @@ impl DependencyPlanningResult {
             (_, None) => Ok(()),
         }
     }
+}
+
+fn validate_diagnostic_text(
+    field: &'static str,
+    value: &str,
+) -> Result<(), DependencyPlanningContractError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(DependencyPlanningContractError::MissingField { field });
+    }
+    if trimmed.len() > MAX_DIAGNOSTIC_MESSAGE_LEN {
+        return Err(DependencyPlanningContractError::FieldTooLong {
+            field,
+            max_len: MAX_DIAGNOSTIC_MESSAGE_LEN,
+        });
+    }
+    if trimmed.chars().any(char::is_control) {
+        return Err(DependencyPlanningContractError::InvalidText { field });
+    }
+    Ok(())
+}
+
+fn validate_diagnostic_field_path(
+    field: &'static str,
+    value: &str,
+) -> Result<(), DependencyPlanningContractError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(DependencyPlanningContractError::MissingField { field });
+    }
+    if trimmed.len() > MAX_DIAGNOSTIC_FIELD_PATH_LEN {
+        return Err(DependencyPlanningContractError::FieldTooLong {
+            field,
+            max_len: MAX_DIAGNOSTIC_FIELD_PATH_LEN,
+        });
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_control() || matches!(ch, '/' | '\\'))
+    {
+        return Err(DependencyPlanningContractError::InvalidField {
+            field,
+            reason: "validation field paths must be contract fields, not filesystem paths",
+        });
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '[' | ']' | '-' | ':'))
+    {
+        return Err(DependencyPlanningContractError::InvalidIdentifier { field });
+    }
+    Ok(())
 }

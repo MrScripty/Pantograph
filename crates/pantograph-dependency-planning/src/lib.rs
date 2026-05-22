@@ -30,7 +30,10 @@ pub use model_ref::{
     ModelArtifactKind, ModelRefMigrationDiagnostic, ModelStorageKind, ModelValidationState,
     PumasArtifactEntryPath, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
 };
-pub use preflight::{DependencyPlanningIdentityKey, DependencyPreflightModelRef};
+pub use preflight::{
+    DependencyPlanningIdentityKey, DependencyPreflightRequest, DependencyPreflightResult,
+    ValidatedDependencyPreflightRequest, ValidatedDependencyPreflightResult,
+};
 pub use request::{
     DependencyBindingId, DependencyNodeTypeId, DependencyOverrideFieldsV1,
     DependencyOverridePatchV1, DependencyOverrideScope, DependencyPlanningCallerContext,

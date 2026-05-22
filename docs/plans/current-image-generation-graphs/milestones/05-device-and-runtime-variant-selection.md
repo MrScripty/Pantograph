@@ -777,25 +777,29 @@ fixture contract must not remain reachable as an alternate execution path.
         caller context for diagnostics. Source node type must not become a
         runtime-selection input; scheduler/runtime intent remains the only
         graph-originating runtime influence.
-     2. Path-free preflight/model-reference successor gate: add the successor
-        contract before production preflight migration. The successor replaces
-        `ModelRefV2` for graph/node-engine dependency identity and must not
-        contain `model_path`, local load paths, `entry_path`, or
-        `selected_artifact_path` as executable identity. It carries
-        `PumasModelRef`, task id/task type, expected artifact kind when known,
-        selected dependency binding ids, optional dependency requirements id,
-        selected scheduler/runtime/device facts when those have already been
-        decided, and bounded diagnostics. This successor is distinct from
-        `DependencyPlanningResult`: host/planner results may contain
-        `PumasArtifactLoadTarget` for backend handoff after planning, but
-        node-engine preflight identity must not receive or re-export that load
-        target. Add a shared typed dependency-planning identity/correlation key
-        in this gate or before the first migration that needs it; the key is
-        built from Pumas model ref, selected artifact identity/kind when known,
-        task facts, runtime/device intent or selection, platform context, and
-        selected dependency bindings, never from local load paths. Add serde
-        fixtures and validation tests proving path-shaped identity is rejected
-        or absent. Do not add a compatibility alias from the successor back to
+     2. Path-free preflight request/result contract gate: add the request and
+        result contracts before production preflight migration. These contracts
+        replace `ModelRefV2` for graph/node-engine dependency preflight
+        identity and must not contain `model_path`, local load paths,
+        `entry_path`, or `selected_artifact_path` as executable identity.
+        `DependencyPreflightRequest` carries `DependencyPlanningIdentityKey`,
+        `DependencyPlanningRequest`, dependency requirements identity, and
+        dependency-environment identity. `DependencyPreflightResult` carries
+        the same path-free identity key, readiness state, environment proof,
+        dependency requirements identity, and bounded diagnostics. Scheduler
+        runtime/device values in these contracts are graph/caller intent or
+        hard requirements only, not scheduler-selected execution decisions.
+        The preflight result is distinct from `DependencyPlanningResult`:
+        host/planner results may contain `PumasArtifactLoadTarget` for backend
+        handoff after planning, but node-engine preflight identity must not
+        receive or re-export that load target. Add a shared typed
+        dependency-planning identity/correlation key in this gate or before the
+        first migration that needs it; the key is built from Pumas model ref,
+        selected artifact identity/kind when known, task facts, scheduler
+        intent/requirements, platform context, and selected dependency
+        bindings, never from local load paths. Add serde fixtures and
+        validation tests proving path-shaped identity is rejected or absent.
+        Do not add a compatibility alias from the preflight contracts back to
         `ModelRefV2`.
      3. Dependency-environment typed contract gate: before production
         node-engine preflight migration, add the typed dependency-environment
@@ -837,8 +841,10 @@ fixture contract must not remain reachable as an alternate execution path.
         `ModelDependencyResolver` methods that consume `ModelDependencyRequest`
         and return `ModelRefV2` with typed operations for dependency planning
         and dependency-environment resolve/check/install. The canonical
-        inference-preflight operation consumes `DependencyPlanningRequest` and
-        returns `DependencyPreflightModelRef` plus typed diagnostics. The
+        inference-preflight operation consumes `DependencyPreflightRequest` and
+        returns `DependencyPreflightResult` plus typed diagnostics. Host
+        planning operations consume `DependencyPlanningRequest` and return
+        `DependencyPlanningResult` for scheduler/Pumas handoff facts. The
         dependency-environment operations consume the typed environment request
         contracts from the previous gate and return typed environment
         readiness/install results. Delete or replace the old trait methods,
@@ -903,9 +909,9 @@ fixture contract must not remain reachable as an alternate execution path.
         graph-facing `model_path` inference identity must be removed entirely or
         replaced with typed Pumas-ref ports in this migration; do not leave
         retired path nodes registered as dormant compatibility surfaces.
-     11. Update node-engine preflight callers/tests to use the typed
-        model-reference request and remove all successful `model_path` preflight
-        cases from canonical `llm-inference`.
+     11. Update node-engine preflight callers/tests to use
+        `DependencyPreflightRequest`/`DependencyPreflightResult` and remove all
+        successful `model_path` preflight cases from canonical `llm-inference`.
      12. Remove the old path-shaped `ModelDependencyRequest` fields from
         graph/node-engine dependency identity. Any remaining executable path
         must move into an explicitly named backend/worker-local plan handoff
@@ -923,7 +929,7 @@ fixture contract must not remain reachable as an alternate execution path.
      local path knowledge; stale or unresolved Pumas state fails with typed
      diagnostics; legacy `model_path`, `resolved_model_source`,
      `selected_artifact_path`, and `entry_path` cannot produce successful
-     dependency-preflight execution; `ModelRefV2` or its successor does not
+     dependency-preflight execution; `DependencyPreflightResult` does not
      require or emit `model_path` as graph identity. Host/planner tests prove
      Pumas-approved load targets are resolved outside node-engine and are passed
      to runtime or worker code only after scheduler/planner selection.
@@ -952,16 +958,19 @@ fixture contract must not remain reachable as an alternate execution path.
      crates to pass fmt, targeted tests, default/all-features/no-default-features
      checks where public feature contracts exist, and the frontend slice to pass
      the existing Node test harness plus typecheck.
-   - 2026-05-21 implementation: completed the contract-only path-free
-     preflight successor slice in `pantograph-dependency-planning`.
+   - 2026-05-21 implementation update: completed the contract-only path-free
+     preflight request/result slice in `pantograph-dependency-planning`.
      `DependencyPlanningIdentityKey` now provides a shared cache/activity/
      preflight correlation key built from Pumas model identity, task facts,
-     optional selected runtime/device facts, platform context, expected
-     artifact kind, and selected dependency bindings. `DependencyPreflightModelRef`
-     now provides the graph/node-engine preflight successor and is explicitly
-     separate from host/planner `DependencyPlanningResult` load-target handoff.
-     Both contracts deny unknown path/load-target fields and validation rejects
-     `selected_artifact_path` as path-free dependency identity.
+     scheduler intent or hard requirements, platform context, expected artifact
+     kind, and selected dependency bindings. `DependencyPreflightRequest` and
+     `DependencyPreflightResult` now provide the graph/node-engine preflight
+     contract and are explicitly separate from host/planner
+     `DependencyPlanningResult` load-target handoff. The retired
+     `DependencyPreflightModelRef` contract and fixture were removed. The
+     preflight contracts deny unknown path/load-target/package-fact fields, and
+     validation rejects `selected_artifact_path` as path-free dependency
+     identity.
    - No-fallback/no-legacy confirmation: this slice did not migrate production
      preflight, did not adapt the new successor back into `ModelRefV2`, did not
      add `PumasArtifactLoadTarget` to node-engine identity, and did not preserve
@@ -971,11 +980,18 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo fmt -p pantograph-dependency-planning -- --check`, and
      `cargo check -p pantograph-dependency-planning`,
      `cargo check -p pantograph-dependency-planning --all-features`, and
-     `cargo check -p pantograph-dependency-planning --no-default-features`.
+     `cargo check -p pantograph-dependency-planning --no-default-features`,
+     `git diff --check`, and
+     `rg -n "DependencyPreflightModelRef|dependency_preflight_model_ref" crates/pantograph-dependency-planning`
+     confirmed the retired preflight model-ref contract is absent from the
+     crate.
+   - Deviation/discovered issue: no implementation deviation was required. The
+     plan was corrected to replace stale `DependencyPreflightModelRef` language
+     with the request/result contract.
    - Remaining follow-up: migrate node-engine request construction and host
-     resolver boundaries to consume the shared request and return the path-free
-     successor, then replace cache/activity/frontend dependency-environment
-     identity with the shared identity key.
+     resolver boundaries to consume `DependencyPreflightRequest` and return
+     `DependencyPreflightResult`, then replace cache/activity/frontend
+     dependency-environment identity with the shared identity key.
    - 2026-05-21 re-plan boundary: the next node-engine adapter step cannot be
      a standalone production request-builder slice. Leaving a typed
      `DependencyPlanningRequest` builder unused creates dead migration code,
@@ -1292,12 +1308,10 @@ fixture contract must not remain reachable as an alternate execution path.
      path-rejection logic to those files without first splitting cohesive
      helper modules and documenting ownership.
    - 2026-05-21 codebase blast-radius iteration for this split:
-     implementation must correct the current ambiguous preflight terminology
-     before broader migration. `DependencyPlanningIdentityKey` currently uses
-     `selected_runtime_id` and `selected_device_id` even though preflight has
-     only graph/caller scheduler intent or hard scheduler requirements. The
-     next contract slice must replace or supersede those names with intent or
-     requirement terminology; reserve "selected" for scheduler/host execution
+     implementation must correct ambiguous preflight terminology before broader
+     migration. `DependencyPlanningIdentityKey` must carry scheduler intent or
+     hard scheduler requirements, not `selected_runtime_id` or
+     `selected_device_id`; reserve "selected" for scheduler/host execution
      decisions only.
    - Single projection path requirement: node-engine and embedded-runtime
      currently build legacy `ModelDependencyRequest` payloads independently.

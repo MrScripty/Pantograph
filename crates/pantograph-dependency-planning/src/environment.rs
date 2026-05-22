@@ -5,10 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::DependencyPlanningContractError;
 use crate::preflight::DependencyPlanningIdentityKey;
-use crate::request::{
-    DependencyBindingId, DependencyPlanningRequest, DependencyRequirementsId, DeviceIntentId,
-    RuntimeIntentId,
-};
+use crate::request::{DependencyBindingId, DependencyPlanningRequest, DependencyRequirementsId};
 use crate::result::DependencyPlanningDiagnostic;
 
 const MAX_ENVIRONMENT_ID_LEN: usize = 128;
@@ -173,7 +170,8 @@ impl DependencyEnvironmentRequest {
         if let Some(environment_ref) = &self.environment_ref {
             environment_ref.validate()?;
         }
-        self.validate_identity_matches_planning_request()?;
+        self.identity_key
+            .validate_matches_planning_request(&self.planning_request)?;
         if matches!(
             self.action,
             DependencyEnvironmentAction::Check | DependencyEnvironmentAction::Install
@@ -183,63 +181,6 @@ impl DependencyEnvironmentRequest {
                 field: "dependency_requirements_id",
             });
         }
-        Ok(())
-    }
-
-    fn validate_identity_matches_planning_request(
-        &self,
-    ) -> Result<(), DependencyPlanningContractError> {
-        let identity = &self.identity_key;
-        let request = &self.planning_request;
-
-        if identity.model_ref != request.model_ref {
-            return Err(DependencyPlanningContractError::InvalidField {
-                field: "identity_key.model_ref",
-                reason: "identity key model ref must match planning request model ref",
-            });
-        }
-        if identity.task_id != request.task_id {
-            return Err(DependencyPlanningContractError::InvalidField {
-                field: "identity_key.task_id",
-                reason: "identity key task id must match planning request task id",
-            });
-        }
-        if identity.task_type != request.task_type {
-            return Err(DependencyPlanningContractError::InvalidField {
-                field: "identity_key.task_type",
-                reason: "identity key task type must match planning request task type",
-            });
-        }
-        if identity.expected_artifact_kind != request.expected_artifact_kind {
-            return Err(DependencyPlanningContractError::InvalidField {
-                field: "identity_key.expected_artifact_kind",
-                reason: "identity key artifact kind must match planning request artifact kind",
-            });
-        }
-        if identity.platform_context != request.platform_context {
-            return Err(DependencyPlanningContractError::InvalidField {
-                field: "identity_key.platform_context",
-                reason:
-                    "identity key platform context must match planning request platform context",
-            });
-        }
-        if identity.selected_binding_ids != request.selected_binding_ids {
-            return Err(DependencyPlanningContractError::InvalidField {
-                field: "identity_key.selected_binding_ids",
-                reason:
-                    "identity key selected bindings must match planning request selected bindings",
-            });
-        }
-        validate_optional_runtime_match(
-            "identity_key.selected_runtime_id",
-            identity.selected_runtime_id.as_ref(),
-            request.scheduler_intent.requested_runtime_id.as_ref(),
-        )?;
-        validate_optional_device_match(
-            "identity_key.selected_device_id",
-            identity.selected_device_id.as_ref(),
-            request.scheduler_intent.requested_device_id.as_ref(),
-        )?;
         Ok(())
     }
 }
@@ -374,42 +315,6 @@ fn validate_environment_identifier(
         return Err(DependencyPlanningContractError::InvalidIdentifier { field });
     }
     Ok(trimmed.to_string())
-}
-
-fn validate_optional_runtime_match(
-    field: &'static str,
-    selected: Option<&RuntimeIntentId>,
-    requested: Option<&RuntimeIntentId>,
-) -> Result<(), DependencyPlanningContractError> {
-    let (Some(selected), Some(requested)) = (selected, requested) else {
-        return Ok(());
-    };
-    if selected == requested {
-        Ok(())
-    } else {
-        Err(DependencyPlanningContractError::InvalidField {
-            field,
-            reason: "selected runtime must match requested runtime when both are present",
-        })
-    }
-}
-
-fn validate_optional_device_match(
-    field: &'static str,
-    selected: Option<&DeviceIntentId>,
-    requested: Option<&DeviceIntentId>,
-) -> Result<(), DependencyPlanningContractError> {
-    let (Some(selected), Some(requested)) = (selected, requested) else {
-        return Ok(());
-    };
-    if selected == requested {
-        Ok(())
-    } else {
-        Err(DependencyPlanningContractError::InvalidField {
-            field,
-            reason: "selected device must match requested device when both are present",
-        })
-    }
 }
 
 fn reject_path_shaped_request_fields(

@@ -7807,21 +7807,24 @@ Worker rules:
     node-engine preflight and host resolver boundaries in separate validated
     slices.
   - Verification passed: docs-only update; `git diff --check`.
-- 2026-05-21 Milestone 5 path-free preflight successor contract:
+- 2026-05-21 Milestone 5 path-free preflight request/result contract:
   - Smallest useful vertical slice: add the contract-only path-free preflight
-    successor and shared identity/correlation key before production
-    node-engine preflight migration.
+    request/result contracts and shared identity/correlation key before
+    production node-engine preflight migration.
   - Allowed write set: `crates/pantograph-dependency-planning/`,
     `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
     and this execution log. Root proposal markdown files remained ignored.
   - Implementation completed: `DependencyPlanningIdentityKey` now carries the
-    shared Pumas-ref/task/runtime-device/platform/binding identity used by
+    shared Pumas-ref/task/scheduler-intent/platform/binding identity used by
     preflight, cache, activity, and frontend correlation without local load
-    paths. `DependencyPreflightModelRef` now carries that key, optional
-    dependency requirements id, and bounded diagnostics as the path-free
-    successor to `ModelRefV2` for graph/node-engine dependency identity. Both
-    new DTOs deny unknown path/load-target fields, and validation rejects
-    `selected_artifact_path` in path-free identity.
+    paths. `DependencyPreflightRequest` carries the identity key, matching
+    `DependencyPlanningRequest`, dependency requirements identity, and
+    environment identity. `DependencyPreflightResult` carries path-free
+    readiness proof plus bounded diagnostics as the graph/node-engine
+    preflight successor to `ModelRefV2`. The retired
+    `DependencyPreflightModelRef` export and fixture were removed. The
+    preflight DTOs deny unknown path/load-target/package-fact fields, and
+    validation rejects `selected_artifact_path` in path-free identity.
   - No-fallback/no-legacy confirmation: the slice did not migrate production
     execution, convert the successor back to `ModelRefV2`, add a load target to
     node-engine identity, or preserve any successful `model_path` contract.
@@ -7835,11 +7838,19 @@ Worker rules:
     `cargo fmt -p pantograph-dependency-planning -- --check`,
     `cargo check -p pantograph-dependency-planning`,
     `cargo check -p pantograph-dependency-planning --all-features`,
-    and `cargo check -p pantograph-dependency-planning --no-default-features`.
+    `cargo check -p pantograph-dependency-planning --no-default-features`,
+    `git diff --check`, and
+    `rg -n "DependencyPreflightModelRef|dependency_preflight_model_ref" crates/pantograph-dependency-planning`
+    confirmed the retired preflight model-ref contract is absent from the
+    crate.
+  - Deviation/discovered issue: no implementation deviation was required. The
+    plan language was corrected in the same slice so current milestone
+    instructions target `DependencyPreflightRequest`/`DependencyPreflightResult`
+    instead of the retired `DependencyPreflightModelRef`.
   - Remaining follow-up: migrate node-engine request construction and host
-    resolver traits to consume the shared request and return
-    `DependencyPreflightModelRef`, then move embedded-runtime cache/activity
-    and frontend dependency-environment matching to `DependencyPlanningIdentityKey`.
+    resolver traits to consume `DependencyPreflightRequest` and return
+    `DependencyPreflightResult`, then move embedded-runtime cache/activity and
+    frontend dependency-environment matching to `DependencyPlanningIdentityKey`.
 - 2026-05-21 Milestone 5 node-engine adapter re-plan boundary:
   - Investigation result: the next production migration cannot be a standalone
     node-engine `DependencyPlanningRequest` builder. A builder that is not used
@@ -7849,9 +7860,9 @@ Worker rules:
   - Required adjustment: the next code slice must first add the typed
     dependency-environment resolve/check/install contracts, then move canonical
     preflight and dependency-environment consumers together onto typed
-    contracts. Node-engine should build the shared typed request, the host
-    resolver should consume it, and the preflight result should be
-    `DependencyPreflightModelRef` rather than `ModelRefV2`.
+    contracts. Node-engine should build the shared typed preflight request, the
+    host resolver should consume it, and the preflight result should be
+    `DependencyPreflightResult` rather than `ModelRefV2`.
   - Ownership note: dependency-environment check/install must not keep
     `ModelDependencyRequest.model_path` as canonical inference dependency
     identity after preflight moves. The old resolver contract is deletion work
@@ -8147,11 +8158,11 @@ Worker rules:
     `languages/rust/RUST-API-STANDARDS.md`, and
     `languages/rust/RUST-TOOLING-STANDARDS.md`.
   - Existing-code finding: `pantograph-dependency-planning` already owns a
-    small path-free `preflight` module and exports
-    `DependencyPlanningIdentityKey`/`DependencyPreflightModelRef`. The next
-    slice should extend that owner into the request/result contract gate
-    instead of creating a second preflight contract in node-engine,
-    embedded-runtime, scheduler, or frontend code.
+    small path-free `preflight` module and the shared
+    `DependencyPlanningIdentityKey`. The next slice should extend that owner
+    into the request/result contract gate instead of creating a second
+    preflight contract in node-engine, embedded-runtime, scheduler, or frontend
+    code.
   - Blast-radius finding: the option 2 decision is standards-compliant only if
     implementation keeps preflight narrow. Without explicit guardrails, the
     next slice could accidentally pass full dependency-environment status or
@@ -8173,9 +8184,11 @@ Worker rules:
     land.
   - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
 - 2026-05-21 Milestone 5 codebase blast-radius iteration:
-  - Existing-code findings: shared preflight identity still uses
+  - Existing-code findings: shared preflight identity previously used
     `selected_runtime_id`/`selected_device_id` names before scheduler
-    selection; node-engine and embedded-runtime independently build
+    selection; the preflight contract implementation now resolves that finding
+    with scheduler intent/requirement naming. Node-engine and embedded-runtime
+    still independently build
     `ModelDependencyRequest`; embedded-runtime dependency environment emits
     worker-local manifest and Python executable fields; workflow-service still
     preserves path-only Puma-Lib state; image generation still consumes

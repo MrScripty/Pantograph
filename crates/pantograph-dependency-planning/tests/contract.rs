@@ -5,10 +5,11 @@ use pantograph_dependency_planning::{
     DependencyEnvironmentValidationState, DependencyOperationTimestampMs,
     DependencyPlanningContractError, DependencyPlanningDiagnosticCode,
     DependencyPlanningIdentityKey, DependencyPlanningPlatformContext, DependencyPlanningRequest,
-    DependencyPlanningResult, DependencyPlanningState, DependencyPreflightModelRef,
-    DependencyRequirementKind, ModelArtifactKind, PumasArtifactEntryPath,
-    PumasArtifactEntryPathError, PumasArtifactLoadPathKind, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyPlanningRequest,
+    DependencyPlanningResult, DependencyPlanningState, DependencyPreflightRequest,
+    DependencyPreflightResult, DependencyRequirementKind, ModelArtifactKind,
+    PumasArtifactEntryPath, PumasArtifactEntryPathError, PumasArtifactLoadPathKind,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+    ValidatedDependencyPreflightRequest, ValidatedDependencyPreflightResult,
 };
 
 const VALID_REQUEST: &str = include_str!("fixtures/dependency_planning_request.json");
@@ -16,7 +17,11 @@ const READY_RESULT: &str = include_str!("fixtures/dependency_planning_ready_resu
 const UNAVAILABLE_RESULT: &str =
     include_str!("fixtures/dependency_planning_unavailable_result.json");
 const IDENTITY_KEY: &str = include_str!("fixtures/dependency_planning_identity_key.json");
-const PREFLIGHT_MODEL_REF: &str = include_str!("fixtures/dependency_preflight_model_ref.json");
+const PREFLIGHT_REQUEST: &str = include_str!("fixtures/dependency_preflight_request.json");
+const PREFLIGHT_READY_RESULT: &str =
+    include_str!("fixtures/dependency_preflight_ready_result.json");
+const PREFLIGHT_UNAVAILABLE_RESULT: &str =
+    include_str!("fixtures/dependency_preflight_unavailable_result.json");
 const ENV_RESOLVE_REQUEST: &str =
     include_str!("fixtures/dependency_environment_resolve_request.json");
 const ENV_CHECK_REQUEST: &str = include_str!("fixtures/dependency_environment_check_request.json");
@@ -192,34 +197,83 @@ fn dependency_planning_identity_key_fixture_decodes_and_validates() {
     assert_eq!(identity_key.task_id.as_str(), "image_generation");
     assert_eq!(
         identity_key
-            .selected_runtime_id
+            .scheduler_intent
+            .requested_runtime_id
             .as_ref()
             .map(|id| id.as_str()),
         Some("pytorch")
     );
+    assert_eq!(
+        identity_key
+            .scheduler_intent
+            .requested_device_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("cuda:0")
+    );
 }
 
 #[test]
-fn dependency_preflight_model_ref_fixture_decodes_and_validates() {
-    let model_ref: DependencyPreflightModelRef =
-        serde_json::from_str(PREFLIGHT_MODEL_REF).expect("preflight fixture should decode");
+fn dependency_preflight_request_fixture_decodes_and_validates() {
+    let value: serde_json::Value =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("preflight request fixture should parse");
+    let validated = ValidatedDependencyPreflightRequest::try_from(value)
+        .expect("preflight request fixture should validate");
 
-    model_ref
-        .validate()
-        .expect("path-free preflight model ref should validate");
-    assert_eq!(model_ref.contract_version, 1);
+    assert_eq!(validated.as_request().contract_version, 1);
     assert_eq!(
-        model_ref
+        validated.as_request().identity_key.model_ref.model_id,
+        "image/stable-diffusion/tiny-sd"
+    );
+    assert_eq!(
+        validated
+            .as_request()
             .dependency_requirements_id
             .as_ref()
             .map(|id| id.as_str()),
         Some("tiny-sd:pytorch:linux-x86_64:torch-diffusers")
     );
-    assert_eq!(model_ref.diagnostics.len(), 1);
+    assert!(validated.as_request().environment_ref.is_some());
 }
 
 #[test]
-fn dependency_preflight_model_ref_rejects_load_target_fields() {
+fn dependency_preflight_result_fixtures_decode_and_validate() {
+    let ready_value: serde_json::Value = serde_json::from_str(PREFLIGHT_READY_RESULT)
+        .expect("preflight ready result fixture should parse");
+    let ready = ValidatedDependencyPreflightResult::try_from(ready_value)
+        .expect("preflight ready result fixture should validate");
+
+    assert_eq!(
+        ready.as_result().readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(ready.as_result().diagnostics.len(), 1);
+
+    let unavailable_value: serde_json::Value = serde_json::from_str(PREFLIGHT_UNAVAILABLE_RESULT)
+        .expect("preflight unavailable result fixture should parse");
+    let unavailable = ValidatedDependencyPreflightResult::try_from(unavailable_value)
+        .expect("preflight unavailable result fixture should validate");
+
+    assert_eq!(
+        unavailable.as_result().readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    assert_eq!(
+        unavailable
+            .as_result()
+            .diagnostics
+            .iter()
+            .map(|diagnostic| &diagnostic.code)
+            .collect::<Vec<_>>(),
+        vec![
+            &DependencyPlanningDiagnosticCode::PumasUnavailable,
+            &DependencyPlanningDiagnosticCode::RuntimeUnavailable
+        ]
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_load_target_fields() {
     let value = serde_json::json!({
         "contract_version": 1,
         "identity_key": {
@@ -233,8 +287,133 @@ fn dependency_preflight_model_ref_rejects_load_target_fields() {
         }
     });
 
-    serde_json::from_value::<DependencyPreflightModelRef>(value)
-        .expect_err("preflight identity must not deserialize load target fields");
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(value)
+            .expect_err("preflight identity must reject load target fields"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_preflight",
+            reason: "preflight payload must not contain path-shaped dependency identity fields"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_missing_environment_identity() {
+    let mut request: DependencyPreflightRequest =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("fixture should decode");
+    request.environment_ref = None;
+
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(request)
+            .expect_err("preflight request requires dependency environment identity"),
+        DependencyPlanningContractError::MissingField {
+            field: "environment_ref"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_ready_result_rejects_missing_environment_identity() {
+    let mut result: DependencyPreflightResult =
+        serde_json::from_str(PREFLIGHT_READY_RESULT).expect("fixture should decode");
+    result.environment_ref = None;
+
+    assert_eq!(
+        ValidatedDependencyPreflightResult::try_from(result)
+            .expect_err("ready preflight result requires dependency environment identity"),
+        DependencyPlanningContractError::MissingField {
+            field: "environment_ref"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_duplicate_selected_binding_ids() {
+    let mut request: DependencyPreflightRequest =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("fixture should decode");
+    request
+        .identity_key
+        .selected_binding_ids
+        .push("torch-diffusers".parse().expect("test binding id is valid"));
+
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(request)
+            .expect_err("selected binding ids must be unique"),
+        DependencyPlanningContractError::InvalidField {
+            field: "identity_key.selected_binding_ids",
+            reason: "selected binding ids must be unique"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_malformed_selected_binding_ids() {
+    let mut value: serde_json::Value =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("fixture should parse");
+    value["identity_key"]["selected_binding_ids"] = serde_json::json!(["bad/binding"]);
+
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(value)
+            .expect_err("selected binding ids must be validated ids"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_preflight_request",
+            reason: "request JSON did not match dependency preflight contract"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_legacy_selected_runtime_fields() {
+    let mut value: serde_json::Value =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("fixture should parse");
+    value["identity_key"]["selected_runtime_id"] = serde_json::json!("pytorch");
+
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(value)
+            .expect_err("preflight identity must not accept legacy selected runtime fields"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_preflight_request",
+            reason: "request JSON did not match dependency preflight contract"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_nested_path_fields() {
+    let mut value: serde_json::Value =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("fixture should parse");
+    value["planning_request"]["model_ref"]["selected_artifact_path"] =
+        serde_json::json!("image/stable-diffusion/tiny-sd/model_index.json");
+
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(value)
+            .expect_err("preflight request must reject nested path-shaped fields"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_preflight",
+            reason: "preflight payload must not contain path-shaped dependency identity fields"
+        }
+    );
+}
+
+#[test]
+fn dependency_preflight_request_rejects_package_fact_fields() {
+    let mut value: serde_json::Value =
+        serde_json::from_str(PREFLIGHT_REQUEST).expect("fixture should parse");
+    value["resolved_model_package_facts"] = serde_json::json!({
+        "package_facts_contract_version": 1,
+        "model_ref": {
+            "model_id": "image/stable-diffusion/tiny-sd"
+        }
+    });
+
+    assert_eq!(
+        ValidatedDependencyPreflightRequest::try_from(value)
+            .expect_err("preflight request must reject executable package fact fields"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_preflight",
+            reason: "preflight payload must not contain executable dependency handoff fields"
+        }
+    );
 }
 
 #[test]
@@ -304,7 +483,8 @@ fn dependency_environment_request_fixtures_decode_and_validate() {
             validated
                 .as_request()
                 .identity_key
-                .selected_runtime_id
+                .scheduler_intent
+                .requested_runtime_id
                 .as_ref()
                 .map(|id| id.as_str()),
             Some("pytorch")

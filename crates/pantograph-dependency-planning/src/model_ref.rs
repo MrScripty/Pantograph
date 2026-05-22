@@ -10,7 +10,7 @@ const MAX_PUMAS_ARTIFACT_ENTRY_PATH_LEN: usize = 1024;
 
 /// Stable model reference resolved from the model library.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct PumasModelRef {
     /// Canonical model id assigned by Pumas or an equivalent model library.
     pub model_id: String,
@@ -62,7 +62,7 @@ impl PumasModelRef {
 
 /// Diagnostic produced while converting a legacy model reference to a Pumas ref.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct ModelRefMigrationDiagnostic {
     pub code: String,
     pub message: String,
@@ -217,7 +217,7 @@ pub enum ModelValidationState {
 /// Pantograph dependency and inference planning without making contracts depend
 /// on Pumas library internals.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct PumasArtifactLoadTarget {
     pub model_ref: PumasModelRef,
     pub artifact_kind: ModelArtifactKind,

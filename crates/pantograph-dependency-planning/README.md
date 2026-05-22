@@ -14,7 +14,7 @@ actions, persisted fixtures, and backend handoff boundaries.
 | `src/environment.rs` | Typed dependency-environment resolve/check/install request, result, requirement, binding, status-row, operation, validation-error, and environment-ref contracts. |
 | `src/environment/` | Dependency-environment child modules for result payload rows and row-level validation helpers. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
-| `src/preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
+| `src/preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
 | `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `src/result.rs` | Typed dependency-planning result states and diagnostics. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
@@ -71,14 +71,14 @@ Pumas I/O remains outside this crate.
 - Source node type is bounded caller context for diagnostics, not a runtime
   routing selector.
 - Path-free preflight identity is separate from host/planner load-target
-  results. `DependencyPreflightModelRef` and `DependencyPlanningIdentityKey`
-  must never contain `PumasArtifactLoadTarget`, `model_path`, local load paths,
-  `entry_path`, or `selected_artifact_path`.
+  results. `DependencyPreflightRequest`, `DependencyPreflightResult`, and
+  `DependencyPlanningIdentityKey` must never contain `PumasArtifactLoadTarget`,
+  `model_path`, local load paths, `entry_path`, or `selected_artifact_path`.
 - Pumas load targets are result/handoff facts, not graph identity.
 - Dependency-environment requests carry a typed action and a matching
   `DependencyPlanningIdentityKey` plus `DependencyPlanningRequest`. The identity
   key and planning request must agree on model ref, task, artifact kind,
-  platform, selected bindings, and any runtime/device facts present in both.
+  platform, selected bindings, and scheduler intent.
 - Dependency-environment check/install requests require a
   `dependency_requirements_id`; resolve requests may omit it.
 - Dependency-environment readiness, install, validation, and failure states are
@@ -155,8 +155,7 @@ let identity_key = DependencyPlanningIdentityKey {
     task_id: request.task_id.clone(),
     task_type: request.task_type.clone(),
     expected_artifact_kind: request.expected_artifact_kind.clone(),
-    selected_runtime_id: None,
-    selected_device_id: None,
+    scheduler_intent: request.scheduler_intent.clone(),
     platform_context: request.platform_context.clone(),
     selected_binding_ids: request.selected_binding_ids.clone(),
 };

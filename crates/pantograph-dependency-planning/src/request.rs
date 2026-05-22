@@ -94,7 +94,7 @@ validated_id!(DependencyPlatformKey, "platform_key");
 /// policy and do not authorize node-engine or frontend code to choose an
 /// executable runtime/device directly.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SchedulerIntent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_runtime_id: Option<RuntimeIntentId>,
@@ -104,7 +104,7 @@ pub struct SchedulerIntent {
 
 /// Bounded caller context used for diagnostics and traceability.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyPlanningCallerContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_node_type: Option<DependencyNodeTypeId>,
@@ -134,7 +134,7 @@ impl DependencyPlanningCallerContext {
 /// requirement result, or host facts. The shared contract carries the stable key
 /// only, not arbitrary platform JSON.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyPlanningPlatformContext {
     pub platform_key: DependencyPlatformKey,
 }
@@ -172,7 +172,7 @@ pub enum DependencyOverrideScope {
 
 /// Supported override fields for dependency patch contract v1.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyOverrideFieldsV1 {
     #[serde(default)]
     pub python_executable: Option<String>,
@@ -218,7 +218,7 @@ impl DependencyOverrideFieldsV1 {
 
 /// Manual override patch contract v1.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyOverridePatchV1 {
     #[serde(default = "default_dependency_override_contract_version")]
     pub contract_version: u32,
@@ -259,7 +259,7 @@ fn default_dependency_override_contract_version() -> u32 {
 
 /// Typed dependency planning request crossing graph, host, and scheduler seams.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DependencyPlanningRequest {
     pub model_ref: PumasModelRef,
     pub task_id: DependencyTaskId,
@@ -294,7 +294,7 @@ impl DependencyPlanningRequest {
 }
 
 impl SchedulerIntent {
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.requested_runtime_id.is_none() && self.requested_device_id.is_none()
     }
 }
