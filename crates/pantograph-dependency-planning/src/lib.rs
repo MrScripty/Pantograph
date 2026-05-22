@@ -9,6 +9,7 @@ mod environment;
 mod error;
 mod model_ref;
 mod preflight;
+mod readiness;
 mod request;
 mod result;
 
@@ -33,6 +34,9 @@ pub use model_ref::{
 pub use preflight::{
     DependencyPlanningIdentityKey, DependencyPreflightRequest, DependencyPreflightResult,
     ValidatedDependencyPreflightRequest, ValidatedDependencyPreflightResult,
+};
+pub use readiness::{
+    DependencyReadinessPolicy, DependencyReadinessRequest, ValidatedDependencyReadinessRequest,
 };
 pub use request::{
     DependencyBindingId, DependencyNodeTypeId, DependencyOverrideFieldsV1,

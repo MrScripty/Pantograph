@@ -15,6 +15,7 @@ frontend state, and scheduler policy.
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
 | `preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
+| `readiness.rs` | Path-free host readiness input contract and typed readiness policy for producing preflight proof without leaking executable handoff facts. |
 | `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `result.rs` | Dependency-planning state, diagnostic, and result DTOs. |
 
@@ -61,6 +62,9 @@ is the only public facade.
 - Python/package-manager fields are contained in Python-specific detail structs
   so managed-binary, system-package, runtime-feature, device/toolchain, and
   non-Python dependencies can be added without overloading Python rows.
+- Dependency readiness input is a host request, not readiness proof; it carries
+  typed policy and path-free planning identity while the host produces
+  `DependencyPreflightResult`.
 
 ## Revisit Triggers
 - The crate exceeds the decomposition thresholds.
@@ -96,6 +100,10 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Dependency-environment unavailable, invalid, missing, failed, and
   not-implemented outcomes are result states with diagnostics, not string
   errors.
+- Dependency readiness requests are host inputs. They may influence whether the
+  host checks only or prepares missing dependencies, but they do not carry
+  requirements ids, environment refs, Pumas package facts, local paths, or
+  executable worker handoff data.
 
 ## Structured Producer Contract
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
@@ -104,3 +112,6 @@ assert_eq!(task_id.as_str(), "image_generation");
 - New public DTO fields require fixture updates in the same slice.
 - Boundary request/result/row structs reject unknown fields where they carry
   dependency-environment protocol state.
+- Readiness request fixtures use typed `policy` enum values and reject unknown,
+  path-shaped, and executable handoff fields before host wiring can consume
+  them.

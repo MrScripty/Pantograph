@@ -8596,6 +8596,130 @@ Worker rules:
     `DependencyPreflightRequest`/`DependencyPreflightResult` and
     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then delete
     the old `ModelDependencyRequest`, `ModelRefV2`, and legacy request builders.
+- 2026-05-22 Milestone 5 dependency preflight ownership re-plan:
+  - Boundary discovered: production dependency preflight cannot migrate
+    directly from the current typed request projection into
+    `DependencyPreflightRequest` because the typed contract requires
+    `dependency_requirements_id` and `environment_ref`, while the only live
+    producer still goes through `ModelDependencyResolver`,
+    `ModelDependencyRequest`, and `ModelRefV2.model_path`.
+  - Decision: use a host-owned dependency readiness service as the next
+    replacement step, with scheduler-owned dependency planning recorded as the
+    later objective. The service is named `DependencyReadinessHost` to keep it
+    distinct from the node-engine preflight phase and the proof-bearing
+    `DependencyPreflightResult`. Node-engine builds and validates path-free
+    dependency intent, calls the host service, and receives
+    `DependencyPreflightResult` plus typed diagnostics only. The host service
+    owns current-run dependency readiness proof by resolving/checking/installing
+    dependency environments through the shared typed environment contracts. It
+    must not return executable load targets, local paths, package facts, Python
+    executable facts, or worker launch material through node-engine preflight
+    identity.
+  - Contract correction required before host wiring: do not use
+    `DependencyPreflightRequest` as the host-service input because it already
+    requires `dependency_requirements_id` and `environment_ref`. Add a shared
+    `DependencyReadinessRequest` in `pantograph-dependency-planning`; it carries
+    `DependencyPlanningIdentityKey`, `DependencyPlanningRequest`, and any typed
+    readiness action/policy fields needed by the host, but not the readiness
+    proof facts that the host produces. Also add one canonical identity-key
+    constructor such as `DependencyPlanningIdentityKey::from_planning_request`
+    so node-engine and host code do not duplicate field-by-field key assembly.
+    Readiness policy must be an enum/newtype such as `DependencyReadinessPolicy`
+    or an exact semantic reuse of `DependencyEnvironmentAction`, not a raw mode
+    string or boolean. The request needs a validated wrapper that rejects
+    unknown fields, path-shaped identity fields, executable handoff fields,
+    identity/planning request mismatch, duplicate selected binding ids,
+    unsupported contract versions, and missing or invalid required policy.
+    Readiness input validation must not require `dependency_requirements_id` or
+    `environment_ref`.
+  - Rejected options: making explicit dependency-environment graph nodes the
+    only canonical readiness path was rejected because it adds boilerplate and
+    weakens automatic multi-model execution; moving immediately to full
+    scheduler-owned dependency planning was deferred as the long-term target
+    because it expands this slice into scheduler policy and resource/history
+    planning; adapter conversions back to `ModelDependencyRequest` or
+    `ModelRefV2` were rejected as legacy preservation.
+  - No-fallback/no-legacy confirmation: the planned host service replaces the
+    old resolver boundary instead of wrapping it. The migration sequence must
+    delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+    `resolve_model_ref`, path-derived model-id repair, and path-shaped
+    cache/activity/frontend dependency-environment contracts as their typed
+    replacements land.
+  - Next implementation slice: add only the shared
+    `DependencyReadinessRequest` contract and canonical identity-key
+    constructor in `pantograph-dependency-planning`, with serde fixtures,
+    validation tests, and README traceability. Prefer a new focused
+    `readiness.rs` module and `readiness_contract.rs` integration test if the
+    readiness input contract would grow `preflight.rs` or the already-large
+    `tests/contract.rs` further. Do not wire node-engine production behavior,
+    implement embedded-runtime Pumas/package-manager I/O, migrate frontend DTOs,
+    change scheduler policy, add lockfile changes, or preserve old resolver
+    conversions in that slice.
+  - Following vertical slice: wire the node-engine `DependencyReadinessHost`
+    boundary and the minimal embedded-runtime host registration/implementation
+    needed for a real producer-to-consumer path. That slice must use typed
+    errors/diagnostics rather than `Result<T, String>`, fail closed when the
+    host is missing, and avoid leaving the new service as dead migration code
+    or keeping the old resolver as a successful alternate branch. It needs at
+    least one full-path acceptance test from graph dependency-planning input to
+    node-engine readiness request to embedded-runtime host
+    `DependencyPreflightResult`, plus focused missing-host and host-returned
+    unavailable diagnostics. Any durable dependency-environment state in tests
+    must use per-test roots rather than shared sqlite/cache paths.
+  - Cleanup targets for the resolver deletion sequence explicitly include
+    node-engine public re-exports, `core_executor/dependency_preflight`
+    legacy input projection, direct audio/llamacpp/pytorch `ModelRefV2`
+    consumers, embedded-runtime runtime extension snapshots and lifecycle
+    registration, dependency-environment executor helpers, dependency activity
+    events, model-dependency tests/stubs, frontend dependency-environment
+    DTO/action/activity matcher files, and saved or mock workflow fixtures that
+    still carry successful `modelPath`/`model_path` dependency identity.
+  - Standards iteration result: the host-owned readiness re-plan remains
+    standards-compliant only with the typed-policy, parse-once validation,
+    serde fixture, decomposition, and cross-layer acceptance gates above. If a
+    slice cannot meet those gates, stop and re-plan rather than adding a
+    path-shaped adapter or compatibility branch.
+- 2026-05-22 Milestone 5 dependency readiness contract slice completed:
+  - Slice/write set: added the shared host input contract in
+    `crates/pantograph-dependency-planning/src/readiness.rs`, public re-exports
+    in `lib.rs`, the canonical
+    `DependencyPlanningIdentityKey::from_planning_request` constructor and
+    shared field-rejection helpers in `preflight.rs`, README updates, the
+    `dependency_readiness_request.json` fixture, and focused
+    `tests/readiness_contract.rs` coverage. This was serial integration-owner
+    work because it changes a shared Rust contract and plan files.
+  - No-fallback/no-legacy result: the slice did not wire node-engine or
+    embedded-runtime production behavior, did not call Pumas/package-manager
+    I/O, did not migrate frontend DTOs, and did not add adapters back to
+    `ModelDependencyRequest`, `ModelRefV2`, or path-shaped `model_path`
+    identity.
+  - Contract behavior: readiness input is path-free and proof-free. It carries
+    `DependencyPlanningIdentityKey`, `DependencyPlanningRequest`, and typed
+    `DependencyReadinessPolicy`; validation rejects unknown fields,
+    path-shaped fields, executable handoff fields, mismatched identity,
+    duplicate selected binding ids, unsupported contract versions, and missing
+    policy, while not requiring `dependency_requirements_id` or
+    `environment_ref`.
+  - Standards evidence: `readiness.rs` keeps the new responsibility out of
+    `preflight.rs`; file-size review after the slice is `preflight.rs` 418
+    lines, `readiness.rs` 100 lines, `tests/contract.rs` 794 lines unchanged,
+    and `tests/readiness_contract.rs` 199 lines. Source/test/fixture READMEs
+    were updated in the same slice.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    `cargo check -p pantograph-dependency-planning --no-default-features`,
+    `cargo fmt -p pantograph-dependency-planning -- --check`, and
+    `git diff --check`. Initial test compile exposed one local type inference
+    issue and one `#[must_use]` test warning; both were fixed before the final
+    verification pass.
+  - Remaining follow-up: the next implementation slice is the real vertical
+    host path: node-engine `DependencyReadinessHost` boundary plus minimal
+    embedded-runtime host registration/implementation and full-path acceptance
+    test, while deleting migrated old resolver helpers instead of preserving
+    them as successful fallback branches.
 
 ### Traceability Links
 

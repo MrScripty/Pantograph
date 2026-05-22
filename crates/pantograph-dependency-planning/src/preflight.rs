@@ -33,6 +33,30 @@ pub struct DependencyPlanningIdentityKey {
 }
 
 impl DependencyPlanningIdentityKey {
+    /// Build the canonical path-free identity key for a planning request.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DependencyPlanningContractError` when the planning request is
+    /// invalid or contains dependency identity that cannot be used as a
+    /// path-free planning key.
+    pub fn from_planning_request(
+        request: &DependencyPlanningRequest,
+    ) -> Result<Self, DependencyPlanningContractError> {
+        request.validate()?;
+        let identity_key = Self {
+            model_ref: request.model_ref.clone(),
+            task_id: request.task_id.clone(),
+            task_type: request.task_type.clone(),
+            expected_artifact_kind: request.expected_artifact_kind.clone(),
+            scheduler_intent: request.scheduler_intent.clone(),
+            platform_context: request.platform_context.clone(),
+            selected_binding_ids: request.selected_binding_ids.clone(),
+        };
+        identity_key.validate()?;
+        Ok(identity_key)
+    }
+
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         validate_path_free_model_ref(&self.model_ref)?;
         validate_unique_binding_ids(&self.selected_binding_ids)?;
@@ -268,7 +292,7 @@ fn default_dependency_preflight_contract_version() -> u32 {
     1
 }
 
-fn validate_contract_version(
+pub(crate) fn validate_contract_version(
     value: u32,
     field: &'static str,
     reason: &'static str,
@@ -311,6 +335,28 @@ fn validate_unique_binding_ids(
 fn reject_path_shaped_preflight_fields(
     value: &serde_json::Value,
 ) -> Result<(), DependencyPlanningContractError> {
+    reject_path_shaped_dependency_fields(
+        value,
+        "dependency_preflight",
+        "preflight payload must not contain path-shaped dependency identity fields",
+    )
+}
+
+fn reject_executable_preflight_payload_fields(
+    value: &serde_json::Value,
+) -> Result<(), DependencyPlanningContractError> {
+    reject_executable_dependency_payload_fields(
+        value,
+        "dependency_preflight",
+        "preflight payload must not contain executable dependency handoff fields",
+    )
+}
+
+pub(crate) fn reject_path_shaped_dependency_fields(
+    value: &serde_json::Value,
+    field: &'static str,
+    reason: &'static str,
+) -> Result<(), DependencyPlanningContractError> {
     fn visit(value: &serde_json::Value) -> bool {
         match value {
             serde_json::Value::Object(object) => object.iter().any(|(key, child)| {
@@ -334,17 +380,16 @@ fn reject_path_shaped_preflight_fields(
     }
 
     if visit(value) {
-        Err(DependencyPlanningContractError::InvalidField {
-            field: "dependency_preflight",
-            reason: "preflight payload must not contain path-shaped dependency identity fields",
-        })
+        Err(DependencyPlanningContractError::InvalidField { field, reason })
     } else {
         Ok(())
     }
 }
 
-fn reject_executable_preflight_payload_fields(
+pub(crate) fn reject_executable_dependency_payload_fields(
     value: &serde_json::Value,
+    field: &'static str,
+    reason: &'static str,
 ) -> Result<(), DependencyPlanningContractError> {
     fn visit(value: &serde_json::Value) -> bool {
         match value {
@@ -373,10 +418,7 @@ fn reject_executable_preflight_payload_fields(
     }
 
     if visit(value) {
-        Err(DependencyPlanningContractError::InvalidField {
-            field: "dependency_preflight",
-            reason: "preflight payload must not contain executable dependency handoff fields",
-        })
+        Err(DependencyPlanningContractError::InvalidField { field, reason })
     } else {
         Ok(())
     }

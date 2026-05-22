@@ -10,6 +10,7 @@ consumers depend on stale fields.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contract.rs` | Public serde and validation tests for request/result DTOs and Pumas entry paths. |
+| `readiness_contract.rs` | Public serde and validation tests for the host readiness input contract. |
 | `fixtures/` | Versioned JSON examples for ready and unavailable planning states. |
 
 ## Problem
@@ -22,6 +23,9 @@ contracts for multi-layer consumers.
 - Fixtures must avoid graph-visible local filesystem path identity.
 - Ready results may include Pumas-approved load targets because those are
   host/planner handoff facts, not graph identity.
+- Readiness request tests must stay path-free and proof-free; requirements ids,
+  environment refs, package facts, and executable paths belong to host-produced
+  result/handoff contracts.
 
 ## Decision
 Use a small public integration test with JSON fixtures rather than broad
@@ -39,6 +43,8 @@ migrate to the shared contract.
 - Ready results require load targets.
 - Non-ready results do not carry load targets.
 - Pumas artifact entry paths reject local absolute paths.
+- Readiness requests use typed policy enum values and reject unknown/path-shaped
+  fields before host wiring consumes them.
 
 ## Revisit Triggers
 - Host-language generated schemas are added.
@@ -69,3 +75,5 @@ cargo test -p pantograph-dependency-planning
 - Fixture changes must accompany corresponding DTO changes.
 - Ready and unavailable examples intentionally cover both success and typed
   diagnostic flows.
+- Readiness fixtures intentionally cover host input only; preflight result
+  fixtures cover readiness proof after host processing.
