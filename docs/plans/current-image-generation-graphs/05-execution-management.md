@@ -8556,6 +8556,46 @@ Worker rules:
     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then remove
     the old `ModelDependencyRequest`/`ModelRefV2` request-building and
     path-shaped dependency-environment activity/frontend surfaces.
+- 2026-05-22 Milestone 5 node-engine typed dependency-planning request
+  projection:
+  - Smallest useful vertical slice: add the node-engine graph-input projection
+    into the shared `DependencyPlanningRequest` contract and use it as a
+    fail-closed preflight gate before replacing the resolver trait.
+  - Allowed write set:
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight/`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and Milestone 5
+    plan notes. Root proposal markdown files remained ignored.
+  - Implementation completed: added
+    `dependency_preflight/planning_projection.rs`, which requires
+    `pumas_model_ref`, projects typed scheduler runtime/device intent,
+    platform key, selected binding ids, task identity, and caller context, and
+    rejects `pumas_model_ref.selected_artifact_path` as path-shaped dependency
+    identity. Dependency preflight now validates this shared request before
+    calling the remaining legacy resolver.
+  - No-fallback/no-legacy confirmation: this slice does not convert the shared
+    request back into `ModelDependencyRequest`, does not repair
+    `ModelRefV2.model_path`, and does not accept `model_id` or `model_path` as
+    substitutes for `pumas_model_ref`.
+  - Standards evidence: after splitting the new projection owner,
+    `dependency_preflight.rs` is 467 lines,
+    `dependency_preflight/input_projection.rs` is 384 lines, and
+    `dependency_preflight/planning_projection.rs` is 145 lines. The directory
+    README documents that the typed projection must not become a compatibility
+    bridge back to old DTOs.
+  - Verification passed:
+    `cargo fmt -p node-engine`,
+    `cargo test -p node-engine --features inference-nodes build_dependency_planning_request`,
+    `cargo test -p node-engine --features inference-nodes dependency_preflight`,
+    `cargo check -p node-engine --features inference-nodes`,
+    `cargo check -p node-engine --all-features`,
+    `cargo check -p node-engine --no-default-features`,
+    `cargo fmt -p node-engine -- --check`, and `git diff --check`.
+  - Remaining follow-up: replace `ModelDependencyResolver` and the
+    embedded-runtime implementation with
+    `DependencyPreflightRequest`/`DependencyPreflightResult` and
+    `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then delete
+    the old `ModelDependencyRequest`, `ModelRefV2`, and legacy request builders.
 
 ### Traceability Links
 

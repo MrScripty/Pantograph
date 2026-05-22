@@ -3646,6 +3646,117 @@ fn test_build_model_dependency_request_uses_package_facts_for_model_and_task_onl
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_dependency_planning_request_uses_typed_pumas_identity() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "image/stable-diffusion/tiny-sd",
+            "revision": "main",
+            "selected_artifact_id": "diffusers-bundle"
+        }),
+    );
+    inputs.insert("task_kind".to_string(), serde_json::json!("text-to-image"));
+    inputs.insert("runtime_id".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("device_id".to_string(), serde_json::json!("cuda:0"));
+    inputs.insert(
+        "platform_context".to_string(),
+        serde_json::json!({ "platform_key": "linux-x86_64" }),
+    );
+    inputs.insert(
+        "selected_binding_ids".to_string(),
+        serde_json::json!(["binding.diffusers.core"]),
+    );
+
+    let request = build_dependency_planning_request("llm-inference", &inputs)
+        .expect("dependency planning request should build");
+
+    assert_eq!(request.model_ref.model_id, "image/stable-diffusion/tiny-sd");
+    assert_eq!(
+        request.model_ref.selected_artifact_id.as_deref(),
+        Some("diffusers-bundle")
+    );
+    assert_eq!(request.model_ref.selected_artifact_path, None);
+    assert_eq!(request.task_id.as_str(), "image-generation");
+    assert_eq!(
+        request
+            .scheduler_intent
+            .requested_runtime_id
+            .as_ref()
+            .map(|value| value.as_str()),
+        Some("pytorch")
+    );
+    assert_eq!(
+        request
+            .scheduler_intent
+            .requested_device_id
+            .as_ref()
+            .map(|value| value.as_str()),
+        Some("cuda:0")
+    );
+    assert_eq!(
+        request
+            .platform_context
+            .as_ref()
+            .map(|value| value.platform_key.as_str()),
+        Some("linux-x86_64")
+    );
+    assert_eq!(request.selected_binding_ids.len(), 1);
+    assert_eq!(
+        request
+            .caller_context
+            .source_node_type
+            .as_ref()
+            .map(|value| value.as_str()),
+        Some("llm-inference")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_dependency_planning_request_rejects_path_only_identity() {
+    let mut inputs = HashMap::new();
+    inputs.insert("model_id".to_string(), serde_json::json!("legacy-model"));
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/models/legacy.gguf"),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("text-generation"),
+    );
+
+    let err = build_dependency_planning_request("llm-inference", &inputs)
+        .expect_err("dependency planning must require pumas_model_ref");
+
+    assert!(err.contains("Missing pumas_model_ref input"));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_dependency_planning_request_rejects_selected_artifact_path() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "llm/imported/test-gguf",
+            "selected_artifact_id": "model.gguf",
+            "selected_artifact_path": "llm/imported/test-gguf/model.gguf"
+        }),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("text-generation"),
+    );
+
+    let err = build_dependency_planning_request("llm-inference", &inputs)
+        .expect_err("dependency planning identity must stay path-free");
+
+    assert!(err.contains("selected_artifact_path"));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_model_dependency_request_ignores_recommended_backend() {
     let mut inputs = HashMap::new();
     inputs.insert(

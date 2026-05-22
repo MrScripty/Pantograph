@@ -31,6 +31,8 @@ use super::{read_optional_input_string_aliases, read_optional_input_value_aliase
 
 mod input_projection;
 pub(crate) use input_projection::*;
+mod planning_projection;
+pub(crate) use planning_projection::*;
 
 #[cfg(feature = "pytorch-nodes")]
 const MAX_DEPENDENCY_PREFLIGHT_COMPATIBILITY_ISSUES: usize = 32;
@@ -194,17 +196,16 @@ async fn enforce_dependency_preflight_inner(
         return Err(NodeEngineError::ExecutionFailed(message));
     };
 
-    let request = build_model_dependency_request(node_type, inputs);
-    let request_model_id = match request.model_id.as_deref() {
-        Some(model_id) if !model_id.trim().is_empty() => model_id.to_string(),
-        _ => {
-            let message =
-                "Missing pumas_model_ref/model_id input. Connect Puma-Lib pumas_model_ref output."
-                    .to_string();
+    let planning_request = match build_dependency_planning_request(node_type, inputs) {
+        Ok(request) => request,
+        Err(error) => {
+            let message = format!("Dependency planning request validation failed: {error}");
             record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
             return Err(NodeEngineError::ExecutionFailed(message));
         }
     };
+    let request_model_id = planning_request.model_ref.model_id.clone();
+    let request = build_model_dependency_request(node_type, inputs);
     let requirements = match resolver
         .resolve_model_dependency_requirements(request.clone())
         .await

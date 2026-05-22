@@ -1500,6 +1500,41 @@ fixture contract must not remain reachable as an alternate execution path.
      the remaining `ModelDependencyRequest`, `ModelRefV2`, and path-shaped
      activity/frontend dependency-environment surfaces instead of adapting
      them.
+   - 2026-05-22 implementation update: completed the node-engine typed
+     dependency-planning request projection slice. Node-engine now builds a
+     `DependencyPlanningRequest` from graph inputs before dependency preflight
+     reaches the legacy resolver. The projection requires `pumas_model_ref`,
+     carries typed scheduler runtime/device intent, platform key, selected
+     binding ids, task identity, and caller context, and rejects path-shaped
+     `selected_artifact_path` identity. The projection lives in
+     `dependency_preflight/planning_projection.rs`; the existing legacy
+     `input_projection.rs` remains below the decomposition threshold.
+   - 2026-05-22 no-fallback/no-legacy confirmation: this slice adds a
+     fail-closed canonical request gate, not a compatibility adapter. It does
+     not convert `DependencyPlanningRequest` back into
+     `ModelDependencyRequest`, does not repair `ModelRefV2.model_path`, and
+     does not accept `model_id`/`model_path` as a substitute for
+     `pumas_model_ref`.
+   - 2026-05-22 standards evidence: the new projection module is 145 lines;
+     `dependency_preflight.rs` is 467 lines and
+     `dependency_preflight/input_projection.rs` is 384 lines after the split.
+     The directory README records the ownership split between legacy input
+     projection and typed dependency-planning projection.
+   - 2026-05-22 verification passed:
+     `cargo fmt -p node-engine`,
+     `cargo test -p node-engine --features inference-nodes build_dependency_planning_request`,
+     `cargo test -p node-engine --features inference-nodes dependency_preflight`,
+     `cargo check -p node-engine --features inference-nodes`,
+     `cargo check -p node-engine --all-features`,
+     `cargo check -p node-engine --no-default-features`,
+     `cargo fmt -p node-engine -- --check`, and `git diff --check`.
+   - Remaining follow-up: replace the `ModelDependencyResolver` trait and
+     embedded-runtime implementation so dependency preflight consumes
+     `DependencyPreflightRequest`/`DependencyPreflightResult` and
+     dependency-environment operations consume
+     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`; then delete
+     `ModelDependencyRequest`, `ModelRefV2`, and the legacy request-building
+     helpers.
    - Historical preflight contract-slice scope clarification: the preflight
      contract gate may also touch existing `pantograph-dependency-planning`
      sibling modules, fixtures, and tests when required to make the shared
