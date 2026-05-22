@@ -182,8 +182,10 @@ impl TauriModelDependencyResolver {
             }
         };
 
-        let mut cache = self.status_cache.write().await;
-        cache.insert(Self::cache_key(&request), status.clone());
+        if let Some(cache_key) = Self::cache_key(&request) {
+            let mut cache = self.status_cache.write().await;
+            cache.insert(cache_key, status.clone());
+        }
         self.emit_activity(
             &context,
             "check",
@@ -250,18 +252,20 @@ impl TauriModelDependencyResolver {
         }
 
         {
-            let mut cache = self.status_cache.write().await;
-            cache.insert(
-                Self::cache_key(&request),
-                ModelDependencyStatus {
-                    state: DependencyState::Installing,
-                    code: None,
-                    message: Some("Installing dependencies...".to_string()),
-                    requirements: requirements.clone(),
-                    bindings: Vec::new(),
-                    checked_at: Some(Utc::now().to_rfc3339()),
-                },
-            );
+            if let Some(cache_key) = Self::cache_key(&request) {
+                let mut cache = self.status_cache.write().await;
+                cache.insert(
+                    cache_key,
+                    ModelDependencyStatus {
+                        state: DependencyState::Installing,
+                        code: None,
+                        message: Some("Installing dependencies...".to_string()),
+                        requirements: requirements.clone(),
+                        bindings: Vec::new(),
+                        checked_at: Some(Utc::now().to_rfc3339()),
+                    },
+                );
+            }
         }
 
         let mut rows = Vec::new();
@@ -287,18 +291,20 @@ impl TauriModelDependencyResolver {
             bindings: rows.clone(),
             installed_at: Some(Utc::now().to_rfc3339()),
         };
-        let mut cache = self.status_cache.write().await;
-        cache.insert(
-            Self::cache_key(&request),
-            ModelDependencyStatus {
-                state,
-                code: install.code.clone(),
-                message: install.message.clone(),
-                requirements,
-                bindings: rows,
-                checked_at: Some(Utc::now().to_rfc3339()),
-            },
-        );
+        if let Some(cache_key) = Self::cache_key(&request) {
+            let mut cache = self.status_cache.write().await;
+            cache.insert(
+                cache_key,
+                ModelDependencyStatus {
+                    state,
+                    code: install.code.clone(),
+                    message: install.message.clone(),
+                    requirements,
+                    bindings: rows,
+                    checked_at: Some(Utc::now().to_rfc3339()),
+                },
+            );
+        }
 
         self.emit_activity(
             &context,

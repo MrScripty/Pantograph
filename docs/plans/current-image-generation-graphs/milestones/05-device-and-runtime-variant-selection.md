@@ -1470,6 +1470,36 @@ fixture contract must not remain reachable as an alternate execution path.
      this in the typed preflight/execution-plan contract replacement by
      carrying canonical Pumas model refs as typed identities, not by
      reintroducing local paths or graph-carried artifact load targets.
+   - 2026-05-22 implementation update: completed the embedded-runtime
+     dependency descriptor path-fallback removal slice. The resolver descriptor
+     lookup no longer repairs path-only requests through
+     `PumasApi::resolve_pumas_model_ref`, no longer derives `model_id` from
+     `ModelDependencyRequest.model_path`, and no longer uses `model_path` as a
+     dependency status cache key. Path-only dependency requests remain
+     unresolved until the shared typed preflight/environment contracts carry
+     canonical Pumas model refs through the boundary.
+   - 2026-05-22 no-fallback/no-legacy confirmation: this slice removes a
+     legacy Pumas path-resolution branch instead of preserving it behind an
+     adapter. It does not add a compatibility conversion from
+     `DependencyPreflightRequest`, `DependencyEnvironmentRequest`, or Pumas
+     model refs back into `ModelDependencyRequest`/`ModelRefV2`, and it does
+     not pass executable paths into graph, cache, activity, or node-engine
+     dependency identity.
+   - 2026-05-22 verification passed:
+     `cargo fmt -p pantograph-embedded-runtime`,
+     `cargo test -p pantograph-embedded-runtime model_dependencies`,
+     `cargo check -p pantograph-embedded-runtime`,
+     `cargo check -p pantograph-embedded-runtime --all-features`,
+     `cargo check -p pantograph-embedded-runtime --no-default-features`,
+     `cargo fmt -p pantograph-embedded-runtime -- --check`, and
+     `git diff --check`.
+   - Remaining follow-up: replace the old resolver boundary and
+     dependency-environment executor with
+     `DependencyPreflightRequest`/`DependencyPreflightResult` and
+     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then remove
+     the remaining `ModelDependencyRequest`, `ModelRefV2`, and path-shaped
+     activity/frontend dependency-environment surfaces instead of adapting
+     them.
    - Historical preflight contract-slice scope clarification: the preflight
      contract gate may also touch existing `pantograph-dependency-planning`
      sibling modules, fixtures, and tests when required to make the shared

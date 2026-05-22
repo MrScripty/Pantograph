@@ -72,8 +72,9 @@ impl TauriModelDependencyResolver {
         &self,
         request: &ModelDependencyRequest,
     ) -> Option<ModelDependencyStatus> {
+        let key = Self::cache_key(request)?;
         let cache = self.status_cache.read().await;
-        cache.get(&Self::cache_key(request)).cloned()
+        cache.get(&key).cloned()
     }
 
     fn current_activity_emitter(&self) -> Option<DependencyActivityEmitter> {
@@ -127,7 +128,7 @@ impl TauriModelDependencyResolver {
         );
     }
 
-    fn cache_key(request: &ModelDependencyRequest) -> String {
+    fn cache_key(request: &ModelDependencyRequest) -> Option<String> {
         descriptors::cache_key(request)
     }
 

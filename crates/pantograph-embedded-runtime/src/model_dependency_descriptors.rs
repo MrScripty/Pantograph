@@ -81,12 +81,11 @@ fn stable_json(value: &serde_json::Value) -> String {
     }
 }
 
-pub(super) fn cache_key(request: &ModelDependencyRequest) -> String {
+pub(super) fn cache_key(request: &ModelDependencyRequest) -> Option<String> {
     let model_key = request
         .model_id
         .clone()
-        .filter(|id| !id.trim().is_empty())
-        .unwrap_or_else(|| request.model_path.clone());
+        .filter(|id| !id.trim().is_empty())?;
     let backend_key = request
         .backend_key
         .clone()
@@ -102,13 +101,13 @@ pub(super) fn cache_key(request: &ModelDependencyRequest) -> String {
         .collect::<Vec<_>>();
     selected.sort();
 
-    format!(
+    Some(format!(
         "{}|{}|{}|{}",
         model_key,
         backend_key,
         platform_key,
         selected.join(",")
-    )
+    ))
 }
 
 fn canonical_backend_key(value: Option<&str>) -> Option<String> {
@@ -261,30 +260,7 @@ async fn resolve_model_with_api(
         }
     }
 
-    if request.model_path.trim().is_empty() {
-        return Ok(None);
-    }
-
-    let model_ref = api
-        .resolve_pumas_model_ref(&request.model_path)
-        .await
-        .map_err(|e| format!("Failed to resolve model ref '{}': {e}", request.model_path))?;
-    if model_ref.model_id.trim().is_empty() {
-        return Ok(None);
-    }
-
-    let Some(record) = api
-        .get_model(&model_ref.model_id)
-        .await
-        .map_err(|e| format!("Failed to query model '{}': {e}", model_ref.model_id))?
-    else {
-        return Ok(None);
-    };
-    let execution_descriptor = resolve_execution_descriptor_with_api(api, &record).await?;
-    Ok(Some(ResolvedPumasModel {
-        record,
-        execution_descriptor,
-    }))
+    Ok(None)
 }
 
 pub(super) async fn resolve_descriptor(
@@ -301,7 +277,7 @@ pub(super) async fn resolve_descriptor(
         .model_id
         .clone()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| request.model_path.clone());
+        .unwrap_or_default();
     let mut model_path = request.model_path.clone();
     let mut model_type = request.model_type.clone();
     let mut task_type_primary = request
@@ -334,7 +310,7 @@ pub(super) async fn resolve_descriptor(
         .as_ref()
         .map(|id| !id.trim().is_empty())
         .unwrap_or(false)
-        || model_id != request.model_path;
+        || !model_id.is_empty();
 
     Ok(ResolvedModelDescriptor {
         model_id,

@@ -154,9 +154,17 @@ fn cache_key_is_deterministic_for_binding_order() {
     right.selected_binding_ids = vec!["binding-a".to_string(), "binding-b".to_string()];
 
     assert_eq!(
-        TauriModelDependencyResolver::cache_key(&left),
-        TauriModelDependencyResolver::cache_key(&right)
+        TauriModelDependencyResolver::cache_key(&left).unwrap(),
+        TauriModelDependencyResolver::cache_key(&right).unwrap()
     );
+}
+
+#[test]
+fn cache_key_requires_model_id_instead_of_falling_back_to_path() {
+    let mut request = sample_request();
+    request.model_id = None;
+
+    assert_eq!(TauriModelDependencyResolver::cache_key(&request), None);
 }
 
 #[test]
@@ -325,7 +333,7 @@ async fn resolve_descriptor_uses_entry_path_for_external_diffusers_bundle() {
 }
 
 #[tokio::test]
-async fn resolve_descriptor_does_not_scan_descriptors_for_path_only_external_entry_path() {
+async fn resolve_descriptor_keeps_path_only_external_entry_path_unresolved() {
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
     write_test_diffusers_bundle(&bundle_root);
@@ -356,7 +364,7 @@ async fn resolve_descriptor_does_not_scan_descriptors_for_path_only_external_ent
         .await
         .expect("descriptor should preserve unresolved path-only input");
 
-    assert_eq!(descriptor.model_id, bundle_root.display().to_string());
+    assert_eq!(descriptor.model_id, "");
     assert_eq!(descriptor.model_path, bundle_root.display().to_string());
     assert_eq!(descriptor.task_type_primary, "text-to-image");
     assert!(!descriptor.model_id_resolved);
@@ -399,12 +407,12 @@ async fn resolve_descriptor_uses_primary_file_for_library_owned_file_model() {
 }
 
 #[tokio::test]
-async fn resolve_descriptor_uses_pumas_model_ref_for_path_only_library_model() {
+async fn resolve_descriptor_does_not_resolve_path_only_library_model() {
     let temp_dir = create_test_env();
     let model_dir = temp_dir
         .path()
         .join("shared-resources/models/llm/imported/test-gguf");
-    let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+    write_library_owned_file_model(&model_dir, "model.gguf", 256);
 
     let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
     let request = ModelDependencyRequest {
@@ -425,11 +433,11 @@ async fn resolve_descriptor_uses_pumas_model_ref_for_path_only_library_model() {
     let descriptor = resolver
         .resolve_descriptor(&request, Some(&api))
         .await
-        .expect("descriptor should resolve through Pumas model-ref lookup");
+        .expect("descriptor should keep path-only input unresolved");
 
-    assert_eq!(descriptor.model_id, "llm/imported/test-gguf");
-    assert_eq!(descriptor.model_path, model_file.display().to_string());
-    assert!(descriptor.model_id_resolved);
+    assert_eq!(descriptor.model_id, "");
+    assert_eq!(descriptor.model_path, model_dir.display().to_string());
+    assert!(!descriptor.model_id_resolved);
 }
 
 #[tokio::test]

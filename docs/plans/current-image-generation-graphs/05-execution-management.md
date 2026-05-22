@@ -8522,6 +8522,40 @@ Worker rules:
   - Remaining follow-up: migrate dependency-environment execution to
     `DependencyEnvironmentRequest`/`DependencyEnvironmentResult` and remove the
     legacy request-building helpers rather than preserving them as wrappers.
+- 2026-05-22 Milestone 5 embedded-runtime dependency descriptor path-fallback
+  removal:
+  - Smallest useful vertical slice: remove the embedded-runtime dependency
+    descriptor branch that repaired path-only dependency requests into Pumas
+    model identities before the larger resolver-boundary replacement.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_operations.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`, and
+    Milestone 5 plan notes. Root proposal markdown files remained ignored.
+  - Implementation completed: descriptor lookup no longer calls
+    `PumasApi::resolve_pumas_model_ref` for path-only requests, no longer
+    derives `model_id` from `ModelDependencyRequest.model_path`, and no longer
+    uses `model_path` as the dependency status cache key. Cache lookup/inserts
+    now require `model_id`; path-only requests remain unresolved.
+  - No-fallback/no-legacy confirmation: this slice removes a legacy
+    path-resolution branch rather than wrapping it. It does not convert shared
+    dependency-planning contracts back into `ModelDependencyRequest` or
+    `ModelRefV2`, and it does not make executable paths graph, cache,
+    activity, or node-engine dependency identity.
+  - Verification passed:
+    `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime model_dependencies`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --all-features`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`,
+    `cargo fmt -p pantograph-embedded-runtime -- --check`, and
+    `git diff --check`.
+  - Remaining follow-up: complete the resolver-boundary migration to
+    `DependencyPreflightRequest`/`DependencyPreflightResult` and
+    `DependencyEnvironmentRequest`/`DependencyEnvironmentResult`, then remove
+    the old `ModelDependencyRequest`/`ModelRefV2` request-building and
+    path-shaped dependency-environment activity/frontend surfaces.
 
 ### Traceability Links
 
