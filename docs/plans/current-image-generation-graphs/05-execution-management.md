@@ -8117,38 +8117,72 @@ Worker rules:
     made and recorded.
   - Verification passed for this docs-only re-plan note: `git diff --check`.
 - 2026-05-21 Milestone 5 resolver boundary re-plan decision:
-  - Decision: use option 2 with option 3 discipline. Split
-    model-ref/preflight hydration out of dependency-environment resolving. The
-    dependency resolver boundary becomes dependency-environment only:
-    resolve/check/install consume `DependencyEnvironmentRequest` and return
-    `DependencyEnvironmentResult` with typed states and diagnostics. A separate
-    shared path-free preflight contract in `pantograph-dependency-planning`
-    replaces `ModelRefV2` as the graph/node-engine handoff.
-  - Required preflight contract shape: `PumasModelRef`, canonical task id/task
-    type, optional expected artifact kind, optional typed scheduler intent or
-    explicit scheduler requirement, dependency-environment identity, selected
-    binding ids, platform identity, caller context, and diagnostics. It must not
-    carry executable local paths, Pumas load targets, package facts,
-    backend-local device strings, or scheduler-selected runtime/device/load
-    decisions.
-  - Option 3 discipline: this is a staging step toward full scheduler/host
-    planning. Node-engine forwards graph intent and typed preflight facts only;
-    Pumas remains authoritative for artifact lookup/load targets; scheduler or
-    host planning remains authoritative for executable backend/runtime/device
-    decisions and worker handoff. The split must not create another DTO that a
-    future scheduler-owned execution plan needs to adapt back through.
-  - No-fallback/no-legacy confirmation: the plan now rejects adapters that map
-    new dependency-environment or preflight contracts back into
-    `ModelDependencyRequirements`, `ModelDependencyStatus`,
-    `ModelDependencyInstallResult`, or `ModelRefV2`. The migration must remove
-    `ModelDependencyRequest.model_path`, `ModelRefV2.model_path`,
-    path-derived model-id repair, and path-shaped cache/activity identity when
-    the canonical replacements land.
-  - Next implementation slice: add only the path-free shared preflight
-    request/result contract and fixtures to `pantograph-dependency-planning`.
-    Do not migrate node-engine, embedded-runtime, frontend, worker, scheduler,
-    generated DTOs, lockfiles, or saved workflows until that contract gate
-    passes.
+  - Updated decision: use option 3 followed by option 2. First define the
+    canonical scheduler/host execution handoff that replaces model-ref
+    hydration; then replace the resolver boundary and delete the old
+    path-shaped contracts. This supersedes the earlier "option 2 with option 3
+    discipline" staging for the next migration step.
+  - Execution handoff boundary: the post-preflight handoff is produced only
+    after scheduler/host planning and is the only contract allowed to carry
+    executable Pumas-approved load targets, selected backend/runtime/device
+    decisions, dependency-environment launch facts, and worker-local execution
+    facts. Node-engine preflight, dependency-environment status, graph/cache
+    identity, and frontend activity correlation remain path-free.
+  - Owner-selection result: codebase impact review inspected existing
+    scheduler, runtime-registry, embedded-runtime, worker, and
+    dependency-planning boundaries. The owner anchor is the existing
+    `pantograph-workflow-service::WorkflowExecutionPlan`, with executable
+    launch material produced by an embedded-runtime/host subordinate projection
+    after Pumas load-target approval. `WorkflowExecutionPlan` remains
+    path-free and must not grow local paths, full package facts, graph inputs,
+    worker envelopes, or launch-process details. The subordinate handoff is the
+    only allowed source of worker-local Pumas load targets; graph value maps,
+    node-engine preflight, dependency-environment results, frontend activity
+    identity, and cache keys remain path-free.
+  - Rust API-shape decision: node-engine calls a host service rather than
+    receiving executable handoff data. Add a planned-inference execution host
+    extension such as `PLANNED_INFERENCE_EXECUTION_HOST` storing
+    `Arc<dyn PlannedInferenceExecutionHost>`. The first method is image
+    generation:
+    `generate_image(PlannedImageGenerationRequest)`, where the request carries
+    only `workflow_run_id`, `node_id`, `request_id`, and
+    `inference::ImageGenerationRequest`. Embedded-runtime implements the trait,
+    resolves the active `WorkflowExecutionPlan` node decision, obtains the
+    Pumas-approved load target through Pumas, builds an internal
+    `PlannedImageGenerationLaunchHandoff`, and calls a gateway launch API such
+    as `InferenceGateway::generate_image_from_launch_handoff(...)`. The gateway
+    method may wrap the existing canonical planning-input methods, but
+    executable package/load-target facts must enter backend execution only
+    through the host-built handoff.
+  - No additional architecture re-plan is required for this boundary. Future
+    implementation slices still need normal thin-slice planning with allowed
+    write sets, focused tests, and verification, but the owner, API shape,
+    rejected fields, lifecycle, and diagnostic direction are now recorded.
+  - Resolver replacement after the handoff is planned:
+    dependency-environment resolve/check/install consume
+    `DependencyEnvironmentRequest` and return
+    `DependencyEnvironmentResult`; canonical preflight consumes
+    `DependencyPreflightRequest` and returns `DependencyPreflightResult`; no
+    resolver method returns `ModelRefV2` or executable load-target facts to
+    node-engine.
+  - No-fallback/no-legacy confirmation: the migration must remove
+    `resolve_model_ref`, `ModelDependencyRequest.model_path`,
+    `ModelRefV2.model_path`, path-derived model-id repair, and path-shaped
+    cache/activity identity when their canonical replacements land. Do not add
+    adapters that map dependency-environment results, preflight results, or
+    execution handoff facts back into `ModelDependencyRequirements`,
+    `ModelDependencyStatus`, `ModelDependencyInstallResult`,
+    `ModelDependencyRequest`, or `ModelRefV2`.
+  - Next implementation slice: implement only the node-engine planned
+    execution host boundary and focused node-engine tests. The allowed write
+    set is `crates/node-engine/src/planned_inference.rs`,
+    `crates/node-engine/src/extensions.rs`, `crates/node-engine/src/lib.rs`
+    only if re-exports are required,
+    `crates/node-engine/src/core_executor/inference_nodes.rs`, and matching
+    node-engine inference tests. Do not implement embedded-runtime Pumas
+    load-target resolution, gateway/backend worker execution, resolver
+    migration, frontend/generated/saved workflow changes, or lockfile edits in
+    that first code slice.
   - Verification passed for this docs-only design update: `git diff --check`.
 - 2026-05-21 Milestone 5 path-free preflight standards iteration:
   - Standards reviewed:
@@ -8163,20 +8197,21 @@ Worker rules:
     into the request/result contract gate instead of creating a second
     preflight contract in node-engine, embedded-runtime, scheduler, or frontend
     code.
-  - Blast-radius finding: the option 2 decision is standards-compliant only if
-    implementation keeps preflight narrow. Without explicit guardrails, the
-    next slice could accidentally pass full dependency-environment status or
-    install payloads through graph/node-engine identity, let scheduler intent
-    become a scheduler decision, or reintroduce local paths through fields such
-    as `selected_artifact_path`, `local_load_path`, Python executable paths, or
+  - Blast-radius finding: the earlier preflight split decision is
+    standards-compliant only if implementation keeps preflight narrow. Without
+    explicit guardrails, the preflight contract slice could accidentally pass
+    full dependency-environment status or install payloads through
+    graph/node-engine identity, let scheduler intent become a scheduler
+    decision, or reintroduce local paths through fields such as
+    `selected_artifact_path`, `local_load_path`, Python executable paths, or
     package source paths.
-  - Plan update completed: Milestone 5 now requires the next contract gate to
-    extend `pantograph-dependency-planning::preflight`, reuse existing validated
-    contracts, reject path-shaped and load-target/package-fact fields, keep
-    scheduler/runtime/device values as intent or hard requirements only, split
-    the preflight module if it approaches decomposition limits, update READMEs
-    and fixtures, and run the full dependency-planning contract verification
-    set.
+  - Plan update completed: Milestone 5 required the preflight contract gate to
+    extend `pantograph-dependency-planning::preflight`, reuse existing
+    validated contracts, reject path-shaped and load-target/package-fact
+    fields, keep scheduler/runtime/device values as intent or hard
+    requirements only, split the preflight module if it approaches
+    decomposition limits, update READMEs and fixtures, and run the full
+    dependency-planning contract verification set.
   - No-fallback/no-legacy confirmation: this standards pass does not authorize
     compatibility shims. The later migration must remove `ModelRefV2`,
     `ModelDependencyRequest.model_path`, path-derived model-id repair, and old
@@ -8207,17 +8242,18 @@ Worker rules:
     removed or replaced by canonical contracts as their migration slices land.
   - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
 - 2026-05-21 Milestone 5 preflight contract blast-radius follow-up:
-  - Existing-code findings: the next contract-only slice needs a slightly wider
-    dependency-planning write scope than `preflight.rs` alone because
+  - Existing-code findings: the preflight contract-only slice needed a
+    slightly wider dependency-planning write scope than `preflight.rs` alone
+    because
     `DependencyPlanningIdentityKey` is consumed by dependency-environment
     request validation and fixtures. Unknown-field rejection is top-level for
     several contracts but not guaranteed for nested preflight protocol structs.
     Later migration targets in node-engine and embedded-runtime already exceed
     the standards file-size threshold, and the current preflight path performs
     repeated resolve/check/model-ref hydration work through legacy DTOs.
-  - Plan update completed: Milestone 5 now permits the next contract gate to
+  - Plan update completed: Milestone 5 permitted the preflight contract gate to
     update dependency-planning sibling modules, fixtures, and tests when needed
-    for the identity terminology correction; requires nested unknown-field
+    for the identity terminology correction; required nested unknown-field
     rejection for the complete preflight protocol; requires decomposition before
     adding migration behavior to the large node-engine and embedded-runtime
     files; requires embedded-runtime/node-engine to import shared DTOs directly

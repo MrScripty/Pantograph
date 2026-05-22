@@ -1180,60 +1180,171 @@ fixture contract must not remain reachable as an alternate execution path.
      inventing a replacement model-ref/preflight handoff during implementation.
      Stop and plan the canonical replacement for model-ref hydration before
      editing node-engine or embedded-runtime resolver code.
-   - 2026-05-21 re-plan decision: use option 2 with option 3 discipline. Split
-     model-ref/preflight hydration out of dependency-environment resolving
-     instead of folding it into dependency-environment results. The dependency
-     resolver boundary becomes dependency-environment only:
-     resolve/check/install consume `DependencyEnvironmentRequest` and return
+   - 2026-05-21 updated re-plan decision: use option 3 followed by option 2.
+     First plan the canonical scheduler/host execution handoff that replaces
+     model-ref hydration, then replace the resolver boundary and delete the
+     old path-shaped contracts. This supersedes the earlier "option 2 with
+     option 3 discipline" staging for the next migration step because
+     replacing the resolver trait before defining the post-preflight execution
+     handoff would either preserve `ModelRefV2.model_path` or force a broad
+     handoff contract to be invented during implementation.
+   - Stage 1, execution handoff boundary: define the canonical post-preflight
+     handoff that is produced after scheduler/host planning. This contract is
+     the only place executable Pumas-approved load targets, selected
+     backend/runtime/device decisions, dependency-environment launch facts,
+     and worker-local execution facts may appear. The handoff must be owned by
+     the scheduler/host/runtime planning boundary, not by node-engine
+     preflight, not by dependency-environment status, and not by the graph. It
+     may reference the path-free preflight result, Pumas model ref, selected
+     artifact identity/kind, dependency requirements id, environment ref,
+     selected binding ids, and typed diagnostics, but it must keep executable
+     paths and worker launch facts out of graph/cache/activity identity.
+   - Stage 1 owner decision after codebase impact review:
+     `pantograph-workflow-service::WorkflowExecutionPlan` is the selected
+     scheduler owner anchor because it already owns run-scoped selected
+     backend/runtime/device/task/model facts and is installed into node
+     execution through embedded-runtime projection. Keep
+     `WorkflowExecutionPlan` itself path-free: it may continue to carry reduced
+     selected Pumas model identity, dependency readiness proof, policy trace
+     ids, selected backend/runtime/device/task facts, and bounded diagnostics,
+     but it must not carry executable local paths, full Pumas package facts,
+     raw graph inputs, worker envelopes, image bytes, scheduler internals, or
+     launch-process details. The executable handoff is a subordinate
+     embedded-runtime/host projection produced from the active
+     `WorkflowExecutionPlan` after Pumas has approved the selected artifact load
+     target and after scheduler selection is complete.
+   - Stage 1 rejected alternatives: do not create a new scheduler planning DTO
+     family parallel to `WorkflowExecutionPlan`; do not fold executable load
+     targets into dependency-environment status; do not revive graph/input
+     fields such as `resolved_model_package_facts`,
+     `resolved_model_artifact_load_target`, or `model_path` as canonical
+     execution handoff; do not make node-engine derive, repair, cache, emit, or
+     persist executable paths. A host-local projection may pass worker launch
+     material to the inference gateway/runtime, but graph value maps,
+     dependency-preflight contracts, frontend activity identity, and cache keys
+     remain path-free.
+   - Stage 1 lifecycle and diagnostics: the embedded-runtime/host projection
+     loads the active execution plan for the workflow run, resolves the
+     selected Pumas artifact through Pumas' typed load-target resolver, checks
+     selected model/artifact/runtime consistency, and either installs a
+     run/node-scoped planned execution handoff or returns typed diagnostics that
+     terminate the workflow run. Missing, stale, invalid, unavailable,
+     not-installed, not-implemented, runtime-mismatch, and selected-artifact
+     mismatch states must fail closed with scheduler/host diagnostics rather
+     than falling back to path joins, largest-file selection, graph-carried
+     package facts, or Python-worker resolver behavior.
+   - Stage 1 Rust API-shape decision: node-engine calls a host service, not a
+     load-target data object. Add a `node_engine::planned_inference`
+     extension-service boundary, installed through executor extensions under a
+     dedicated key such as `PLANNED_INFERENCE_EXECUTION_HOST`:
+     `Arc<dyn PlannedInferenceExecutionHost>`. The trait exposes
+     task-specific execution methods, starting with image generation:
+     `generate_image(PlannedImageGenerationRequest) ->
+     Result<inference::ImageGenerationResult,
+     PlannedInferenceExecutionError>`. The request carries only
+     `workflow_run_id`, `node_id`, `request_id`, and the user/workflow
+     `inference::ImageGenerationRequest`. It must not carry package facts,
+     Pumas artifact load targets, local paths, `ModelRefV2`, dependency
+     environment payloads, backend-local device strings, or scheduler-selected
+     facts beyond run/node correlation.
+   - Stage 1 host implementation shape: embedded-runtime implements
+     `PlannedInferenceExecutionHost`. For each request it loads the active
+     `WorkflowExecutionPlan`, finds the matching node decision, projects the
+     scheduler decision to `inference::BackendExecutionDecision`, resolves the
+     selected Pumas artifact through Pumas' typed load-target resolver, checks
+     selected model/artifact/runtime consistency, and builds a host/internal
+     launch handoff such as `inference::PlannedImageGenerationLaunchHandoff`.
+     That handoff may contain `workflow_run_id`, `node_id`, the projected
+     `BackendExecutionDecision`, validated `ResolvedModelPackageFacts`, the
+     Pumas-approved `PumasArtifactLoadTarget`, and bounded diagnostics. It is
+     worker-launch material only: do not serialize it into graph values,
+     dependency-preflight results, dependency-environment results, frontend
+     activity identity, or cache keys.
+   - Stage 1 gateway shape: add or expose a gateway-owned launch API such as
+     `InferenceGateway::generate_image_from_launch_handoff(request, handoff,
+     request_id, lifecycle_sink)`. The implementation may be a thin wrapper
+     around the existing `generate_image_from_planning_input` and
+     `generate_image_from_planning_input_with_lifecycle` methods, but the
+     executable facts must enter the inference backend only through the
+     host-built handoff. Node-engine image generation then builds only the
+     user/workflow `ImageGenerationRequest` and calls the planned execution
+     host; it no longer parses `resolved_model_package_facts`,
+     `resolved_model_artifact_load_target`, or `model_path` inputs.
+   - Stage 1 focused test plan: add node-engine tests proving image generation
+     fails closed when `PLANNED_INFERENCE_EXECUTION_HOST` is missing and proving
+     the node passes only run/node/request/image intent to the host; add
+     embedded-runtime projection tests proving stale run, missing node,
+     selected model mismatch, unavailable Pumas load target, invalid artifact,
+     and runtime mismatch return typed diagnostics; add inference gateway tests
+     proving the launch-handoff API delegates to the canonical image-generation
+     planner and preserves lifecycle/resource observation. These tests must be
+     updated in the later code slice, not in this docs-only planning commit.
+   - Stage 1 planning status: no further architecture re-plan is required for
+     this boundary. Future implementation slices still need normal thin-slice
+     planning with allowed write sets and verification, but the owner, API
+     shape, rejected fields, lifecycle, and diagnostic direction are recorded.
+   - Stage 2, resolver boundary replacement: after the execution handoff owner
+     and contract are planned, replace `ModelDependencyResolver` with typed
+     operations. Dependency-environment resolve/check/install consume
+     `DependencyEnvironmentRequest` and return
      `DependencyEnvironmentResult` plus typed diagnostics for unavailable,
-     invalid, missing, failed, or not-implemented states. A separate shared
-     path-free preflight contract in `pantograph-dependency-planning` replaces
-     `ModelRefV2` as the graph/node-engine handoff. It carries `PumasModelRef`,
-     canonical task id/task type, optional expected artifact kind, optional
-     typed scheduler intent or explicit scheduler requirement, selected
-     dependency-environment identity, selected binding ids, platform identity,
-     caller context, and diagnostics. It must not carry executable local paths,
-     Pumas load targets, package facts, backend-local device strings, or
-     scheduler-selected runtime/device/load-target decisions.
-   - Option 3 discipline for the split contract: design the new preflight
-     contract as the narrow predecessor of full scheduler/host planning, not as
-     another dependency resolver DTO. Node-engine forwards graph intent and
-     typed preflight facts only. Pumas remains the sole owner of artifact
-     lookup, storage kind, validation state, and local load targets. Scheduler
-     or host planning remains the sole owner of executable backend/runtime/device
-     selection and later worker handoff. The split must make a later full
-     scheduler-owned execution plan able to replace the preflight handoff
-     without another compatibility layer.
-   - Required removal/replacement from this decision: remove
-     `ModelDependencyRequest.model_path`, `ModelRefV2.model_path`,
-     path-derived model id repair, and path-shaped cache/activity identity when
-     their canonical replacements land. Do not add adapters that map
-     `DependencyEnvironmentResult` or the new preflight contract back into
+     invalid, missing, failed, or not-implemented states. Canonical preflight
+     consumes `DependencyPreflightRequest` and returns
+     `DependencyPreflightResult`. There is no resolver method that returns
+     `ModelRefV2`, no graph/node-engine resolver path that returns executable
+     load targets, and no dependency-environment result field that acts as a
+     worker execution handoff.
+   - Stage 2 removal requirements: remove `resolve_model_ref`,
+     `ModelRefV2.model_path`, `ModelDependencyRequest.model_path`,
+     path-derived model id repair, and path-shaped cache/activity identity in
+     the same migration sequence that lands their canonical replacements. Do
+     not add adapters that map `DependencyEnvironmentResult`,
+     `DependencyPreflightResult`, or the execution handoff back into
      `ModelDependencyRequirements`, `ModelDependencyStatus`,
-     `ModelDependencyInstallResult`, or `ModelRefV2`. Tests that mention those
-     retired DTOs after migration must be negative coverage proving rejection,
-     stale diagnostics, or removal.
-   - Next implementation slice after this decision: add the path-free shared
-     preflight request/result contract and fixtures to
-     `pantograph-dependency-planning` only. The slice may update crate docs and
-     tests, but must not migrate node-engine, embedded-runtime, frontend,
-     worker, scheduler, generated DTOs, lockfiles, or saved workflows until the
-     contract gate passes. Focused fixture coverage must include valid
-     path-free preflight, explicit runtime/device intent as scheduler
-     requirement facts, missing dependency-environment identity, invalid
-     selected binding ids, unknown-field rejection, path-shaped field
-     rejection, and typed diagnostics.
-   - Contract-slice scope clarification: the next contract gate may also touch
-     existing `pantograph-dependency-planning` sibling modules, fixtures, and
-     tests when required to make the shared identity terminology coherent. In
-     particular, replacing or superseding `DependencyPlanningIdentityKey`
-     runtime/device fields may require updates in `environment.rs`,
-     `request.rs`, crate re-exports, and dependency-environment fixtures. Do
-     that as a single contract correction with no alias fields, no accepted
-     legacy field names, and no compatibility adapter back to `ModelRefV2` or
-     `ModelDependencyRequest`.
+     `ModelDependencyInstallResult`, `ModelDependencyRequest`, or
+     `ModelRefV2`. Tests that mention retired DTOs after migration must be
+     negative coverage proving rejection, stale diagnostics, or removal.
+   - Node-engine rule after the update: node-engine forwards graph intent,
+     typed Pumas references, dependency-environment identity/readiness proof,
+     selected binding ids, platform context, and scheduler intent only.
+     Node-engine must not know, derive, repair, cache, or emit executable
+     model paths. The runtime/worker receives executable load targets only
+     from the scheduler/host execution handoff after Pumas approval and
+     scheduler selection.
+   - Next implementation slice after this API decision: implement only the
+     node-engine planned execution host boundary and focused node-engine tests.
+     Allowed write set: `crates/node-engine/src/planned_inference.rs`,
+     `crates/node-engine/src/extensions.rs`, `crates/node-engine/src/lib.rs`
+     only if re-exports are required,
+     `crates/node-engine/src/core_executor/inference_nodes.rs`, and the
+     matching node-engine inference tests. The slice must remove image
+     generation's direct parsing of `resolved_model_package_facts`,
+     `resolved_model_artifact_load_target`, and `model_path` only where the
+     new host boundary replaces it, and must fail closed when the planned
+     execution host is missing. It must not implement embedded-runtime Pumas
+     load-target resolution, change gateway/backend worker execution, migrate
+     `ModelDependencyResolver`, touch frontend/generated/saved workflow files,
+     or edit lockfiles.
+   - Subsequent handoff implementation slices: add the inference gateway
+     launch-handoff API and tests; implement the embedded-runtime
+     `PlannedInferenceExecutionHost` projection from active
+     `WorkflowExecutionPlan` plus Pumas load-target resolver; then replace the
+     remaining resolver boundary. The resolver-replacement write set is
+     expected to include node-engine model dependency contracts/preflight,
+     embedded-runtime model dependency operations, dependency-environment task
+     executor helpers, and their focused tests, with large-file decomposition
+     before behavioral migration where required.
+   - Historical preflight contract-slice scope clarification: the preflight
+     contract gate may also touch existing `pantograph-dependency-planning`
+     sibling modules, fixtures, and tests when required to make the shared
+     identity terminology coherent. In particular, replacing or superseding
+     `DependencyPlanningIdentityKey` runtime/device fields may require updates
+     in `environment.rs`, `request.rs`, crate re-exports, and
+     dependency-environment fixtures. Do that as a single contract correction
+     with no alias fields, no accepted legacy field names, and no compatibility
+     adapter back to `ModelRefV2` or `ModelDependencyRequest`.
    - 2026-05-21 standards iteration for the path-free preflight split: the
-     next contract gate must extend the existing
+     preflight contract gate must extend the existing
      `pantograph-dependency-planning` preflight owner rather than creating a
      second node-engine, embedded-runtime, scheduler, or frontend-owned
      preflight DTO family. Use explicit public names such as
@@ -1296,7 +1407,7 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo check -p pantograph-dependency-planning --all-features`,
      `cargo check -p pantograph-dependency-planning --no-default-features`,
      and `git diff --check`.
-   - Later migration decomposition requirement: the contract-only slice must
+   - Later migration decomposition requirement: the preflight contract-only slice must
      stay out of node-engine and embedded-runtime, but later migration slices
      that touch already-large files must include decomposition work in the same
      slice or immediately before the behavioral change. Current targets over
@@ -1395,10 +1506,10 @@ fixture contract must not remain reachable as an alternate execution path.
      a compatibility mode.
    - Execution-plan handoff follow-up: image-generation execution currently
      consumes graph/input-carried package facts and artifact load targets as an
-     intermediate bridge. Keep this out of the next contract-only slice, but
-     record it as a required later removal: scheduler/host execution-plan
-     projection must become the only source of executable package/load-target
-     facts before Milestone 5 closes.
+     intermediate bridge. The earlier preflight contract-only slice kept this
+     out of graph identity, but the updated next slice must plan its removal:
+     scheduler/host execution-plan projection must become the only source of
+     executable package/load-target facts before Milestone 5 closes.
    - Dependency ownership requirement for later migration: when
      embedded-runtime and node-engine stop using the retired model-dependency
      DTOs, shared contracts must be imported from
