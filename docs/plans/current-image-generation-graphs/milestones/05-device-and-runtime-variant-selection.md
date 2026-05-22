@@ -1283,6 +1283,37 @@ fixture contract must not remain reachable as an alternate execution path.
      this boundary. Future implementation slices still need normal thin-slice
      planning with allowed write sets and verification, but the owner, API
      shape, rejected fields, lifecycle, and diagnostic direction are recorded.
+   - 2026-05-22 standards iteration for the Stage 1 API shape: reviewed
+     `CODING-STANDARDS.md`, `PLAN-STANDARDS.md`,
+     `languages/rust/RUST-API-STANDARDS.md`,
+     `languages/rust/RUST-ASYNC-STANDARDS.md`,
+     `languages/rust/RUST-INTEROP-STANDARDS.md`, and
+     `languages/rust/RUST-TOOLING-STANDARDS.md`. The API shape remains
+     standards-compliant only with these guardrails:
+     `PlannedInferenceExecutionHost` is an async outer I/O boundary because it
+     crosses host runtime, Pumas resolver, and inference gateway calls; pure
+     request validation and projection helpers must remain synchronous.
+     Public request/error/handoff types must be correct-by-construction with
+     private fields, constructors or `TryFrom` validation, `Debug`, stable
+     accessors, and `#[non_exhaustive]` where future extension is likely.
+     Prefer existing domain types for workflow/run/node/request ids and Pumas
+     facts instead of raw `String` values once the implementation owner is in
+     scope; if a raw string is unavoidable at node-engine's boundary, validate
+     it once before building the request and pass the validated request inward.
+     `PlannedInferenceExecutionError` must preserve source errors where
+     possible and include bounded workflow_run_id/node_id/request_id context
+     without duplicating durable diagnostics at every layer.
+   - Stage 1 decomposition review: the next code slice touches
+     `crates/node-engine/src/core_executor/inference_nodes.rs` and likely
+     `crates/node-engine/src/core_executor/inference_tests.rs`, both already
+     above the 500-line decomposition-review threshold. The slice must either
+     extract the image-generation planned-execution path into focused child
+     modules such as
+     `crates/node-engine/src/core_executor/image_generation_nodes.rs` and a
+     matching focused test module, or keep the existing large-file edits to a
+     minimal routing change and record why immediate extraction would make the
+     slice less reviewable. Do not add substantial new logic to
+     `inference_nodes.rs` or `inference_tests.rs` without extraction.
    - Stage 2, resolver boundary replacement: after the execution handoff owner
      and contract are planned, replace `ModelDependencyResolver` with typed
      operations. Dependency-environment resolve/check/install consume
@@ -1316,15 +1347,21 @@ fixture contract must not remain reachable as an alternate execution path.
      Allowed write set: `crates/node-engine/src/planned_inference.rs`,
      `crates/node-engine/src/extensions.rs`, `crates/node-engine/src/lib.rs`
      only if re-exports are required,
-     `crates/node-engine/src/core_executor/inference_nodes.rs`, and the
-     matching node-engine inference tests. The slice must remove image
-     generation's direct parsing of `resolved_model_package_facts`,
-     `resolved_model_artifact_load_target`, and `model_path` only where the
-     new host boundary replaces it, and must fail closed when the planned
-     execution host is missing. It must not implement embedded-runtime Pumas
-     load-target resolution, change gateway/backend worker execution, migrate
-     `ModelDependencyResolver`, touch frontend/generated/saved workflow files,
-     or edit lockfiles.
+     `crates/node-engine/src/core_executor/inference_nodes.rs`, optional
+     extracted node-engine image-generation child modules/tests created by the
+     decomposition review, and the matching node-engine inference tests. The
+     slice must remove image generation's direct parsing of
+     `resolved_model_package_facts`, `resolved_model_artifact_load_target`, and
+     `model_path` only where the new host boundary replaces it, and must fail
+     closed when the planned execution host is missing. It must not implement
+     embedded-runtime Pumas load-target resolution, change gateway/backend
+     worker execution, migrate `ModelDependencyResolver`, touch
+     frontend/generated/saved workflow files, or edit lockfiles. Verification
+     must include focused node-engine tests, `cargo fmt -p node-engine`,
+     `cargo check -p node-engine`, `cargo check -p node-engine --all-features`,
+     `cargo check -p node-engine --no-default-features`, and
+     `git diff --check`; run the broader node-engine test set if the
+     decomposition touches shared executor routing.
    - Subsequent handoff implementation slices: add the inference gateway
      launch-handoff API and tests; implement the embedded-runtime
      `PlannedInferenceExecutionHost` projection from active

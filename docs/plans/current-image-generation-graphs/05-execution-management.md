@@ -8158,6 +8158,14 @@ Worker rules:
     implementation slices still need normal thin-slice planning with allowed
     write sets, focused tests, and verification, but the owner, API shape,
     rejected fields, lifecycle, and diagnostic direction are now recorded.
+  - 2026-05-22 standards iteration: the Stage 1 API shape remains
+    standards-compliant only if the first code slice treats
+    `PlannedInferenceExecutionHost` as an async outer I/O boundary, keeps pure
+    validation/projection synchronous, gives public request/error/handoff types
+    private validated constructors or `TryFrom` conversions, preserves bounded
+    workflow_run_id/node_id/request_id diagnostics, and performs a
+    decomposition review before adding logic to the already-large
+    `node-engine` image-generation executor/test files.
   - Resolver replacement after the handoff is planned:
     dependency-environment resolve/check/install consume
     `DependencyEnvironmentRequest` and return
@@ -8178,11 +8186,12 @@ Worker rules:
     set is `crates/node-engine/src/planned_inference.rs`,
     `crates/node-engine/src/extensions.rs`, `crates/node-engine/src/lib.rs`
     only if re-exports are required,
-    `crates/node-engine/src/core_executor/inference_nodes.rs`, and matching
-    node-engine inference tests. Do not implement embedded-runtime Pumas
-    load-target resolution, gateway/backend worker execution, resolver
-    migration, frontend/generated/saved workflow changes, or lockfile edits in
-    that first code slice.
+    `crates/node-engine/src/core_executor/inference_nodes.rs`, optional
+    extracted node-engine image-generation child modules/tests created by the
+    decomposition review, and matching node-engine inference tests. Do not
+    implement embedded-runtime Pumas load-target resolution, gateway/backend
+    worker execution, resolver migration, frontend/generated/saved workflow
+    changes, or lockfile edits in that first code slice.
   - Verification passed for this docs-only design update: `git diff --check`.
 - 2026-05-21 Milestone 5 path-free preflight standards iteration:
   - Standards reviewed:
