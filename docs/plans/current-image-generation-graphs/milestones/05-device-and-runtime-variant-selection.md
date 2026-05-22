@@ -1342,6 +1342,31 @@ fixture contract must not remain reachable as an alternate execution path.
      `git diff --check`. Line counts after the split:
      `model_dependencies.rs` 278 lines and `model_dependency_operations.rs`
      371 lines.
+   - 2026-05-21 implementation update: completed the embedded-runtime
+     dependency-environment executor decomposition prerequisite. Moved input
+     projection, dependency mode parsing, environment-ref manifest emission,
+     stable key helpers, and legacy dependency-environment request building into
+     `task_executor/dependency_environment/helpers.rs` with module README
+     ownership notes. `dependency_environment.rs` now owns only the executor
+     flow for dependency-environment and dependency-preflight actions.
+   - Dependency-environment decomposition verification:
+     `cargo fmt -p pantograph-embedded-runtime`,
+     `cargo test -p pantograph-embedded-runtime task_executor::tests::input_helpers`,
+     `cargo test -p pantograph-embedded-runtime task_executor::tests::dependency_preflight`,
+     `cargo fmt -p pantograph-embedded-runtime -- --check`,
+     `cargo check -p pantograph-embedded-runtime`,
+     `cargo check -p pantograph-embedded-runtime --all-features`,
+     `cargo check -p pantograph-embedded-runtime --no-default-features`, and
+     `git diff --check`. Line counts after the split:
+     `task_executor/dependency_environment.rs` 244 lines and
+     `task_executor/dependency_environment/helpers.rs` 415 lines.
+   - Discovered issue: the broader filtered command
+     `cargo test -p pantograph-embedded-runtime task_executor` still fails in
+     recorder-stream cases because those tests execute Python-backed onnx/audio
+     nodes without `pumas_model_ref`/`model_id` and hit the current fail-closed
+     dependency-preflight guard. This was not changed by the decomposition
+     slice; it remains a follow-up for the upcoming typed preflight migration
+     rather than a helper-split fix.
    - 2026-05-21 codebase blast-radius iteration for this split:
      implementation must correct ambiguous preflight terminology before broader
      migration. `DependencyPlanningIdentityKey` must carry scheduler intent or

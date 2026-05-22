@@ -12,6 +12,7 @@ hold execution families that need host resources.
 | File | Description |
 | ---- | ----------- |
 | `dependency_environment.rs` | Dependency requirement input parsing, explicit dependency environment emission, dependency preflight, and model-ref resolution. |
+| `dependency_environment/` | Helper modules for dependency-environment input projection, environment-ref manifest emission, and legacy execution support during shared-contract migration. |
 | `puma_lib.rs` | Puma-Lib selected-model lookup through explicit selector-access roles, selected-detail inference-settings refresh, optional owner full-package-facts enrichment, execution descriptor projection, metadata normalization, and model-path output preparation. |
 | `python_execution.rs` | Python runtime input normalization, runtime instance metadata, adapter invocation, failure health recording, and stream replay. |
 | `rag_search.rs` | RAG search execution against the host-provided RAG backend. |

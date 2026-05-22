@@ -8303,6 +8303,47 @@ Worker rules:
     `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`
     before migrating dependency-environment execution to the shared typed
     contracts.
+- 2026-05-21 Milestone 5 dependency-environment executor decomposition:
+  - Smallest useful vertical slice: split embedded-runtime
+    dependency-environment executor helpers out of the over-threshold task
+    executor module before dependency-environment contract migration.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/`,
+    `crates/pantograph-embedded-runtime/src/task_executor/README.md`, and
+    Milestone 5 plan notes. Root proposal markdown files remained ignored.
+  - Implementation completed: moved input projection, dependency mode parsing,
+    environment-ref manifest emission, stable key helpers, and legacy
+    dependency-environment request building into
+    `task_executor/dependency_environment/helpers.rs`. Added a directory README
+    documenting that the child module is not the shared contract owner and must
+    be removed or replaced during typed-contract migration rather than wrapped
+    as compatibility behavior.
+  - No-fallback/no-legacy confirmation: this slice was structural
+    decomposition only. It did not change successful dependency-environment
+    behavior, did not add typed-contract adapters, and did not map shared
+    dependency-planning DTOs back into old node-engine DTOs.
+  - Standards evidence: line counts after the split are
+    `task_executor/dependency_environment.rs` 244 and
+    `task_executor/dependency_environment/helpers.rs` 415.
+  - Verification passed:
+    `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime task_executor::tests::input_helpers`,
+    `cargo test -p pantograph-embedded-runtime task_executor::tests::dependency_preflight`,
+    `cargo fmt -p pantograph-embedded-runtime -- --check`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --all-features`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`, and
+    `git diff --check`.
+  - Discovered issue: `cargo test -p pantograph-embedded-runtime task_executor`
+    still fails in recorder-stream cases that execute Python-backed onnx/audio
+    nodes without `pumas_model_ref`/`model_id`, triggering the current
+    fail-closed dependency-preflight guard. The helper split did not introduce
+    that behavior; keep it as a typed-preflight migration follow-up instead of
+    repairing it through compatibility behavior.
+  - Remaining follow-up: migrate dependency-environment execution to
+    `DependencyEnvironmentRequest`/`DependencyEnvironmentResult` and remove the
+    legacy request-building helpers rather than preserving them as wrappers.
 
 ### Traceability Links
 
