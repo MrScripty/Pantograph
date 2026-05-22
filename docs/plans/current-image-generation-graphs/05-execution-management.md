@@ -8193,6 +8193,46 @@ Worker rules:
     worker execution, resolver migration, frontend/generated/saved workflow
     changes, or lockfile edits in that first code slice.
   - Verification passed for this docs-only design update: `git diff --check`.
+- 2026-05-22 Milestone 5 node-engine planned execution host boundary:
+  - Smallest useful vertical slice: add the node-engine host-service boundary
+    for planned image generation and remove image generation's direct
+    graph-carried package/load-target execution bridge.
+  - Allowed write set: `crates/node-engine/src/planned_inference.rs`,
+    `crates/node-engine/src/extensions.rs`,
+    `crates/node-engine/src/core_executor/inference_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and Milestone 5
+    plan notes. `crates/node-engine/src/lib.rs` was not needed. Unrelated root
+    proposal markdown files remained ignored.
+  - Implementation completed: added `PlannedInferenceExecutionHost`,
+    `PlannedImageGenerationRequest`, and bounded host execution errors; added
+    the `PLANNED_INFERENCE_EXECUTION_HOST` extension key; routed canonical
+    image generation through the host with workflow_run_id/node_id/request_id
+    correlation; stopped parsing image-generation
+    `resolved_model_package_facts` and `resolved_model_artifact_load_target`;
+    removed the old image-generation planned gateway test backend; and added
+    focused host-boundary tests.
+  - No-fallback/no-legacy confirmation: image generation now fails closed when
+    the planned execution host is missing. Node-engine no longer uses
+    graph-carried package facts, artifact load targets, model paths, or gateway
+    planning as a fallback for image-generation execution.
+  - Decomposition note: `inference_nodes.rs` and `inference_tests.rs` remain
+    over the preferred line-count threshold, but this slice kept those files to
+    minimal routing/test edits and put new public API logic in
+    `planned_inference.rs`. Further image-generation behavior must be
+    extracted before adding substantial logic.
+  - Verification passed:
+    `cargo test -p node-engine --features inference-nodes canonical_llm_image_generation`,
+    `cargo test -p node-engine --features inference-nodes build_image_generation_execution_request`,
+    `cargo test -p node-engine --features inference-nodes`,
+    `cargo check -p node-engine`,
+    `cargo check -p node-engine --all-features`,
+    `cargo check -p node-engine --no-default-features`,
+    `cargo fmt -p node-engine -- --check`, and `git diff --check`.
+  - Remaining follow-up: implement the embedded-runtime
+    `PlannedInferenceExecutionHost` projection from `WorkflowExecutionPlan`
+    through Pumas' typed load-target resolver, add the inference gateway
+    launch-handoff API, then delete the old
+    `PlannedInferenceDecisionContext` extension path when no consumer remains.
 - 2026-05-21 Milestone 5 path-free preflight standards iteration:
   - Standards reviewed:
     `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`,

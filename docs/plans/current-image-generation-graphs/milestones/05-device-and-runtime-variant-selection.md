@@ -1371,6 +1371,42 @@ fixture contract must not remain reachable as an alternate execution path.
      embedded-runtime model dependency operations, dependency-environment task
      executor helpers, and their focused tests, with large-file decomposition
      before behavioral migration where required.
+   - 2026-05-22 implementation update: completed the node-engine planned
+     execution host boundary slice. `node-engine::planned_inference` now exposes
+     `PlannedInferenceExecutionHost`,
+     `PlannedImageGenerationRequest`, and bounded planned-execution errors;
+     `ExecutorExtensions` now has the
+     `PLANNED_INFERENCE_EXECUTION_HOST` key; and canonical image generation now
+     builds only the user/workflow `ImageGenerationRequest` plus
+     workflow_run_id/node_id/request_id before calling the host. The slice
+     removed image generation's node-engine parsing/use of
+     `resolved_model_package_facts` and
+     `resolved_model_artifact_load_target`, removed the old image-generation
+     planned gateway test backend, and added focused tests for missing host,
+     host-boundary payload shape, host error propagation, and legacy package
+     facts being ignored.
+   - 2026-05-22 no-fallback/no-legacy confirmation: image generation now fails
+     closed when the planned execution host is absent and no longer falls back
+     to graph-carried package facts, artifact load targets, model paths, or
+     gateway-local planning. The old run-scoped
+     `PlannedInferenceDecisionContext` remains in the codebase only because
+     embedded-runtime projection still installs it; subsequent handoff slices
+     must remove that retired decision-extension path when embedded-runtime
+     owns `PlannedInferenceExecutionHost`.
+   - 2026-05-22 decomposition note: the slice touched the over-threshold
+     `inference_nodes.rs` and `inference_tests.rs` files as a minimal routing
+     change while moving new public boundary logic into `planned_inference.rs`.
+     No image-generation child module was extracted because adding an
+     extraction in the same slice would have expanded the blast radius beyond
+     the host-boundary replacement. Any later image-generation logic beyond
+     routing must extract a focused module first.
+   - 2026-05-22 verification passed:
+     `cargo test -p node-engine --features inference-nodes canonical_llm_image_generation`,
+     `cargo test -p node-engine --features inference-nodes build_image_generation_execution_request`,
+     `cargo test -p node-engine --features inference-nodes`,
+     `cargo check -p node-engine`, `cargo check -p node-engine --all-features`,
+     `cargo check -p node-engine --no-default-features`,
+     `cargo fmt -p node-engine -- --check`, and `git diff --check`.
    - Historical preflight contract-slice scope clarification: the preflight
      contract gate may also touch existing `pantograph-dependency-planning`
      sibling modules, fixtures, and tests when required to make the shared

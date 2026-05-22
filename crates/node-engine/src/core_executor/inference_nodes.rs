@@ -9,6 +9,7 @@ use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::extensions::{extension_keys, ExecutorExtensions};
 use crate::model_dependencies::ModelRefV2;
+use crate::planned_inference::{PlannedImageGenerationRequest, PlannedInferenceExecutionHost};
 
 use super::{
     build_extra_settings, parse_reranker_documents_input, read_optional_input_bool_aliases,
@@ -51,35 +52,6 @@ fn inference_lifecycle_sink(
 }
 
 #[cfg(feature = "inference-nodes")]
-fn require_image_generation_planned_decision<'a>(
-    extensions: &'a ExecutorExtensions,
-    task_id: &str,
-    execution_id: &str,
-) -> Result<&'a inference::BackendExecutionDecision> {
-    let context = extensions
-        .get::<Arc<crate::planned_inference::PlannedInferenceDecisionContext>>(
-            extension_keys::PLANNED_INFERENCE_DECISIONS,
-        )
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "Image generation requires planned inference context with an ImageGenerationExecutionPlan decision".to_string(),
-            )
-        })?;
-
-    context
-        .decision_for_node(
-            execution_id,
-            task_id,
-            inference::InferenceTaskId::ImageGeneration,
-        )
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!(
-                "Image generation planned inference context rejected execution: {error}"
-            ))
-        })
-}
-
-#[cfg(feature = "inference-nodes")]
 fn assign_typed_request_id(
     request: &mut inference::InferenceExecutionRequest,
     task_id: &str,
@@ -97,6 +69,22 @@ fn assign_typed_request_id(
 #[cfg(feature = "inference-nodes")]
 fn inference_request_id(task_id: &str, execution_id: &str, task_label: &str) -> String {
     format!("{execution_id}:{task_id}:{task_label}")
+}
+
+#[cfg(feature = "inference-nodes")]
+fn require_planned_inference_execution_host(
+    extensions: &ExecutorExtensions,
+) -> Result<Arc<dyn PlannedInferenceExecutionHost>> {
+    extensions
+        .get::<Arc<dyn PlannedInferenceExecutionHost>>(
+            extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
+        )
+        .cloned()
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Image generation requires planned inference execution host".to_string(),
+            )
+        })
 }
 
 /// Resolve a model path that may be a directory to the actual `.gguf` file inside.
@@ -465,26 +453,6 @@ fn parse_resolved_model_package_facts(
 }
 
 #[cfg(feature = "inference-nodes")]
-fn parse_resolved_model_artifact_load_target(
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Result<Option<inference::PumasArtifactLoadTarget>> {
-    let Some((key, value)) =
-        read_optional_input_value(inputs, "resolved_model_artifact_load_target")
-            .map(|value| ("resolved_model_artifact_load_target", value))
-            .or_else(|| {
-                read_optional_input_value(inputs, "artifact_load_target")
-                    .map(|value| ("artifact_load_target", value))
-            })
-    else {
-        return Ok(None);
-    };
-
-    serde_json::from_value(value)
-        .map(Some)
-        .map_err(|error| NodeEngineError::ExecutionFailed(format!("Invalid {key} input: {error}")))
-}
-
-#[cfg(feature = "inference-nodes")]
 pub(crate) async fn execute_embedding_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
@@ -701,6 +669,7 @@ pub(crate) fn build_rerank_execution_request(
         ));
     }
 
+    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
     let documents = parse_reranker_documents_input(inputs)?;
     let top_n = read_positive_usize_with_task_options(inputs, &["top_n", "topN", "top_k", "topK"]);
     let return_documents = read_bool_with_task_options(
@@ -713,7 +682,6 @@ pub(crate) fn build_rerank_execution_request(
     extra_settings.remove("gpu_layers");
     extra_settings.remove("context_length");
 
-    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
     let model_ref = parse_pumas_model_ref(inputs);
     let model_name = read_rerank_model_name(inputs, model_ref.as_ref())?;
 
@@ -806,34 +774,15 @@ pub(crate) async fn execute_audio_transcription_inference(
 
 #[cfg(feature = "inference-nodes")]
 pub(crate) async fn execute_image_generation_inference(
-    gateway: Option<&Arc<InferenceGateway>>,
+    _gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
     task_id: &str,
     execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
-    let gw = require_gateway(gateway)?;
     let mut request = build_image_generation_execution_request(inputs)?;
     assign_typed_request_id(&mut request, task_id, execution_id);
-    let backend_decision =
-        require_image_generation_planned_decision(extensions, task_id, execution_id)?;
-    let package_facts = request
-        .resolved_model_package_facts
-        .as_ref()
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "Image generation requires resolved_model_package_facts for planned execution"
-                    .to_string(),
-            )
-        })?;
-    let artifact_load_target =
-        parse_resolved_model_artifact_load_target(inputs)?.ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "Image generation requires resolved_model_artifact_load_target for planned execution"
-                    .to_string(),
-            )
-        })?;
-    let image_request = match &request.input {
+    let image_request = match request.input {
         inference::InferenceExecutionInput::ImageGeneration { request } => request,
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
@@ -841,25 +790,25 @@ pub(crate) async fn execute_image_generation_inference(
             )));
         }
     };
-    let planning_input = inference::ImageGenerationPlanningInput {
-        request: image_request,
-        package_facts,
-        artifact_load_target: &artifact_load_target,
-        backend_decision,
-    };
-    let image_result = if let Some(lifecycle_sink) = inference_lifecycle_sink(extensions) {
-        gw.generate_image_from_planning_input_with_lifecycle(
-            planning_input,
-            request.request_id.clone(),
-            lifecycle_sink,
+    let request_id = request.request_id.ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "Image generation request id was not assigned before planned execution".to_string(),
         )
-        .await
-    } else {
-        gw.generate_image_from_planning_input(planning_input).await
-    }
-    .map_err(|error| {
-        NodeEngineError::ExecutionFailed(format!("Planned image generation failed: {error}"))
     })?;
+    let planned_request =
+        PlannedImageGenerationRequest::new(execution_id, task_id, request_id, image_request)
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Invalid planned image generation request: {error}"
+                ))
+            })?;
+    let host = require_planned_inference_execution_host(extensions)?;
+    let image_result = host
+        .generate_image(planned_request)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Planned image generation failed: {error}"))
+        })?;
 
     let mut outputs = HashMap::new();
     outputs.insert(
@@ -925,7 +874,6 @@ pub(crate) fn build_image_generation_execution_request(
         ));
     }
 
-    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
     let model_ref = parse_pumas_model_ref(inputs);
     let model = read_image_generation_model_name(inputs, model_ref.as_ref())?
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing image model input".to_string()))?;
@@ -938,7 +886,7 @@ pub(crate) fn build_image_generation_execution_request(
         task_id: inference::InferenceTaskId::ImageGeneration,
         model_ref,
         model_name: Some(model.clone()),
-        resolved_model_package_facts,
+        resolved_model_package_facts: None,
         input: inference::InferenceExecutionInput::ImageGeneration {
             request: inference::ImageGenerationRequest {
                 model,

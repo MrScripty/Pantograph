@@ -10,6 +10,10 @@ use crate::model_dependencies::{
     ModelDependencyStatus, ModelRefV2,
 };
 #[cfg(feature = "inference-nodes")]
+use crate::planned_inference::{
+    PlannedImageGenerationRequest, PlannedInferenceExecutionError, PlannedInferenceExecutionHost,
+};
+#[cfg(feature = "inference-nodes")]
 use async_trait::async_trait;
 #[cfg(feature = "inference-nodes")]
 use futures_util::stream;
@@ -18,17 +22,13 @@ use inference::backend::BackendStartOutcome;
 #[cfg(feature = "inference-nodes")]
 use inference::{
     AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment,
-    BackendCapabilities, BackendConfig, BackendError, BackendExecutionContext,
-    BackendExecutionDecision, BackendId, CacheGenerationOptions, ChatChunk,
-    DeviceResolutionDecision, EmbeddingResult, EncodedImage, GenerationOptions,
-    ImageGenerationExecutionPlan, ImageGenerationRequest, ImageGenerationResult, InferenceBackend,
-    InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput,
-    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceResourceObservationSourceKind, InferenceTaskId,
-    InferenceUsage, LengthGenerationOptions, ModelArtifactKind, ModelStorageKind,
-    ModelValidationState, ProcessSpawner, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
-    PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
-    RuntimeVariantId, SamplingGenerationOptions,
+    BackendCapabilities, BackendConfig, BackendError, CacheGenerationOptions, ChatChunk,
+    EmbeddingResult, EncodedImage, GenerationOptions, ImageGenerationResult, InferenceBackend,
+    InferenceExecutionInput, InferenceLifecyclePhase, InferenceRequestLifecycleEvent,
+    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
+    InferenceResourceObservationSourceKind, InferenceTaskId, InferenceUsage,
+    LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest, RerankResponse,
+    RerankResult, ResolvedModelPackageFacts, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -1419,6 +1419,7 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
         .expect("canonical image generation request should build");
 
     assert_eq!(request.task_id, InferenceTaskId::ImageGeneration);
+    assert_eq!(request.resolved_model_package_facts, None);
     assert_eq!(
         request.model_name.as_deref(),
         Some("pumas://models/tiny-diffusion")
@@ -1481,7 +1482,7 @@ fn test_build_image_generation_execution_request_ignores_noncanonical_scheduler_
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_image_generation_execution_request_forwards_package_facts() {
+fn test_build_image_generation_execution_request_does_not_use_package_facts_for_model_identity() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/diffusers_bundle_package_facts.json"
     );
@@ -1506,6 +1507,34 @@ fn test_build_image_generation_execution_request_forwards_package_facts() {
 }
 
 #[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_image_generation_execution_request_ignores_legacy_package_facts_payload() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("paint"));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny-diffusion"
+        }),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::json!({"legacy": "ignored"}),
+    );
+
+    let request = build_image_generation_execution_request(&inputs)
+        .expect("image generation request should ignore legacy package facts payload");
+
+    assert_eq!(request.resolved_model_package_facts, None);
+    match request.input {
+        InferenceExecutionInput::ImageGeneration { request } => {
+            assert_eq!(request.model, "pumas://models/tiny-diffusion");
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 fn image_generation_package_facts_fixture() -> ResolvedModelPackageFacts {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
@@ -1514,95 +1543,78 @@ fn image_generation_package_facts_fixture() -> ResolvedModelPackageFacts {
 }
 
 #[cfg(feature = "inference-nodes")]
-fn image_generation_artifact_load_target(
-    package_facts: &ResolvedModelPackageFacts,
-) -> PumasArtifactLoadTarget {
-    PumasArtifactLoadTarget {
-        model_ref: package_facts.model_ref.clone(),
-        artifact_kind: ModelArtifactKind::DiffusersBundle,
-        local_load_path: "/pumas/models/image/stable-diffusion/tiny-sd".to_string(),
-        load_path_kind: PumasArtifactLoadPathKind::Directory,
-        library_root_id: Some("test-root".to_string()),
-        storage_kind: ModelStorageKind::LibraryOwned,
-        validation_state: ModelValidationState::Valid,
-        content_fingerprint: None,
-        package_facts_contract_version: Some(package_facts.package_facts_contract_version),
+#[derive(Debug)]
+struct MockPlannedImageGenerationHost {
+    requests: Arc<Mutex<Vec<PlannedImageGenerationRequest>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl PlannedInferenceExecutionHost for MockPlannedImageGenerationHost {
+    async fn generate_image(
+        &self,
+        request: PlannedImageGenerationRequest,
+    ) -> std::result::Result<ImageGenerationResult, PlannedInferenceExecutionError> {
+        self.requests
+            .lock()
+            .expect("planned image host requests lock")
+            .push(request);
+        Ok(sample_image_generation_result())
     }
 }
 
 #[cfg(feature = "inference-nodes")]
-fn planned_image_generation_decision(
-    package_facts: &ResolvedModelPackageFacts,
-) -> BackendExecutionDecision {
-    let runtime_variant_id =
-        RuntimeVariantId::parse("pytorch.diffusers").expect("runtime variant id");
-    let selected_device_id = InferenceDeviceId::parse("cuda:0").expect("device id");
-    BackendExecutionDecision {
-        selected_backend_id: BackendId::parse("pytorch").expect("backend id"),
-        selected_runtime_variant_id: runtime_variant_id.clone(),
-        selected_device_class: InferenceDeviceClass::Cuda,
-        selected_device_id: Some(selected_device_id.clone()),
-        device_decision: DeviceResolutionDecision {
-            policy: InferenceDevicePolicy::Explicit {
-                device_class: InferenceDeviceClass::Cuda,
-                device_id: Some(selected_device_id.clone()),
-            },
-            runtime_variant_id,
-            selected_device_class: InferenceDeviceClass::Cuda,
-            selected_device_id: Some(selected_device_id),
-            diagnostics: Vec::new(),
-        },
-        selected_task_id: Some(InferenceTaskId::ImageGeneration),
-        selected_model_ref: Some(package_facts.model_ref.clone()),
-        diagnostics: Vec::new(),
-        dependency_readiness: inference::pytorch_diffusers_image_generation_package_requirements()
-            .into_iter()
-            .map(|declaration| {
-                declaration.to_readiness_fact(
-                    inference::CapabilityAvailabilityState::Available,
-                    inference::DependencyReadinessResolverOwner::EmbeddedRuntime,
-                )
-            })
-            .collect(),
-        selection_policy_trace: None,
+fn sample_image_generation_result() -> ImageGenerationResult {
+    ImageGenerationResult {
+        images: vec![EncodedImage {
+            data_base64: "aW1hZ2U=".to_string(),
+            mime_type: "image/png".to_string(),
+            width: Some(512),
+            height: Some(384),
+        }],
+        seed_used: Some(42),
+        metadata: serde_json::json!({
+            "image_count": 1,
+            "backend": "mock-planned-host"
+        }),
     }
 }
 
 #[cfg(feature = "inference-nodes")]
-fn planned_image_generation_extensions(
-    workflow_run_id: &str,
-    node_id: &str,
-    package_facts: &ResolvedModelPackageFacts,
+fn planned_image_generation_host_extensions(
+    requests: Arc<Mutex<Vec<PlannedImageGenerationRequest>>>,
 ) -> ExecutorExtensions {
     let mut extensions = ExecutorExtensions::new();
-    let context = crate::planned_inference::PlannedInferenceDecisionContext::new(
-        workflow_run_id,
-        HashMap::from([(
-            node_id.to_string(),
-            planned_image_generation_decision(package_facts),
-        )]),
-    )
-    .expect("planned image context");
+    let host: Arc<dyn PlannedInferenceExecutionHost> =
+        Arc::new(MockPlannedImageGenerationHost { requests });
     extensions.set(
-        crate::extensions::extension_keys::PLANNED_INFERENCE_DECISIONS,
-        Arc::new(context),
+        crate::extensions::extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
+        host,
     );
     extensions
 }
 
 #[cfg(feature = "inference-nodes")]
+#[derive(Debug)]
+struct FailingPlannedImageGenerationHost;
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl PlannedInferenceExecutionHost for FailingPlannedImageGenerationHost {
+    async fn generate_image(
+        &self,
+        request: PlannedImageGenerationRequest,
+    ) -> std::result::Result<ImageGenerationResult, PlannedInferenceExecutionError> {
+        Err(PlannedInferenceExecutionError::execution_failed(
+            &request,
+            "planned host unavailable",
+        ))
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_canonical_llm_image_generation_requires_planned_context() {
-    let package_facts = image_generation_package_facts_fixture();
-    let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let planned_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockTypedImageGenerationBackend {
-            raw_image_requests: raw_image_requests.clone(),
-            planned_image_requests: planned_image_requests.clone(),
-        }),
-        "mock",
-    ));
+async fn test_canonical_llm_image_generation_requires_planned_execution_host() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -1617,177 +1629,30 @@ async fn test_canonical_llm_image_generation_requires_planned_context() {
         serde_json::json!("paint a quiet lake SECRET_PROMPT"),
     );
     inputs.insert(
-        "task_options".to_string(),
+        "pumas_model_ref".to_string(),
         serde_json::json!({
-            "negative_prompt": "blur",
-            "width": 512,
-            "height": 384,
-            "num_inference_steps": 12,
-            "guidance_scale": 7.5,
-            "seed": 42,
-            "num_images_per_prompt": 1
+            "model_id": "pumas://models/tiny-diffusion"
         }),
     );
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-    inputs.insert(
-        "pumas_model_ref".to_string(),
-        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
-    );
 
-    let executor = CoreTaskExecutor::new()
-        .with_gateway(gateway)
-        .with_execution_id("run-image".to_string());
+    let executor = CoreTaskExecutor::new().with_execution_id("run-image".to_string());
     let context = graph_flow::Context::new();
     let extensions = ExecutorExtensions::new();
     let error = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect_err("image generation must require planned context");
+        .expect_err("image generation must require a planned execution host");
 
     assert!(error
         .to_string()
-        .contains("ImageGenerationExecutionPlan decision"));
-    assert!(raw_image_requests
-        .lock()
-        .expect("raw image requests lock")
-        .is_empty());
-    assert!(planned_image_requests
-        .lock()
-        .expect("planned image requests lock")
-        .is_empty());
+        .contains("planned inference execution host"));
 }
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_canonical_llm_image_generation_requires_package_facts_for_planned_execution() {
+async fn test_canonical_llm_image_generation_uses_planned_execution_host_boundary() {
     let package_facts = image_generation_package_facts_fixture();
-    let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let planned_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockTypedImageGenerationBackend {
-            raw_image_requests: raw_image_requests.clone(),
-            planned_image_requests: planned_image_requests.clone(),
-        }),
-        "mock",
-    ));
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "_data".to_string(),
-        serde_json::json!({"node_type": "llm-inference"}),
-    );
-    inputs.insert(
-        "task_kind".to_string(),
-        serde_json::json!("image_generation"),
-    );
-    inputs.insert(
-        "prompt".to_string(),
-        serde_json::json!("paint a quiet lake"),
-    );
-    inputs.insert(
-        "pumas_model_ref".to_string(),
-        serde_json::json!({
-            "model_id": "pumas://models/tiny-diffusion",
-            "selected_artifact_path": "/models/tiny-diffusion"
-        }),
-    );
-
-    let executor = CoreTaskExecutor::new()
-        .with_gateway(gateway)
-        .with_execution_id("run-image".to_string());
-    let context = graph_flow::Context::new();
-    let extensions =
-        planned_image_generation_extensions("run-image", "llm-inference-1", &package_facts);
-    let error = executor
-        .execute_task("llm-inference-1", inputs, &context, &extensions)
-        .await
-        .expect_err("image generation must require package facts");
-
-    assert!(error.to_string().contains("resolved_model_package_facts"));
-    assert!(raw_image_requests
-        .lock()
-        .expect("raw image requests lock")
-        .is_empty());
-    assert!(planned_image_requests
-        .lock()
-        .expect("planned image requests lock")
-        .is_empty());
-}
-
-#[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_canonical_llm_image_generation_requires_artifact_load_target_for_planned_execution() {
-    let package_facts = image_generation_package_facts_fixture();
-    let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let planned_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockTypedImageGenerationBackend {
-            raw_image_requests: raw_image_requests.clone(),
-            planned_image_requests: planned_image_requests.clone(),
-        }),
-        "mock",
-    ));
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "_data".to_string(),
-        serde_json::json!({"node_type": "llm-inference"}),
-    );
-    inputs.insert(
-        "task_kind".to_string(),
-        serde_json::json!("image_generation"),
-    );
-    inputs.insert(
-        "prompt".to_string(),
-        serde_json::json!("paint a quiet lake"),
-    );
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-    inputs.insert(
-        "pumas_model_ref".to_string(),
-        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
-    );
-
-    let executor = CoreTaskExecutor::new()
-        .with_gateway(gateway)
-        .with_execution_id("run-image".to_string());
-    let context = graph_flow::Context::new();
-    let extensions =
-        planned_image_generation_extensions("run-image", "llm-inference-1", &package_facts);
-    let error = executor
-        .execute_task("llm-inference-1", inputs, &context, &extensions)
-        .await
-        .expect_err("image generation must require Pumas artifact load target");
-
-    assert!(error
-        .to_string()
-        .contains("resolved_model_artifact_load_target"));
-    assert!(raw_image_requests
-        .lock()
-        .expect("raw image requests lock")
-        .is_empty());
-    assert!(planned_image_requests
-        .lock()
-        .expect("planned image requests lock")
-        .is_empty());
-}
-
-#[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
-    let package_facts = image_generation_package_facts_fixture();
-    let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let planned_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockTypedImageGenerationBackend {
-            raw_image_requests: raw_image_requests.clone(),
-            planned_image_requests: planned_image_requests.clone(),
-        }),
-        "mock",
-    ));
+    let planned_requests = Arc::new(Mutex::new(Vec::new()));
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -1815,7 +1680,7 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     );
     inputs.insert(
         "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
+        serde_json::json!({"legacy": "must be ignored"}),
     );
     inputs.insert(
         "pumas_model_ref".to_string(),
@@ -1823,29 +1688,19 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     );
     inputs.insert(
         "resolved_model_artifact_load_target".to_string(),
-        serde_json::to_value(image_generation_artifact_load_target(&package_facts))
-            .expect("artifact load target json"),
+        serde_json::json!({
+            "local_load_path": "/should/not/reach/node-engine",
+            "artifact_kind": "diffusers_bundle"
+        }),
     );
 
-    let executor = CoreTaskExecutor::new()
-        .with_gateway(gateway)
-        .with_execution_id("run-image".to_string());
+    let executor = CoreTaskExecutor::new().with_execution_id("run-image".to_string());
     let context = graph_flow::Context::new();
-    let mut extensions =
-        planned_image_generation_extensions("run-image", "llm-inference-1", &package_facts);
-    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
-    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
-        Arc::new(MockInferenceLifecycleSink {
-            events: lifecycle_events.clone(),
-        });
-    extensions.set(
-        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
-        lifecycle_sink,
-    );
+    let extensions = planned_image_generation_host_extensions(planned_requests.clone());
     let outputs = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect("canonical image generation inference should use planned gateway");
+        .expect("canonical image generation inference should use planned execution host");
 
     assert_eq!(outputs["results"]["images"][0]["mime_type"], "image/png");
     assert_eq!(outputs["results"]["images"][0]["width"], 512);
@@ -1853,6 +1708,10 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     assert_eq!(outputs["image"], "aW1hZ2U=");
     assert_eq!(outputs["metadata"]["seed_used"], 42);
     assert_eq!(outputs["metadata"]["image_count"], 1);
+    assert_eq!(
+        outputs["metadata"]["backend_metadata"]["backend"],
+        "mock-planned-host"
+    );
     let compact_results =
         serde_json::to_string(&outputs["results"]).expect("compact results serialize");
     assert!(!compact_results.contains("aW1hZ2U="));
@@ -1865,74 +1724,35 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     assert!(!bounded_outputs.contains("SECRET_PROMPT"));
     assert!(!bounded_outputs.contains("aW1hZ2U="));
 
-    assert!(raw_image_requests
+    let captured = planned_requests
         .lock()
-        .expect("raw image requests lock")
-        .is_empty());
-    let captured = planned_image_requests
-        .lock()
-        .expect("planned image requests lock");
+        .expect("planned execution host requests lock");
     assert_eq!(captured.len(), 1);
+    let planned_request = &captured[0];
+    assert_eq!(planned_request.workflow_run_id(), "run-image");
+    assert_eq!(planned_request.node_id(), "llm-inference-1");
     assert_eq!(
-        captured[0].model,
-        image_generation_artifact_load_target(&package_facts).local_load_path
+        planned_request.request_id(),
+        "run-image:llm-inference-1:image_generation"
     );
-    assert_eq!(captured[0].negative_prompt.as_deref(), Some("blur"));
-    assert_eq!(captured[0].width, Some(512));
-    assert_eq!(captured[0].height, Some(384));
-    assert_eq!(captured[0].num_inference_steps, Some(12));
-    assert_eq!(captured[0].guidance_scale, Some(7.5));
-    assert_eq!(captured[0].seed, Some(42));
-    assert_eq!(captured[0].denoising_scheduler, None);
-
-    let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 6);
-    let backend_completed = events
-        .iter()
-        .find(|event| {
-            event.phase == InferenceLifecyclePhase::BackendExecution
-                && event.kind == InferenceRequestLifecycleEventKind::Completed
-        })
-        .expect("backend execution completion");
-    assert_eq!(
-        backend_completed.request_id.as_deref(),
-        Some("run-image:llm-inference-1:image_generation")
-    );
-    assert_eq!(backend_completed.backend_key.as_deref(), Some("pytorch"));
-    assert_eq!(
-        backend_completed.selected_runtime_variant_id.as_deref(),
-        Some("pytorch.diffusers")
-    );
-    assert_eq!(
-        backend_completed.selected_device_class,
-        Some(InferenceDeviceClass::Cuda)
-    );
-    assert!(backend_completed
-        .selected_device_id
-        .as_ref()
-        .is_some_and(|id| id.as_str() == "cuda:0"));
-    assert_eq!(
-        backend_completed.model_id.as_deref(),
-        Some("image/stable-diffusion/tiny-sd")
-    );
-    let bounded_events = serde_json::to_string(&*events).expect("events serialize");
-    assert!(!bounded_events.contains("SECRET_PROMPT"));
-    assert!(!bounded_events.contains("aW1hZ2U="));
+    let image_request = planned_request.image_request();
+    assert_eq!(image_request.model, package_facts.model_ref.model_id);
+    assert_eq!(image_request.prompt, "paint a quiet lake SECRET_PROMPT");
+    assert_eq!(image_request.negative_prompt.as_deref(), Some("blur"));
+    assert_eq!(image_request.width, Some(512));
+    assert_eq!(image_request.height, Some(384));
+    assert_eq!(image_request.num_inference_steps, Some(12));
+    assert_eq!(image_request.guidance_scale, Some(7.5));
+    assert_eq!(image_request.seed, Some(42));
+    assert_eq!(image_request.num_images_per_prompt, Some(1));
+    assert_eq!(image_request.denoising_scheduler, None);
+    let captured_json = serde_json::to_string(image_request).expect("image request serialize");
+    assert!(!captured_json.contains("/should/not/reach/node-engine"));
 }
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_canonical_llm_image_generation_rejects_stale_planned_context() {
-    let package_facts = image_generation_package_facts_fixture();
-    let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let planned_image_requests = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockTypedImageGenerationBackend {
-            raw_image_requests: raw_image_requests.clone(),
-            planned_image_requests: planned_image_requests.clone(),
-        }),
-        "mock",
-    ));
+async fn test_canonical_llm_image_generation_reports_planned_execution_host_error() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -1947,19 +1767,19 @@ async fn test_canonical_llm_image_generation_rejects_stale_planned_context() {
         serde_json::json!("paint a quiet lake SECRET_PROMPT"),
     );
     inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-    inputs.insert(
         "pumas_model_ref".to_string(),
-        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny-diffusion"
+        }),
     );
 
-    let executor = CoreTaskExecutor::new()
-        .with_gateway(gateway)
-        .with_execution_id("run-current".to_string());
-    let extensions =
-        planned_image_generation_extensions("run-stale", "llm-inference-1", &package_facts);
+    let executor = CoreTaskExecutor::new().with_execution_id("run-image".to_string());
+    let mut extensions = ExecutorExtensions::new();
+    let host: Arc<dyn PlannedInferenceExecutionHost> = Arc::new(FailingPlannedImageGenerationHost);
+    extensions.set(
+        crate::extensions::extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
+        host,
+    );
     let error = executor
         .execute_task(
             "llm-inference-1",
@@ -1968,19 +1788,14 @@ async fn test_canonical_llm_image_generation_rejects_stale_planned_context() {
             &extensions,
         )
         .await
-        .expect_err("stale planned context must fail closed");
+        .expect_err("planned execution host errors must fail image generation");
 
-    assert!(error
-        .to_string()
-        .contains("planned inference context belongs"));
-    assert!(raw_image_requests
-        .lock()
-        .expect("raw image requests lock")
-        .is_empty());
-    assert!(planned_image_requests
-        .lock()
-        .expect("planned image requests lock")
-        .is_empty());
+    let message = error.to_string();
+    assert!(message.contains("Planned image generation failed"));
+    assert!(message.contains("workflow run 'run-image'"));
+    assert!(message.contains("node 'llm-inference-1'"));
+    assert!(message.contains("request 'run-image:llm-inference-1:image_generation'"));
+    assert!(message.contains("planned host unavailable"));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -4431,142 +4246,6 @@ impl InferenceBackend for MockTypedRerankBackend {
                 .collect(),
             metadata: serde_json::Value::Null,
         })
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
-struct MockTypedImageGenerationBackend {
-    raw_image_requests: Arc<Mutex<Vec<ImageGenerationRequest>>>,
-    planned_image_requests: Arc<Mutex<Vec<ImageGenerationRequest>>>,
-}
-
-#[cfg(feature = "inference-nodes")]
-#[async_trait]
-impl InferenceBackend for MockTypedImageGenerationBackend {
-    fn name(&self) -> &'static str {
-        "mock-image"
-    }
-
-    fn description(&self) -> &'static str {
-        "Mock typed image generation backend"
-    }
-
-    fn capabilities(&self) -> BackendCapabilities {
-        BackendCapabilities {
-            image_generation: true,
-            ..BackendCapabilities::default()
-        }
-    }
-
-    async fn start(
-        &mut self,
-        _config: &BackendConfig,
-        _spawner: Arc<dyn ProcessSpawner>,
-    ) -> std::result::Result<BackendStartOutcome, BackendError> {
-        Ok(BackendStartOutcome::default())
-    }
-
-    fn stop(&mut self) {}
-
-    fn is_ready(&self) -> bool {
-        true
-    }
-
-    async fn health_check(&self) -> bool {
-        true
-    }
-
-    fn base_url(&self) -> Option<String> {
-        None
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        _request_json: String,
-    ) -> std::result::Result<
-        Pin<
-            Box<
-                dyn futures_util::Stream<Item = std::result::Result<ChatChunk, BackendError>>
-                    + Send,
-            >,
-        >,
-        BackendError,
-    > {
-        Err(BackendError::Inference(
-            "chat not supported by mock".to_string(),
-        ))
-    }
-
-    async fn embeddings(
-        &self,
-        _texts: Vec<String>,
-        _model: &str,
-    ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
-        Err(BackendError::Inference(
-            "embeddings not supported by mock".to_string(),
-        ))
-    }
-
-    async fn rerank(
-        &self,
-        _request: RerankRequest,
-    ) -> std::result::Result<RerankResponse, BackendError> {
-        Err(BackendError::Inference(
-            "rerank not supported by mock".to_string(),
-        ))
-    }
-
-    async fn generate_image(
-        &self,
-        request: ImageGenerationRequest,
-    ) -> std::result::Result<ImageGenerationResult, BackendError> {
-        self.raw_image_requests
-            .lock()
-            .expect("raw image requests lock")
-            .push(request.clone());
-        Ok(mock_image_generation_result(&request))
-    }
-
-    async fn generate_image_from_plan(
-        &self,
-        plan: ImageGenerationExecutionPlan,
-        _context: BackendExecutionContext,
-    ) -> std::result::Result<ImageGenerationResult, BackendError> {
-        let request = ImageGenerationRequest {
-            model: plan.artifact_load_target.local_load_path,
-            prompt: plan.prompt,
-            negative_prompt: plan.negative_prompt,
-            width: plan.width,
-            height: plan.height,
-            num_inference_steps: plan.num_inference_steps,
-            guidance_scale: plan.guidance_scale,
-            seed: plan.seed,
-            denoising_scheduler: plan.denoising_scheduler.as_ref().map(ToString::to_string),
-            num_images_per_prompt: plan.num_images_per_prompt,
-            init_image: None,
-            mask_image: None,
-            strength: None,
-            extra_options: serde_json::Value::Object(Default::default()),
-        };
-        self.planned_image_requests
-            .lock()
-            .expect("planned image requests lock")
-            .push(request.clone());
-        Ok(mock_image_generation_result(&request))
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
-fn mock_image_generation_result(request: &ImageGenerationRequest) -> ImageGenerationResult {
-    ImageGenerationResult {
-        images: vec![EncodedImage {
-            data_base64: "aW1hZ2U=".to_string(),
-            mime_type: "image/png".to_string(),
-            width: request.width,
-            height: request.height,
-        }],
-        seed_used: request.seed,
-        metadata: serde_json::json!({"denoising_scheduler": request.denoising_scheduler}),
     }
 }
 
