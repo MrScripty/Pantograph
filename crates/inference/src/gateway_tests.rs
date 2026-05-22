@@ -16,7 +16,7 @@ use crate::device_contracts::{
 };
 use crate::image_generation_planner::{
     ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnosticCode,
-    ImageGenerationPlanningInput,
+    ImageGenerationPlanningInput, PlannedImageGenerationLaunchHandoff,
 };
 use crate::model_contracts::{
     CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
@@ -292,6 +292,18 @@ fn sample_image_generation_request() -> ImageGenerationRequest {
         strength: None,
         extra_options: serde_json::Value::Null,
     }
+}
+
+fn sample_image_generation_launch_handoff(
+    facts: ResolvedModelPackageFacts,
+    decision: BackendExecutionDecision,
+) -> PlannedImageGenerationLaunchHandoff {
+    PlannedImageGenerationLaunchHandoff::new(
+        facts.clone(),
+        sample_artifact_load_target(&facts),
+        decision,
+    )
+    .expect("valid image-generation launch handoff")
 }
 
 fn sample_image_backend_decision(backend_id: &str) -> BackendExecutionDecision {
@@ -1281,6 +1293,29 @@ async fn test_generate_image_from_planning_input_plans_and_forwards() {
 }
 
 #[tokio::test]
+async fn test_generate_image_from_launch_handoff_plans_and_forwards() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = sample_image_generation_request();
+    let handoff =
+        sample_image_generation_launch_handoff(facts, sample_image_backend_decision("pytorch"));
+
+    let result = gateway
+        .generate_image_from_launch_handoff(&request, &handoff)
+        .await
+        .expect("launch handoff should build one execution plan");
+
+    assert_eq!(result.images.len(), 1);
+    assert_eq!(result.images[0].data_base64, "a compact test image");
+    assert_eq!(result.seed_used, Some(42));
+    assert_eq!(result.metadata["planned_backend"], "pytorch");
+    assert_eq!(
+        result.metadata["planned_runtime_variant"],
+        "pytorch.diffusers"
+    );
+}
+
+#[tokio::test]
 async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_decision() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let sink = Arc::new(RecordingLifecycleSink::default());
@@ -1350,6 +1385,95 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_
     let event_json = serde_json::to_string(&events).expect("events serialize");
     assert!(!event_json.contains("a compact test image"));
     assert!(!event_json.contains("aW1hZ2U="));
+}
+
+#[tokio::test]
+async fn test_generate_image_from_launch_handoff_with_lifecycle_records_planned_decision() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = sample_image_generation_request();
+    let handoff =
+        sample_image_generation_launch_handoff(facts, sample_image_backend_decision("pytorch"));
+
+    let result = gateway
+        .generate_image_from_launch_handoff_with_lifecycle(
+            &request,
+            &handoff,
+            Some("run-a:image-node-1:image_generation".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("launch handoff should emit lifecycle");
+
+    assert_eq!(result.images.len(), 1);
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert!(events.iter().all(|event| {
+        event.request_id.as_deref() == Some("run-a:image-node-1:image_generation")
+            && event.task_id.as_deref() == Some("image_generation")
+            && event.backend_key.as_deref() == Some("pytorch")
+            && event.runtime_id.as_deref() == Some("pytorch.diffusers")
+            && event.selected_runtime_variant_id.as_deref() == Some("pytorch.diffusers")
+            && event.model_id.as_deref() == Some("image/stable-diffusion/tiny-sd")
+            && event.resolved_artifact_kind.as_deref() == Some("diffusers_bundle")
+    }));
+    let event_json = serde_json::to_string(&events).expect("events serialize");
+    assert!(!event_json.contains("a compact test image"));
+    assert!(!event_json.contains("aW1hZ2U="));
+    assert!(!event_json.contains("/pumas/models/image/stable-diffusion/tiny-sd"));
+}
+
+#[test]
+fn test_planned_image_generation_launch_handoff_rejects_wrong_task() {
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let mut decision = sample_image_backend_decision("pytorch");
+    decision.selected_task_id = Some(InferenceTaskId::TextGeneration);
+
+    let error = PlannedImageGenerationLaunchHandoff::new(
+        facts.clone(),
+        sample_artifact_load_target(&facts),
+        decision,
+    )
+    .expect_err("launch handoff must reject non-image task decisions");
+
+    assert!(error.to_string().contains("requires image_generation task"));
+}
+
+#[test]
+fn test_planned_image_generation_launch_handoff_rejects_selected_model_mismatch() {
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let mut decision = sample_image_backend_decision("pytorch");
+    decision.selected_model_ref = Some(PumasModelRef {
+        model_id: "pumas://models/image/other".to_string(),
+        revision: None,
+        selected_artifact_id: None,
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    });
+
+    let error = PlannedImageGenerationLaunchHandoff::new(
+        facts.clone(),
+        sample_artifact_load_target(&facts),
+        decision,
+    )
+    .expect_err("launch handoff must reject model mismatches");
+
+    assert!(error.to_string().contains("selected model"));
 }
 
 #[tokio::test]

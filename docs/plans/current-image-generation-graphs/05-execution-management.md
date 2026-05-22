@@ -8233,6 +8233,37 @@ Worker rules:
     through Pumas' typed load-target resolver, add the inference gateway
     launch-handoff API, then delete the old
     `PlannedInferenceDecisionContext` extension path when no consumer remains.
+- 2026-05-22 Milestone 5 inference gateway launch handoff:
+  - Smallest useful vertical slice: add the inference-owned
+    image-generation worker-launch handoff and gateway methods that consume it,
+    without changing node-engine, embedded-runtime, frontend, generated files,
+    saved workflows, lockfiles, or Pumas resolver code.
+  - Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+    `crates/inference/src/gateway.rs`, `crates/inference/src/lib.rs`,
+    `crates/inference/src/gateway_tests.rs`, and Milestone 5 plan notes.
+  - Implementation completed: added `PlannedImageGenerationLaunchHandoff` with
+    private fields and constructor validation for image-generation task
+    decisions and selected-model/package-facts consistency; exported the
+    handoff and error type; added gateway methods for launch-handoff execution
+    with and without lifecycle events; and added focused tests for forwarding,
+    lifecycle event shape, task mismatch, and selected model mismatch.
+  - No-fallback/no-legacy confirmation: the handoff is only
+    host-to-gateway worker-launch material. It is not serialized into graph
+    values, preflight results, dependency-environment results, frontend
+    activity identity, or cache keys, and it does not revive graph-carried
+    package facts or artifact load targets.
+  - Verification passed:
+    `cargo test -p inference generate_image_from_launch_handoff`,
+    `cargo test -p inference planned_image_generation_launch_handoff`,
+    `cargo test -p inference gateway::tests::`,
+    `cargo check -p inference`,
+    `cargo check -p inference --all-features`,
+    `cargo check -p inference --no-default-features`,
+    `cargo fmt -p inference -- --check`, and `git diff --check`.
+  - Remaining follow-up: implement embedded-runtime
+    `PlannedInferenceExecutionHost` to build this handoff from the active
+    `WorkflowExecutionPlan` and Pumas typed load-target resolver, then remove
+    the old planned-decision extension path when it is no longer consumed.
 - 2026-05-21 Milestone 5 path-free preflight standards iteration:
   - Standards reviewed:
     `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`,

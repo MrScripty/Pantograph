@@ -117,6 +117,7 @@ pub use image_generation_planner::{
     ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnostic,
     ImageGenerationPlannerDiagnosticCode, ImageGenerationPlannerDiagnosticSeverity,
     ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
+    PlannedImageGenerationLaunchHandoff, PlannedImageGenerationLaunchHandoffError,
 };
 pub use managed_binaries::{
     resolve_managed_binary_command, ManagedBinaryFacadeError, ManagedBinaryKey,

@@ -2,6 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use thiserror::Error;
 
 use crate::device_contracts::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
@@ -40,6 +41,99 @@ pub struct ImageGenerationPlanningInput<'a> {
     pub artifact_load_target: &'a PumasArtifactLoadTarget,
     /// Scheduler-owned backend/runtime/device decision.
     pub backend_decision: &'a BackendExecutionDecision,
+}
+
+/// Host-built worker-launch handoff for planned image generation.
+///
+/// This type is intentionally not a graph/preflight/cache contract. It is the
+/// narrow runtime handoff that carries Pumas-approved executable facts from the
+/// host scheduler boundary into the inference gateway.
+#[derive(Debug, Clone, PartialEq)]
+#[must_use]
+pub struct PlannedImageGenerationLaunchHandoff {
+    package_facts: ResolvedModelPackageFacts,
+    artifact_load_target: PumasArtifactLoadTarget,
+    backend_decision: BackendExecutionDecision,
+}
+
+impl PlannedImageGenerationLaunchHandoff {
+    pub fn new(
+        package_facts: ResolvedModelPackageFacts,
+        artifact_load_target: PumasArtifactLoadTarget,
+        backend_decision: BackendExecutionDecision,
+    ) -> Result<Self, PlannedImageGenerationLaunchHandoffError> {
+        if !matches!(
+            backend_decision.selected_task_id,
+            Some(InferenceTaskId::ImageGeneration)
+        ) {
+            return Err(PlannedImageGenerationLaunchHandoffError::TaskMismatch {
+                actual_task_id: backend_decision.selected_task_id,
+            });
+        }
+
+        if let Some(selected_model_ref) = backend_decision.selected_model_ref.as_ref() {
+            let selected_model_id = canonical_pumas_model_id(selected_model_ref);
+            let package_model_id = canonical_pumas_model_id(&package_facts.model_ref);
+            if selected_model_id != package_model_id {
+                return Err(
+                    PlannedImageGenerationLaunchHandoffError::SelectedModelMismatch {
+                        selected_model_id,
+                        package_model_id,
+                    },
+                );
+            }
+        }
+
+        Ok(Self {
+            package_facts,
+            artifact_load_target,
+            backend_decision,
+        })
+    }
+
+    #[must_use]
+    pub fn package_facts(&self) -> &ResolvedModelPackageFacts {
+        &self.package_facts
+    }
+
+    #[must_use]
+    pub fn artifact_load_target(&self) -> &PumasArtifactLoadTarget {
+        &self.artifact_load_target
+    }
+
+    #[must_use]
+    pub fn backend_decision(&self) -> &BackendExecutionDecision {
+        &self.backend_decision
+    }
+
+    pub(crate) fn planning_input<'a>(
+        &'a self,
+        request: &'a ImageGenerationRequest,
+    ) -> ImageGenerationPlanningInput<'a> {
+        ImageGenerationPlanningInput {
+            request,
+            package_facts: &self.package_facts,
+            artifact_load_target: &self.artifact_load_target,
+            backend_decision: &self.backend_decision,
+        }
+    }
+}
+
+/// Invalid host-built image-generation launch handoff.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PlannedImageGenerationLaunchHandoffError {
+    #[error("planned image-generation launch handoff requires image_generation task, got {actual_task_id:?}")]
+    TaskMismatch {
+        actual_task_id: Option<InferenceTaskId>,
+    },
+    #[error(
+        "planned image-generation launch handoff selected model '{selected_model_id}' does not match package facts model '{package_model_id}'"
+    )]
+    SelectedModelMismatch {
+        selected_model_id: String,
+        package_model_id: String,
+    },
 }
 
 /// Planner result: exactly one execution plan or bounded diagnostics.

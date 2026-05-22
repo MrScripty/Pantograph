@@ -25,6 +25,7 @@ use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, Inference
 use crate::image_generation_planner::{
     plan_image_generation_execution, ImageGenerationExecutionPlan,
     ImageGenerationPlannerDiagnostic, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
+    PlannedImageGenerationLaunchHandoff,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
@@ -1393,6 +1394,16 @@ impl InferenceGateway {
         }
     }
 
+    /// Execute a host-built image-generation launch handoff.
+    pub async fn generate_image_from_launch_handoff(
+        &self,
+        request: &ImageGenerationRequest,
+        handoff: &PlannedImageGenerationLaunchHandoff,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        self.generate_image_from_planning_input(handoff.planning_input(request))
+            .await
+    }
+
     /// Build and execute one image-generation plan while emitting bounded lifecycle facts.
     pub async fn generate_image_from_planning_input_with_lifecycle(
         &self,
@@ -1471,6 +1482,22 @@ impl InferenceGateway {
                 result
             }
         }
+    }
+
+    /// Execute a host-built image-generation launch handoff with bounded lifecycle facts.
+    pub async fn generate_image_from_launch_handoff_with_lifecycle(
+        &self,
+        request: &ImageGenerationRequest,
+        handoff: &PlannedImageGenerationLaunchHandoff,
+        request_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        self.generate_image_from_planning_input_with_lifecycle(
+            handoff.planning_input(request),
+            request_id,
+            lifecycle_sink,
+        )
+        .await
     }
 
     /// Transcribe audio through the active backend.

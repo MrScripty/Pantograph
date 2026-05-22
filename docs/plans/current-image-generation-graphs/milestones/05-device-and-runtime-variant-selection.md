@@ -1407,6 +1407,28 @@ fixture contract must not remain reachable as an alternate execution path.
      `cargo check -p node-engine`, `cargo check -p node-engine --all-features`,
      `cargo check -p node-engine --no-default-features`,
      `cargo fmt -p node-engine -- --check`, and `git diff --check`.
+   - 2026-05-22 implementation update: completed the inference gateway
+     launch-handoff API slice. `inference` now owns
+     `PlannedImageGenerationLaunchHandoff`, validates that the scheduler
+     decision is for `image_generation`, validates any selected scheduler model
+     ref against the Pumas package facts model ref, and exposes
+     `InferenceGateway::generate_image_from_launch_handoff` plus
+     `generate_image_from_launch_handoff_with_lifecycle`. The gateway methods
+     delegate through the existing side-effect-free image-generation planner so
+     lifecycle/resource observation and planner diagnostics stay canonical.
+   - 2026-05-22 no-fallback/no-legacy confirmation: the launch handoff is
+     worker-launch material only and is not a graph, preflight, cache, activity,
+     or node-engine identity contract. This slice did not reintroduce
+     graph-carried package facts, graph-carried artifact load targets, Python
+     worker resolution, or path joins; invalid scheduler task/model decisions
+     fail before backend dispatch.
+   - 2026-05-22 verification passed:
+     `cargo test -p inference generate_image_from_launch_handoff`,
+     `cargo test -p inference planned_image_generation_launch_handoff`,
+     `cargo test -p inference gateway::tests::`,
+     `cargo check -p inference`, `cargo check -p inference --all-features`,
+     `cargo check -p inference --no-default-features`,
+     `cargo fmt -p inference -- --check`, and `git diff --check`.
    - Historical preflight contract-slice scope clarification: the preflight
      contract gate may also touch existing `pantograph-dependency-planning`
      sibling modules, fixtures, and tests when required to make the shared
