@@ -179,3 +179,14 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: replace
   node-engine dependency preflight output with typed readiness proof rather
   than `ModelRefV2`.
+- 2026-05-22 re-plan trigger before the next code slice: replacing node-engine
+  dependency preflight output directly with `DependencyPreflightResult` would
+  either break current runtime input assembly that still expects `ModelRefV2`,
+  or require a compatibility adapter from typed readiness proof back to
+  `ModelRefV2`. The first option is too broad for the next thin slice because
+  host dispatch, queue state, and runtime handoff are not in place; the second
+  option violates the no-fallback/no-legacy rule. Required re-plan decision:
+  reorder Milestone 5a so node-engine preflight replacement is preceded by a
+  scheduler-owned readiness admission/handoff seam that gives runtime hosts a
+  non-legacy dispatch input, then delete `ModelRefV2` preflight production
+  without a bridge.

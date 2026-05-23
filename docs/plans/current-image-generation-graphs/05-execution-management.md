@@ -8853,6 +8853,23 @@ Worker rules:
   - Remaining follow-up: continue Milestone 5a by replacing node-engine
     dependency preflight output with typed readiness proof rather than
     `ModelRefV2`.
+- 2026-05-22 Milestone 5a re-plan trigger before node-engine preflight
+  replacement:
+  - Finding: existing node-engine and embedded-runtime dependency preflight
+    functions still return `Option<ModelRefV2>` and current runtime input
+    assembly inserts that value into Python runtime inputs. Directly replacing
+    that output with `DependencyPreflightResult` before scheduler dispatch and
+    runtime host handoff exist would either break the execution path or require
+    a compatibility conversion back into `ModelRefV2`.
+  - No-fallback/no-legacy impact: a conversion from typed readiness proof back
+    into `ModelRefV2` would preserve the retired successful path and is not
+    allowed.
+  - Required re-plan: insert an ordering seam before node-engine replacement.
+    The next implementation slice should create scheduler-owned readiness
+    admission/handoff contracts that runtime hosts can consume without
+    `ModelRefV2`; after that seam exists, replace node-engine preflight output
+    and delete the legacy resolver/model-ref production path instead of
+    adapting it.
 
 ### Traceability Links
 
