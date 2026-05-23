@@ -6,11 +6,11 @@ use crate::workflow::{
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerQueueTaskRecord, SchedulerQueueTaskState,
-    SchedulerQueueTransition, SchedulerQueueTransitionApplyResult, SchedulerQueueTransitionId,
-    SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerWorkflowId,
+    SchedulableTaskIntent, SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTaskState,
+    SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTaskStateTransition,
+    SchedulerTaskStateTransitionApplyResult, SchedulerTaskStateTransitionId, SchedulerWorkflowId,
     SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-    SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+    SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 
 use super::super::policy::{
@@ -73,39 +73,87 @@ fn scheduler_transition(
     workflow_run_id: &str,
     task_id: &str,
     transition_id: &str,
-    expected_previous_state: Option<SchedulerQueueTaskState>,
-    next_state: SchedulerQueueTaskState,
-) -> SchedulerQueueTransition {
-    SchedulerQueueTransition {
-        contract_version: SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
-        transition_id: SchedulerQueueTransitionId::parse(transition_id).expect("transition id"),
+    expected_previous_state: Option<SchedulerTaskStateKind>,
+    next_state: SchedulerTaskStateKind,
+) -> SchedulerTaskStateTransition {
+    let task_intent = scheduler_task_intent(workflow_run_id, task_id);
+    SchedulerTaskStateTransition {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        transition_id: SchedulerTaskStateTransitionId::parse(transition_id).expect("transition id"),
         workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
         workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
         node_id: pantograph_scheduler::SchedulerNodeId::parse(task_id).expect("node id"),
         task_id: SchedulerTaskId::parse(task_id).expect("task id"),
-        task_intent: scheduler_task_intent(workflow_run_id, task_id),
         expected_previous_state,
-        next_state,
+        next_state: scheduler_state(next_state, task_intent),
     }
 }
 
 fn scheduler_record(
     workflow_run_id: &str,
     task_id: &str,
-    state: SchedulerQueueTaskState,
-) -> SchedulerQueueTaskRecord {
-    SchedulerQueueTaskRecord {
-        contract_version: SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+    state: SchedulerTaskStateKind,
+) -> SchedulerTaskStateRecord {
+    let task_intent = scheduler_task_intent(workflow_run_id, task_id);
+    SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
         workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
         workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
         node_id: pantograph_scheduler::SchedulerNodeId::parse(task_id).expect("node id"),
         task_id: SchedulerTaskId::parse(task_id).expect("task id"),
-        task_intent: scheduler_task_intent(workflow_run_id, task_id),
-        state,
+        state: scheduler_state(state, task_intent),
         state_version: 1,
-        last_transition_id: SchedulerQueueTransitionId::parse("transition-existing")
+        last_transition_id: SchedulerTaskStateTransitionId::parse("transition-existing")
             .expect("transition id"),
     }
+}
+
+fn scheduler_state(
+    state: SchedulerTaskStateKind,
+    task_intent: SchedulableTaskIntent,
+) -> SchedulerTaskState {
+    match state {
+        SchedulerTaskStateKind::AwaitingInputs => SchedulerTaskState::AwaitingInputs {
+            diagnostics: Vec::new(),
+        },
+        SchedulerTaskStateKind::InputUnavailable => SchedulerTaskState::InputUnavailable {
+            diagnostics: scheduler_state_diagnostics(),
+        },
+        SchedulerTaskStateKind::Invalid => SchedulerTaskState::Invalid {
+            diagnostics: scheduler_state_diagnostics(),
+        },
+        SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready { task_intent },
+        SchedulerTaskStateKind::WaitingDependencyReadiness => {
+            SchedulerTaskState::WaitingDependencyReadiness { task_intent }
+        }
+        SchedulerTaskStateKind::WaitingResources => {
+            SchedulerTaskState::WaitingResources { task_intent }
+        }
+        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch { task_intent },
+        SchedulerTaskStateKind::Running => SchedulerTaskState::Running { task_intent },
+        SchedulerTaskStateKind::PausedDeferred => SchedulerTaskState::PausedDeferred {
+            task_intent,
+            diagnostics: scheduler_state_diagnostics(),
+        },
+        SchedulerTaskStateKind::RetryableFailed => SchedulerTaskState::RetryableFailed {
+            task_intent,
+            diagnostics: scheduler_state_diagnostics(),
+        },
+        SchedulerTaskStateKind::TerminalFailed => SchedulerTaskState::TerminalFailed {
+            diagnostics: scheduler_state_diagnostics(),
+        },
+        SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed { task_intent },
+        _ => panic!("test helper does not support unknown scheduler task state kind"),
+    }
+}
+
+fn scheduler_state_diagnostics() -> Vec<pantograph_scheduler::SchedulerTaskStateDiagnostic> {
+    vec![pantograph_scheduler::SchedulerTaskStateDiagnostic {
+        severity: pantograph_scheduler::SchedulerTaskStateDiagnosticSeverity::Error,
+        code: pantograph_scheduler::SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+        message: "test scheduler diagnostic".to_string(),
+        hint: None,
+    }]
 }
 
 #[test]
@@ -327,21 +375,24 @@ fn active_run_applies_scheduler_task_state_transitions() {
         "image-task",
         "transition-pending",
         None,
-        SchedulerQueueTaskState::Pending,
+        SchedulerTaskStateKind::AwaitingInputs,
     );
     let result = store
         .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, initial.clone())
         .expect("initial task transition");
     assert!(matches!(
         result,
-        SchedulerQueueTransitionApplyResult::Applied(_)
+        SchedulerTaskStateTransitionApplyResult::Applied(_)
     ));
 
     let records = store
         .active_run_scheduler_task_records(&session_id, &workflow_run_id)
         .expect("task records");
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].state, SchedulerQueueTaskState::Pending);
+    assert_eq!(
+        records[0].state.kind(),
+        SchedulerTaskStateKind::AwaitingInputs
+    );
     assert_eq!(records[0].state_version, 1);
 
     let replay = store
@@ -349,15 +400,15 @@ fn active_run_applies_scheduler_task_state_transitions() {
         .expect("replay initial task transition");
     assert!(matches!(
         replay,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_)
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_)
     ));
 
     let ready = scheduler_transition(
         &workflow_run_id,
         "image-task",
         "transition-ready",
-        Some(SchedulerQueueTaskState::Pending),
-        SchedulerQueueTaskState::Ready,
+        Some(SchedulerTaskStateKind::AwaitingInputs),
+        SchedulerTaskStateKind::Ready,
     );
     let _ready_result = store
         .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, ready)
@@ -365,7 +416,7 @@ fn active_run_applies_scheduler_task_state_transitions() {
     let records = store
         .active_run_scheduler_task_records(&session_id, &workflow_run_id)
         .expect("task records after ready");
-    assert_eq!(records[0].state, SchedulerQueueTaskState::Ready);
+    assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Ready);
     assert_eq!(records[0].state_version, 2);
 }
 
@@ -397,7 +448,7 @@ fn active_run_rejects_task_records_for_different_run() {
             vec![scheduler_record(
                 "run-other",
                 "image-task",
-                SchedulerQueueTaskState::Pending,
+                SchedulerTaskStateKind::AwaitingInputs,
             )],
         )
         .expect_err("different run record should fail");

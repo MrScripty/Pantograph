@@ -88,7 +88,7 @@ inputs are ready.
   owner for dependency edges, input bindings, and intent templates; scheduler
   lifecycle state must not duplicate graph bindings or become a second graph
   definition source.
-- `SchedulerTaskStateRecord` and `SchedulerTaskTransition`: scheduler-owned
+- `SchedulerTaskStateRecord` and `SchedulerTaskStateTransition`: scheduler-owned
   durable lifecycle contracts that replace the current intent-required
   `SchedulerQueueTaskRecord` and `SchedulerQueueTransition` shapes. The record
   carries workflow/run/node/task correlation, state version, transition
@@ -219,17 +219,19 @@ implementation can be considered complete:
    scheduler task-state records and transition tests for awaiting inputs,
    input-unavailable, invalid, ready, waiting for dependency readiness,
    waiting for resources, waiting for batch, running, paused/deferred,
-   retryable failed, terminal failed, and completed. Queue-state transition
-   coverage completed 2026-05-23 against the old queue contract, but the next
-   implementation must replace that contract rather than preserving it as a
-   compatibility layer.
+   retryable failed, terminal failed, and completed. Completed 2026-05-23 by
+   replacing the old intent-required queue contract in source/tests with
+   phase-aware task-state records and transitions. No compatibility aliases or
+   shims remain for the old queue record symbols.
 3. Add task-state read models and diagnostics projection for graph editor and
    run inspection. Read models must join immutable task definition facts with
    scheduler-owned lifecycle state and must allow model/task-intent fields to
    be unknown before materialization. Initial path-free workflow-service
    read-model projection and dedicated active-run query boundary completed
-   2026-05-23 against the old queue record; replacement read-model wiring must
-   move to the phase-aware state contract.
+   2026-05-23, and the replacement task-state slice moved those read models to
+   the phase-aware state contract with optional pre-intent fields. The broader
+   diagnostics/timing/attempt/task-definition join remains open for the
+   orchestrator and ledger slices.
 4. Align graph-visible scheduler constraints before relying on them in
    materialization or admission. The workflow-service task graph already
    models optional hard `runtime` and `device` constraints. Completed

@@ -95,11 +95,13 @@ resolver behavior.
   readiness proof, matching dependency environment ref, and optionally the
   scheduler dispatch decision. It must not carry executable Pumas load targets,
   local paths, `ModelRefV2`, or worker launch facts.
-- `SchedulerQueueTaskRecord` and `SchedulerQueueTransition` are durable,
-  replayable queue contracts for one schedulable task. They carry task
-  correlation, task intent, queue state, state version, and transition id only.
-  They must not carry executable Pumas load targets, local paths,
-  `ModelRefV2`, worker launch details, reservations, or batching groups.
+- `SchedulerTaskStateRecord` and `SchedulerTaskStateTransition` are durable,
+  replayable task-state contracts for one workflow task. They carry task
+  correlation, phase-aware state, state version, and transition id only.
+  Schedulable phases carry `SchedulableTaskIntent`; pre-intent and terminal
+  invalid phases carry typed diagnostics instead. They must not carry
+  executable Pumas load targets, local paths, `ModelRefV2`, worker launch
+  details, reservations, or batching groups.
 - `SchedulerTaskLifecycleDiagnosticSnapshot` is a backend-owned explanation of
   one scheduler queue task state for graph editor and run inspection. It may
   explain waiting, deferred, unavailable, failed, and completed states with
@@ -194,9 +196,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   consume `ValidatedSchedulerRuntimeHandoff` values once correlation,
   environment refs, readiness proof, and optional dispatch decision have been
   validated. Queue persistence and replay consumers may use
-  `ValidatedSchedulerQueueTaskRecord`,
-  `ValidatedSchedulerQueueTransition`, and
-  `apply_scheduler_queue_transition` to validate idempotent task-state replay.
+  `ValidatedSchedulerTaskStateRecord`,
+  `ValidatedSchedulerTaskStateTransition`, and
+  `apply_scheduler_task_state_transition` to validate idempotent task-state replay.
   Graph editor and run-inspection consumers may display
   `ValidatedSchedulerTaskLifecycleDiagnosticSnapshot` values after the backend
   validates state-compatible diagnostic codes and bounded messages.
@@ -241,9 +243,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   intent and policy fields; `SchedulerReadinessAdmissionDecision` action,
   state, readiness proof, and typed diagnostics; `SchedulerRuntimeHandoff`
   correlation fields, state, readiness proof, environment ref, and optional
-  dispatch decision fields; `SchedulerQueueTaskRecord` correlation, task
+  dispatch decision fields; `SchedulerTaskStateRecord` correlation, task
   intent, state, state version, and last transition id fields;
-  `SchedulerQueueTransition` correlation, task intent, expected previous state,
+  `SchedulerTaskStateTransition` correlation, task intent, expected previous state,
   next state, and transition id fields;
   `SchedulerTaskLifecycleDiagnosticSnapshot` correlation, queue state,
   diagnostic severity, code, bounded message, and optional hint fields;

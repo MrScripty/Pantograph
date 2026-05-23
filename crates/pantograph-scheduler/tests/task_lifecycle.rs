@@ -1,7 +1,7 @@
 use pantograph_scheduler::{
-    SchedulerContractError, SchedulerQueueTaskState, SchedulerTaskLifecycleDiagnostic,
-    SchedulerTaskLifecycleDiagnosticCode, SchedulerTaskLifecycleDiagnosticSeverity,
-    SchedulerTaskLifecycleDiagnosticSnapshot, ValidatedSchedulerTaskLifecycleDiagnosticSnapshot,
+    SchedulerContractError, SchedulerTaskLifecycleDiagnostic, SchedulerTaskLifecycleDiagnosticCode,
+    SchedulerTaskLifecycleDiagnosticSeverity, SchedulerTaskLifecycleDiagnosticSnapshot,
+    SchedulerTaskStateKind, ValidatedSchedulerTaskLifecycleDiagnosticSnapshot,
     SCHEDULER_TASK_LIFECYCLE_DIAGNOSTIC_CONTRACT_VERSION,
 };
 
@@ -21,7 +21,7 @@ fn valid_lifecycle_fixture_decodes_and_validates() {
     );
     assert_eq!(
         validated.as_ref().state,
-        SchedulerQueueTaskState::WaitingResources
+        SchedulerTaskStateKind::WaitingResources
     );
 }
 
@@ -67,7 +67,7 @@ fn waiting_states_require_diagnostics() {
             .parse()
             .expect("test node id must parse"),
         task_id: "task.001".parse().expect("test task id must parse"),
-        state: SchedulerQueueTaskState::WaitingBatch,
+        state: SchedulerTaskStateKind::WaitingBatch,
         diagnostics: Vec::new(),
     };
 
@@ -88,7 +88,7 @@ fn completed_state_requires_completed_diagnostic_code() {
         include_str!("fixtures/task_lifecycle_waiting_resources.json"),
     )
     .expect("fixture must decode");
-    snapshot.state = SchedulerQueueTaskState::Completed;
+    snapshot.state = SchedulerTaskStateKind::Completed;
 
     let error = ValidatedSchedulerTaskLifecycleDiagnosticSnapshot::try_from(snapshot)
         .expect_err("completed lifecycle state must not carry resource-waiting diagnostics");
@@ -133,7 +133,7 @@ fn completed_state_accepts_completed_diagnostic_code() {
             .parse()
             .expect("test node id must parse"),
         task_id: "task.001".parse().expect("test task id must parse"),
-        state: SchedulerQueueTaskState::Completed,
+        state: SchedulerTaskStateKind::Completed,
         diagnostics: vec![SchedulerTaskLifecycleDiagnostic {
             severity: SchedulerTaskLifecycleDiagnosticSeverity::Info,
             code: SchedulerTaskLifecycleDiagnosticCode::TaskCompleted,

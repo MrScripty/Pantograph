@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
 use pantograph_diagnostics_ledger::SchedulerModelCacheState;
-use pantograph_scheduler::SchedulerQueueTaskRecord;
+use pantograph_scheduler::SchedulerTaskStateRecord;
 
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
@@ -53,7 +53,7 @@ struct WorkflowExecutionSessionActiveRun {
     execution_plan: Option<WorkflowExecutionPlan>,
     // Milestone 5c stages task-state storage before the orchestrator consumes it.
     #[allow(dead_code)]
-    scheduler_task_records: BTreeMap<String, SchedulerQueueTaskRecord>,
+    scheduler_task_records: BTreeMap<String, SchedulerTaskStateRecord>,
     // Milestone 5c stages task-result storage before durable ledger replay.
     scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
 }

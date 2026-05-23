@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::SchedulerContractError;
-use crate::queue::SchedulerQueueTaskState;
+use crate::queue::SchedulerTaskStateKind;
 use crate::{SchedulerNodeId, SchedulerTaskId, SchedulerWorkflowId, SchedulerWorkflowRunId};
 
 const MAX_TEXT_LEN: usize = 1024;
@@ -42,11 +42,7 @@ pub enum SchedulerTaskLifecycleDiagnosticCode {
 }
 
 impl SchedulerTaskLifecycleDiagnosticCode {
-    fn is_compatible_with(&self, state: SchedulerQueueTaskState) -> bool {
-        use SchedulerQueueTaskState::{
-            Blocked, Completed, PausedDeferred, Pending, Ready, RetryableFailed, Running,
-            TerminalFailed, WaitingBatch, WaitingDependencyReadiness, WaitingResources,
-        };
+    fn is_compatible_with(&self, state: SchedulerTaskStateKind) -> bool {
         use SchedulerTaskLifecycleDiagnosticCode::{
             DependencyUnavailable, DeviceUnavailable, ResourceUnavailable, RetryableFailure,
             RuntimeUnavailable, SchedulerPolicyError, TaskBlocked, TaskCompleted, TaskDeferred,
@@ -54,14 +50,23 @@ impl SchedulerTaskLifecycleDiagnosticCode {
             WaitingDependencyReadiness as WaitingDependencyReadinessCode,
             WaitingResources as WaitingResourcesCode,
         };
+        use SchedulerTaskStateKind::{
+            AwaitingInputs, Completed, InputUnavailable, Invalid, PausedDeferred, Ready,
+            RetryableFailed, Running, TerminalFailed, WaitingBatch, WaitingDependencyReadiness,
+            WaitingResources,
+        };
 
         match state {
-            Pending => matches!(self, TaskPending | SchedulerPolicyError),
+            AwaitingInputs => matches!(
+                self,
+                TaskPending | DependencyUnavailable | SchedulerPolicyError
+            ),
             Ready => matches!(self, TaskReady | SchedulerPolicyError),
-            Blocked => matches!(
+            InputUnavailable => matches!(
                 self,
                 TaskBlocked | DependencyUnavailable | SchedulerPolicyError
             ),
+            Invalid => matches!(self, TaskBlocked | SchedulerPolicyError),
             WaitingDependencyReadiness => matches!(
                 self,
                 WaitingDependencyReadinessCode | DependencyUnavailable | SchedulerPolicyError
@@ -120,7 +125,7 @@ pub struct SchedulerTaskLifecycleDiagnostic {
 impl SchedulerTaskLifecycleDiagnostic {
     fn validate_for_state(
         &self,
-        state: SchedulerQueueTaskState,
+        state: SchedulerTaskStateKind,
     ) -> Result<(), SchedulerContractError> {
         validate_text("task_lifecycle_diagnostic.message", &self.message)?;
         if let Some(hint) = &self.hint {
@@ -146,7 +151,7 @@ pub struct SchedulerTaskLifecycleDiagnosticSnapshot {
     pub workflow_run_id: SchedulerWorkflowRunId,
     pub node_id: SchedulerNodeId,
     pub task_id: SchedulerTaskId,
-    pub state: SchedulerQueueTaskState,
+    pub state: SchedulerTaskStateKind,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<SchedulerTaskLifecycleDiagnostic>,
 }
@@ -197,15 +202,16 @@ impl TryFrom<SchedulerTaskLifecycleDiagnosticSnapshot>
     }
 }
 
-fn state_requires_diagnostics(state: SchedulerQueueTaskState) -> bool {
-    use SchedulerQueueTaskState::{
-        Blocked, Completed, PausedDeferred, RetryableFailed, TerminalFailed, WaitingBatch,
-        WaitingDependencyReadiness, WaitingResources,
+fn state_requires_diagnostics(state: SchedulerTaskStateKind) -> bool {
+    use SchedulerTaskStateKind::{
+        Completed, InputUnavailable, Invalid, PausedDeferred, RetryableFailed, TerminalFailed,
+        WaitingBatch, WaitingDependencyReadiness, WaitingResources,
     };
 
     matches!(
         state,
-        Blocked
+        InputUnavailable
+            | Invalid
             | WaitingDependencyReadiness
             | WaitingResources
             | WaitingBatch

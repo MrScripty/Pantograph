@@ -10,11 +10,12 @@ use crate::intent::{
 };
 
 const MAX_ID_LEN: usize = 128;
+const MAX_DIAGNOSTIC_TEXT_LEN: usize = 1024;
 
-/// Current contract version for durable scheduler queue state.
-pub const SCHEDULER_QUEUE_STATE_CONTRACT_VERSION: u16 = 1;
+/// Current contract version for durable scheduler task state.
+pub const SCHEDULER_TASK_STATE_CONTRACT_VERSION: u16 = 1;
 
-macro_rules! scheduler_queue_id {
+macro_rules! scheduler_task_state_id {
     ($name:ident, $field:literal) => {
         #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[must_use]
@@ -86,15 +87,16 @@ macro_rules! scheduler_queue_id {
     };
 }
 
-scheduler_queue_id!(SchedulerQueueTransitionId, "transition_id");
+scheduler_task_state_id!(SchedulerTaskStateTransitionId, "transition_id");
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum SchedulerQueueTaskState {
-    Pending,
+pub enum SchedulerTaskStateKind {
+    AwaitingInputs,
+    InputUnavailable,
+    Invalid,
     Ready,
-    Blocked,
     WaitingDependencyReadiness,
     WaitingResources,
     WaitingBatch,
@@ -105,29 +107,33 @@ pub enum SchedulerQueueTaskState {
     Completed,
 }
 
-impl SchedulerQueueTaskState {
-    fn can_transition_to(self, next: SchedulerQueueTaskState) -> bool {
-        use SchedulerQueueTaskState::{Blocked, Completed, PausedDeferred, Pending, Ready};
-        use SchedulerQueueTaskState::{RetryableFailed, Running, TerminalFailed, WaitingBatch};
-        use SchedulerQueueTaskState::{WaitingDependencyReadiness, WaitingResources};
+impl SchedulerTaskStateKind {
+    fn can_transition_to(self, next: SchedulerTaskStateKind) -> bool {
+        use SchedulerTaskStateKind::{
+            AwaitingInputs, Completed, InputUnavailable, Invalid, PausedDeferred, Ready,
+            RetryableFailed, Running, TerminalFailed, WaitingBatch, WaitingDependencyReadiness,
+            WaitingResources,
+        };
 
         match self {
-            Pending => matches!(
-                next,
-                Ready | Blocked | WaitingDependencyReadiness | TerminalFailed
-            ),
+            AwaitingInputs => matches!(next, Ready | InputUnavailable | Invalid | TerminalFailed),
+            InputUnavailable => matches!(next, AwaitingInputs | TerminalFailed),
+            Invalid => matches!(next, TerminalFailed),
             Ready => matches!(
                 next,
-                WaitingResources | WaitingBatch | Running | PausedDeferred | TerminalFailed
+                WaitingDependencyReadiness
+                    | WaitingResources
+                    | WaitingBatch
+                    | Running
+                    | PausedDeferred
+                    | TerminalFailed
             ),
-            Blocked => matches!(
-                next,
-                WaitingDependencyReadiness | Ready | PausedDeferred | TerminalFailed
-            ),
-            WaitingDependencyReadiness => matches!(
-                next,
-                Ready | PausedDeferred | RetryableFailed | TerminalFailed
-            ),
+            WaitingDependencyReadiness => {
+                matches!(
+                    next,
+                    Ready | PausedDeferred | RetryableFailed | TerminalFailed
+                )
+            }
             WaitingResources => matches!(
                 next,
                 Ready | WaitingBatch | Running | PausedDeferred | RetryableFailed | TerminalFailed
@@ -148,91 +154,233 @@ impl SchedulerQueueTaskState {
                     | WaitingBatch
                     | TerminalFailed
             ),
-            RetryableFailed => matches!(
-                next,
-                Pending | Ready | WaitingDependencyReadiness | TerminalFailed
-            ),
+            RetryableFailed => {
+                matches!(next, Ready | WaitingDependencyReadiness | TerminalFailed)
+            }
             TerminalFailed | Completed => false,
         }
     }
+
+    fn can_be_initial(self) -> bool {
+        matches!(
+            self,
+            SchedulerTaskStateKind::AwaitingInputs
+                | SchedulerTaskStateKind::InputUnavailable
+                | SchedulerTaskStateKind::Invalid
+                | SchedulerTaskStateKind::Ready
+        )
+    }
 }
 
-/// Durable queue record persisted for replay and recovery.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SchedulerTaskStateDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SchedulerTaskStateDiagnosticCode {
+    AwaitingInputs,
+    InputUnavailable,
+    InvalidTask,
+    TaskDeferred,
+    RetryableFailure,
+    TerminalFailure,
+    SchedulerPolicyError,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct SchedulerQueueTaskRecord {
-    #[serde(default = "default_scheduler_queue_state_contract_version")]
+pub struct SchedulerTaskStateDiagnostic {
+    pub severity: SchedulerTaskStateDiagnosticSeverity,
+    pub code: SchedulerTaskStateDiagnosticCode,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+}
+
+impl SchedulerTaskStateDiagnostic {
+    fn validate(&self) -> Result<(), SchedulerContractError> {
+        validate_text("task_state_diagnostic.message", &self.message)?;
+        if let Some(hint) = &self.hint {
+            validate_text("task_state_diagnostic.hint", hint)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[non_exhaustive]
+pub enum SchedulerTaskState {
+    AwaitingInputs {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    },
+    InputUnavailable {
+        diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    },
+    Invalid {
+        diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    },
+    Ready {
+        task_intent: SchedulableTaskIntent,
+    },
+    WaitingDependencyReadiness {
+        task_intent: SchedulableTaskIntent,
+    },
+    WaitingResources {
+        task_intent: SchedulableTaskIntent,
+    },
+    WaitingBatch {
+        task_intent: SchedulableTaskIntent,
+    },
+    Running {
+        task_intent: SchedulableTaskIntent,
+    },
+    PausedDeferred {
+        task_intent: SchedulableTaskIntent,
+        diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    },
+    RetryableFailed {
+        task_intent: SchedulableTaskIntent,
+        diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    },
+    TerminalFailed {
+        diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    },
+    Completed {
+        task_intent: SchedulableTaskIntent,
+    },
+}
+
+impl SchedulerTaskState {
+    #[must_use]
+    pub fn kind(&self) -> SchedulerTaskStateKind {
+        match self {
+            SchedulerTaskState::AwaitingInputs { .. } => SchedulerTaskStateKind::AwaitingInputs,
+            SchedulerTaskState::InputUnavailable { .. } => SchedulerTaskStateKind::InputUnavailable,
+            SchedulerTaskState::Invalid { .. } => SchedulerTaskStateKind::Invalid,
+            SchedulerTaskState::Ready { .. } => SchedulerTaskStateKind::Ready,
+            SchedulerTaskState::WaitingDependencyReadiness { .. } => {
+                SchedulerTaskStateKind::WaitingDependencyReadiness
+            }
+            SchedulerTaskState::WaitingResources { .. } => SchedulerTaskStateKind::WaitingResources,
+            SchedulerTaskState::WaitingBatch { .. } => SchedulerTaskStateKind::WaitingBatch,
+            SchedulerTaskState::Running { .. } => SchedulerTaskStateKind::Running,
+            SchedulerTaskState::PausedDeferred { .. } => SchedulerTaskStateKind::PausedDeferred,
+            SchedulerTaskState::RetryableFailed { .. } => SchedulerTaskStateKind::RetryableFailed,
+            SchedulerTaskState::TerminalFailed { .. } => SchedulerTaskStateKind::TerminalFailed,
+            SchedulerTaskState::Completed { .. } => SchedulerTaskStateKind::Completed,
+        }
+    }
+
+    #[must_use]
+    pub fn task_intent(&self) -> Option<&SchedulableTaskIntent> {
+        match self {
+            SchedulerTaskState::Ready { task_intent }
+            | SchedulerTaskState::WaitingDependencyReadiness { task_intent }
+            | SchedulerTaskState::WaitingResources { task_intent }
+            | SchedulerTaskState::WaitingBatch { task_intent }
+            | SchedulerTaskState::Running { task_intent }
+            | SchedulerTaskState::PausedDeferred { task_intent, .. }
+            | SchedulerTaskState::RetryableFailed { task_intent, .. }
+            | SchedulerTaskState::Completed { task_intent } => Some(task_intent),
+            SchedulerTaskState::AwaitingInputs { .. }
+            | SchedulerTaskState::InputUnavailable { .. }
+            | SchedulerTaskState::Invalid { .. }
+            | SchedulerTaskState::TerminalFailed { .. } => None,
+        }
+    }
+
+    fn validate_for_task(
+        &self,
+        workflow_id: &SchedulerWorkflowId,
+        workflow_run_id: &SchedulerWorkflowRunId,
+        node_id: &SchedulerNodeId,
+        task_id: &SchedulerTaskId,
+    ) -> Result<(), SchedulerContractError> {
+        if let Some(task_intent) = self.task_intent() {
+            task_intent.validate()?;
+            validate_correlation(workflow_id, workflow_run_id, node_id, task_id, task_intent)?;
+        }
+        validate_diagnostics(self)
+    }
+}
+
+/// Durable task-state record persisted for replay and recovery.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SchedulerTaskStateRecord {
+    #[serde(default = "default_scheduler_task_state_contract_version")]
     pub contract_version: u16,
     pub workflow_id: SchedulerWorkflowId,
     pub workflow_run_id: SchedulerWorkflowRunId,
     pub node_id: SchedulerNodeId,
     pub task_id: SchedulerTaskId,
-    pub task_intent: SchedulableTaskIntent,
-    pub state: SchedulerQueueTaskState,
+    pub state: SchedulerTaskState,
     pub state_version: u64,
-    pub last_transition_id: SchedulerQueueTransitionId,
+    pub last_transition_id: SchedulerTaskStateTransitionId,
 }
 
-impl SchedulerQueueTaskRecord {
-    /// Validates a raw persisted queue record before scheduler replay.
+impl SchedulerTaskStateRecord {
+    /// Validates a raw persisted task-state record before scheduler replay.
     pub fn validate(&self) -> Result<(), SchedulerContractError> {
         validate_contract_version(self.contract_version)?;
         if self.state_version == 0 {
             return Err(SchedulerContractError::InvalidField {
                 field: "state_version",
-                reason: "queue state version must be greater than zero",
+                reason: "task state version must be greater than zero",
             });
         }
-        self.task_intent.validate()?;
-        validate_correlation(
-            self.workflow_id.as_ref(),
-            self.workflow_run_id.as_ref(),
-            self.node_id.as_ref(),
-            self.task_id.as_ref(),
-            &self.task_intent,
+        self.state.validate_for_task(
+            &self.workflow_id,
+            &self.workflow_run_id,
+            &self.node_id,
+            &self.task_id,
         )
     }
 }
 
-/// Idempotent queue transition event persisted for replay.
+/// Idempotent task-state transition event persisted for replay.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct SchedulerQueueTransition {
-    #[serde(default = "default_scheduler_queue_state_contract_version")]
+pub struct SchedulerTaskStateTransition {
+    #[serde(default = "default_scheduler_task_state_contract_version")]
     pub contract_version: u16,
-    pub transition_id: SchedulerQueueTransitionId,
+    pub transition_id: SchedulerTaskStateTransitionId,
     pub workflow_id: SchedulerWorkflowId,
     pub workflow_run_id: SchedulerWorkflowRunId,
     pub node_id: SchedulerNodeId,
     pub task_id: SchedulerTaskId,
-    pub task_intent: SchedulableTaskIntent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expected_previous_state: Option<SchedulerQueueTaskState>,
-    pub next_state: SchedulerQueueTaskState,
+    pub expected_previous_state: Option<SchedulerTaskStateKind>,
+    pub next_state: SchedulerTaskState,
 }
 
-impl SchedulerQueueTransition {
-    /// Validates a raw queue transition before applying it to persisted state.
+impl SchedulerTaskStateTransition {
+    /// Validates a raw task-state transition before applying it.
     pub fn validate(&self) -> Result<(), SchedulerContractError> {
         validate_contract_version(self.contract_version)?;
-        self.task_intent.validate()?;
-        validate_correlation(
-            self.workflow_id.as_ref(),
-            self.workflow_run_id.as_ref(),
-            self.node_id.as_ref(),
-            self.task_id.as_ref(),
-            &self.task_intent,
+        self.next_state.validate_for_task(
+            &self.workflow_id,
+            &self.workflow_run_id,
+            &self.node_id,
+            &self.task_id,
         )?;
-        if self.expected_previous_state.is_none()
-            && self.next_state != SchedulerQueueTaskState::Pending
-        {
+        if self.expected_previous_state.is_none() && !self.next_state.kind().can_be_initial() {
             return Err(SchedulerContractError::InvalidField {
                 field: "next_state",
-                reason: "initial queue transition must create pending state",
+                reason: "initial task-state transition must create an initial state",
             });
         }
         if let Some(previous) = self.expected_previous_state {
-            validate_state_transition(previous, self.next_state)?;
+            validate_state_transition(previous, self.next_state.kind())?;
         }
         Ok(())
     }
@@ -240,17 +388,17 @@ impl SchedulerQueueTransition {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub enum SchedulerQueueTransitionApplyResult {
-    Applied(SchedulerQueueTaskRecord),
-    AlreadyApplied(SchedulerQueueTaskRecord),
+pub enum SchedulerTaskStateTransitionApplyResult {
+    Applied(SchedulerTaskStateRecord),
+    AlreadyApplied(SchedulerTaskStateRecord),
 }
 
 /// Pure contract logic for deterministic replay. Persistence, locking, and
 /// worker lifecycle ownership belong to later infrastructure slices.
-pub fn apply_scheduler_queue_transition(
-    current: Option<&SchedulerQueueTaskRecord>,
-    transition: SchedulerQueueTransition,
-) -> Result<SchedulerQueueTransitionApplyResult, SchedulerContractError> {
+pub fn apply_scheduler_task_state_transition(
+    current: Option<&SchedulerTaskStateRecord>,
+    transition: SchedulerTaskStateTransition,
+) -> Result<SchedulerTaskStateTransitionApplyResult, SchedulerContractError> {
     transition.validate()?;
     match current {
         None => apply_initial_transition(transition),
@@ -260,24 +408,24 @@ pub fn apply_scheduler_queue_transition(
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub struct ValidatedSchedulerQueueTaskRecord(SchedulerQueueTaskRecord);
+pub struct ValidatedSchedulerTaskStateRecord(SchedulerTaskStateRecord);
 
-impl ValidatedSchedulerQueueTaskRecord {
+impl ValidatedSchedulerTaskStateRecord {
     #[must_use]
-    pub fn as_ref(&self) -> &SchedulerQueueTaskRecord {
+    pub fn as_ref(&self) -> &SchedulerTaskStateRecord {
         &self.0
     }
 
     #[must_use]
-    pub fn into_inner(self) -> SchedulerQueueTaskRecord {
+    pub fn into_inner(self) -> SchedulerTaskStateRecord {
         self.0
     }
 }
 
-impl TryFrom<SchedulerQueueTaskRecord> for ValidatedSchedulerQueueTaskRecord {
+impl TryFrom<SchedulerTaskStateRecord> for ValidatedSchedulerTaskStateRecord {
     type Error = SchedulerContractError;
 
-    fn try_from(value: SchedulerQueueTaskRecord) -> Result<Self, Self::Error> {
+    fn try_from(value: SchedulerTaskStateRecord) -> Result<Self, Self::Error> {
         value.validate()?;
         Ok(Self(value))
     }
@@ -285,57 +433,57 @@ impl TryFrom<SchedulerQueueTaskRecord> for ValidatedSchedulerQueueTaskRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub struct ValidatedSchedulerQueueTransition(SchedulerQueueTransition);
+pub struct ValidatedSchedulerTaskStateTransition(SchedulerTaskStateTransition);
 
-impl ValidatedSchedulerQueueTransition {
+impl ValidatedSchedulerTaskStateTransition {
     #[must_use]
-    pub fn as_ref(&self) -> &SchedulerQueueTransition {
+    pub fn as_ref(&self) -> &SchedulerTaskStateTransition {
         &self.0
     }
 
     #[must_use]
-    pub fn into_inner(self) -> SchedulerQueueTransition {
+    pub fn into_inner(self) -> SchedulerTaskStateTransition {
         self.0
     }
 }
 
-impl TryFrom<SchedulerQueueTransition> for ValidatedSchedulerQueueTransition {
+impl TryFrom<SchedulerTaskStateTransition> for ValidatedSchedulerTaskStateTransition {
     type Error = SchedulerContractError;
 
-    fn try_from(value: SchedulerQueueTransition) -> Result<Self, Self::Error> {
+    fn try_from(value: SchedulerTaskStateTransition) -> Result<Self, Self::Error> {
         value.validate()?;
         Ok(Self(value))
     }
 }
 
 fn apply_initial_transition(
-    transition: SchedulerQueueTransition,
-) -> Result<SchedulerQueueTransitionApplyResult, SchedulerContractError> {
+    transition: SchedulerTaskStateTransition,
+) -> Result<SchedulerTaskStateTransitionApplyResult, SchedulerContractError> {
     if transition.expected_previous_state.is_some() {
         return Err(SchedulerContractError::InvalidField {
             field: "expected_previous_state",
-            reason: "initial queue transition must not expect existing state",
+            reason: "initial task-state transition must not expect existing state",
         });
     }
-    Ok(SchedulerQueueTransitionApplyResult::Applied(
+    Ok(SchedulerTaskStateTransitionApplyResult::Applied(
         record_from_transition(transition, 1),
     ))
 }
 
 fn apply_existing_transition(
-    record: &SchedulerQueueTaskRecord,
-    transition: SchedulerQueueTransition,
-) -> Result<SchedulerQueueTransitionApplyResult, SchedulerContractError> {
+    record: &SchedulerTaskStateRecord,
+    transition: SchedulerTaskStateTransition,
+) -> Result<SchedulerTaskStateTransitionApplyResult, SchedulerContractError> {
     record.validate()?;
     validate_same_task(record, &transition)?;
     if record.last_transition_id == transition.transition_id {
         if record.state != transition.next_state {
             return Err(SchedulerContractError::InvalidField {
                 field: "transition_id",
-                reason: "duplicate queue transition id must replay the same next state",
+                reason: "duplicate task-state transition id must replay the same next state",
             });
         }
-        return Ok(SchedulerQueueTransitionApplyResult::AlreadyApplied(
+        return Ok(SchedulerTaskStateTransitionApplyResult::AlreadyApplied(
             record.clone(),
         ));
     }
@@ -344,29 +492,28 @@ fn apply_existing_transition(
             field: "expected_previous_state",
         });
     };
-    if record.state != expected_previous_state {
+    if record.state.kind() != expected_previous_state {
         return Err(SchedulerContractError::InvalidField {
             field: "expected_previous_state",
-            reason: "queue transition previous state must match persisted task state",
+            reason: "task-state transition previous state must match persisted task state",
         });
     }
-    validate_state_transition(record.state, transition.next_state)?;
-    Ok(SchedulerQueueTransitionApplyResult::Applied(
+    validate_state_transition(record.state.kind(), transition.next_state.kind())?;
+    Ok(SchedulerTaskStateTransitionApplyResult::Applied(
         record_from_transition(transition, record.state_version + 1),
     ))
 }
 
 fn record_from_transition(
-    transition: SchedulerQueueTransition,
+    transition: SchedulerTaskStateTransition,
     state_version: u64,
-) -> SchedulerQueueTaskRecord {
-    SchedulerQueueTaskRecord {
-        contract_version: SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+) -> SchedulerTaskStateRecord {
+    SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
         workflow_id: transition.workflow_id,
         workflow_run_id: transition.workflow_run_id,
         node_id: transition.node_id,
         task_id: transition.task_id,
-        task_intent: transition.task_intent,
         state: transition.next_state,
         state_version,
         last_transition_id: transition.transition_id,
@@ -374,84 +521,113 @@ fn record_from_transition(
 }
 
 fn validate_same_task(
-    record: &SchedulerQueueTaskRecord,
-    transition: &SchedulerQueueTransition,
+    record: &SchedulerTaskStateRecord,
+    transition: &SchedulerTaskStateTransition,
 ) -> Result<(), SchedulerContractError> {
     if record.workflow_id != transition.workflow_id {
         return Err(SchedulerContractError::InvalidField {
             field: "workflow_id",
-            reason: "queue transition workflow id must match persisted record",
+            reason: "task-state transition workflow id must match persisted record",
         });
     }
     if record.workflow_run_id != transition.workflow_run_id {
         return Err(SchedulerContractError::InvalidField {
             field: "workflow_run_id",
-            reason: "queue transition workflow run id must match persisted record",
+            reason: "task-state transition workflow run id must match persisted record",
         });
     }
     if record.node_id != transition.node_id {
         return Err(SchedulerContractError::InvalidField {
             field: "node_id",
-            reason: "queue transition node id must match persisted record",
+            reason: "task-state transition node id must match persisted record",
         });
     }
     if record.task_id != transition.task_id {
         return Err(SchedulerContractError::InvalidField {
             field: "task_id",
-            reason: "queue transition task id must match persisted record",
-        });
-    }
-    if record.task_intent != transition.task_intent {
-        return Err(SchedulerContractError::InvalidField {
-            field: "task_intent",
-            reason: "queue transition task intent must match persisted record",
+            reason: "task-state transition task id must match persisted record",
         });
     }
     Ok(())
 }
 
 fn validate_correlation(
-    workflow_id: &str,
-    workflow_run_id: &str,
-    node_id: &str,
-    task_id: &str,
+    workflow_id: &SchedulerWorkflowId,
+    workflow_run_id: &SchedulerWorkflowRunId,
+    node_id: &SchedulerNodeId,
+    task_id: &SchedulerTaskId,
     task_intent: &SchedulableTaskIntent,
 ) -> Result<(), SchedulerContractError> {
-    if workflow_id != task_intent.workflow_id.as_ref() {
+    if workflow_id.as_ref() != task_intent.workflow_id.as_ref() {
         return Err(SchedulerContractError::InvalidField {
             field: "workflow_id",
-            reason: "queue task workflow id must match task intent",
+            reason: "task state workflow id must match task intent",
         });
     }
-    if workflow_run_id != task_intent.workflow_run_id.as_ref() {
+    if workflow_run_id.as_ref() != task_intent.workflow_run_id.as_ref() {
         return Err(SchedulerContractError::InvalidField {
             field: "workflow_run_id",
-            reason: "queue task workflow run id must match task intent",
+            reason: "task state workflow run id must match task intent",
         });
     }
-    if node_id != task_intent.node_id.as_ref() {
+    if node_id.as_ref() != task_intent.node_id.as_ref() {
         return Err(SchedulerContractError::InvalidField {
             field: "node_id",
-            reason: "queue task node id must match task intent",
+            reason: "task state node id must match task intent",
         });
     }
-    if task_id != task_intent.task_id.as_ref() {
+    if task_id.as_ref() != task_intent.task_id.as_ref() {
         return Err(SchedulerContractError::InvalidField {
             field: "task_id",
-            reason: "queue task id must match task intent",
+            reason: "task state task id must match task intent",
         });
     }
     Ok(())
 }
 
+fn validate_diagnostics(state: &SchedulerTaskState) -> Result<(), SchedulerContractError> {
+    let diagnostics = match state {
+        SchedulerTaskState::AwaitingInputs { diagnostics }
+        | SchedulerTaskState::InputUnavailable { diagnostics }
+        | SchedulerTaskState::Invalid { diagnostics }
+        | SchedulerTaskState::PausedDeferred { diagnostics, .. }
+        | SchedulerTaskState::RetryableFailed { diagnostics, .. }
+        | SchedulerTaskState::TerminalFailed { diagnostics } => diagnostics,
+        SchedulerTaskState::Ready { .. }
+        | SchedulerTaskState::WaitingDependencyReadiness { .. }
+        | SchedulerTaskState::WaitingResources { .. }
+        | SchedulerTaskState::WaitingBatch { .. }
+        | SchedulerTaskState::Running { .. }
+        | SchedulerTaskState::Completed { .. } => return Ok(()),
+    };
+
+    if matches!(
+        state,
+        SchedulerTaskState::InputUnavailable { .. }
+            | SchedulerTaskState::Invalid { .. }
+            | SchedulerTaskState::PausedDeferred { .. }
+            | SchedulerTaskState::RetryableFailed { .. }
+            | SchedulerTaskState::TerminalFailed { .. }
+    ) && diagnostics.is_empty()
+    {
+        return Err(SchedulerContractError::MissingField {
+            field: "task_state.diagnostics",
+        });
+    }
+    for diagnostic in diagnostics {
+        diagnostic.validate()?;
+    }
+    Ok(())
+}
+
 fn validate_state_transition(
-    previous: SchedulerQueueTaskState,
-    next: SchedulerQueueTaskState,
+    previous: SchedulerTaskStateKind,
+    next: SchedulerTaskStateKind,
 ) -> Result<(), SchedulerContractError> {
     if previous == next {
         return Err(SchedulerContractError::InvalidField {
             field: "next_state",
-            reason: "queue transition must advance to a different state",
+            reason: "task-state transition must advance to a different state",
         });
     }
     if previous.can_transition_to(next) {
@@ -459,22 +635,22 @@ fn validate_state_transition(
     } else {
         Err(SchedulerContractError::InvalidField {
             field: "next_state",
-            reason: "queue transition is not allowed from the previous state",
+            reason: "task-state transition is not allowed from the previous state",
         })
     }
 }
 
-fn default_scheduler_queue_state_contract_version() -> u16 {
-    SCHEDULER_QUEUE_STATE_CONTRACT_VERSION
+fn default_scheduler_task_state_contract_version() -> u16 {
+    SCHEDULER_TASK_STATE_CONTRACT_VERSION
 }
 
 fn validate_contract_version(value: u16) -> Result<(), SchedulerContractError> {
-    if value == SCHEDULER_QUEUE_STATE_CONTRACT_VERSION {
+    if value == SCHEDULER_TASK_STATE_CONTRACT_VERSION {
         Ok(())
     } else {
         Err(SchedulerContractError::InvalidField {
             field: "contract_version",
-            reason: "unsupported scheduler queue state contract version",
+            reason: "unsupported scheduler task state contract version",
         })
     }
 }
@@ -497,4 +673,21 @@ fn validate_identifier(field: &'static str, value: &str) -> Result<String, Sched
         return Err(SchedulerContractError::InvalidIdentifier { field });
     }
     Ok(trimmed.to_string())
+}
+
+fn validate_text(field: &'static str, value: &str) -> Result<(), SchedulerContractError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(SchedulerContractError::MissingField { field });
+    }
+    if trimmed.len() > MAX_DIAGNOSTIC_TEXT_LEN {
+        return Err(SchedulerContractError::FieldTooLong {
+            field,
+            max_len: MAX_DIAGNOSTIC_TEXT_LEN,
+        });
+    }
+    if trimmed.chars().any(char::is_control) {
+        return Err(SchedulerContractError::InvalidText { field });
+    }
+    Ok(())
 }

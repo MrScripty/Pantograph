@@ -6,8 +6,8 @@ use crate::workflow::{
 #[cfg(test)]
 use crate::WorkflowRunId;
 use pantograph_scheduler::{
-    apply_scheduler_queue_transition, SchedulerQueueTaskRecord, SchedulerQueueTransition,
-    SchedulerQueueTransitionApplyResult,
+    apply_scheduler_task_state_transition, SchedulerTaskStateRecord, SchedulerTaskStateTransition,
+    SchedulerTaskStateTransitionApplyResult,
 };
 
 use super::super::policy::{
@@ -292,7 +292,7 @@ impl WorkflowExecutionSessionStore {
         &mut self,
         session_id: &str,
         workflow_run_id: &str,
-        records: Vec<SchedulerQueueTaskRecord>,
+        records: Vec<SchedulerTaskStateRecord>,
     ) -> Result<(), WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
@@ -334,7 +334,7 @@ impl WorkflowExecutionSessionStore {
         &self,
         session_id: &str,
         workflow_run_id: &str,
-    ) -> Result<Vec<SchedulerQueueTaskRecord>, WorkflowServiceError> {
+    ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowServiceError> {
         let state = self.active.get(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
@@ -356,8 +356,8 @@ impl WorkflowExecutionSessionStore {
         &mut self,
         session_id: &str,
         workflow_run_id: &str,
-        transition: SchedulerQueueTransition,
-    ) -> Result<SchedulerQueueTransitionApplyResult, WorkflowServiceError> {
+        transition: SchedulerTaskStateTransition,
+    ) -> Result<SchedulerTaskStateTransitionApplyResult, WorkflowServiceError> {
         let tick = self.next_tick();
         validate_active_run_task_transition(workflow_run_id, &transition)?;
         let state = self.active.get_mut(session_id).ok_or_else(|| {
@@ -378,15 +378,15 @@ impl WorkflowExecutionSessionStore {
         }
 
         let task_id = transition.task_id.as_str().to_string();
-        let result = apply_scheduler_queue_transition(
+        let result = apply_scheduler_task_state_transition(
             active_run.scheduler_task_records.get(&task_id),
             transition,
         )
         .map_err(map_scheduler_task_state_error)?;
 
         match &result {
-            SchedulerQueueTransitionApplyResult::Applied(record)
-            | SchedulerQueueTransitionApplyResult::AlreadyApplied(record) => {
+            SchedulerTaskStateTransitionApplyResult::Applied(record)
+            | SchedulerTaskStateTransitionApplyResult::AlreadyApplied(record) => {
                 active_run
                     .scheduler_task_records
                     .insert(task_id, record.clone());
@@ -686,7 +686,7 @@ impl WorkflowExecutionSessionStore {
 #[allow(dead_code)]
 fn validate_active_run_task_record(
     workflow_run_id: &str,
-    record: &SchedulerQueueTaskRecord,
+    record: &SchedulerTaskStateRecord,
 ) -> Result<(), WorkflowServiceError> {
     record.validate().map_err(map_scheduler_task_state_error)?;
     if record.workflow_run_id.as_str() != workflow_run_id {
@@ -703,7 +703,7 @@ fn validate_active_run_task_record(
 #[allow(dead_code)]
 fn validate_active_run_task_transition(
     workflow_run_id: &str,
-    transition: &SchedulerQueueTransition,
+    transition: &SchedulerTaskStateTransition,
 ) -> Result<(), WorkflowServiceError> {
     if transition.workflow_run_id.as_str() != workflow_run_id {
         return Err(WorkflowServiceError::Internal(format!(

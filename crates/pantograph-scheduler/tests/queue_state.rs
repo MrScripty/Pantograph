@@ -1,38 +1,56 @@
+use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_scheduler::{
-    apply_scheduler_queue_transition, SchedulerContractError, SchedulerQueueTaskRecord,
-    SchedulerQueueTaskState, SchedulerQueueTransition, SchedulerQueueTransitionApplyResult,
-    ValidatedSchedulerQueueTaskRecord, ValidatedSchedulerQueueTransition,
-    SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+    apply_scheduler_task_state_transition, SchedulableTaskIntent, SchedulerContractError,
+    SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTaskState,
+    SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
+    SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+    ValidatedSchedulerTaskStateRecord, ValidatedSchedulerTaskStateTransition,
+    SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 
 #[test]
-fn valid_queue_transition_fixture_decodes_validates_and_applies() {
-    let transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must match scheduler queue transition contract");
+fn valid_task_state_transition_fixture_decodes_validates_and_applies() {
+    let transition: SchedulerTaskStateTransition =
+        serde_json::from_str(include_str!("fixtures/task_state_transition_ready.json"))
+            .expect("fixture must match scheduler task-state transition contract");
 
-    let validated = ValidatedSchedulerQueueTransition::try_from(transition.clone())
-        .expect("queue transition fixture must validate");
+    let validated = ValidatedSchedulerTaskStateTransition::try_from(transition.clone())
+        .expect("task-state transition fixture must validate");
 
     assert_eq!(
         validated.as_ref().contract_version,
-        SCHEDULER_QUEUE_STATE_CONTRACT_VERSION
+        SCHEDULER_TASK_STATE_CONTRACT_VERSION
     );
 
-    let result = apply_scheduler_queue_transition(None, transition)
-        .expect("initial queue transition must create pending record");
-    let SchedulerQueueTransitionApplyResult::Applied(record) = result else {
+    let result = apply_scheduler_task_state_transition(None, transition)
+        .expect("initial ready transition must create task-state record");
+    let SchedulerTaskStateTransitionApplyResult::Applied(record) = result else {
         panic!("initial transition should be applied");
     };
 
-    assert_eq!(record.state, SchedulerQueueTaskState::Pending);
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::Ready);
     assert_eq!(record.state_version, 1);
-    let _validated_record = ValidatedSchedulerQueueTaskRecord::try_from(record)
-        .expect("applied queue record must validate");
+    let _validated_record = ValidatedSchedulerTaskStateRecord::try_from(record)
+        .expect("applied task-state record must validate");
 }
 
 #[test]
-fn rejects_path_shaped_queue_fields() {
+fn pre_intent_task_state_does_not_require_task_intent() {
+    let transition = task_transition_to(None, awaiting_inputs_state());
+    let result = apply_scheduler_task_state_transition(None, transition)
+        .expect("awaiting inputs is a valid pre-intent initial state");
+
+    let SchedulerTaskStateTransitionApplyResult::Applied(record) = result else {
+        panic!("initial awaiting-inputs transition should apply");
+    };
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::AwaitingInputs);
+    assert!(record.state.task_intent().is_none());
+}
+
+#[test]
+fn rejects_path_shaped_task_state_fields() {
     let value = serde_json::json!({
         "contract_version": 1,
         "transition_id": "transition.001",
@@ -41,23 +59,14 @@ fn rejects_path_shaped_queue_fields() {
         "node_id": "node.llm_inference",
         "task_id": "task.001",
         "model_path": "/models/juggernaut",
-        "task_intent": {
-            "contract_version": 1,
-            "workflow_id": "workflow.image_generation",
-            "workflow_run_id": "run.001",
-            "node_id": "node.llm_inference",
-            "task_id": "task.001",
-            "task_type": "image_generation",
-            "model_ref": {
-                "model_id": "pumas://models/juggernaut-xl-v10"
-            }
-        },
         "local_load_path": "/models/juggernaut/model.safetensors",
-        "next_state": "pending"
+        "next_state": {
+            "kind": "awaiting_inputs"
+        }
     });
 
-    let error = serde_json::from_value::<SchedulerQueueTransition>(value)
-        .expect_err("queue transition must reject path-shaped fields");
+    let error = serde_json::from_value::<SchedulerTaskStateTransition>(value)
+        .expect_err("task-state transition must reject path-shaped fields");
 
     assert!(
         error.to_string().contains("unknown field `model_path`")
@@ -70,174 +79,205 @@ fn rejects_path_shaped_queue_fields() {
 
 #[test]
 fn duplicate_transition_is_idempotent() {
-    let transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
+    let transition: SchedulerTaskStateTransition =
+        serde_json::from_str(include_str!("fixtures/task_state_transition_ready.json"))
             .expect("fixture must decode");
-    let record = match apply_scheduler_queue_transition(None, transition.clone())
+    let record = match apply_scheduler_task_state_transition(None, transition.clone())
         .expect("initial transition must apply")
     {
-        SchedulerQueueTransitionApplyResult::Applied(record) => record,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_) => {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
             panic!("first transition cannot be already applied")
         }
     };
 
-    let result = apply_scheduler_queue_transition(Some(&record), transition)
+    let result = apply_scheduler_task_state_transition(Some(&record), transition)
         .expect("duplicate transition must replay idempotently");
 
     assert_eq!(
         result,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(record)
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(record)
     );
 }
 
 #[test]
-fn duplicate_transition_id_must_match_persisted_task_intent() {
-    let transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
+fn duplicate_transition_id_must_match_persisted_next_state() {
+    let transition: SchedulerTaskStateTransition =
+        serde_json::from_str(include_str!("fixtures/task_state_transition_ready.json"))
             .expect("fixture must decode");
-    let record = match apply_scheduler_queue_transition(None, transition.clone())
+    let record = match apply_scheduler_task_state_transition(None, transition.clone())
         .expect("initial transition must apply")
     {
-        SchedulerQueueTransitionApplyResult::Applied(record) => record,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_) => {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
             panic!("first transition cannot be already applied")
         }
     };
     let mut replay = transition;
-    replay.task_intent.model_ref.model_id = "pumas://models/other".to_string();
+    replay.next_state = awaiting_inputs_state();
 
-    let error = apply_scheduler_queue_transition(Some(&record), replay)
-        .expect_err("duplicate transition id must not hide different task intent");
+    let error = apply_scheduler_task_state_transition(Some(&record), replay)
+        .expect_err("duplicate transition id must not hide different next state");
 
     assert_eq!(
         error,
         SchedulerContractError::InvalidField {
-            field: "task_intent",
-            reason: "queue transition task intent must match persisted record"
+            field: "transition_id",
+            reason: "duplicate task-state transition id must replay the same next state"
         }
     );
 }
 
 #[test]
 fn next_transition_requires_matching_previous_state() {
-    let initial: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must decode");
-    let record = match apply_scheduler_queue_transition(None, initial)
-        .expect("initial transition must apply")
-    {
-        SchedulerQueueTransitionApplyResult::Applied(record) => record,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_) => {
-            panic!("first transition cannot be already applied")
-        }
-    };
-    let mut next_transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must decode");
-    next_transition.transition_id = "transition.002"
-        .parse()
-        .expect("test transition id must parse");
-    next_transition.expected_previous_state = Some(SchedulerQueueTaskState::Ready);
-    next_transition.next_state = SchedulerQueueTaskState::Running;
+    let record = task_record_with_state(awaiting_inputs_state());
+    let next_transition = task_transition_to(
+        Some(SchedulerTaskStateKind::Ready),
+        running_state(task_intent("run.001", "task.001")),
+    );
 
-    let error = apply_scheduler_queue_transition(Some(&record), next_transition)
+    let error = apply_scheduler_task_state_transition(Some(&record), next_transition)
         .expect_err("transition must match persisted state");
 
     assert_eq!(
         error,
         SchedulerContractError::InvalidField {
             field: "expected_previous_state",
-            reason: "queue transition previous state must match persisted task state"
+            reason: "task-state transition previous state must match persisted task state"
         }
     );
 }
 
 #[test]
 fn terminal_states_do_not_transition_to_running() {
-    let initial: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must decode");
-    let mut record = match apply_scheduler_queue_transition(None, initial)
-        .expect("initial transition must apply")
-    {
-        SchedulerQueueTransitionApplyResult::Applied(record) => record,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_) => {
-            panic!("first transition cannot be already applied")
-        }
-    };
-    record.state = SchedulerQueueTaskState::Completed;
-    record.state_version = 4;
-    record.last_transition_id = "transition.completed"
-        .parse()
-        .expect("test transition id must parse");
+    let current = task_record_with_state(completed_state(task_intent("run.001", "task.001")));
+    let next_transition = task_transition_to(
+        Some(SchedulerTaskStateKind::Completed),
+        running_state(task_intent("run.001", "task.001")),
+    );
 
-    let mut next_transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must decode");
-    next_transition.transition_id = "transition.after_completed"
-        .parse()
-        .expect("test transition id must parse");
-    next_transition.expected_previous_state = Some(SchedulerQueueTaskState::Completed);
-    next_transition.next_state = SchedulerQueueTaskState::Running;
-
-    let error = apply_scheduler_queue_transition(Some(&record), next_transition)
-        .expect_err("completed queue task must be terminal");
+    let error = apply_scheduler_task_state_transition(Some(&current), next_transition)
+        .expect_err("completed task state must be terminal");
 
     assert_eq!(
         error,
         SchedulerContractError::InvalidField {
             field: "next_state",
-            reason: "queue transition is not allowed from the previous state"
+            reason: "task-state transition is not allowed from the previous state"
         }
     );
 }
 
-fn queue_record_with_state(state: SchedulerQueueTaskState) -> SchedulerQueueTaskRecord {
-    let transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must decode");
-    let mut record = match apply_scheduler_queue_transition(None, transition)
-        .expect("initial transition must apply")
-    {
-        SchedulerQueueTransitionApplyResult::Applied(record) => record,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_) => {
-            panic!("first transition cannot be already applied")
+#[test]
+fn task_state_contract_allows_only_declared_transitions() {
+    for previous in all_task_state_kinds() {
+        for next in all_task_state_kinds() {
+            let current = task_record_with_state(state_for_kind(*previous));
+            let applied = apply_scheduler_task_state_transition(
+                Some(&current),
+                task_transition_to(Some(*previous), state_for_kind(*next)),
+            );
+            let allowed = allowed_next_states(*previous).contains(next);
+            assert_eq!(
+                applied.is_ok(),
+                allowed,
+                "transition from {previous:?} to {next:?} should be allowed={allowed}"
+            );
+            if let Ok(SchedulerTaskStateTransitionApplyResult::Applied(record)) = applied {
+                assert_eq!(record.state.kind(), *next);
+                assert_eq!(record.state_version, current.state_version + 1);
+            }
         }
-    };
-    record.state = state;
-    record.state_version = 7;
-    record.last_transition_id = "transition.existing"
-        .parse()
-        .expect("test transition id must parse");
-    record
+    }
 }
 
-fn queue_transition_to(
-    expected_previous_state: Option<SchedulerQueueTaskState>,
-    next_state: SchedulerQueueTaskState,
-) -> SchedulerQueueTransition {
-    let mut transition: SchedulerQueueTransition =
-        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
-            .expect("fixture must decode");
-    transition.transition_id = "transition.next"
-        .parse()
-        .expect("test transition id must parse");
-    transition.expected_previous_state = expected_previous_state;
-    transition.next_state = next_state;
-    transition
+#[test]
+fn task_state_transition_replay_is_idempotent_for_matching_transition_id() {
+    let current = task_record_with_state(ready_state(task_intent("run.001", "task.001")));
+    let replay = apply_scheduler_task_state_transition(
+        Some(&current),
+        SchedulerTaskStateTransition {
+            transition_id: current.last_transition_id.clone(),
+            next_state: current.state.clone(),
+            expected_previous_state: Some(SchedulerTaskStateKind::AwaitingInputs),
+            ..task_transition_to(
+                Some(SchedulerTaskStateKind::AwaitingInputs),
+                ready_state(task_intent("run.001", "task.001")),
+            )
+        },
+    )
+    .expect("matching transition id replay");
+
+    assert!(matches!(
+        replay,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_)
+    ));
 }
 
-fn all_queue_states() -> &'static [SchedulerQueueTaskState] {
-    use SchedulerQueueTaskState::{
-        Blocked, Completed, PausedDeferred, Pending, Ready, RetryableFailed, Running,
-        TerminalFailed, WaitingBatch, WaitingDependencyReadiness, WaitingResources,
+#[test]
+fn task_state_transition_rejects_stale_expected_previous_state() {
+    let current = task_record_with_state(ready_state(task_intent("run.001", "task.001")));
+    let error = apply_scheduler_task_state_transition(
+        Some(&current),
+        task_transition_to(
+            Some(SchedulerTaskStateKind::AwaitingInputs),
+            terminal_failed_state(),
+        ),
+    )
+    .expect_err("stale expected state must fail");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::InvalidField {
+            field: "expected_previous_state",
+            reason: "task-state transition previous state must match persisted task state"
+        }
+    );
+}
+
+fn task_record_with_state(state: SchedulerTaskState) -> SchedulerTaskStateRecord {
+    SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow.image_generation").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse("run.001").expect("run id"),
+        node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+        task_id: SchedulerTaskId::parse("task.001").expect("task id"),
+        state,
+        state_version: 7,
+        last_transition_id: SchedulerTaskStateTransitionId::parse("transition.existing")
+            .expect("test transition id must parse"),
+    }
+}
+
+fn task_transition_to(
+    expected_previous_state: Option<SchedulerTaskStateKind>,
+    next_state: SchedulerTaskState,
+) -> SchedulerTaskStateTransition {
+    SchedulerTaskStateTransition {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        transition_id: SchedulerTaskStateTransitionId::parse("transition.next")
+            .expect("test transition id must parse"),
+        workflow_id: SchedulerWorkflowId::parse("workflow.image_generation").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse("run.001").expect("run id"),
+        node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+        task_id: SchedulerTaskId::parse("task.001").expect("task id"),
+        expected_previous_state,
+        next_state,
+    }
+}
+
+fn all_task_state_kinds() -> &'static [SchedulerTaskStateKind] {
+    use SchedulerTaskStateKind::{
+        AwaitingInputs, Completed, InputUnavailable, Invalid, PausedDeferred, Ready,
+        RetryableFailed, Running, TerminalFailed, WaitingBatch, WaitingDependencyReadiness,
+        WaitingResources,
     };
 
     &[
-        Pending,
+        AwaitingInputs,
+        InputUnavailable,
+        Invalid,
         Ready,
-        Blocked,
         WaitingDependencyReadiness,
         WaitingResources,
         WaitingBatch,
@@ -249,26 +289,22 @@ fn all_queue_states() -> &'static [SchedulerQueueTaskState] {
     ]
 }
 
-fn allowed_queue_next_states(
-    previous: SchedulerQueueTaskState,
-) -> &'static [SchedulerQueueTaskState] {
-    use SchedulerQueueTaskState::{
-        Blocked, Completed, PausedDeferred, Pending, Ready, RetryableFailed, Running,
-        TerminalFailed, WaitingBatch, WaitingDependencyReadiness, WaitingResources,
+fn allowed_next_states(previous: SchedulerTaskStateKind) -> &'static [SchedulerTaskStateKind] {
+    use SchedulerTaskStateKind::{
+        AwaitingInputs, Completed, InputUnavailable, Invalid, PausedDeferred, Ready,
+        RetryableFailed, Running, TerminalFailed, WaitingBatch, WaitingDependencyReadiness,
+        WaitingResources,
     };
 
     match previous {
-        Pending => &[Ready, Blocked, WaitingDependencyReadiness, TerminalFailed],
+        AwaitingInputs => &[Ready, InputUnavailable, Invalid, TerminalFailed],
+        InputUnavailable => &[AwaitingInputs, TerminalFailed],
+        Invalid => &[TerminalFailed],
         Ready => &[
+            WaitingDependencyReadiness,
             WaitingResources,
             WaitingBatch,
             Running,
-            PausedDeferred,
-            TerminalFailed,
-        ],
-        Blocked => &[
-            WaitingDependencyReadiness,
-            Ready,
             PausedDeferred,
             TerminalFailed,
         ],
@@ -302,104 +338,106 @@ fn allowed_queue_next_states(
             WaitingBatch,
             TerminalFailed,
         ],
-        RetryableFailed => &[Pending, Ready, WaitingDependencyReadiness, TerminalFailed],
+        RetryableFailed => &[Ready, WaitingDependencyReadiness, TerminalFailed],
         TerminalFailed | Completed => &[],
-        _ => panic!("test matrix must be updated for new queue state: {previous:?}"),
+        _ => panic!("test matrix must be updated for new task state: {previous:?}"),
     }
 }
 
-#[test]
-fn queue_initial_transition_only_creates_pending_state() {
-    let applied = apply_scheduler_queue_transition(
-        None,
-        queue_transition_to(None, SchedulerQueueTaskState::Pending),
-    )
-    .expect("initial pending transition");
-
-    let SchedulerQueueTransitionApplyResult::Applied(record) = applied else {
-        panic!("initial transition must apply");
-    };
-    assert_eq!(record.state, SchedulerQueueTaskState::Pending);
-    assert_eq!(record.state_version, 1);
-
-    let error = apply_scheduler_queue_transition(
-        None,
-        queue_transition_to(None, SchedulerQueueTaskState::Ready),
-    )
-    .expect_err("initial non-pending transition must fail");
-
-    assert_eq!(
-        error,
-        SchedulerContractError::InvalidField {
-            field: "next_state",
-            reason: "initial queue transition must create pending state"
-        }
-    );
-}
-
-#[test]
-fn queue_contract_allows_only_declared_task_state_transitions() {
-    for previous in all_queue_states() {
-        for next in all_queue_states() {
-            let current = queue_record_with_state(*previous);
-            let applied = apply_scheduler_queue_transition(
-                Some(&current),
-                queue_transition_to(Some(*previous), *next),
-            );
-            let allowed = allowed_queue_next_states(*previous).contains(next);
-            assert_eq!(
-                applied.is_ok(),
-                allowed,
-                "transition from {previous:?} to {next:?} should be allowed={allowed}"
-            );
-            if let Ok(SchedulerQueueTransitionApplyResult::Applied(record)) = applied {
-                assert_eq!(record.state, *next);
-                assert_eq!(record.state_version, current.state_version + 1);
+fn state_for_kind(kind: SchedulerTaskStateKind) -> SchedulerTaskState {
+    let intent = task_intent("run.001", "task.001");
+    match kind {
+        SchedulerTaskStateKind::AwaitingInputs => awaiting_inputs_state(),
+        SchedulerTaskStateKind::InputUnavailable => SchedulerTaskState::InputUnavailable {
+            diagnostics: diagnostics(),
+        },
+        SchedulerTaskStateKind::Invalid => SchedulerTaskState::Invalid {
+            diagnostics: diagnostics(),
+        },
+        SchedulerTaskStateKind::Ready => ready_state(intent),
+        SchedulerTaskStateKind::WaitingDependencyReadiness => {
+            SchedulerTaskState::WaitingDependencyReadiness {
+                task_intent: intent,
             }
         }
+        SchedulerTaskStateKind::WaitingResources => SchedulerTaskState::WaitingResources {
+            task_intent: intent,
+        },
+        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch {
+            task_intent: intent,
+        },
+        SchedulerTaskStateKind::Running => running_state(intent),
+        SchedulerTaskStateKind::PausedDeferred => SchedulerTaskState::PausedDeferred {
+            task_intent: intent,
+            diagnostics: diagnostics(),
+        },
+        SchedulerTaskStateKind::RetryableFailed => SchedulerTaskState::RetryableFailed {
+            task_intent: intent,
+            diagnostics: diagnostics(),
+        },
+        SchedulerTaskStateKind::TerminalFailed => terminal_failed_state(),
+        SchedulerTaskStateKind::Completed => completed_state(intent),
+        _ => panic!("test helper must be updated for new task state: {kind:?}"),
     }
 }
 
-#[test]
-fn queue_transition_replay_is_idempotent_for_matching_transition_id() {
-    let current = queue_record_with_state(SchedulerQueueTaskState::Ready);
-    let replay = apply_scheduler_queue_transition(
-        Some(&current),
-        SchedulerQueueTransition {
-            transition_id: current.last_transition_id.clone(),
-            next_state: current.state,
-            expected_previous_state: Some(SchedulerQueueTaskState::Pending),
-            ..queue_transition_to(
-                Some(SchedulerQueueTaskState::Pending),
-                SchedulerQueueTaskState::Ready,
-            )
-        },
-    )
-    .expect("matching transition id replay");
-
-    assert!(matches!(
-        replay,
-        SchedulerQueueTransitionApplyResult::AlreadyApplied(_)
-    ));
+fn awaiting_inputs_state() -> SchedulerTaskState {
+    SchedulerTaskState::AwaitingInputs {
+        diagnostics: Vec::new(),
+    }
 }
 
-#[test]
-fn queue_transition_rejects_stale_expected_previous_state() {
-    let current = queue_record_with_state(SchedulerQueueTaskState::Ready);
-    let error = apply_scheduler_queue_transition(
-        Some(&current),
-        queue_transition_to(
-            Some(SchedulerQueueTaskState::Pending),
-            SchedulerQueueTaskState::TerminalFailed,
-        ),
-    )
-    .expect_err("stale expected state must fail");
+fn ready_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
+    SchedulerTaskState::Ready { task_intent }
+}
 
-    assert_eq!(
-        error,
-        SchedulerContractError::InvalidField {
-            field: "expected_previous_state",
-            reason: "queue transition previous state must match persisted task state"
-        }
-    );
+fn running_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
+    SchedulerTaskState::Running { task_intent }
+}
+
+fn completed_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
+    SchedulerTaskState::Completed { task_intent }
+}
+
+fn terminal_failed_state() -> SchedulerTaskState {
+    SchedulerTaskState::TerminalFailed {
+        diagnostics: diagnostics(),
+    }
+}
+
+fn diagnostics() -> Vec<SchedulerTaskStateDiagnostic> {
+    vec![SchedulerTaskStateDiagnostic {
+        severity: SchedulerTaskStateDiagnosticSeverity::Error,
+        code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+        message: "test scheduler diagnostic".to_string(),
+        hint: None,
+    }]
+}
+
+fn task_intent(workflow_run_id: &str, task_id: &str) -> SchedulableTaskIntent {
+    SchedulableTaskIntent {
+        contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow.image_generation").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+        node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+        fairness_key: Some("user.local".parse().expect("fairness key")),
+        task_type: DependencyTaskId::parse("image_generation").expect("task type"),
+        model_ref: PumasModelRef {
+            model_id: "pumas://models/juggernaut-xl-v10".to_string(),
+            revision: None,
+            selected_artifact_id: Some("artifact.diffusers.bundle".to_string()),
+            selected_artifact_path: Some(
+                "pumas://artifacts/juggernaut-xl-v10/diffusers".to_string(),
+            ),
+            migration_diagnostics: Vec::new(),
+        },
+        constraints: SchedulerRuntimeDeviceConstraints {
+            requested_runtime_id: Some("diffusers-pytorch".parse().expect("runtime id")),
+            requested_device_id: Some("cuda:0".parse().expect("device id")),
+        },
+        trait_settings: Vec::new(),
+        dependency_override_patches: Vec::new(),
+        estimate_hints: Vec::new(),
+    }
 }

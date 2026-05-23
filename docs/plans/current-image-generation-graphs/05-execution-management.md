@@ -9815,6 +9815,48 @@ Worker rules:
   - Verification passed for this docs-only standards pass: `git diff --check`
     against the three touched plan files. No source implementation changed,
     and no commit was created.
+- 2026-05-23 Milestone 5c phase-aware scheduler task-state replacement slice
+  completed:
+  - Smallest useful vertical slice: replace the intent-required scheduler
+    queue record/transition contract with phase-aware durable task-state
+    records and transitions, then update active-run storage and path-free read
+    models to consume the new state shape.
+  - Allowed write set: `pantograph-scheduler` queue/task-state contract,
+    lifecycle import/tests, fixtures, README files;
+    `pantograph-workflow-service` active-run scheduler task-state
+    storage/read-model tests; and current plan notes.
+  - No-fallback confirmation: removed old scheduler queue record/transition
+    source symbols, fixtures, exports, and tests instead of adding aliases or
+    compatibility shims. Pre-intent states do not synthesize
+    `SchedulableTaskIntent`; invalid/unavailable/terminal states carry typed
+    diagnostics.
+  - Implementation notes: added `SchedulerTaskState` variants for
+    awaiting-inputs, input-unavailable, invalid, ready,
+    waiting-dependency-readiness, waiting-resources, waiting-batch, running,
+    paused-deferred, retryable-failed, terminal-failed, and completed. Durable
+    records now carry state-specific payloads, state version, and transition
+    id; schedulable states carry the strict path-free task intent, while
+    pre-intent and terminal diagnostic states do not.
+  - Focused tests/fixtures: replaced the old queue transition fixture with
+    `task_state_transition_ready.json`; added scheduler transition coverage
+    for pre-intent states, diagnostics requirements, idempotent replay,
+    duplicate transition ids, terminal closure, stale previous state
+    rejection, and path-shaped field rejection. Workflow-service read models
+    now verify pre-intent records expose optional task/model/runtime/device
+    fields without internal scheduler payloads.
+  - Verification passed: `cargo test -p pantograph-scheduler --test
+    queue_state`; `cargo test -p pantograph-scheduler --test task_lifecycle`;
+    `cargo test -p pantograph-workflow-service scheduler::store::tests
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow::tests::task_state_read_model --lib`; `cargo check -p
+    pantograph-scheduler`; `cargo check -p pantograph-scheduler
+    --all-features`; `cargo check -p pantograph-scheduler
+    --no-default-features`; `cargo check -p pantograph-workflow-service`;
+    `cargo check -p pantograph-workflow-service --all-features`; and `cargo
+    check -p pantograph-workflow-service --no-default-features`.
+  - Remaining follow-up: full graph-editor/run-inspection task-state views
+    still need immutable task-definition joins, waiting reasons, timing,
+    attempts, and ledger-backed diagnostics from the orchestrator slices.
 
 ### Traceability Links
 

@@ -17,7 +17,7 @@ graph editing, node execution, frontend adapters, or runtime hosts.
 | `dispatch.rs` | Scheduler-selected runtime/device/model/reservation/batch execution decision contract. |
 | `handoff.rs` | Runtime-host handoff envelope that carries readiness proof and optional dispatch decision. |
 | `resource.rs` | Platform-neutral resource observation, residency, reservation, and fit contracts. |
-| `queue.rs` | Durable task queue state and idempotent transition replay contract. |
+| `queue.rs` | Durable phase-aware task state and idempotent transition replay contract. |
 | `lifecycle.rs` and `supervision.rs` | User-facing lifecycle diagnostics and scheduler service ownership contracts. |
 
 ## Problem
@@ -60,7 +60,7 @@ change behind stable typed contracts.
   policy and it must not contain local paths or executable Pumas load targets.
 - `SchedulerRuntimeHandoff` may carry dispatch facts only through
   `SchedulerDispatchDecision`.
-- Readiness proof, queue state, resource snapshots, batching decisions, and
+- Readiness proof, task state, resource snapshots, batching decisions, and
   lifecycle diagnostics are separate contracts; none of them may silently stand
   in for another.
 - Runtime choices from a graph are hard constraints only when explicitly

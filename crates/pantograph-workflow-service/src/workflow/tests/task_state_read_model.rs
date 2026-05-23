@@ -1,10 +1,10 @@
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerNodeId, SchedulerQueueTaskRecord, SchedulerQueueTaskState,
-    SchedulerQueueTransitionId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId,
-    SchedulerTraitId, SchedulerTraitSetting, SchedulerTraitValue, SchedulerWorkflowId,
-    SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-    SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+    SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId,
+    SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransitionId, SchedulerTraitId, SchedulerTraitSetting, SchedulerTraitValue,
+    SchedulerWorkflowId, SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+    SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 
 use super::*;
@@ -12,44 +12,63 @@ use super::*;
 fn scheduler_record(
     workflow_run_id: &str,
     task_id: &str,
-    state: SchedulerQueueTaskState,
-) -> SchedulerQueueTaskRecord {
-    SchedulerQueueTaskRecord {
-        contract_version: SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+    state: SchedulerTaskStateKind,
+) -> SchedulerTaskStateRecord {
+    let intent = SchedulableTaskIntent {
+        contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
         workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
         workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
         node_id: SchedulerNodeId::parse(task_id).expect("node id"),
         task_id: SchedulerTaskId::parse(task_id).expect("task id"),
-        task_intent: SchedulableTaskIntent {
-            contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-            workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
-            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
-            node_id: SchedulerNodeId::parse(task_id).expect("node id"),
-            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
-            fairness_key: None,
-            task_type: DependencyTaskId::parse("image_generation").expect("task type"),
-            model_ref: PumasModelRef {
-                model_id: "image/example/tiny-diffusion".to_string(),
-                revision: None,
-                selected_artifact_id: Some("diffusers-bundle".to_string()),
-                selected_artifact_path: None,
-                migration_diagnostics: Vec::new(),
-            },
-            constraints: SchedulerRuntimeDeviceConstraints {
-                requested_runtime_id: Some("diffusers-pytorch".parse().expect("runtime id")),
-                requested_device_id: Some("cuda:0".parse().expect("device id")),
-            },
-            trait_settings: vec![SchedulerTraitSetting {
-                trait_id: SchedulerTraitId::parse("denoising_scheduler").expect("trait id"),
-                value: SchedulerTraitValue::String("euler".to_string()),
-            }],
-            dependency_override_patches: Vec::new(),
-            estimate_hints: Vec::new(),
+        fairness_key: None,
+        task_type: DependencyTaskId::parse("image_generation").expect("task type"),
+        model_ref: PumasModelRef {
+            model_id: "image/example/tiny-diffusion".to_string(),
+            revision: None,
+            selected_artifact_id: Some("diffusers-bundle".to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
         },
-        state,
+        constraints: SchedulerRuntimeDeviceConstraints {
+            requested_runtime_id: Some("diffusers-pytorch".parse().expect("runtime id")),
+            requested_device_id: Some("cuda:0".parse().expect("device id")),
+        },
+        trait_settings: vec![SchedulerTraitSetting {
+            trait_id: SchedulerTraitId::parse("denoising_scheduler").expect("trait id"),
+            value: SchedulerTraitValue::String("euler".to_string()),
+        }],
+        dependency_override_patches: Vec::new(),
+        estimate_hints: Vec::new(),
+    };
+    SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+        node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+        state: state_with_intent(state, intent),
         state_version: 3,
-        last_transition_id: SchedulerQueueTransitionId::parse("transition-ready")
+        last_transition_id: SchedulerTaskStateTransitionId::parse("transition-ready")
             .expect("transition id"),
+    }
+}
+
+fn state_with_intent(
+    state: SchedulerTaskStateKind,
+    task_intent: SchedulableTaskIntent,
+) -> SchedulerTaskState {
+    match state {
+        SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready { task_intent },
+        SchedulerTaskStateKind::WaitingDependencyReadiness => {
+            SchedulerTaskState::WaitingDependencyReadiness { task_intent }
+        }
+        SchedulerTaskStateKind::WaitingResources => {
+            SchedulerTaskState::WaitingResources { task_intent }
+        }
+        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch { task_intent },
+        SchedulerTaskStateKind::Running => SchedulerTaskState::Running { task_intent },
+        SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed { task_intent },
+        other => panic!("test helper expected schedulable state, got {other:?}"),
     }
 }
 
@@ -58,7 +77,7 @@ fn scheduler_task_state_read_model_projects_path_free_display_facts() {
     let read_models = workflow_scheduler_task_state_read_models(&[scheduler_record(
         "run-image-plan",
         "image-task",
-        SchedulerQueueTaskState::WaitingResources,
+        SchedulerTaskStateKind::WaitingResources,
     )])
     .expect("task state read model");
 
@@ -68,9 +87,12 @@ fn scheduler_task_state_read_model_projects_path_free_display_facts() {
     assert_eq!(read_model.workflow_run_id, "run-image-plan");
     assert_eq!(read_model.node_id, "image-task");
     assert_eq!(read_model.task_id, "image-task");
-    assert_eq!(read_model.task_type, "image_generation");
-    assert_eq!(read_model.model_id, "image/example/tiny-diffusion");
-    assert_eq!(read_model.state, SchedulerQueueTaskState::WaitingResources);
+    assert_eq!(read_model.task_type.as_deref(), Some("image_generation"));
+    assert_eq!(
+        read_model.model_id.as_deref(),
+        Some("image/example/tiny-diffusion")
+    );
+    assert_eq!(read_model.state, SchedulerTaskStateKind::WaitingResources);
     assert_eq!(
         read_model.requested_runtime_id.as_deref(),
         Some("diffusers-pytorch")
@@ -85,7 +107,7 @@ fn scheduler_task_state_read_model_does_not_expose_execution_internals() {
     let read_models = workflow_scheduler_task_state_read_models(&[scheduler_record(
         "run-image-plan",
         "image-task",
-        SchedulerQueueTaskState::Ready,
+        SchedulerTaskStateKind::Ready,
     )])
     .expect("task state read model");
     let serialized = serde_json::to_string(&read_models).expect("serialize read model");
@@ -96,6 +118,35 @@ fn scheduler_task_state_read_model_does_not_expose_execution_internals() {
     assert!(!serialized.contains("model_path"));
     assert!(!serialized.contains("local_load_path"));
     assert!(!serialized.contains("runtime_handoff"));
+}
+
+#[test]
+fn scheduler_task_state_read_model_supports_pre_intent_state() {
+    let record = SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse("run-image-plan").expect("run id"),
+        node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+        task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+        state: SchedulerTaskState::AwaitingInputs {
+            diagnostics: Vec::new(),
+        },
+        state_version: 1,
+        last_transition_id: SchedulerTaskStateTransitionId::parse("transition-awaiting-inputs")
+            .expect("transition id"),
+    };
+
+    let read_models =
+        workflow_scheduler_task_state_read_models(&[record]).expect("task state read model");
+
+    assert_eq!(read_models.len(), 1);
+    let read_model = &read_models[0];
+    assert_eq!(read_model.state, SchedulerTaskStateKind::AwaitingInputs);
+    assert_eq!(read_model.task_type, None);
+    assert_eq!(read_model.model_id, None);
+    assert_eq!(read_model.requested_runtime_id, None);
+    assert_eq!(read_model.requested_device_id, None);
+    assert!(read_model.trait_settings.is_empty());
 }
 
 #[tokio::test]
@@ -145,7 +196,7 @@ async fn scheduler_task_state_query_reads_active_run_records() {
                 vec![scheduler_record(
                     &workflow_run_id,
                     "image-task",
-                    SchedulerQueueTaskState::WaitingResources,
+                    SchedulerTaskStateKind::WaitingResources,
                 )],
             )
             .expect("set task records");
@@ -167,7 +218,7 @@ async fn scheduler_task_state_query_reads_active_run_records() {
     assert_eq!(response.tasks.len(), 1);
     assert_eq!(
         response.tasks[0].state,
-        SchedulerQueueTaskState::WaitingResources
+        SchedulerTaskStateKind::WaitingResources
     );
     assert_eq!(response.tasks[0].task_id, "image-task");
 }

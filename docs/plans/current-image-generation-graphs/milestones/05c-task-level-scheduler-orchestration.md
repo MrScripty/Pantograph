@@ -18,7 +18,7 @@ durable task orchestration path.
   correlation, dependencies, task kind, Pumas model refs, optional hard
   runtime/device constraints, typed trait settings, and estimate hints without
   local paths or executable Pumas load targets.
-- [ ] Replace the current intent-required `SchedulerQueueTaskRecord` and
+- [x] Replace the current intent-required `SchedulerQueueTaskRecord` and
   `SchedulerQueueTransition` contracts with phase-aware scheduler task-state
   records and transition APIs. The new scheduler-owned state contract must
   represent pre-intent tasks such as awaiting materialized inputs, invalid
@@ -537,3 +537,33 @@ durable task orchestration path.
   workflow graph bindings/templates into scheduler because that couples
   scheduler policy to graph composition. No source implementation changed in
   this planning update, and no commit was created.
+- 2026-05-23 phase-aware scheduler task-state replacement slice completed.
+  Smallest useful vertical slice: replace the scheduler crate's
+  intent-required durable queue record and transition contract with
+  `SchedulerTaskStateRecord`, `SchedulerTaskStateTransition`, and
+  `SchedulerTaskState` variants that distinguish pre-intent, schedulable, and
+  terminal diagnostic states. Allowed write set: `pantograph-scheduler`
+  task-state contract, lifecycle import/tests, scheduler README/fixtures;
+  workflow-service active-run task-state storage/read-model tests; and this
+  plan. No-fallback confirmation: old `SchedulerQueueTaskRecord`,
+  `SchedulerQueueTransition`, `SchedulerQueueTaskState`,
+  `ValidatedSchedulerQueue*`, `SCHEDULER_QUEUE_STATE_CONTRACT_VERSION`, and
+  `apply_scheduler_queue_transition` symbols were removed from source/tests
+  instead of being shimmed. Focused tests/fixtures now cover pre-intent states
+  without `SchedulableTaskIntent`, required diagnostics for invalid and
+  unavailable states, idempotent replay, terminal closure, and stale previous
+  state rejection. Workflow-service read models now accept pre-intent records
+  and expose optional task/model/runtime/device fields until a schedulable
+  intent exists. Verification passed: `cargo test -p pantograph-scheduler
+  --test queue_state`, `cargo test -p pantograph-scheduler --test
+  task_lifecycle`, `cargo test -p pantograph-workflow-service
+  scheduler::store::tests --lib`, `cargo test -p pantograph-workflow-service
+  workflow::tests::task_state_read_model --lib`, `cargo check -p
+  pantograph-scheduler`, `cargo check -p pantograph-scheduler
+  --all-features`, `cargo check -p pantograph-scheduler
+  --no-default-features`, `cargo check -p pantograph-workflow-service`,
+  `cargo check -p pantograph-workflow-service --all-features`, and `cargo
+  check -p pantograph-workflow-service --no-default-features`. Remaining
+  follow-up: the broader graph-editor diagnostics read model item stays open
+  because immutable task definition joins, timing/attempt fields, waiting
+  reasons, and ledger durability still need the orchestrator integration.
