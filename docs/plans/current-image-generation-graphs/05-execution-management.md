@@ -8807,6 +8807,28 @@ Worker rules:
   - Remaining follow-up: continue Milestone 5a with path-free schedulable task
     intent contracts in `pantograph-scheduler` and focused boundary validation
     tests.
+- 2026-05-22 Milestone 5a schedulable task intent contract slice completed:
+  - Smallest useful vertical slice: add a validated, path-free task intent DTO
+    for one ready workflow DAG node without adding queue execution behavior.
+  - Allowed write set: `Cargo.lock`, `crates/pantograph-scheduler/`, Milestone
+    5a plan notes, and this execution log.
+  - Implementation: split the scheduler crate into `ownership`, `intent`, and
+    `error` modules; added `SchedulableTaskIntent`,
+    `ValidatedSchedulableTaskIntent`, validated workflow/run/node/task/fairness
+    ids, optional hard runtime/device constraints, typed trait setting values,
+    bounded estimate hints, and serde fixture tests.
+  - No-fallback/no-legacy confirmation: top-level `model_path` is rejected at
+    the serde boundary; the scheduler intent contract carries Pumas model refs
+    and typed intent only. It does not expose executable Pumas load targets,
+    local load paths, `ModelDependencyRequest`, `ModelRefV2`, frontend
+    `modelPath`, or worker launch facts.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`, and
+    `cargo fmt -p pantograph-scheduler -- --check`.
+  - Remaining follow-up: continue Milestone 5a with backend-owned capability
+    hints for graph editor and option-provider consumers.
 
 ### Traceability Links
 

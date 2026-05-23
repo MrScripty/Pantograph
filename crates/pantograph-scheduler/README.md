@@ -9,7 +9,10 @@ ownership.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `src/lib.rs` | Public scheduler boundary contract version plus typed ownership enums for scheduler-owned capabilities and non-scheduler consumers. |
+| `src/lib.rs` | Curated public re-exports for scheduler boundary and task intent contracts. |
+| `src/intent.rs` | Path-free schedulable task intent contract, validated workflow/run/node/task ids, runtime/device constraints, typed trait settings, and bounded estimate hints. |
+| `src/ownership.rs` | Scheduler-owned capability and non-scheduler consumer ownership boundary enums. |
+| `tests/` | Public serde and validation contract tests with JSON fixtures. |
 
 ## Problem
 Pantograph workflows can pause between ready DAG tasks while concurrent users,
@@ -58,6 +61,11 @@ resolver behavior.
 - Legacy `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
   graph-visible `model_path`, and frontend `modelPath` paths are replacement
   targets, not compatibility contracts for this crate.
+- `SchedulableTaskIntent` must remain path-free. It may carry a canonical
+  `PumasModelRef`, optional hard runtime/device requirements, typed trait
+  settings, dependency override patches, and bounded estimate hints, but it
+  must not carry `model_path`, local load paths, executable Pumas load targets,
+  or worker launch details.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -81,38 +89,64 @@ runtime host boundaries.
 ```rust
 use pantograph_scheduler::{
     owner_for_capability, SchedulerBoundaryOwner, SchedulerOwnedCapability,
+    SchedulableTaskIntent, ValidatedSchedulableTaskIntent,
 };
 
 assert_eq!(
     owner_for_capability(SchedulerOwnedCapability::DispatchDecision),
     SchedulerBoundaryOwner::Scheduler
 );
+
+let fixture = r#"{
+  "contract_version": 1,
+  "workflow_id": "workflow.image_generation",
+  "workflow_run_id": "run.001",
+  "node_id": "node.llm_inference",
+  "task_id": "task.001",
+  "task_type": "image_generation",
+  "model_ref": { "model_id": "pumas://models/example" }
+}"#;
+
+let intent: SchedulableTaskIntent = serde_json::from_str(fixture)?;
+let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## API Consumer Contract
-- Inputs: scheduler-owned capability labels and non-scheduler consumer labels.
-- Outputs: the canonical owner for scheduler capabilities and explicit
-  deny-policy checks for non-scheduler consumers.
+- Inputs: scheduler-owned capability labels, non-scheduler consumer labels, and
+  raw `SchedulableTaskIntent` DTOs decoded from graph, IPC, saved-workflow, or
+  queue payloads.
+- Outputs: the canonical owner for scheduler capabilities, explicit deny-policy
+  checks for non-scheduler consumers, and `ValidatedSchedulableTaskIntent`
+  values for internal scheduler policy.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
-- Errors: this first boundary slice has no fallible public API. Later boundary
-  parsing and state transitions must return typed errors/diagnostics.
+- Errors: scheduler boundary validation returns `SchedulerContractError`.
+  Runtime scheduling, dependency, resource, and dispatch failures will be
+  represented by later typed diagnostics instead of string parsing.
 - Compatibility: `SCHEDULER_CONTRACT_VERSION` is the starting version for
-  persisted or transported scheduler DTOs. Breaking persisted shape changes
-  require migration planning.
+  persisted or transported scheduler DTOs.
+  `SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION` is the starting version for ready
+  DAG task intent. Breaking persisted shape changes require migration planning.
 
 ## Structured Producer Contract
 - Stable fields: `SCHEDULER_CONTRACT_VERSION`,
   `SchedulerOwnedCapability`, `SchedulerBoundaryConsumer`, and
-  `SchedulerBoundaryOwner` enum semantics.
+  `SchedulerBoundaryOwner` enum semantics; `SchedulableTaskIntent` field names,
+  task correlation ids, `PumasModelRef`, runtime/device constraint fields,
+  typed trait setting value kinds, and estimate hint kinds.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
+  Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
   belong to the scheduler boundary; consumer variants identify components that
-  may consume scheduler facts but not own policy.
+  may consume scheduler facts but not own policy. Estimate hint variants are
+  hints only; scheduler policy owns final resource admission.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
-  contracts expand; existing meanings must not be repurposed.
+  contracts expand; existing meanings must not be repurposed. New task trait
+  values must be added as typed enum variants or typed structs, not arbitrary
+  JSON maps.
 - Regeneration/migration: fixtures, bindings, adapters, and README content must
   update in the same slice when persisted scheduler DTOs are introduced or
   changed.

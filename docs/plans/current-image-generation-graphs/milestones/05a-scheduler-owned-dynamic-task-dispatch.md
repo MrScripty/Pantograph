@@ -18,7 +18,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   scheduler crate/module. Record allowed write sets and keep shared contracts,
   generated DTOs, fixtures, lockfiles, and plan files under serial integration
   ownership.
-- [ ] Define a path-free schedulable task intent contract for ready workflow
+- [x] Define a path-free schedulable task intent contract for ready workflow
   nodes. Include workflow/run/node/task correlation, user or fairness identity,
   task type, Pumas model ref, optional hard runtime/device constraints, typed
   trait/settings intent, dependency override intent, and bounded estimate
@@ -145,3 +145,20 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: define
   path-free schedulable task intent contracts in the scheduler crate without
   exposing local paths or executable Pumas load targets.
+- 2026-05-22 schedulable task intent contract slice completed. Smallest useful
+  vertical slice: add the path-free `SchedulableTaskIntent` DTO and validated
+  wrapper inside `pantograph-scheduler` without wiring queue execution.
+  Allowed write set: `Cargo.lock`, `crates/pantograph-scheduler/`, this
+  milestone file, and execution notes. No-fallback confirmation: the contract
+  carries `PumasModelRef`, optional hard runtime/device constraints, typed trait
+  settings, dependency override patches, and bounded estimate hints; it rejects
+  top-level `model_path` through the serde boundary and does not expose local
+  load paths, executable Pumas load targets, `ModelDependencyRequest`,
+  `ModelRefV2`, frontend `modelPath`, or worker launch facts. Verification
+  passed: `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`, and
+  `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: define
+  backend-owned capability hints for graph editor and option-provider
+  consumers without exposing final scheduler decisions.
