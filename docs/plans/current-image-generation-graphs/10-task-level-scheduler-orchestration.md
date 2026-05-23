@@ -132,7 +132,12 @@ but the ownership and data boundaries must remain explicit.
    in active-run state for the first orchestrator slices, but design the schema
    and validation so durable diagnostics-ledger persistence/replay can replace
    that storage later without changing graph, node-engine, scheduler, or
-   runtime-host contracts.
+   runtime-host contracts. Completed 2026-05-23 as a versioned and validated
+   workflow-service `WorkflowSchedulerTaskResult` contract plus focused staged
+   active-run scheduler task-result storage. The contract is path-free and
+   launch-free, rejects unknown path metadata, carries typed values and bounded
+   diagnostics, and leaves diagnostics-ledger replay as a storage replacement
+   rather than a second execution path.
 6. Add dependency-to-input binding resolution from materialized results. A
    runtime inference task becomes scheduler-admissible only when required
    typed values have been materialized into a valid `SchedulableTaskIntent`.

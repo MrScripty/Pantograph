@@ -15,6 +15,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 | `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, active-run scheduler task-state transition storage, and active-run finish transitions. |
+| `store_task_results.rs` | Staged active-run scheduler task-result storage used by Milestone 5c before durable diagnostics-ledger replay replaces the storage backend. |
 | `store_admission.rs` | Scheduler store admission ETA projection helper used by queue diagnostics. |
 | `store_diagnostics.rs` | Scheduler snapshot diagnostics and runtime-diagnostics request projection helpers extracted from the store. |
 | `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
@@ -79,6 +80,11 @@ Active-run scheduler task records now use `pantograph-scheduler` queue
 records and transition application for the Milestone 5c task-orchestration
 bridge. The store only persists validated task state for the admitted run; it
 does not choose task policy, execute nodes, or synthesize runtime handoff.
+Active-run scheduler task results are staged in a separate focused store
+module. They persist validated, path-free workflow task outputs for the
+admitted run only until the durable diagnostics-ledger replay slice replaces
+that storage; they are not a second scheduler policy model or runtime launch
+path.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.
@@ -131,6 +137,10 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   `pantograph-scheduler` queue contracts before storage. Workflow-service
   must not define a second task-state transition table or bypass scheduler
   transition validation.
+- Active-run scheduler task results must validate through
+  `WorkflowSchedulerTaskResult` before storage. The store may index staged
+  results by task id for the active run, but it must not store executable
+  paths, runtime handoff, Pumas load targets, or raw node-engine internals.
 - Dequeued-run records carry the scheduler session's required backend/model
   facts at admission time so workflow-service diagnostics can emit selected
   runtime and reserved model audit fields without rereading mutable graph

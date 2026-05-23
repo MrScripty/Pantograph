@@ -273,6 +273,7 @@ impl WorkflowExecutionSessionStore {
             scheduler_decision_reason,
             execution_plan: None,
             scheduler_task_records: Default::default(),
+            scheduler_task_results: Default::default(),
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {

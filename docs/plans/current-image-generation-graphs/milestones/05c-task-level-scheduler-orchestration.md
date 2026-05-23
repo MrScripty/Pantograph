@@ -35,7 +35,7 @@ durable task orchestration path.
   provide it. Frontend option-provider context must use scheduler constraint
   vocabulary and must not revive `backend_key` or `runtime_variant_id` as
   graph-visible scheduler policy.
-- [ ] Add the typed task result materialization contract and active-run result
+- [x] Add the typed task result materialization contract and active-run result
   storage before implementing the orchestrator. Results must represent
   scheduler-owned task outputs as typed values, including `PumasModelRef`,
   scalar settings, media/artifact refs, diagnostics, invalid/unavailable
@@ -296,3 +296,30 @@ durable task orchestration path.
   pantograph-uniffi --all-features`, `cargo check -p node-engine -p
   workflow-nodes -p pantograph-workflow-service -p pantograph-uniffi
   --no-default-features`, and `git diff --check`.
+- 2026-05-23: Typed task-result materialization and active-run storage slice
+  completed. `pantograph-workflow-service` now exposes the versioned,
+  validated `WorkflowSchedulerTaskResult` contract with typed output values
+  for `PumasModelRef`, scalar values, media artifact refs, diagnostic-only
+  outputs, bounded diagnostics, terminal metadata, and closed invalid or
+  unavailable status. The contract rejects unknown path or launch metadata and
+  contains no local model paths, Pumas load targets, runtime handoff, worker
+  launch details, or node-engine internals. The scheduler store now has a
+  focused staged active-run result storage module that validates result
+  correlation against the active workflow run and can be replaced by later
+  diagnostics-ledger replay without changing graph, node-engine, scheduler, or
+  runtime-host semantics. This preserves the no-fallback rule because
+  materialized outputs are explicit typed scheduler-owned facts, not
+  compatibility routes from graph-local paths or whole-workflow output demand.
+  Verification passed: `cargo test -p pantograph-workflow-service
+  workflow::tests::task_result_contracts --lib`, `cargo test -p
+  pantograph-workflow-service active_run_scheduler_task_results --lib`,
+  `cargo fmt -p pantograph-workflow-service -- --check`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+  --all-features`, `cargo check -p pantograph-workflow-service
+  --no-default-features`, and `git diff --check`. Verification deviation
+  fixed during the slice: the first focused compile used a non-existent
+  `QueueItemNotRunning` error variant; the store now uses the existing
+  `QueueItemNotFound` contract for no-active-run and wrong-active-run reads.
+  Remaining follow-up: implement dependency-to-input binding resolution from
+  materialized task results before the scheduler task orchestrator can admit
+  downstream runtime tasks.

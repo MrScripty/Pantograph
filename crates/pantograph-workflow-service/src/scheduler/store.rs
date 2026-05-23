@@ -10,7 +10,7 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOve
 use crate::workflow::{
     WorkflowCapabilityModel, WorkflowExecutionPlan, WorkflowLocalRunPlacementRecord,
     WorkflowLocalRunPlacementState, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowRuntimeIssue, WorkflowServiceError,
+    WorkflowRuntimeIssue, WorkflowSchedulerTaskResult, WorkflowServiceError,
 };
 
 use super::{
@@ -25,6 +25,8 @@ pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 mod store_diagnostics;
 #[path = "store_queue.rs"]
 mod store_queue;
+#[path = "store_task_results.rs"]
+mod store_task_results;
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowExecutionSessionQueuedRun {
@@ -52,6 +54,8 @@ struct WorkflowExecutionSessionActiveRun {
     // Milestone 5c stages task-state storage before the orchestrator consumes it.
     #[allow(dead_code)]
     scheduler_task_records: BTreeMap<String, SchedulerQueueTaskRecord>,
+    // Milestone 5c stages task-result storage before durable ledger replay.
+    scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
 }
 
 #[derive(Debug, Clone)]

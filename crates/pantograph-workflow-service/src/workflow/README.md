@@ -38,6 +38,7 @@ public exports out of the service crate.
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, optional schedulable task intents, and typed projection diagnostics. |
 | `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs and projection diagnostic enums re-exported through the workflow facade. |
+| `task_result_contracts.rs` | Public typed scheduler task-result DTOs used by task orchestration materialization before dependency binding resolution. |
 | `task_state_read_model.rs` | Presentation-neutral scheduler task-state projection from validated queue records for graph editor and run inspection consumers. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
@@ -208,6 +209,12 @@ facade test module.
   runtime/device constraints, and scheduler trait settings, but it must not
   read or preserve legacy `model_path`/`model_ref` identity or executable Pumas
   load targets.
+- Workflow scheduler task results are typed materialization records, not
+  execution launch records. `task_result_contracts.rs` may carry path-free
+  model refs, scalar values, media/artifact refs, status, bounded diagnostics,
+  and terminal metadata, but it must not carry local model paths, Pumas load
+  targets, worker launch details, runtime handoff, or raw node-engine
+  internals.
 - Workflow execution-plan DTOs are correct-by-construction: public builders and
   serde deserialization validate schema version, attribution ids, node ids,
   selected task/device facts, bounded diagnostic vectors, and policy trace ids.

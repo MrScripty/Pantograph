@@ -9592,6 +9592,40 @@ Worker rules:
     --no-default-features`, and `git diff --check`.
   - Remaining follow-up: typed task-result materialization and active-run
     result storage remain the next Milestone 5c implementation item.
+- 2026-05-23 Milestone 5c typed task-result materialization slice completed:
+  - Smallest useful vertical slice: add the workflow-service task-result
+    materialization contract and staged active-run result storage before
+    dependency binding resolution or orchestrator dispatch.
+  - Allowed write set: focused workflow-service task-result contract and
+    tests, narrow workflow-service exports/test registration, scheduler-store
+    active-run result storage module and initialization, scheduler/workflow
+    READMEs, Milestone 5c plan, task-level orchestration plan, and this
+    execution log.
+  - Implementation notes: added a versioned `WorkflowSchedulerTaskResult`
+    DTO with typed output values for `PumasModelRef`, strings, booleans,
+    signed/unsigned integers, media artifact refs, diagnostic-only outputs,
+    closed result status, bounded diagnostics, and terminal metadata. Added
+    focused staged active-run result storage APIs that validate result schema
+    and active workflow-run correlation.
+  - No-fallback/no-legacy confirmation: task results carry scheduler-owned
+    typed facts only. They do not carry local model paths, executable Pumas
+    load targets, runtime handoff, worker launch details, node-engine
+    internals, `ModelRefV2`, frontend `modelPath`, or reduced-plan launch
+    projections.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    workflow::tests::task_result_contracts --lib`, `cargo test -p
+    pantograph-workflow-service active_run_scheduler_task_results --lib`,
+    `cargo fmt -p pantograph-workflow-service -- --check`, `cargo check -p
+    pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+    --all-features`, `cargo check -p pantograph-workflow-service
+    --no-default-features`, and `git diff --check`.
+  - Verification deviation fixed: the first focused compile exposed a
+    non-existent `QueueItemNotRunning` error variant in the new staged store
+    module; the implementation now uses the existing `QueueItemNotFound`
+    contract for no-active-run and wrong-active-run cases.
+  - Remaining follow-up: dependency-to-input binding resolution from
+    materialized task results is the next Milestone 5c item before the
+    orchestrator can admit downstream runtime tasks.
 
 ### Traceability Links
 

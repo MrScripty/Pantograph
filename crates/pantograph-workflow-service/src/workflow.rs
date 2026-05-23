@@ -47,6 +47,7 @@ mod session_runtime;
 mod session_runtime_load_lifecycle;
 mod task_graph;
 mod task_graph_contracts;
+mod task_result_contracts;
 mod task_state_read_model;
 mod validation;
 mod workflow_run_api;
@@ -109,6 +110,14 @@ pub use self::task_graph_contracts::{
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+};
+pub use self::task_result_contracts::{
+    WorkflowSchedulerTaskMediaArtifactRef, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskResultDiagnostic, WorkflowSchedulerTaskResultDiagnosticSeverity,
+    WorkflowSchedulerTaskResultError, WorkflowSchedulerTaskResultOutput,
+    WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultTerminalMetadata,
+    WorkflowSchedulerTaskResultValue, WORKFLOW_SCHEDULER_TASK_RESULT_MAX_DIAGNOSTICS,
+    WORKFLOW_SCHEDULER_TASK_RESULT_MAX_OUTPUTS, WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
 };
 pub use self::task_state_read_model::{
     workflow_scheduler_task_state_read_models, WorkflowSchedulerTaskStateReadModel,
