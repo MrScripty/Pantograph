@@ -131,3 +131,15 @@ durable task orchestration path.
   no-default-features checks. Deviation/follow-up:
   `#[allow(dead_code)]` is scoped to the staged task-state bridge until the
   Milestone 5c orchestrator slice consumes these store APIs in production.
+- 2026-05-23: Third implementation slice strengthened the canonical
+  scheduler queue-state contract coverage. `pantograph-scheduler` now has an
+  exhaustive public integration test matrix proving each declared
+  `SchedulerQueueTaskState` transition is accepted or rejected by
+  `apply_scheduler_queue_transition`, including initial-state creation,
+  terminal-state closure, stale expected-state rejection, and idempotent replay.
+  This keeps the state machine in the scheduler crate and does not add any
+  workflow-service or node-engine fallback behavior. Verification passed:
+  `cargo test -p pantograph-scheduler --test queue_state`,
+  `cargo check -p pantograph-scheduler`, `cargo check -p pantograph-scheduler
+  --all-features`, and `cargo check -p pantograph-scheduler
+  --no-default-features`.

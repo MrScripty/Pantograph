@@ -1,6 +1,6 @@
 use pantograph_scheduler::{
-    apply_scheduler_queue_transition, SchedulerContractError, SchedulerQueueTaskState,
-    SchedulerQueueTransition, SchedulerQueueTransitionApplyResult,
+    apply_scheduler_queue_transition, SchedulerContractError, SchedulerQueueTaskRecord,
+    SchedulerQueueTaskState, SchedulerQueueTransition, SchedulerQueueTransitionApplyResult,
     ValidatedSchedulerQueueTaskRecord, ValidatedSchedulerQueueTransition,
     SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
 };
@@ -189,6 +189,217 @@ fn terminal_states_do_not_transition_to_running() {
         SchedulerContractError::InvalidField {
             field: "next_state",
             reason: "queue transition is not allowed from the previous state"
+        }
+    );
+}
+
+fn queue_record_with_state(state: SchedulerQueueTaskState) -> SchedulerQueueTaskRecord {
+    let transition: SchedulerQueueTransition =
+        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
+            .expect("fixture must decode");
+    let mut record = match apply_scheduler_queue_transition(None, transition)
+        .expect("initial transition must apply")
+    {
+        SchedulerQueueTransitionApplyResult::Applied(record) => record,
+        SchedulerQueueTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("first transition cannot be already applied")
+        }
+    };
+    record.state = state;
+    record.state_version = 7;
+    record.last_transition_id = "transition.existing"
+        .parse()
+        .expect("test transition id must parse");
+    record
+}
+
+fn queue_transition_to(
+    expected_previous_state: Option<SchedulerQueueTaskState>,
+    next_state: SchedulerQueueTaskState,
+) -> SchedulerQueueTransition {
+    let mut transition: SchedulerQueueTransition =
+        serde_json::from_str(include_str!("fixtures/queue_transition_pending.json"))
+            .expect("fixture must decode");
+    transition.transition_id = "transition.next"
+        .parse()
+        .expect("test transition id must parse");
+    transition.expected_previous_state = expected_previous_state;
+    transition.next_state = next_state;
+    transition
+}
+
+fn all_queue_states() -> &'static [SchedulerQueueTaskState] {
+    use SchedulerQueueTaskState::{
+        Blocked, Completed, PausedDeferred, Pending, Ready, RetryableFailed, Running,
+        TerminalFailed, WaitingBatch, WaitingDependencyReadiness, WaitingResources,
+    };
+
+    &[
+        Pending,
+        Ready,
+        Blocked,
+        WaitingDependencyReadiness,
+        WaitingResources,
+        WaitingBatch,
+        Running,
+        PausedDeferred,
+        RetryableFailed,
+        TerminalFailed,
+        Completed,
+    ]
+}
+
+fn allowed_queue_next_states(
+    previous: SchedulerQueueTaskState,
+) -> &'static [SchedulerQueueTaskState] {
+    use SchedulerQueueTaskState::{
+        Blocked, Completed, PausedDeferred, Pending, Ready, RetryableFailed, Running,
+        TerminalFailed, WaitingBatch, WaitingDependencyReadiness, WaitingResources,
+    };
+
+    match previous {
+        Pending => &[Ready, Blocked, WaitingDependencyReadiness, TerminalFailed],
+        Ready => &[
+            WaitingResources,
+            WaitingBatch,
+            Running,
+            PausedDeferred,
+            TerminalFailed,
+        ],
+        Blocked => &[
+            WaitingDependencyReadiness,
+            Ready,
+            PausedDeferred,
+            TerminalFailed,
+        ],
+        WaitingDependencyReadiness => &[Ready, PausedDeferred, RetryableFailed, TerminalFailed],
+        WaitingResources => &[
+            Ready,
+            WaitingBatch,
+            Running,
+            PausedDeferred,
+            RetryableFailed,
+            TerminalFailed,
+        ],
+        WaitingBatch => &[
+            Ready,
+            Running,
+            PausedDeferred,
+            RetryableFailed,
+            TerminalFailed,
+        ],
+        Running => &[
+            Completed,
+            RetryableFailed,
+            TerminalFailed,
+            PausedDeferred,
+            WaitingResources,
+        ],
+        PausedDeferred => &[
+            Ready,
+            WaitingDependencyReadiness,
+            WaitingResources,
+            WaitingBatch,
+            TerminalFailed,
+        ],
+        RetryableFailed => &[Pending, Ready, WaitingDependencyReadiness, TerminalFailed],
+        TerminalFailed | Completed => &[],
+        _ => panic!("test matrix must be updated for new queue state: {previous:?}"),
+    }
+}
+
+#[test]
+fn queue_initial_transition_only_creates_pending_state() {
+    let applied = apply_scheduler_queue_transition(
+        None,
+        queue_transition_to(None, SchedulerQueueTaskState::Pending),
+    )
+    .expect("initial pending transition");
+
+    let SchedulerQueueTransitionApplyResult::Applied(record) = applied else {
+        panic!("initial transition must apply");
+    };
+    assert_eq!(record.state, SchedulerQueueTaskState::Pending);
+    assert_eq!(record.state_version, 1);
+
+    let error = apply_scheduler_queue_transition(
+        None,
+        queue_transition_to(None, SchedulerQueueTaskState::Ready),
+    )
+    .expect_err("initial non-pending transition must fail");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::InvalidField {
+            field: "next_state",
+            reason: "initial queue transition must create pending state"
+        }
+    );
+}
+
+#[test]
+fn queue_contract_allows_only_declared_task_state_transitions() {
+    for previous in all_queue_states() {
+        for next in all_queue_states() {
+            let current = queue_record_with_state(*previous);
+            let applied = apply_scheduler_queue_transition(
+                Some(&current),
+                queue_transition_to(Some(*previous), *next),
+            );
+            let allowed = allowed_queue_next_states(*previous).contains(next);
+            assert_eq!(
+                applied.is_ok(),
+                allowed,
+                "transition from {previous:?} to {next:?} should be allowed={allowed}"
+            );
+            if let Ok(SchedulerQueueTransitionApplyResult::Applied(record)) = applied {
+                assert_eq!(record.state, *next);
+                assert_eq!(record.state_version, current.state_version + 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn queue_transition_replay_is_idempotent_for_matching_transition_id() {
+    let current = queue_record_with_state(SchedulerQueueTaskState::Ready);
+    let replay = apply_scheduler_queue_transition(
+        Some(&current),
+        SchedulerQueueTransition {
+            transition_id: current.last_transition_id.clone(),
+            next_state: current.state,
+            expected_previous_state: Some(SchedulerQueueTaskState::Pending),
+            ..queue_transition_to(
+                Some(SchedulerQueueTaskState::Pending),
+                SchedulerQueueTaskState::Ready,
+            )
+        },
+    )
+    .expect("matching transition id replay");
+
+    assert!(matches!(
+        replay,
+        SchedulerQueueTransitionApplyResult::AlreadyApplied(_)
+    ));
+}
+
+#[test]
+fn queue_transition_rejects_stale_expected_previous_state() {
+    let current = queue_record_with_state(SchedulerQueueTaskState::Ready);
+    let error = apply_scheduler_queue_transition(
+        Some(&current),
+        queue_transition_to(
+            Some(SchedulerQueueTaskState::Pending),
+            SchedulerQueueTaskState::TerminalFailed,
+        ),
+    )
+    .expect_err("stale expected state must fail");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::InvalidField {
+            field: "expected_previous_state",
+            reason: "queue transition previous state must match persisted task state"
         }
     );
 }

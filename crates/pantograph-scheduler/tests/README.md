@@ -13,9 +13,13 @@ scheduler-owned boundary before runtime execution is wired.
 | `schedulable_task_intent.rs` | Path-free task intent validation and legacy field rejection tests. |
 | `capability_hint.rs` | Graph/editor capability hint availability and diagnostic validation tests. |
 | `readiness_admission.rs` | Scheduler dependency readiness admission and policy mapping tests. |
+| `queue_state.rs` | Durable queue-state validation, idempotent replay, legacy path rejection, and exhaustive transition matrix tests. |
 | `dispatch_decision.rs` | Runtime/device/model/reservation/batch dispatch decision contract tests. |
+| `runtime_handoff.rs` | Runtime-host handoff validation and path-free dispatch envelope tests. |
 | `resource_residency.rs` | Platform-neutral resource observation and fit validation tests. |
 | `batching_policy.rs` | Cross-workflow task compatibility and batch rejection tests. |
+| `task_lifecycle.rs` | Backend-owned task lifecycle diagnostic compatibility tests. |
+| `lifecycle_supervision.rs` | Scheduler lifecycle owner and bounded component supervision tests. |
 
 ## Problem
 The scheduler contracts are consumed across queue storage, graph/editor hints,

@@ -9440,6 +9440,27 @@ Worker rules:
     Milestone 5c orchestrator and currently carry scoped `#[allow(dead_code)]`
     markers. The next orchestrator/storage slice must consume or remove those
     markers instead of leaving a long-term unused API.
+- 2026-05-23 Milestone 5c scheduler queue transition coverage slice
+  completed:
+  - Smallest useful vertical slice: prove the canonical scheduler task-state
+    transition contract covers every state named by Milestone 5c before
+    workflow-service durable replay and orchestrator consumption expand.
+  - Allowed write set: `crates/pantograph-scheduler/tests/queue_state.rs`,
+    `crates/pantograph-scheduler/tests/README.md`, the Milestone 5c plan,
+    the task-orchestration design note, and this execution log.
+  - Implementation notes: queue-state integration tests now cover the full
+    `SchedulerQueueTaskState` matrix, initial pending creation, terminal-state
+    closure, stale expected-state rejection, and idempotent replay through the
+    public scheduler API.
+  - No-fallback/no-legacy confirmation: this slice keeps the state machine in
+    `pantograph-scheduler`, adds no node-engine or workflow-service execution
+    branch, and does not synthesize runtime handoff, model paths, or Pumas load
+    targets from task state.
+  - Verification passed: `cargo test -p pantograph-scheduler --test
+    queue_state`, `cargo check -p pantograph-scheduler`, `cargo check -p
+    pantograph-scheduler --all-features`, `cargo check -p pantograph-scheduler
+    --no-default-features`, `cargo fmt -p pantograph-scheduler -- --check`,
+    and `git diff --check`.
 
 ### Traceability Links
 

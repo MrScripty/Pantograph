@@ -106,7 +106,9 @@ but the ownership and data boundaries must remain explicit.
 2. Add durable task state records and transition tests for pending, ready,
    blocked, waiting for dependency readiness, waiting for resources, waiting
    for batch, running, paused/deferred, retryable failed, terminal failed, and
-   completed.
+   completed. Queue-state transition coverage completed 2026-05-23 in the
+   scheduler crate; durable workflow-service persistence, replay, diagnostics
+   ledger projection, and orchestrator consumption remain staged work.
 3. Add task-state read models and diagnostics projection for graph editor and
    run inspection.
 4. Add the scheduler task orchestrator with a synchronous policy core and an
