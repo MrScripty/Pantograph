@@ -244,16 +244,18 @@ optimistic backend-owned readiness.
 1. Establish the scheduler ownership boundary and crate/module placement,
    including which shared contracts remain serial integration-owner work.
 2. Define capability hint and schedulable task intent contracts.
-3. Replace dependency preflight output with typed readiness proof, not
+3. Add scheduler-owned readiness admission and the non-legacy runtime handoff
+   seam that runtime hosts will consume.
+4. Replace dependency preflight output with typed readiness proof, not
    `ModelRefV2`.
-4. Add scheduler queue state and typed task lifecycle diagnostics.
-5. Add dispatch decision contract and host handoff shape.
-6. Move dependency readiness policy into scheduler-owned admission/dispatch.
-7. Add resource/residency snapshot admission and reservation ids behind the
+5. Add scheduler queue state and typed task lifecycle diagnostics.
+6. Add dispatch decision contract and host handoff shape.
+7. Move dependency readiness policy into scheduler-owned admission/dispatch.
+8. Add resource/residency snapshot admission and reservation ids behind the
    platform-neutral observer abstraction.
-8. Add batching policy surface for compatible ready tasks across workflows.
-9. Wire runtime host execution through dispatch decisions.
-10. Delete retired resolver/path contracts and successful legacy fixtures.
+9. Add batching policy surface for compatible ready tasks across workflows.
+10. Wire runtime host execution through dispatch decisions.
+11. Delete retired resolver/path contracts and successful legacy fixtures.
 
 ## Legacy Removal Targets
 
@@ -310,3 +312,45 @@ add compatibility shims or alternate successful branches.
   trait and thin OS modules.
 - Queue recovery cannot be made idempotent without changing persisted contract
   shape or ledger semantics.
+
+## Known Forward Boundaries Before Milestone 8
+
+These are expected design checkpoints. They are not permission to add fallback
+branches or preserve retired systems.
+
+- **Readiness admission ordering:** replacing node-engine preflight directly
+  would either break the current runtime input path or require converting back
+  into `ModelRefV2`. Use the selected Option 3 ordering: add
+  scheduler-owned readiness admission and a non-legacy runtime handoff seam
+  first, then delete `ModelRefV2` preflight production.
+- **Scheduler queue persistence:** durable task state must have one owner. If
+  existing ledger tables cannot represent replayable queue state without
+  overloading diagnostics, create scheduler-owned persistence instead of
+  storing operational queue state as incidental metadata.
+- **Resource observation and reservations:** platform collectors must remain
+  behind a neutral observer contract with Linux, Windows, and macOS modules.
+  If admission-time snapshots are not enough for concurrent runtime execution,
+  re-plan the real-time observer upgrade without changing graph/editor
+  contracts.
+- **Dependency readiness ownership:** dependency check/install/defer/fail
+  policy must move under scheduler admission. If an existing host API can only
+  return `ModelDependencyRequest`, `ModelRefV2`, or executable paths, replace
+  that API rather than bridging through it.
+- **Runtime host load-target resolution:** Pumas-approved executable paths may
+  be resolved only by the runtime host that needs them. If inference or worker
+  APIs require paths earlier than dispatch, re-plan the host request shape
+  rather than passing paths through node-engine or graph contracts.
+- **Batching and fairness:** batching must work across concurrent workflow
+  runs and task pauses. If the existing execution loop assumes whole-workflow
+  uninterrupted execution, re-plan queue/dispatch ownership instead of making
+  batching graph-visible.
+- **Capability hint projection:** graph editor option providers may show
+  possible, unavailable, not-installed, or not-implemented choices, but not
+  final dispatch decisions. If existing option-provider APIs cannot express
+  disabled typed options, replace the projection contract rather than adding
+  frontend inference.
+- **Milestone 8 validation environment:** release validation needs
+  deterministic fixtures and explicit local environment assumptions for Pumas,
+  managed runtimes, resource collectors, and smoke workflows. If those
+  assumptions are missing, record them and re-plan the validation harness
+  instead of accepting nondeterministic release checks.

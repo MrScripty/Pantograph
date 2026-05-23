@@ -8870,6 +8870,27 @@ Worker rules:
     `ModelRefV2`; after that seam exists, replace node-engine preflight output
     and delete the legacy resolver/model-ref production path instead of
     adapting it.
+- 2026-05-22 Milestone 5a re-plan decision:
+  - Decision: use Option 3. Insert scheduler-owned readiness admission and a
+    non-legacy runtime handoff seam before replacing node-engine dependency
+    preflight output.
+  - Smallest next useful vertical slice: define readiness admission contracts
+    from validated `SchedulableTaskIntent` to typed ready/defer/fail results,
+    with dependency readiness proof when ready and no executable Pumas load
+    targets, local paths, `ModelDependencyRequest`, or `ModelRefV2`.
+  - Follow-on slice: define the runtime handoff seam runtime/execution hosts
+    can consume without converting readiness proof back to `ModelRefV2`.
+  - No-fallback/no-legacy confirmation: this reordering is not a compatibility
+    bridge. The legacy preflight producer remains a deletion target after the
+    host-facing non-legacy input exists.
+  - Forward boundary audit through Milestone 8: likely future re-plan
+    checkpoints are scheduler queue persistence ownership, resource observer
+    and reservation ownership, scheduler-owned dependency readiness policy,
+    runtime-host-only Pumas load-target resolution, batching/fairness across
+    concurrent workflow runs, capability hint projection without final
+    scheduler decisions, and deterministic Milestone 8 release validation
+    assumptions. Each checkpoint must replace stale systems or stop for a
+    focused re-plan; none may preserve retired resolver/path behavior.
 
 ### Traceability Links
 

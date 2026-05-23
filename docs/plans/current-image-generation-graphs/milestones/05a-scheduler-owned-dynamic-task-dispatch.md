@@ -29,10 +29,22 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   options, unavailable/not-installed/not-implemented states, and typed
   diagnostics without exposing local paths, load targets, package-manager
   internals, or final scheduler decisions.
+- [ ] Define the scheduler-owned readiness admission contract before replacing
+  node-engine preflight. It must accept validated `SchedulableTaskIntent`,
+  apply scheduler dependency policy, and return typed ready/defer/fail
+  admission results with dependency readiness proof when ready. It must not
+  expose executable Pumas load targets, local paths, `ModelDependencyRequest`,
+  or `ModelRefV2`.
+- [ ] Define the non-legacy runtime handoff seam that runtime/execution hosts
+  will consume after readiness admission. The seam must carry correlation ids,
+  scheduler-owned readiness proof, dependency environment refs when applicable,
+  and later scheduler-selected runtime/device facts. It must not convert
+  readiness proof back into `ModelRefV2` or require graph/node-engine access to
+  executable load paths.
 - [ ] Replace node-engine dependency preflight output with typed readiness
-  proof such as `DependencyPreflightResult`, not `ModelRefV2`. Non-ready states
-  must fail or defer with typed diagnostics. Do not adapt readiness proof back
-  into `ModelDependencyRequest` or `ModelRefV2`.
+  proof after the readiness admission and runtime handoff seam exists.
+  Non-ready states must fail or defer with typed diagnostics. Do not adapt
+  readiness proof back into `ModelDependencyRequest` or `ModelRefV2`.
 - [ ] Add durable scheduler queue state for task-level workflow progress:
   pending, ready, blocked, waiting for dependency readiness, waiting for
   resources, waiting for batch, running, paused/deferred, retryable failed,
@@ -95,6 +107,10 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   collector is available.
 - Cross-layer acceptance test from graph intent to scheduler dispatch to host
   execution without graph or node-engine seeing local paths or load targets.
+- Readiness admission and runtime handoff tests proving the scheduler can
+  produce a host-consumable non-legacy handoff before node-engine preflight is
+  replaced, and proving no adapter can convert the handoff back to
+  `ModelRefV2`.
 - Multi-workflow acceptance test with at least two ready tasks from different
   workflow runs, proving the scheduler can defer one workflow while admitting
   another task or batch.
@@ -190,3 +206,19 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   scheduler-owned readiness admission/handoff seam that gives runtime hosts a
   non-legacy dispatch input, then delete `ModelRefV2` preflight production
   without a bridge.
+- 2026-05-22 re-plan decision: use Option 3. Milestone 5a now inserts two
+  prerequisite slices before node-engine preflight replacement: scheduler-owned
+  readiness admission, then a non-legacy runtime handoff seam. This keeps the
+  next implementation thin while preserving the no-fallback/no-legacy rule:
+  runtime hosts get a new successful input contract before `ModelRefV2`
+  production is deleted, and no compatibility adapter back to
+  `ModelDependencyRequest` or `ModelRefV2` is permitted.
+- 2026-05-22 forward re-plan audit through Milestone 8: likely future
+  boundaries are now expected design checkpoints, not permission to preserve
+  legacy behavior. Stop and re-plan if any slice cannot keep scheduler queue
+  persistence owned by scheduler/infrastructure, isolate resource observation
+  behind platform modules, keep dependency readiness under scheduler policy,
+  hand executable Pumas load targets only to runtime hosts, represent batching
+  across concurrent workflow runs without graph/editor execution facts, project
+  capability hints without final scheduler decisions, or run Milestone 8
+  release validation without deterministic environment assumptions.
