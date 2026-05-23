@@ -3,7 +3,15 @@ use crate::workflow::{
     WorkflowExecutionPlan, WorkflowExecutionPlanNodeDecision, WorkflowExecutionSessionRunRequest,
     WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
 };
+use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
+use pantograph_scheduler::{
+    SchedulableTaskIntent, SchedulerQueueTaskRecord, SchedulerQueueTaskState,
+    SchedulerQueueTransition, SchedulerQueueTransitionApplyResult, SchedulerQueueTransitionId,
+    SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerWorkflowId,
+    SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+    SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+};
 
 use super::super::policy::{
     WorkflowExecutionSessionAdmissionRuntimePosture, WorkflowExecutionSessionWarmCompatibility,
@@ -36,6 +44,68 @@ fn image_execution_plan_for_run(workflow_run_id: &str) -> WorkflowExecutionPlan 
         .expect("valid node decision")],
     )
     .expect("valid execution plan")
+}
+
+fn scheduler_task_intent(workflow_run_id: &str, task_id: &str) -> SchedulableTaskIntent {
+    SchedulableTaskIntent {
+        contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+        node_id: pantograph_scheduler::SchedulerNodeId::parse(task_id).expect("node id"),
+        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+        fairness_key: None,
+        task_type: DependencyTaskId::parse("image_generation").expect("task type"),
+        model_ref: PumasModelRef {
+            model_id: "image/example/tiny-diffusion".to_string(),
+            revision: None,
+            selected_artifact_id: Some("diffusers-bundle".to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        },
+        constraints: SchedulerRuntimeDeviceConstraints::default(),
+        trait_settings: Vec::new(),
+        dependency_override_patches: Vec::new(),
+        estimate_hints: Vec::new(),
+    }
+}
+
+fn scheduler_transition(
+    workflow_run_id: &str,
+    task_id: &str,
+    transition_id: &str,
+    expected_previous_state: Option<SchedulerQueueTaskState>,
+    next_state: SchedulerQueueTaskState,
+) -> SchedulerQueueTransition {
+    SchedulerQueueTransition {
+        contract_version: SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+        transition_id: SchedulerQueueTransitionId::parse(transition_id).expect("transition id"),
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+        node_id: pantograph_scheduler::SchedulerNodeId::parse(task_id).expect("node id"),
+        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+        task_intent: scheduler_task_intent(workflow_run_id, task_id),
+        expected_previous_state,
+        next_state,
+    }
+}
+
+fn scheduler_record(
+    workflow_run_id: &str,
+    task_id: &str,
+    state: SchedulerQueueTaskState,
+) -> SchedulerQueueTaskRecord {
+    SchedulerQueueTaskRecord {
+        contract_version: SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+        node_id: pantograph_scheduler::SchedulerNodeId::parse(task_id).expect("node id"),
+        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+        task_intent: scheduler_task_intent(workflow_run_id, task_id),
+        state,
+        state_version: 1,
+        last_transition_id: SchedulerQueueTransitionId::parse("transition-existing")
+            .expect("transition id"),
+    }
 }
 
 #[test]
@@ -229,4 +299,109 @@ fn finish_run_clears_run_scoped_execution_plan_before_next_admission() {
         .active_run_execution_plan(&session_id, &second_workflow_run_id)
         .expect("query second run before plan")
         .is_none());
+}
+
+#[test]
+fn active_run_applies_scheduler_task_state_transitions() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &workflow_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    let initial = scheduler_transition(
+        &workflow_run_id,
+        "image-task",
+        "transition-pending",
+        None,
+        SchedulerQueueTaskState::Pending,
+    );
+    let result = store
+        .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, initial.clone())
+        .expect("initial task transition");
+    assert!(matches!(
+        result,
+        SchedulerQueueTransitionApplyResult::Applied(_)
+    ));
+
+    let records = store
+        .active_run_scheduler_task_records(&session_id, &workflow_run_id)
+        .expect("task records");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].state, SchedulerQueueTaskState::Pending);
+    assert_eq!(records[0].state_version, 1);
+
+    let replay = store
+        .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, initial)
+        .expect("replay initial task transition");
+    assert!(matches!(
+        replay,
+        SchedulerQueueTransitionApplyResult::AlreadyApplied(_)
+    ));
+
+    let ready = scheduler_transition(
+        &workflow_run_id,
+        "image-task",
+        "transition-ready",
+        Some(SchedulerQueueTaskState::Pending),
+        SchedulerQueueTaskState::Ready,
+    );
+    let _ready_result = store
+        .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, ready)
+        .expect("ready task transition");
+    let records = store
+        .active_run_scheduler_task_records(&session_id, &workflow_run_id)
+        .expect("task records after ready");
+    assert_eq!(records[0].state, SchedulerQueueTaskState::Ready);
+    assert_eq!(records[0].state_version, 2);
+}
+
+#[test]
+fn active_run_rejects_task_records_for_different_run() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &workflow_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    let err = store
+        .set_active_run_scheduler_task_records(
+            &session_id,
+            &workflow_run_id,
+            vec![scheduler_record(
+                "run-other",
+                "image-task",
+                SchedulerQueueTaskState::Pending,
+            )],
+        )
+        .expect_err("different run record should fail");
+    assert!(err
+        .to_string()
+        .contains("belongs to workflow run 'run-other'"));
 }

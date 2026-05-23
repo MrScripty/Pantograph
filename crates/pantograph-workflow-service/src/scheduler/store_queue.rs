@@ -5,6 +5,10 @@ use crate::workflow::{
 };
 #[cfg(test)]
 use crate::WorkflowRunId;
+use pantograph_scheduler::{
+    apply_scheduler_queue_transition, SchedulerQueueTaskRecord, SchedulerQueueTransition,
+    SchedulerQueueTransitionApplyResult,
+};
 
 use super::super::policy::{
     WorkflowExecutionSessionAdmissionCandidate, WorkflowExecutionSessionAdmissionInput,
@@ -268,6 +272,7 @@ impl WorkflowExecutionSessionStore {
             priority: queued.priority,
             scheduler_decision_reason,
             execution_plan: None,
+            scheduler_task_records: Default::default(),
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {
@@ -279,6 +284,115 @@ impl WorkflowExecutionSessionStore {
             required_models: state.required_models.clone(),
             queued,
         }))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn set_active_run_scheduler_task_records(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        records: Vec<SchedulerQueueTaskRecord>,
+    ) -> Result<(), WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_mut() else {
+            return Err(WorkflowServiceError::Internal(format!(
+                "session '{}' has no active run",
+                session_id
+            )));
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(active_run_mismatch_error(
+                session_id,
+                &active_run.workflow_run_id,
+                workflow_run_id,
+            ));
+        }
+
+        let mut task_records = std::collections::BTreeMap::new();
+        for record in records {
+            validate_active_run_task_record(workflow_run_id, &record)?;
+            let task_id = record.task_id.as_str().to_string();
+            if task_records.insert(task_id.clone(), record).is_some() {
+                return Err(WorkflowServiceError::Internal(format!(
+                    "session '{}' active run '{}' has duplicate scheduler task '{}'",
+                    session_id, workflow_run_id, task_id
+                )));
+            }
+        }
+
+        active_run.scheduler_task_records = task_records;
+        Self::mark_session_access(state, tick);
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn active_run_scheduler_task_records(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<Vec<SchedulerQueueTaskRecord>, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_ref() else {
+            return Ok(Vec::new());
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Ok(Vec::new());
+        }
+        Ok(active_run
+            .scheduler_task_records
+            .values()
+            .cloned()
+            .collect())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn apply_active_run_scheduler_task_transition(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        transition: SchedulerQueueTransition,
+    ) -> Result<SchedulerQueueTransitionApplyResult, WorkflowServiceError> {
+        let tick = self.next_tick();
+        validate_active_run_task_transition(workflow_run_id, &transition)?;
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_mut() else {
+            return Err(WorkflowServiceError::Internal(format!(
+                "session '{}' has no active run",
+                session_id
+            )));
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(active_run_mismatch_error(
+                session_id,
+                &active_run.workflow_run_id,
+                workflow_run_id,
+            ));
+        }
+
+        let task_id = transition.task_id.as_str().to_string();
+        let result = apply_scheduler_queue_transition(
+            active_run.scheduler_task_records.get(&task_id),
+            transition,
+        )
+        .map_err(map_scheduler_task_state_error)?;
+
+        match &result {
+            SchedulerQueueTransitionApplyResult::Applied(record)
+            | SchedulerQueueTransitionApplyResult::AlreadyApplied(record) => {
+                active_run
+                    .scheduler_task_records
+                    .insert(task_id, record.clone());
+            }
+        }
+        Self::mark_session_access(state, tick);
+        Ok(result)
     }
 
     pub(crate) fn finish_run(
@@ -566,4 +680,56 @@ impl WorkflowExecutionSessionStore {
 
         WorkflowExecutionSessionWarmCompatibility::Compatible
     }
+}
+
+#[allow(dead_code)]
+fn validate_active_run_task_record(
+    workflow_run_id: &str,
+    record: &SchedulerQueueTaskRecord,
+) -> Result<(), WorkflowServiceError> {
+    record.validate().map_err(map_scheduler_task_state_error)?;
+    if record.workflow_run_id.as_str() != workflow_run_id {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler task '{}' belongs to workflow run '{}' instead of active run '{}'",
+            record.task_id.as_str(),
+            record.workflow_run_id.as_str(),
+            workflow_run_id
+        )));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn validate_active_run_task_transition(
+    workflow_run_id: &str,
+    transition: &SchedulerQueueTransition,
+) -> Result<(), WorkflowServiceError> {
+    if transition.workflow_run_id.as_str() != workflow_run_id {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler transition '{}' belongs to workflow run '{}' instead of active run '{}'",
+            transition.transition_id.as_str(),
+            transition.workflow_run_id.as_str(),
+            workflow_run_id
+        )));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn active_run_mismatch_error(
+    session_id: &str,
+    active_workflow_run_id: &str,
+    requested_workflow_run_id: &str,
+) -> WorkflowServiceError {
+    WorkflowServiceError::Internal(format!(
+        "session '{}' active run '{}' does not match '{}'",
+        session_id, active_workflow_run_id, requested_workflow_run_id
+    ))
+}
+
+#[allow(dead_code)]
+fn map_scheduler_task_state_error(
+    error: pantograph_scheduler::SchedulerContractError,
+) -> WorkflowServiceError {
+    WorkflowServiceError::Internal(format!("invalid scheduler task state transition: {error}"))
 }

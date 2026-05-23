@@ -118,3 +118,16 @@ durable task orchestration path.
   integer values only. Floating-point generation traits such as guidance scale
   need an explicit typed contract extension before they can be projected
   without loss.
+- 2026-05-23: Second implementation slice started the durable task-state
+  boundary by adding active-run scheduler task record storage and transition
+  application to the workflow-service scheduler store. The store validates
+  records and transitions through `pantograph-scheduler` queue contracts and
+  rejects records whose `workflow_run_id` does not match the active run. This
+  does not complete the durable-record milestone item yet because replay,
+  diagnostics-ledger persistence, and orchestrator consumption remain to be
+  wired. Verification passed:
+  `cargo test -p pantograph-workflow-service scheduler::store::tests` and
+  `cargo check -p pantograph-workflow-service`, including all-features and
+  no-default-features checks. Deviation/follow-up:
+  `#[allow(dead_code)]` is scoped to the staged task-state bridge until the
+  Milestone 5c orchestrator slice consumes these store APIs in production.

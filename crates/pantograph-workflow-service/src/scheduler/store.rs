@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use uuid::Uuid;
 
 use pantograph_diagnostics_ledger::SchedulerModelCacheState;
+use pantograph_scheduler::SchedulerQueueTaskRecord;
 
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
@@ -48,6 +49,9 @@ struct WorkflowExecutionSessionActiveRun {
     priority: i32,
     scheduler_decision_reason: WorkflowSchedulerDecisionReason,
     execution_plan: Option<WorkflowExecutionPlan>,
+    // Milestone 5c stages task-state storage before the orchestrator consumes it.
+    #[allow(dead_code)]
+    scheduler_task_records: BTreeMap<String, SchedulerQueueTaskRecord>,
 }
 
 #[derive(Debug, Clone)]

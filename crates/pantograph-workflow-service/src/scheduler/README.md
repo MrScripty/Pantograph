@@ -14,7 +14,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
-| `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, and active-run finish transitions. |
+| `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, active-run scheduler task-state transition storage, and active-run finish transitions. |
 | `store_admission.rs` | Scheduler store admission ETA projection helper used by queue diagnostics. |
 | `store_diagnostics.rs` | Scheduler snapshot diagnostics and runtime-diagnostics request projection helpers extracted from the store. |
 | `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
@@ -75,6 +75,10 @@ failing immediately with a capacity error.
 When backend runtime-registry admission would currently reject a session load,
 the candidate now also stays queued with `waiting_for_runtime_admission`
 instead of dequeuing into an immediate runtime-load failure.
+Active-run scheduler task records now use `pantograph-scheduler` queue
+records and transition application for the Milestone 5c task-orchestration
+bridge. The store only persists validated task state for the admitted run; it
+does not choose task policy, execute nodes, or synthesize runtime handoff.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.
@@ -123,6 +127,10 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler queue mutation, admission-input construction, and active-run finish
   transitions stay in `store_queue.rs` so canonical `workflow_run_id`
   lifecycle ownership is isolated from runtime-load and stale-cleanup state.
+- Active-run scheduler task records must validate through
+  `pantograph-scheduler` queue contracts before storage. Workflow-service
+  must not define a second task-state transition table or bypass scheduler
+  transition validation.
 - Dequeued-run records carry the scheduler session's required backend/model
   facts at admission time so workflow-service diagnostics can emit selected
   runtime and reserved model audit fields without rereading mutable graph

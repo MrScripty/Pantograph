@@ -9414,6 +9414,32 @@ Worker rules:
     floating-point generation options such as guidance scale. Future trait
     projection work must extend the typed scheduler trait value contract rather
     than silently dropping or stringifying floats.
+- 2026-05-23 Milestone 5c active-run scheduler task-state bridge slice
+  completed:
+  - Smallest useful vertical slice: add workflow-service active-run storage
+    and transition APIs for scheduler task queue records using the canonical
+    `pantograph-scheduler` queue contracts.
+  - Allowed write set: workflow-service scheduler store/readme/test files,
+    the Milestone 5c plan, and this execution log.
+  - Implementation notes: active runs now hold scheduler task records keyed by
+    task id. Store APIs validate records, apply idempotent scheduler queue
+    transitions, preserve replayed transition results, and reject records or
+    transitions whose workflow run id does not match the active run.
+  - No-fallback/no-legacy confirmation: workflow-service did not define a
+    second state machine, did not reinterpret task state, and did not create
+    runtime handoff, node-engine execution, or Pumas load-target identity from
+    these records.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service scheduler::store::tests`, and
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-workflow-service --all-features`,
+    `cargo check -p pantograph-workflow-service --no-default-features`,
+    `cargo fmt -p pantograph-workflow-service -- --check`, and
+    `git diff --check`.
+  - Deviation/follow-up: the active-run task-state APIs are staged for the
+    Milestone 5c orchestrator and currently carry scoped `#[allow(dead_code)]`
+    markers. The next orchestrator/storage slice must consume or remove those
+    markers instead of leaving a long-term unused API.
 
 ### Traceability Links
 
