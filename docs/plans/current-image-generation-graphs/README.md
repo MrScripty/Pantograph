@@ -20,6 +20,7 @@ dispatch.
 | `07-pumas-library-image-generation-facts.md` | Pumas Library producer-fact plan for image-generation family facts, diffusers component evidence, GGUF metadata, summaries, and update cursors. |
 | `08-scheduler-owned-dynamic-task-dispatch.md` | Scheduler-owned dynamic task dispatch design for concurrent workflow tasks, batching, resource admission, capability hints, and dispatch decisions. |
 | `09-runtime-host-handoff-legacy-removal.md` | Runtime-host handoff replacement plan for removing `model_path`/`ModelRefV2` successful execution paths. |
+| `10-task-level-scheduler-orchestration.md` | Option 4 target architecture for durable task-level workflow scheduling, task state, orchestration, and runtime-host dispatch integration. |
 | `milestones/` | Per-slice implementation checklists and verification gates. |
 
 ## Problem
@@ -56,12 +57,20 @@ enough to remove legacy execution because the current runtime nodes still read
 resolve Pumas-approved load targets at the runtime boundary, and then delete
 the old resolver/path contracts.
 
+Option 4 task-level scheduler orchestration is now the target bridge between
+Milestone 5a contracts and the remaining Milestone 5b runtime-host deletion
+work. The scheduler must own durable per-task state and dispatch progress
+before runtime-host execution is wired into production session execution. This
+prevents reduced workflow execution plans or node-engine output demand from
+remaining successful runtime launch paths.
+
 Pumas is split across the execution order. Pumas P0-P1 starts after Pantograph
 Milestone 0 so the package-facts contract is available early. Pumas P2-P5 may
 run in parallel with Pantograph Milestones 1-5, but must complete and be pinned
 before Pantograph Milestone 5a consumes production model facts for scheduler
-dispatch, before Milestone 5b resolves runtime-host load targets, and before
-Milestone 6 consumes real image-generation package facts.
+dispatch, before Milestone 5c integrates production task-level orchestration,
+before Milestone 5b resolves runtime-host load targets, and before Milestone 6
+consumes real image-generation package facts.
 
 ## Alternatives Rejected
 - Single large plan file: rejected because the plan already spans graph,

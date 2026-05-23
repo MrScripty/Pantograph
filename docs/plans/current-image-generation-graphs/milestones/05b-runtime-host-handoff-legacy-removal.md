@@ -14,11 +14,13 @@ depend on runtime loading: the canonical runtime-host request/response,
 host-owned Pumas load-target resolution, and direct scheduler dispatch caller
 must exist before old successful `ModelRefV2`/`model_path` paths are deleted.
 
-Selected re-plan direction as of 2026-05-23: use option 3. Runtime execution
-must be initiated by scheduler dispatch with the actual dispatch-selected
-`SchedulerRuntimeHandoff`. Do not synthesize handoff from
-`WorkflowExecutionPlanNodeDecision`, and do not keep planned inference as an
-alternate successful launch path.
+Selected re-plan direction as of 2026-05-23: plan for option 4 before the
+remaining production runtime-host wiring. Runtime execution must be initiated
+by scheduler task dispatch with the actual dispatch-selected
+`SchedulerRuntimeHandoff`. Workflow progress must be driven by durable
+scheduler task state, not whole-workflow node-engine output demand. Do not
+synthesize handoff from `WorkflowExecutionPlanNodeDecision`, and do not keep
+planned inference as an alternate successful launch path.
 
 **Tasks:**
 
@@ -36,6 +38,11 @@ alternate successful launch path.
   `RuntimeHostExecutionResponse`, and keep request/cancellation/retry
   correlation in scheduler/application orchestration rather than runtime
   adapters.
+- [ ] Complete Milestone 5c task-level scheduler orchestration before
+  continuing production runtime-host wiring. The scheduler must own durable
+  task graph/state/result progression so runtime-host dispatch receives actual
+  dispatch-selected handoff from task state rather than a reduced workflow
+  execution-plan projection.
 - [ ] Wire scheduler dispatch to call runtime-host execution directly from the
   actual dispatch-selected `SchedulerRuntimeHandoff`. The reduced
   `WorkflowExecutionPlan` may remain an inspection/diagnostics projection but
@@ -88,6 +95,10 @@ alternate successful launch path.
   runtime-host execution port, records typed responses, preserves
   cancellation/retry correlation, and does not launch inference through
   node-engine.
+- Task-level orchestration tests proving workflow progress can pause and
+  resume between tasks, admit work from another workflow while one run is
+  waiting, and dispatch runtime tasks from scheduler task state rather than
+  whole-workflow output demand.
 - PyTorch, llama.cpp, and audio tests proving successful execution no longer
   reads graph `model_path`, launches from reduced execution-plan projections,
   or emits `ModelRefV2`.
@@ -168,12 +179,12 @@ alternate successful launch path.
   PyTorch migration: wire scheduler dispatch to call runtime-host execution
   directly from the actual dispatch-selected scheduler handoff.
 - 2026-05-23: Re-plan boundary recorded before the PyTorch migration slice.
-  Decision: use option 3. The existing `EmbeddedPlannedInferenceExecutionHost`
+  Initial direction was direct scheduler-owned dispatch before runtime
+  migration. A later option 4 re-plan in this file supersedes that ordering by
+  requiring task-level scheduler orchestration before production runtime-host
+  wiring continues. The existing `EmbeddedPlannedInferenceExecutionHost`
   launches from a reduced `WorkflowExecutionPlanNodeDecision`; that projection
-  cannot be the source of truth for `RuntimeHostExecutionRequest`. The next
-  implementation must first add scheduler-owned direct dispatch to the
-  runtime-host execution port, then retire planned-inference launch ownership
-  from node-engine, then migrate PyTorch/llama.cpp/audio execution. No
+  cannot be the source of truth for `RuntimeHostExecutionRequest`. No
   scheduler-handoff synthesis from reduced plans, no backend-decision bridge,
   and no alternate planned-inference successful branch are allowed.
 - 2026-05-23 scheduler-owned runtime-host execution dispatch port slice
@@ -198,3 +209,10 @@ alternate successful launch path.
   standards check. Remaining follow-up: wire scheduler dispatch to call the
   runtime-host execution port from the actual dispatch-selected scheduler
   handoff.
+- 2026-05-23 option 4 re-plan recorded. The next production wiring step must
+  first implement Milestone 5c task-level scheduler orchestration because
+  workflow-service session execution currently stores only a reduced execution
+  plan and advances the whole workflow through node-engine output demand.
+  Direct runtime-host dispatch must come from durable scheduler task state and
+  actual dispatch-selected handoff; no reduced-plan handoff synthesis,
+  node-engine planned-inference launch, or `ModelRefV2` bridge is allowed.

@@ -9326,9 +9326,11 @@ Worker rules:
     `08-scheduler-owned-dynamic-task-dispatch.md`,
     `09-runtime-host-handoff-legacy-removal.md`, the Milestone 5b plan, and
     this execution log.
-  - Decision: use option 3. Scheduler dispatch is the only successful caller
-    of runtime-host execution, and it must build `RuntimeHostExecutionRequest`
-    from the actual dispatch-selected `SchedulerRuntimeHandoff`.
+  - Earlier decision: use option 3. Scheduler dispatch is the only successful
+    caller of runtime-host execution, and it must build
+    `RuntimeHostExecutionRequest` from the actual dispatch-selected
+    `SchedulerRuntimeHandoff`. This ordering is superseded by the later option
+    4 task-level scheduler orchestration re-plan below.
   - Boundary clarification: `WorkflowExecutionPlanNodeDecision` remains a
     reduced inspection/diagnostics projection. It must not be used to
     synthesize scheduler handoff, launch inference, or feed a backend-decision
@@ -9365,6 +9367,26 @@ Worker rules:
     check.
   - Remaining follow-up: wire scheduler dispatch to call the runtime-host
     execution port from the actual dispatch-selected scheduler handoff.
+- 2026-05-23 option 4 task-level scheduler orchestration re-plan slice:
+  - Smallest useful vertical slice: update the plan to make option 4 the
+    target architecture before production runtime-host wiring continues.
+  - Allowed write set: this plan directory only. No source, test, config,
+    lockfile, generated, build-output, sqlite, or workflow fixture files are
+    part of this slice.
+  - Decision: add `10-task-level-scheduler-orchestration.md` and Milestone 5c
+    as the required bridge between Milestone 5a scheduler contracts and the
+    remaining Milestone 5b runtime-host legacy removal work.
+  - Design effect: scheduler task state becomes the progress driver for
+    workflow execution. Node-engine output demand and reduced
+    `WorkflowExecutionPlanNodeDecision` remain non-authoritative for runtime
+    launch. Runtime-host execution must receive actual dispatch-selected
+    `SchedulerRuntimeHandoff` from task state.
+  - No-fallback/no-legacy confirmation: the plan forbids handoff synthesis
+    from reduced execution plans, preserving whole-workflow output demand as a
+    runtime launch path, `ModelRefV2` bridges, graph `model_path`, frontend
+    `modelPath`, and planned-inference launch as successful branches.
+  - Verification passed: documentation standards review against plan,
+    architecture, and concurrency standards; `git diff --check -- docs/plans/current-image-generation-graphs`.
 
 ### Traceability Links
 

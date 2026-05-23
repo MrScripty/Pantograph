@@ -242,26 +242,35 @@ optimistic backend-owned readiness.
 
 ## Implementation Stages
 
+Option 4 is the target architecture. Milestone 5a established the scheduler
+contracts and policy surfaces; Milestone 5c owns the cross-layer task
+orchestration integration that replaces whole-workflow output-node demand as
+the progress driver. Milestone 5b then consumes that task-level path to remove
+legacy runtime execution.
+
 1. Establish the scheduler ownership boundary and crate/module placement,
    including which shared contracts remain serial integration-owner work.
 2. Define capability hint and schedulable task intent contracts.
 3. Add scheduler-owned readiness admission and the non-legacy runtime handoff
    that runtime hosts will consume.
-4. Defer node-engine/runtime legacy execution replacement to Milestone 5b
-   because successful runtime execution still reads `model_path` and emits
-   `ModelRefV2`.
+4. Add the task-level orchestration milestone before production runtime wiring
+   because current workflow/session execution still advances through
+   whole-workflow node-engine demand and stores only a reduced execution plan.
 5. Add scheduler queue state and typed task lifecycle diagnostics.
 6. Add dispatch decision contract and host handoff shape.
 7. Move dependency readiness policy into scheduler-owned admission/dispatch.
 8. Add resource/residency snapshot admission and reservation ids behind the
    platform-neutral observer abstraction.
 9. Add batching policy surface for compatible ready tasks across workflows.
-10. Wire scheduler dispatch to call runtime-host execution directly with the
+10. Persist run-scoped task graphs, task states, task results, and task-state
+    read models so workflow progress can pause, resume, batch, and recover at
+    task granularity.
+11. Wire scheduler dispatch to call runtime-host execution directly with the
     actual dispatch-selected `SchedulerRuntimeHandoff`; do not launch runtime
     inference from reduced workflow execution-plan projections.
-11. Retire node-engine planned-inference launch ownership for runtime
+12. Retire node-engine planned-inference launch ownership for runtime
     inference nodes after scheduler-to-runtime-host dispatch is wired.
-12. Delete retired resolver/path contracts and successful legacy fixtures.
+13. Delete retired resolver/path contracts and successful legacy fixtures.
 
 ## Legacy Removal Targets
 

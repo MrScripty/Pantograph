@@ -37,16 +37,21 @@ compatibility bridge and is not allowed.
 
 A later implementation attempt found an additional boundary: the current
 planned image host launches execution from a reduced
-`WorkflowExecutionPlanNodeDecision`. That reduced projection can feed
-diagnostics and inspection, but it is not the authoritative scheduler handoff.
-It does not carry the full validated dispatch state needed by
-`RuntimeHostExecutionRequest`, including the real `SchedulerRuntimeHandoff`,
-dependency environment reference, reservation lease, batching group, readiness
-proof, and selected dispatch facts. Milestone 5b therefore uses option 3:
-scheduler dispatch must call runtime-host execution directly with the actual
-handoff. Do not synthesize a handoff from reduced workflow execution-plan
-fields, and do not keep planned inference as an alternate successful launch
-path.
+`WorkflowExecutionPlanNodeDecision`, and workflow/session execution still
+advances by asking node-engine to demand output nodes for the whole run. That
+reduced projection can feed diagnostics and inspection, but it is not the
+authoritative scheduler handoff. It does not carry the full validated dispatch
+state needed by `RuntimeHostExecutionRequest`, including the real
+`SchedulerRuntimeHandoff`, dependency environment reference, reservation lease,
+batching group, readiness proof, and selected dispatch facts.
+
+Milestone 5b therefore depends on option 4 task-level scheduler orchestration
+before its remaining production wiring continues. Scheduler dispatch must call
+runtime-host execution directly with the actual task-level handoff, and
+workflow progress must be driven by scheduler task state rather than
+whole-workflow output-node demand. Do not synthesize a handoff from reduced
+workflow execution-plan fields, and do not keep planned inference as an
+alternate successful launch path.
 
 ## Responsibility Boundaries
 
@@ -84,13 +89,17 @@ Use the clean replacement path:
 3. Add a scheduler-owned runtime-host execution port and dispatch orchestrator.
    The orchestrator is the only successful caller of runtime-host execution and
    must pass the actual validated `SchedulerRuntimeHandoff`.
-4. Retire planned-inference launch from node-engine. Inference nodes become
+4. Complete task-level scheduler orchestration from
+   `10-task-level-scheduler-orchestration.md` so production session execution
+   has durable task state, task results, and dispatch-selected handoff at the
+   task boundary.
+5. Retire planned-inference launch from node-engine. Inference nodes become
    scheduler task-intent producers and consumers of scheduler task state/results
    rather than callers of `PlannedInferenceExecutionHost`.
-5. Replace PyTorch, llama.cpp, and audio node execution so successful execution
+6. Replace PyTorch, llama.cpp, and audio node execution so successful execution
    no longer reads graph `model_path`, reduced execution-plan projections, or
    emits `ModelRefV2`.
-6. Replace node-engine dependency preflight output with typed readiness proof
+7. Replace node-engine dependency preflight output with typed readiness proof
    or scheduler task state consumption, then delete `ModelDependencyResolver`,
    `ModelDependencyRequest`, `ModelRefV2`, and path-shaped fixtures/tests.
 
@@ -131,8 +140,10 @@ typed diagnostics.
    path resolution and worker execution.
 4. **Direct dispatch wiring:** update workflow/session execution so a
    dispatch-selected scheduler handoff invokes runtime-host execution directly.
-   The reduced `WorkflowExecutionPlan` remains available for inspection and
-   diagnostics only; it must not be used to launch inference.
+   This step depends on option 4 task-level scheduler orchestration so the
+   handoff comes from durable task state rather than whole-workflow reduced
+   plans. The reduced `WorkflowExecutionPlan` remains available for inspection
+   and diagnostics only; it must not be used to launch inference.
 5. **Node-engine launch retirement:** remove node-engine planned-inference
    launch ownership for runtime inference nodes. Affected inference nodes must
    submit or reference schedulable task intent and consume scheduler task

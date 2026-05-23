@@ -38,6 +38,11 @@ milestone status in its file and summarize progress in
      task-level scheduler queueing, capability hints, batching, resource
      admission, dependency readiness policy, and dispatch decisions.
 
+5c. [Task-Level Scheduler Orchestration](milestones/05c-task-level-scheduler-orchestration.md)
+   - Integrate option 4 durable per-task workflow orchestration so scheduler
+     task state, not node-engine output demand or reduced execution plans,
+     advances workflow progress.
+
 5b. [Runtime Host Handoff And Legacy Execution Removal](milestones/05b-runtime-host-handoff-legacy-removal.md)
    - Replace successful `model_path`/`ModelRefV2` runtime execution with
      direct scheduler-to-runtime-host execution that consumes scheduler
@@ -52,14 +57,15 @@ P-a. [Pumas Library Contract Start](07-pumas-library-image-generation-facts.md)
 
 P-b. [Pumas Library Producer-Fact Completion](07-pumas-library-image-generation-facts.md)
    - Complete Pumas P2-P5 before Pantograph Milestone 5a consumes production
-     model facts for scheduler dispatch, before Milestone 5b resolves
+     model facts for scheduler dispatch, before Milestone 5c integrates
+     production task-level orchestration, before Milestone 5b resolves
      runtime-host load targets, and before Milestone 6 consumes real
      image-generation package facts.
    - Provide richer diffusers component facts, image-family evidence, GGUF
      metadata, package-fact summaries, update cursors, and SQLite cache
      migration/backfill.
    - Publish or otherwise pin the Pumas version/commit Pantograph consumes for
-     Milestone 5a, Milestone 5b, and Milestone 6.
+     Milestone 5a, Milestone 5c, Milestone 5b, and Milestone 6.
 
 6. [PyTorch/Diffusers Image Generation Execution Slice](milestones/06-pytorch-diffusers-image-generation-execution-slice.md)
    - Implement deterministic PyTorch/diffusers image-generation planning,
@@ -87,16 +93,19 @@ scheduler-owned dispatch slices because it freezes the adapter facts the
 scheduler will rank. Milestone 5a must then replace whole-workflow static
 planning assumptions with dynamic task-level scheduling before future real
 execution work depends on dependency readiness, runtime/device selection,
-resource admission, batching, or multi-user fairness. Milestone 5b must then
-replace runtime launch ownership with direct scheduler-to-runtime-host
-dispatch and remove successful `model_path`, `ModelRefV2`, and node-engine
-planned-inference execution contracts before Milestone 6 implements real
-PyTorch/diffusers image generation.
+resource admission, batching, or multi-user fairness. Milestone 5c must then
+integrate option 4 durable task-level orchestration into workflow/session
+execution before the remaining Milestone 5b runtime-host wiring proceeds.
+Milestone 5b must then replace runtime launch ownership with direct
+scheduler-to-runtime-host dispatch and remove successful `model_path`,
+`ModelRefV2`, and node-engine planned-inference execution contracts before
+Milestone 6 implements real PyTorch/diffusers image generation.
 
 Pumas P2-P5 may proceed in parallel with Pantograph Milestones 1-5, but Pumas
-producer-fact completion is a hard gate before Milestone 5a, Milestone 5b, and
-Milestone 6 consume production image-generation model facts or resolve
-runtime-host load targets. Milestone 6 must wait for the
+producer-fact completion is a hard gate before Milestone 5a, Milestone 5c,
+Milestone 5b, and Milestone 6 consume production image-generation model facts,
+integrate production task orchestration, or resolve runtime-host load targets.
+Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing
 candidate facts, device-resolution decision from Milestone 0 and Milestone 5,
 and scheduler-owned dynamic task dispatch from Milestone 5a plus direct
@@ -117,6 +126,7 @@ Pumas P0-P1
 Pantograph M1-M5 and Pumas P2-P5 in parallel
 Pumas release/pin
 Pantograph M5a
+Pantograph M5c
 Pantograph M5b
 Pantograph M6
 Pantograph M7-M8
@@ -128,5 +138,7 @@ work is complete, but production execution slices must not preserve
 `model_path` as successful scheduler/dependency handoff paths.
 Milestone 5b owns removal of those successful runtime execution paths and must
 not introduce a scheduler-handoff-to-`ModelRefV2` bridge, synthesize handoff
-from reduced workflow execution-plan projections, or preserve node-engine
-planned-inference launch as an alternate successful execution branch.
+from reduced workflow execution-plan projections, preserve node-engine
+planned-inference launch as an alternate successful execution branch, or bypass
+Milestone 5c task-level orchestration by making whole-workflow output demand
+the runtime launch driver.
