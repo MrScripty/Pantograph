@@ -1,0 +1,108 @@
+{
+  "contract_version": 1,
+  "batching_group_id": "batch.image_generation.001",
+  "state": "compatible",
+  "max_batch_size": 4,
+  "selected_batch_size": 2,
+  "total_incremental_memory_bytes": 2147483648,
+  "candidates": [
+    {
+      "workflow_id": "workflow.image_generation",
+      "workflow_run_id": "run.001",
+      "node_id": "node.llm_inference",
+      "task_id": "task.001",
+      "task_intent": {
+        "contract_version": 1,
+        "workflow_id": "workflow.image_generation",
+        "workflow_run_id": "run.001",
+        "node_id": "node.llm_inference",
+        "task_id": "task.001",
+        "fairness_key": "user.alpha",
+        "task_type": "image_generation",
+        "model_ref": {
+          "model_id": "pumas://models/juggernaut-xl-v10",
+          "selected_artifact_id": "artifact.diffusers.bundle"
+        },
+        "constraints": {
+          "requested_runtime_id": "diffusers-pytorch",
+          "requested_device_id": "cuda:0"
+        },
+        "estimate_hints": [
+          {
+            "kind": "batch_size",
+            "value": 1
+          }
+        ]
+      },
+      "task_family": "image_generation",
+      "selected_runtime_id": "diffusers-pytorch",
+      "selected_device_ids": ["cuda:0"],
+      "selected_model_ref": {
+        "model_id": "pumas://models/juggernaut-xl-v10",
+        "selected_artifact_id": "artifact.diffusers.bundle"
+      },
+      "model_residency_state": "resident",
+      "input_shape_signature": "sdxl.1024x1024.batch1",
+      "estimated_latency_ms": 3200,
+      "memory_impact": {
+        "incremental_bytes": 1073741824,
+        "peak_bytes": 9663676416
+      }
+    },
+    {
+      "workflow_id": "workflow.image_generation",
+      "workflow_run_id": "run.002",
+      "node_id": "node.llm_inference",
+      "task_id": "task.002",
+      "task_intent": {
+        "contract_version": 1,
+        "workflow_id": "workflow.image_generation",
+        "workflow_run_id": "run.002",
+        "node_id": "node.llm_inference",
+        "task_id": "task.002",
+        "fairness_key": "user.beta",
+        "task_type": "image_generation",
+        "model_ref": {
+          "model_id": "pumas://models/juggernaut-xl-v10",
+          "selected_artifact_id": "artifact.diffusers.bundle"
+        },
+        "constraints": {
+          "requested_runtime_id": "diffusers-pytorch",
+          "requested_device_id": "cuda:0"
+        },
+        "estimate_hints": [
+          {
+            "kind": "batch_size",
+            "value": 1
+          }
+        ]
+      },
+      "task_family": "image_generation",
+      "selected_runtime_id": "diffusers-pytorch",
+      "selected_device_ids": ["cuda:0"],
+      "selected_model_ref": {
+        "model_id": "pumas://models/juggernaut-xl-v10",
+        "selected_artifact_id": "artifact.diffusers.bundle"
+      },
+      "model_residency_state": "resident",
+      "input_shape_signature": "sdxl.1024x1024.batch1",
+      "estimated_latency_ms": 3300,
+      "memory_impact": {
+        "incremental_bytes": 1073741824,
+        "peak_bytes": 9663676416
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "compatible_batch",
+      "message": "Two compatible image generation tasks can share a runtime batch."
+    },
+    {
+      "severity": "info",
+      "code": "fairness_policy_trace",
+      "message": "Candidates come from different workflow runs and fairness keys."
+    }
+  ]
+}

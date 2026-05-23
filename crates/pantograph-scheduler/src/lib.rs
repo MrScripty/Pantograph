@@ -5,6 +5,7 @@
 //! boundaries. It does not execute workflow nodes, inspect Pumas storage, launch
 //! runtimes, expose frontend actions, or resolve local model paths.
 
+mod batching;
 mod capability;
 mod dispatch;
 mod error;
@@ -18,6 +19,12 @@ mod resource;
 mod resource_types;
 mod supervision;
 
+pub use batching::{
+    SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
+    SchedulerBatchDiagnosticSeverity, SchedulerBatchMemoryImpact, SchedulerBatchPolicyDecision,
+    SchedulerBatchPolicyState, ValidatedSchedulerBatchPolicyDecision,
+    SCHEDULER_BATCHING_POLICY_CONTRACT_VERSION,
+};
 pub use capability::{
     CapabilityAvailabilityState, SchedulerCapabilityDiagnostic, SchedulerCapabilityDiagnosticCode,
     SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,

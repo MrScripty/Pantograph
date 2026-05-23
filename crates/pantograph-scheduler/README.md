@@ -10,6 +10,7 @@ ownership.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for scheduler boundary and task intent contracts. |
+| `src/batching.rs` | Scheduler-owned batching candidate and policy decision contracts for compatible task groups. |
 | `src/capability.rs` | Backend-owned capability hint contract for graph editor and option-provider consumers. |
 | `src/dispatch.rs` | Scheduler-selected dispatch decision contract for runtime/device/model/dependency/reservation/batch facts. |
 | `src/handoff.rs` | Non-legacy runtime handoff envelope consumed after scheduler readiness admission. |
@@ -120,6 +121,11 @@ resolver behavior.
   diagnostics only. Platform-specific collectors must live behind
   `SchedulerResourceObserver`; scheduler policy must not depend on OS-specific
   resource APIs directly.
+- `SchedulerBatchPolicyDecision` is the scheduler-owned batching compatibility
+  contract. It groups compatible task candidates by task family, selected
+  Pumas model ref, runtime, device set, input shape, memory impact, latency,
+  residency state, and fairness-bearing task intent without exposing runtime
+  worker inputs or executable load targets.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -207,6 +213,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   `SchedulerResourceObserver` after the backend validates resource arithmetic,
   reservation identity, runtime readiness diagnostics, residency diagnostics,
   batching memory impact, and impossible-fit diagnostics.
+  Scheduler batching policy may use
+  `ValidatedSchedulerBatchPolicyDecision` values after candidate correlation,
+  selected runtime/device/model facts, input-shape compatibility, checked
+  memory totals, batch size bounds, and rejection diagnostics are validated.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -245,7 +255,12 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   `SchedulerResourceResidencySnapshot` observation timestamp, device resource
   kind and byte counts, active reservation lease ids, runtime readiness state,
   model residency state, load/warmup timing, batching memory impact, fit
-  assessment state, and resource diagnostic fields.
+  assessment state, and resource diagnostic fields;
+  `SchedulerBatchPolicyDecision` batch group id, state, max and selected batch
+  sizes, total incremental memory bytes, candidate task correlation,
+  task-family, selected runtime, selected device set, selected model ref,
+  input shape signature, latency estimate, memory impact, residency state, and
+  batch diagnostic fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -269,7 +284,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   executable load-target carriers. Resource snapshot states describe
   scheduler-observed availability and fit only; they do not authorize graph,
   node-engine, frontend, or runtime adapter code to choose executable load
-  targets or bypass dispatch policy.
+  targets or bypass dispatch policy. Batching decisions validate candidate
+  compatibility and queue grouping facts only; runtime execution still flows
+  through scheduler dispatch and runtime host handoff.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait

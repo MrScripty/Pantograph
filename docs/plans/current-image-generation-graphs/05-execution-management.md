@@ -9164,6 +9164,35 @@ Worker rules:
     file-size standards check for modified scheduler readiness files.
   - Remaining follow-up: add batching policy surface for compatible tasks
     across workflow runs.
+- 2026-05-22 Milestone 5a scheduler batching policy surface slice completed:
+  - Smallest useful vertical slice: add scheduler-owned batching candidate and
+    policy decision contracts in `pantograph-scheduler`, without implementing
+    runtime execution, an optimizer, queue workers, or host handoff wiring.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerBatchPolicyDecision`,
+    `SchedulerBatchCandidate`, `SchedulerBatchMemoryImpact`, batch policy
+    state, diagnostics, validated wrapper, public exports, README coverage, and
+    a JSON fixture-backed public contract test suite for compatible
+    cross-workflow-run batches.
+  - No-fallback/no-legacy confirmation: batching decisions carry task
+    correlation, path-free task intent, task family, selected runtime, selected
+    device set, selected Pumas model ref, residency state, input shape
+    signature, latency, memory impact, batch sizing, and typed diagnostics
+    only. They validate compatibility across workflow runs, checked memory
+    totals, duplicate candidates, rejected diagnostics, and batch size bounds
+    while rejecting local paths, executable load targets,
+    `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+    `modelPath`, worker launch facts, and runtime host internals.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+    file-size standards check for new scheduler batching files.
+  - Remaining follow-up: wire runtime/execution host handoff through dispatch
+    decisions.
 
 ### Traceability Links
 

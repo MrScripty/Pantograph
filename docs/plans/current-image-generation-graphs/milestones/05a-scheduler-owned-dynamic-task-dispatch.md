@@ -73,7 +73,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   Scheduler policy decides check-only, install-missing, defer, retry, or fail;
   node-engine must not perform dependency resolver discovery as an execution
   fallback.
-- [ ] Add batching policy surface for compatible tasks across workflow runs.
+- [x] Add batching policy surface for compatible tasks across workflow runs.
   Compatibility must account for task family, model/ref identity, runtime,
   device, loaded residency, input shape, memory impact, latency, and fairness.
 - [ ] Wire runtime/execution host handoff through dispatch decisions. The host
@@ -420,3 +420,23 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   file-size standards check for modified scheduler readiness files. Remaining
   follow-up: add batching policy surface for compatible tasks across workflow
   runs.
+- 2026-05-22 scheduler batching policy surface slice completed. Smallest
+  useful vertical slice: add scheduler-owned batching candidate and policy
+  decision contracts in `pantograph-scheduler`, without implementing runtime
+  execution, an optimizer, queue workers, or host handoff wiring. Allowed write
+  set: `crates/pantograph-scheduler/`, this milestone file, and execution
+  notes. No-fallback confirmation: batching decisions carry task correlation,
+  path-free task intent, task family, selected runtime, selected device set,
+  selected Pumas model ref, residency state, input shape signature, latency,
+  memory impact, batch sizing, and typed diagnostics only. They validate
+  compatibility across workflow runs, checked memory totals, duplicate
+  candidates, rejected diagnostics, and batch size bounds while rejecting local
+  paths, executable load targets, `ModelDependencyRequest`, `ModelRefV2`,
+  graph `model_path`, frontend `modelPath`, worker launch facts, and runtime
+  host internals. Verification passed: `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`,
+  `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+  file-size standards check for new scheduler batching files. Remaining
+  follow-up: wire runtime/execution host handoff through dispatch decisions.
