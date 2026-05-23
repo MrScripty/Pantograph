@@ -70,6 +70,8 @@ packages.
 | `runtime_host_execution.rs` | Defines the Milestone 5b runtime-host execution request/response boundary that consumes scheduler handoff facts without exposing `ModelRefV2`, graph `model_path`, executable load targets, or worker launch internals. |
 | `runtime_host_execution_tests.rs` | Focused runtime-host execution contract tests and fixture-backed legacy-field rejection coverage. |
 | `runtime_host_execution_tests/` | Structured fixture documentation and JSON examples for runtime-host execution request/response payloads. |
+| `runtime_host_load_target.rs` | Owns host-only Pumas artifact load-target request building, ready/unavailable response mapping, and typed diagnostics for scheduler-dispatched runtime execution. |
+| `runtime_host_load_target_tests.rs` | Focused tests proving host load-target resolution uses scheduler-selected Pumas refs and returns typed unavailable diagnostics. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
 | `runtime_registry_tests.rs` | Embedded runtime-registry translation, sync, reclaim, restore, and warmup coordination tests extracted from the production runtime-registry module. |
@@ -192,6 +194,10 @@ orchestration if the handoff is readiness-only. The request/response boundary
 must not expose executable Pumas load targets, local paths, `ModelRefV2`,
 graph `model_path`, frontend `modelPath`, reservations, batching groups, or
 worker launch internals to graph/node-engine contracts.
+Runtime-host Pumas load-target resolution is host-only. It builds Pumas
+requests from scheduler-selected model/artifact identity and maps missing,
+stale, invalid, or unavailable Pumas states into typed host diagnostics instead
+of falling back to graph paths.
 Dependency-environment preflight ignores legacy `runtime_hint` as a backend
 preference input, and canonical Python-backed execution no longer derives
 backend selection from explicit `backend_key` fields, Pumas package hints,

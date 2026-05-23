@@ -9292,6 +9292,31 @@ Worker rules:
     directory coverage review, and file-size standards check for new
     runtime-host source/test files.
   - Remaining follow-up: add host-owned Pumas load-target resolution service.
+- 2026-05-22 Milestone 5b host-owned Pumas load-target resolution slice
+  completed:
+  - Smallest useful vertical slice: add the embedded-runtime host-only load
+    target resolver module that builds Pumas requests from validated
+    runtime-host execution requests and maps ready/unavailable Pumas responses
+    into host-owned results without wiring runtime execution.
+  - Allowed write set: `crates/pantograph-embedded-runtime/`, Milestone 5b
+    plan notes, and this execution log.
+  - Implementation notes: added request projection from
+    `ValidatedRuntimeHostExecutionRequest` to Pumas
+    `ResolveModelArtifactLoadTargetRequest`, host-only ready target mapping,
+    typed unavailable diagnostics, and focused tests for selected model refs,
+    ready responses, and unavailable responses.
+  - No-fallback/no-legacy confirmation: the resolver uses scheduler-selected
+    Pumas model/artifact identity and Pumas typed resolver states only; it does
+    not accept graph `model_path`, frontend `modelPath`,
+    `ModelDependencyRequest`, `ModelRefV2`, path repair, package-fact scraping,
+    or alternate successful resolver branches.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime runtime_host_load_target`,
+    `cargo test -p pantograph-embedded-runtime runtime_host_execution`, crate
+    check matrix, fmt check, diff checks, README coverage review, and file-size
+    standards check.
+  - Remaining follow-up: wire PyTorch execution to consume host-owned
+    executable facts instead of graph `model_path`.
 
 ### Traceability Links
 

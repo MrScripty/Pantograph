@@ -37,6 +37,7 @@ mod runtime_config;
 mod runtime_extensions;
 pub mod runtime_health;
 pub mod runtime_host_execution;
+mod runtime_host_load_target;
 pub mod runtime_recovery;
 pub mod runtime_registry;
 mod runtime_registry_controller;

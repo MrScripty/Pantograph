@@ -122,7 +122,7 @@
         "model_id": "pumas://models/juggernaut-xl-v10",
         "revision": "main",
         "selected_artifact_id": "diffusers-bundle",
-        "selected_artifact_path": "pumas://artifacts/juggernaut-xl-v10/diffusers"
+        "selected_artifact_path": "juggernaut-xl-v10/diffusers"
       },
       "readiness_proof": {
         "preflight_result": {
