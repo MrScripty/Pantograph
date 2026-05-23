@@ -51,7 +51,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   resources, waiting for batch, running, paused/deferred, retryable failed,
   terminal failed, and completed. Queue transitions must be idempotent and
   replayable from persisted state.
-- [ ] Add typed scheduler task lifecycle diagnostics so graph editor and run
+- [x] Add typed scheduler task lifecycle diagnostics so graph editor and run
   inspection can explain why a task is waiting, deferred, unavailable, failed,
   or completed without frontend inference.
 - [ ] Add one scheduler lifecycle owner for long-running queue workers,
@@ -311,3 +311,23 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   Remaining follow-up: add typed scheduler task lifecycle diagnostics so users
   and graph/run inspection can explain waiting, deferred, unavailable, failed,
   and completed states without frontend inference.
+- 2026-05-22 typed scheduler task lifecycle diagnostics slice completed.
+  Smallest useful vertical slice: add backend-owned lifecycle diagnostic
+  snapshot contracts in `pantograph-scheduler` for graph/run inspection,
+  without adding frontend projection, persistence, workers, resource
+  observation, batching, or runtime dispatch. Allowed write set:
+  `crates/pantograph-scheduler/`, this milestone file, and execution notes.
+  No-fallback confirmation: lifecycle snapshots carry task correlation, queue
+  state, and typed state-compatible diagnostics only; they reject
+  path/runtime-host fields and do not expose executable Pumas load targets,
+  local paths, `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`,
+  frontend `modelPath`, reservations, batching groups, worker launch facts, or
+  scheduler policy internals. Verification passed:
+  `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`,
+  `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  Remaining follow-up: add one scheduler lifecycle owner for long-running queue
+  workers, dependency readiness actions, resource observation loops, and
+  runtime host dispatch.

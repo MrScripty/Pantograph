@@ -9,6 +9,7 @@ mod capability;
 mod error;
 mod handoff;
 mod intent;
+mod lifecycle;
 mod ownership;
 mod queue;
 mod readiness;
@@ -29,6 +30,12 @@ pub use intent::{
     SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitId,
     SchedulerTraitSetting, SchedulerTraitValue, SchedulerWorkflowId, SchedulerWorkflowRunId,
     ValidatedSchedulableTaskIntent, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+};
+pub use lifecycle::{
+    SchedulerTaskLifecycleDiagnostic, SchedulerTaskLifecycleDiagnosticCode,
+    SchedulerTaskLifecycleDiagnosticSeverity, SchedulerTaskLifecycleDiagnosticSnapshot,
+    ValidatedSchedulerTaskLifecycleDiagnosticSnapshot,
+    SCHEDULER_TASK_LIFECYCLE_DIAGNOSTIC_CONTRACT_VERSION,
 };
 pub use ownership::{
     owner_for_capability, SchedulerBoundaryConsumer, SchedulerBoundaryOwner,

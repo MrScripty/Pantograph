@@ -1,0 +1,16 @@
+{
+  "contract_version": 1,
+  "workflow_id": "workflow.image_generation",
+  "workflow_run_id": "run.001",
+  "node_id": "node.llm_inference",
+  "task_id": "task.001",
+  "state": "waiting_resources",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "waiting_resources",
+      "message": "Task is waiting for scheduler resource admission.",
+      "hint": "The scheduler will dispatch the task when a compatible device has enough reserved capacity."
+    }
+  ]
+}

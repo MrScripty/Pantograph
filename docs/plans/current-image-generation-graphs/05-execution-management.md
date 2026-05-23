@@ -9015,6 +9015,34 @@ Worker rules:
   - Remaining follow-up: add typed scheduler task lifecycle diagnostics so
     graph editor and run inspection can explain waiting, deferred, unavailable,
     failed, and completed task states without frontend inference.
+- 2026-05-22 Milestone 5a typed scheduler task lifecycle diagnostics slice
+  completed:
+  - Smallest useful vertical slice: add backend-owned lifecycle diagnostic
+    snapshot contracts in `pantograph-scheduler` for graph/run inspection,
+    without adding frontend projection, persistence, workers, resource
+    observation, batching, or runtime dispatch.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerTaskLifecycleDiagnosticSnapshot`,
+    `SchedulerTaskLifecycleDiagnostic`,
+    `SchedulerTaskLifecycleDiagnosticCode`,
+    `SchedulerTaskLifecycleDiagnosticSeverity`,
+    `ValidatedSchedulerTaskLifecycleDiagnosticSnapshot`, public exports,
+    README coverage, and a JSON fixture-backed public contract test suite.
+  - No-fallback/no-legacy confirmation: lifecycle snapshots carry task
+    correlation, queue state, and typed state-compatible diagnostics only.
+    They reject path/runtime-host fields and do not expose executable Pumas
+    load targets, local paths, `ModelDependencyRequest`, `ModelRefV2`, graph
+    `model_path`, frontend `modelPath`, reservations, batching groups, worker
+    launch facts, or scheduler policy internals.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  - Remaining follow-up: add one scheduler lifecycle owner for long-running
+    queue workers, dependency readiness actions, resource observation loops,
+    and runtime host dispatch.
 
 ### Traceability Links
 
