@@ -13,6 +13,7 @@ current image-generation graph and device/runtime selection plan.
 | `03-backend-stale-graph-diagnostics.md` | Backend-owned stale graph diagnostic contract and projection. |
 | `04-io-inspector-stale-graph-presentation.md` | IO inspector saved-graph display slice. |
 | `05-device-and-runtime-variant-selection.md` | Device policy, runtime variant, and scheduler-facing candidate slice. |
+| `05a-scheduler-owned-dynamic-task-dispatch.md` | Scheduler-owned dynamic task dispatch, capability hints, task queueing, batching, resource admission, and dispatch decisions. |
 | `06-pytorch-diffusers-image-generation-execution-slice.md` | Deterministic PyTorch/diffusers execution slice. |
 | `07-candle-future-capability-guardrail.md` | Candle non-selection guardrail for image generation. |
 | `08-release-build-and-user-validation.md` | Final verification, release build, and smoke-test gate. |
@@ -25,7 +26,11 @@ of broad unverified horizontal changes.
 
 ## Constraints
 - Milestone 0 must freeze shared contracts before implementation expands.
-- Device/runtime contracts must land before execution slices that consume them.
+- Device/runtime contracts must land before scheduler-owned dispatch slices
+  that consume them.
+- Dynamic task dispatch must replace whole-workflow static planning
+  assumptions before future execution slices depend on scheduler runtime/device,
+  dependency readiness, resource admission, batching, or multi-user fairness.
 - No fallback or legacy execution paths may remain reachable.
 - Each milestone must define verification before implementation is considered
   complete.
@@ -66,10 +71,11 @@ diffusers runtime, and managed llama.cpp runtime artifacts.
   should outlive this plan.
 
 ## Usage Examples
-Before implementing Milestone 5, read `../06-device-runtime-selection.md`,
-complete `00-contract-gate.md`, then update
+Before implementing Milestone 5, read `../06-device-runtime-selection.md`.
+Before implementing Milestone 5a, read
+`../08-scheduler-owned-dynamic-task-dispatch.md`. Update
 `../05-execution-management.md` with verification and standards notes after
-the slice passes.
+each slice passes.
 
 ## API Consumer Contract
 - Supported inputs: milestone files are consumed by implementers and reviewers.

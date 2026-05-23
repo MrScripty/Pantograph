@@ -1771,6 +1771,16 @@ fixture contract must not remain reachable as an alternate execution path.
      embedded-runtime host registration/implementation, with a full
      producer-to-consumer acceptance test and no successful fallback to
      `ModelDependencyResolver`, `ModelDependencyRequest`, or `ModelRefV2`.
+   - 2026-05-22 scheduler-owned dynamic task dispatch re-plan impact:
+     Milestone 5 remains the enabling contract, dependency-readiness, and
+     runtime/device replacement work. It is no longer treated as the final
+     scheduler architecture. The new Milestone 5a owns dynamic task-level
+     queueing, capability hints, batching, resource/residency admission,
+     dependency readiness policy, dispatch decisions, and legacy resolver/path
+     deletion. Current Milestone 5 slices must continue to remove or replace
+     old resolver/path behavior and must not create whole-workflow static
+     planning assumptions that conflict with task-level scheduling for
+     concurrent users.
    - Historical preflight contract-slice scope clarification: the preflight
      contract gate may also touch existing `pantograph-dependency-planning`
      sibling modules, fixtures, and tests when required to make the shared

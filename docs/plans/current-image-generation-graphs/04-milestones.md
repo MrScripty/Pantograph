@@ -33,6 +33,11 @@ milestone status in its file and summarize progress in
      variant readiness, and deterministic scheduler-selected device resolution
      for CPU/CUDA on Linux/Windows and Metal/MPS on macOS.
 
+5a. [Scheduler-Owned Dynamic Task Dispatch](milestones/05a-scheduler-owned-dynamic-task-dispatch.md)
+   - Replace whole-workflow static execution assumptions with durable
+     task-level scheduler queueing, capability hints, batching, resource
+     admission, dependency readiness policy, and dispatch decisions.
+
 P-a. [Pumas Library Contract Start](07-pumas-library-image-generation-facts.md)
    - Start Pumas P0-P1 immediately after Pantograph Milestone 0 freezes the
      expected facts contract.
@@ -40,12 +45,14 @@ P-a. [Pumas Library Contract Start](07-pumas-library-image-generation-facts.md)
      DTO/cache contract, cache freshness statuses, and shared fixture shape.
 
 P-b. [Pumas Library Producer-Fact Completion](07-pumas-library-image-generation-facts.md)
-   - Complete Pumas P2-P5 before Pantograph Milestone 6.
+   - Complete Pumas P2-P5 before Pantograph Milestone 5a consumes production
+     model facts for scheduler dispatch and before Milestone 6 consumes real
+     image-generation package facts.
    - Provide richer diffusers component facts, image-family evidence, GGUF
      metadata, package-fact summaries, update cursors, and SQLite cache
      migration/backfill.
    - Publish or otherwise pin the Pumas version/commit Pantograph consumes for
-     Milestone 6.
+     Milestone 5a/6.
 
 6. [PyTorch/Diffusers Image Generation Execution Slice](milestones/06-pytorch-diffusers-image-generation-execution-slice.md)
    - Implement deterministic PyTorch/diffusers image-generation planning,
@@ -68,17 +75,21 @@ enough for Pantograph planner work to target the real producer contract.
 Milestones 1 and 2 should be completed as one early graph-shape correction
 slice because a fixed saved workflow is not complete while tracked producers
 can still emit the retired graph shape. Milestones 3 and 4 may be implemented
-after the stale diagnostic DTO is frozen. Milestone 5 must land before backend
-execution slices that consume backend/runtime/device choices because it freezes
-the adapter facts the scheduler will rank and the selected decision inference
-will execute.
+after the stale diagnostic DTO is frozen. Milestone 5 must land before
+scheduler-owned dispatch slices because it freezes the adapter facts the
+scheduler will rank. Milestone 5a must then replace whole-workflow static
+planning assumptions with dynamic task-level scheduling before future real
+execution work depends on dependency readiness, runtime/device selection,
+resource admission, batching, or multi-user fairness.
 
 Pumas P2-P5 may proceed in parallel with Pantograph Milestones 1-5, but Pumas
-producer-fact completion is a hard gate before Milestone 6. Milestone 6 must
-wait for the execution planner contracts, backend normalization boundary,
-scheduler-facing candidate facts, and device-resolution decision from Milestone
-0 and Milestone 5. It must also consume the Pumas image-generation facts defined
-in [Pumas Library Image Generation Facts](07-pumas-library-image-generation-facts.md)
+producer-fact completion is a hard gate before Milestone 5a and Milestone 6
+consume production image-generation model facts. Milestone 6 must wait for the
+execution planner contracts, backend normalization boundary, scheduler-facing
+candidate facts, device-resolution decision from Milestone 0 and Milestone 5,
+and scheduler-owned dynamic task dispatch from Milestone 5a. It must also
+consume the Pumas image-generation facts defined in
+[Pumas Library Image Generation Facts](07-pumas-library-image-generation-facts.md)
 from a pinned Pumas release or commit. If those facts, summaries, selected
 artifact semantics, or cache migration/backfill are not available, stop with a
 re-plan note instead of implementing name-derived or fallback behavior.
@@ -91,6 +102,12 @@ Pantograph M0
 Pumas P0-P1
 Pantograph M1-M5 and Pumas P2-P5 in parallel
 Pumas release/pin
+Pantograph M5a
 Pantograph M6
 Pantograph M7-M8
 ```
+
+Milestone 5a may start in contract/design slices before all runtime execution
+work is complete, but production execution slices must not preserve
+`ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`, or
+`model_path` as successful scheduler/dependency handoff paths.

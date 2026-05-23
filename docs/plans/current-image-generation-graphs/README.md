@@ -2,8 +2,9 @@
 
 ## Purpose
 This directory contains the active implementation plan for canonical image
-generation graphs, stale graph diagnostics, single-body media retention, and
-backend-owned device/runtime selection.
+generation graphs, stale graph diagnostics, single-body media retention,
+backend-owned device/runtime selection, and scheduler-owned dynamic task
+dispatch.
 
 ## Contents
 | File/Folder | Description |
@@ -17,12 +18,15 @@ backend-owned device/runtime selection.
 | `05-execution-management.md` | Commit cadence, worker coordination, re-plan triggers, and execution notes. |
 | `06-device-runtime-selection.md` | Device policy, runtime variant, adapter boundary, and scheduler decision design. |
 | `07-pumas-library-image-generation-facts.md` | Pumas Library producer-fact plan for image-generation family facts, diffusers component evidence, GGUF metadata, summaries, and update cursors. |
+| `08-scheduler-owned-dynamic-task-dispatch.md` | Scheduler-owned dynamic task dispatch design for concurrent workflow tasks, batching, resource admission, capability hints, and dispatch decisions. |
 | `milestones/` | Per-slice implementation checklists and verification gates. |
 
 ## Problem
-Pantograph had stale diffusion graph shapes, duplicated media payloads, and
-scattered backend/device selection paths. This plan defines the canonical graph,
-inference, artifact, and runtime-selection work needed to replace those paths.
+Pantograph had stale diffusion graph shapes, duplicated media payloads,
+scattered backend/device selection paths, and execution-time dependency/runtime
+discovery split across node-engine and host code. This plan defines the
+canonical graph, inference, artifact, runtime-selection, and scheduler dispatch
+work needed to replace those paths.
 
 ## Constraints
 - Backend services are the source of truth for graph validity, diagnostics,
@@ -38,10 +42,17 @@ while `plan.md` and `04-milestones.md` preserve execution order. Contract gates
 come before implementation, then thin vertical slices validate behavior before
 adjacent slices expand shared layers.
 
+Dynamic scheduler-owned task dispatch is tracked as its own design section and
+inserted milestone because concurrent users and batching make whole-workflow
+static planning the wrong abstraction. Ready workflow DAG nodes become
+schedulable task units; scheduler policy owns queueing, batching, fairness,
+resource admission, runtime/device selection, and dependency readiness policy.
+
 Pumas is split across the execution order. Pumas P0-P1 starts after Pantograph
 Milestone 0 so the package-facts contract is available early. Pumas P2-P5 may
 run in parallel with Pantograph Milestones 1-5, but must complete and be pinned
-before Pantograph Milestone 6 consumes real image-generation package facts.
+before Pantograph Milestone 5a consumes production model facts for scheduler
+dispatch and before Milestone 6 consumes real image-generation package facts.
 
 ## Alternatives Rejected
 - Single large plan file: rejected because the plan already spans graph,
@@ -55,6 +66,8 @@ before Pantograph Milestone 6 consumes real image-generation package facts.
 - Frontend and Tauri render or transport backend-owned facts; they do not define
   execution semantics.
 - Shared contracts are frozen before parallel implementation begins.
+- Workflows are durable DAG runs; ready nodes are scheduled as task units, not
+  as one static all-at-once workflow execution object.
 
 ## Revisit Triggers
 - A canonical contract cannot represent a required backend/device/runtime fact.

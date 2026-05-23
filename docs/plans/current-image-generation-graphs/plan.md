@@ -44,25 +44,36 @@ risk, lifecycle, and execution-management content.
    - Required GGUF metadata facts
    - Snapshot/cache/update-feed behavior
    - Early P0-P1 producer-contract start after Pantograph Milestone 0
-   - P2-P5 producer-fact completion gate before Pantograph Milestone 6
+   - P2-P5 producer-fact completion gate before Pantograph Milestone 5a/6
    - Cross-repo fixtures and verification
 
-6. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)
+6. [Scheduler-Owned Dynamic Task Dispatch](08-scheduler-owned-dynamic-task-dispatch.md)
+   - Dynamic task dispatch objective
+   - Graph editor and node-engine abstraction boundaries
+   - Capability hint contract
+   - Schedulable task intent
+   - Scheduler queue state
+   - Dispatch decision contract
+   - Resource/residency and batching requirements
+   - Legacy removal targets
+
+7. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)
    - Risk table
    - Definition of done
 
-7. [Milestones](04-milestones.md)
+8. [Milestones](04-milestones.md)
    - Contract gate
    - Current Juggernaut graph slice
    - Retired node producer removal
    - Backend stale graph diagnostics
    - IO inspector stale graph presentation
    - Device and runtime variant selection
+   - Scheduler-owned dynamic task dispatch
    - PyTorch/diffusers image generation execution slice
    - Candle guardrail
    - Release build and user validation
 
-8. [Execution Management](05-execution-management.md)
+9. [Execution Management](05-execution-management.md)
    - Execution notes
    - Commit cadence
    - Optional worker assignment
@@ -80,7 +91,8 @@ implementation.
 Pumas ordering rule: the Pumas plan is not implemented as the final Pantograph
 step. Pumas P0-P1 starts immediately after Pantograph Milestone 0 freezes the
 expected contract. Pumas P2-P5 may run in parallel with Pantograph Milestones
-1-5, but must complete and be pinned before Pantograph Milestone 6 implements
+1-5, but must complete and be pinned before Pantograph Milestone 5a consumes
+production model facts for scheduler dispatch and before Milestone 6 implements
 real PyTorch/diffusers image execution.
 
 ## Standards Rule

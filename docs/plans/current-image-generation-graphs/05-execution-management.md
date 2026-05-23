@@ -67,8 +67,9 @@ Update during implementation:
   package-facts producer contract early. Pumas P2-P5 may run in parallel with
   Pantograph Milestones 1-5, but Pumas fact extraction, summaries, update
   cursors, selected-artifact semantics, and cache migration/backfill must be
-  complete and pinned before Pantograph Milestone 6 begins real PyTorch/diffusers
-  image execution.
+  complete and pinned before Pantograph Milestone 5a consumes production model
+  facts for scheduler dispatch and before Milestone 6 begins real
+  PyTorch/diffusers image execution.
 - 2026-05-10: Committed the plan directory as the initial documentation slice.
   Milestone 0 then completed as a contract-gate documentation slice with write
   scope limited to this plan. The frozen decisions name the planned graph
@@ -8720,6 +8721,67 @@ Worker rules:
     embedded-runtime host registration/implementation and full-path acceptance
     test, while deleting migrated old resolver helpers instead of preserving
     them as successful fallback branches.
+- 2026-05-22 scheduler-owned dynamic task dispatch re-plan:
+  - Boundary corrected: the scheduler target is not a single static
+    whole-workflow plan. Pantograph has concurrent users and workflows may
+    pause between DAG tasks while other workflow tasks run, batch, or wait for
+    resources. Ready workflow nodes should become schedulable task units owned
+    by a durable scheduler queue.
+  - Decision: add `08-scheduler-owned-dynamic-task-dispatch.md` and inserted
+    Milestone 5a. The design abstracts technical complexity away from the graph
+    editor and node-engine by keeping them on typed intent, capability hints,
+    task state, and diagnostics. Scheduler policy owns queueing, batching,
+    fairness, resource admission, runtime/device selection, dependency
+    readiness action, retry/defer/fail decisions, and dispatch timing.
+  - Concern separation: graph editor composes intent and renders backend-owned
+    capability/status facts; node-engine validates graph semantics and submits
+    path-free task intent; capability service answers what is possible; the
+    scheduler decides what runs now and where; dependency readiness prepares or
+    checks environments under scheduler policy; runtime host consumes a
+    short-lived dispatch plan; diagnostics/history records typed outcomes.
+  - Milestone impact: Milestone 5 remains the enabling contract/runtime/device
+    replacement work. Milestone 5a owns the dynamic scheduler architecture:
+    capability hints, schedulable task intent, scheduler queue state, dispatch
+    decisions, resource/residency manager, batching policy, dependency
+    readiness integration, runtime host handoff, and legacy resolver/path
+    deletion.
+  - No-fallback/no-legacy confirmation: the re-plan does not approve
+    `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+    `model_path`, or frontend `modelPath` dependency actions as successful
+    alternate paths. They remain deletion/replacement targets under the new
+    scheduler-owned dispatch milestone.
+  - Documentation updates: updated `plan.md`, `README.md`, `04-milestones.md`,
+    `milestones/README.md`, Milestone 5 notes, and Milestone 6 gating notes;
+    added `08-scheduler-owned-dynamic-task-dispatch.md` and
+    `milestones/05a-scheduler-owned-dynamic-task-dispatch.md`.
+- 2026-05-22 Milestone 5a standards iteration:
+  - Reviewed the scheduler-owned dynamic task dispatch plan against
+    `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+    `CONCURRENCY-STANDARDS.md`, `TESTING-STANDARDS.md`,
+    `DOCUMENTATION-STANDARDS.md`, `SECURITY-STANDARDS.md`,
+    `CROSS-PLATFORM-STANDARDS.md`, `RUST-API-STANDARDS.md`,
+    `RUST-ASYNC-STANDARDS.md`, and `RUST-CROSS-PLATFORM-STANDARDS.md`.
+  - Required plan updates: the first Milestone 5a slice must establish one
+    scheduler-owned implementation boundary; raw graph/IPC/saved-workflow/
+    queue payloads must parse once into validated Rust contracts; core
+    ranking/admission policy remains synchronous unless I/O requires an async
+    shell; long-running queue, readiness, observation, and dispatch workers
+    need a single lifecycle owner with bounded queues, cancellation, shutdown,
+    panic handling, and reservation cleanup.
+  - Cross-platform/resource update: resource observation must use a
+    platform-neutral observer trait with thin Linux, Windows, and macOS modules,
+    typed unavailable/error diagnostics, deterministic fake tests first, and
+    target compile checks before production collectors become required.
+  - Verification update: Milestone 5a now requires boundary validation,
+    replay/idempotency, duplicate-dispatch prevention, reservation release,
+    lifecycle shutdown, cross-layer vertical-slice, multi-workflow batching, and
+    feature-matrix checks for touched public crates.
+  - No-fallback confirmation: implementation may remove retired systems
+    entirely. It must not preserve scheduler policy in frontend/Tauri/
+    node-engine/runtime adapters, scatter platform collection through business
+    logic, or keep `ModelDependencyResolver`, `ModelDependencyRequest`,
+    `ModelRefV2`, `model_path`, or frontend `modelPath` as successful
+    alternate paths.
 
 ### Traceability Links
 

@@ -851,10 +851,11 @@ used by Pumas for the selector snapshot path.
 - 2026-05-12 P6 release-boundary finding: Pantograph now expects
   `MODEL_PACKAGE_FACTS_CONTRACT_VERSION = 2`, but root `Cargo.toml` still pins
   `pumas-library` to tag `v0.6.0`, whose locked source exposes
-  `PACKAGE_FACTS_CONTRACT_VERSION = 1`. Pantograph Milestone 6 must not begin
-  real planner/execution implementation until a Pumas release/tag or commit
-  containing the version 2 producer facts and P6 fixture guarantees is selected
-  and pinned in Pantograph.
+  `PACKAGE_FACTS_CONTRACT_VERSION = 1`. Pantograph Milestone 5a must not
+  consume production model facts for scheduler dispatch, and Milestone 6 must
+  not begin real planner/execution implementation, until a Pumas release/tag or
+  commit containing the version 2 producer facts and P6 fixture guarantees is
+  selected and pinned in Pantograph.
 - 2026-05-12 P6 release-boundary resolution: Pantograph pins
   `pumas-library` to Pumas commit `281a45a5bc604975ebd0d5e71d12adaa5a228382`,
   which is on Pumas `origin/main`, documents the canonical

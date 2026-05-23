@@ -3,6 +3,15 @@
 **Goal:** Prove canonical image-generation inference can execute through
 PyTorch/diffusers and produce a retained image artifact.
 
+**Scheduler Re-Plan Gate:** Future work in this milestone must consume
+scheduler-owned dynamic task dispatch from Milestone 5a rather than relying on
+whole-workflow static planning or execution-time dependency/runtime discovery.
+Successful execution must not depend on `ModelDependencyResolver`,
+`ModelDependencyRequest`, `ModelRefV2`, graph-visible `model_path`, or frontend
+`modelPath` dependency identity. Node-engine and graph editor remain path-free;
+runtime host boundaries may resolve Pumas-approved load targets only from a
+short-lived scheduler dispatch decision.
+
 **Tasks:**
 
 - [x] Add an image-generation execution planner that consumes
