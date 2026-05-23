@@ -14,12 +14,14 @@ use pantograph_scheduler::{
 };
 
 use crate::workflow::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskIntentTemplate,
-    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
+    WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 
+use super::super::WorkflowExecutionSessionStore;
 use super::{WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError};
 
 #[derive(Default)]
@@ -206,6 +208,62 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         .contains("pumas_model_ref"));
 }
 
+#[test]
+fn orchestrator_persists_initial_task_state_for_active_run() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+        task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+        node_type: "llm-inference".to_string(),
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: Some(WorkflowSchedulerTaskIntentTemplate {
+            task_type: "image_generation".parse().expect("task type"),
+            constraints: SchedulerRuntimeDeviceConstraints::default(),
+            trait_settings: Vec::new(),
+            dependency_override_patches: Vec::new(),
+            estimate_hints: Vec::new(),
+        }),
+        diagnostics: Vec::new(),
+    }]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            task_graph.workflow_id.as_str().to_string(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            true,
+        )
+        .expect("create session");
+    let queued_run_id = store
+        .enqueue_run_with_id(&session_id, &empty_run_request(), workflow_run_id.clone())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &queued_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].state,
+        SchedulerTaskState::AwaitingInputs { .. }
+    ));
+}
+
 fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     serde_json::from_str(include_str!(
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -264,4 +322,16 @@ fn scheduler_workflow_id() -> SchedulerWorkflowId {
 
 fn scheduler_workflow_run_id() -> SchedulerWorkflowRunId {
     SchedulerWorkflowRunId::parse("run.001").expect("workflow run id")
+}
+
+fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
+    WorkflowExecutionSessionRunRequest {
+        session_id: "ignored".to_string(),
+        workflow_semantic_version: "0.1.0".to_string(),
+        inputs: Vec::new(),
+        output_targets: None,
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    }
 }

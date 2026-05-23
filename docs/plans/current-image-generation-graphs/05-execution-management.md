@@ -9904,6 +9904,26 @@ Worker rules:
   - Remaining follow-up: production store initialization, dependency readiness
     calls, runtime-host dispatch lifecycle, ledger writes, bounded queues,
     cancellation, retry/defer, and panic handling remain open.
+- 2026-05-23 Milestone 5c orchestrator active-run persistence slice
+  completed:
+  - Smallest useful vertical slice: let the workflow-service orchestrator
+    derive initial task-state records from `WorkflowSchedulerTaskGraph` and
+    persist the task graph plus records together on the active run.
+  - Allowed write set: workflow-service task orchestrator module/tests and
+    current plan notes.
+  - No-fallback confirmation: the method uses the canonical active-run
+    scheduler task-state store. It does not create a parallel queue, call
+    node-engine output demand, launch runtime inference, or keep a records-only
+    compatibility path.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `cargo check -p pantograph-workflow-service
+    --no-default-features`.
+  - Remaining follow-up: production session execution must call this
+    initialization after task graph extraction, then advance state through
+    dependency readiness, dispatch, result materialization, ledger writes,
+    retry/defer, and cancellation policy.
 
 ### Traceability Links
 

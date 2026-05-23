@@ -11,8 +11,10 @@ use thiserror::Error;
 
 use crate::workflow::{
     WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskProjectionDiagnostic,
-    WorkflowSchedulerTaskProjectionDiagnosticSeverity,
+    WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowServiceError,
 };
+
+use super::WorkflowExecutionSessionStore;
 
 /// Workflow-service async shell for scheduler task orchestration.
 ///
@@ -87,9 +89,22 @@ impl WorkflowSchedulerTaskOrchestrator {
         }
         Ok(records)
     }
+
+    pub(crate) fn initialize_active_run_task_state(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_graph: WorkflowSchedulerTaskGraph,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        let records = self.initial_task_state_records(&task_graph)?;
+        store
+            .set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error)]
 #[non_exhaustive]
 #[allow(dead_code)]
 pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
@@ -97,6 +112,8 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     RuntimeHostDispatch(RuntimeHostDispatchError),
     #[error("scheduler contract validation failed")]
     SchedulerContract(SchedulerContractError),
+    #[error("workflow service operation failed")]
+    WorkflowService(WorkflowServiceError),
 }
 
 fn projection_diagnostic_to_task_state_diagnostic(

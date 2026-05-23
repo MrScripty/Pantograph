@@ -609,3 +609,20 @@ durable task orchestration path.
   initialization, dependency readiness calls, runtime-host dispatch lifecycle,
   ledger writes, bounded queues, cancellation, retry/defer, and panic handling
   are not wired into production session execution yet.
+- 2026-05-23 orchestrator active-run state persistence slice completed.
+  Smallest useful vertical slice: add a workflow-service orchestrator method
+  that derives initial task-state records from `WorkflowSchedulerTaskGraph` and
+  stores the graph plus records together on the active run. Allowed write set:
+  workflow-service task orchestrator module/tests and this plan. No-fallback
+  confirmation: the persistence method uses the canonical active-run
+  scheduler task-state store and does not create a parallel queue, call
+  node-engine output demand, launch runtime inference, or preserve a
+  records-only compatibility path. Verification passed: `cargo test -p
+  pantograph-workflow-service scheduler::task_orchestrator --lib`, `cargo
+  check -p pantograph-workflow-service`, `cargo check -p
+  pantograph-workflow-service --all-features`, and `cargo check -p
+  pantograph-workflow-service --no-default-features`. Remaining follow-up:
+  production session execution still needs to call this initialization after
+  task graph extraction, then advance task-state transitions through
+  dependency readiness, dispatch, materialization, ledger writes, and retry /
+  cancellation policy.

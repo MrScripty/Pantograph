@@ -278,7 +278,9 @@ implementation can be considered complete:
    cancellation, retries, and shutdown. Initial task-state creation from
    `WorkflowSchedulerTaskGraph` completed 2026-05-23; production store wiring,
    dependency readiness, dispatch lifecycle, ledger writes, bounded queues,
-   cancellation, retry/defer, and panic handling remain open.
+   cancellation, retry/defer, and panic handling remain open. The orchestrator
+   active-run persistence method was added 2026-05-23; production session
+   execution still needs to call it after task graph extraction.
 9. Add non-runtime single-task execution through node-engine using
    materialized scheduler-owned inputs and task results. Do not use output-node
    demand to drive runtime inference.
