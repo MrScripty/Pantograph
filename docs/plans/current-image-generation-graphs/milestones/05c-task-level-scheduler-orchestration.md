@@ -49,6 +49,14 @@ durable task orchestration path.
   unavailable, or invalid values must emit typed diagnostics and keep the task
   blocked/deferred/failed according to scheduler policy rather than falling
   back to graph-local paths or whole-workflow node-engine demand.
+- [ ] Move runtime-host execution contracts, response contracts, execution
+  port, dispatcher, and typed dispatch errors out of
+  `pantograph-embedded-runtime` into a lower-level shared contract crate before
+  implementing the orchestrator. `pantograph-workflow-service` must consume the
+  shared port from the orchestrator, and `pantograph-embedded-runtime` must
+  implement it. Remove the embedded-runtime-owned contract definitions after
+  the move; do not keep parallel DTOs, aliases, compatibility shims, or a
+  `WorkflowHost` runtime-execution bypass.
 - [ ] Add the scheduler task orchestrator as the workflow-service application
   layer async shell around the synchronous scheduler policy core. It owns
   dependency readiness calls, runtime-host dispatch calls, ledger writes,
@@ -152,6 +160,31 @@ durable task orchestration path.
   `ModelRefV2`, `model_path`, and frontend `modelPath` successful branches
   are deletion targets after replacement. Do not expand them while
   implementing task-result materialization or orchestration.
+- Runtime-host execution request/response/port/dispatcher contracts are owned
+  by a lower-level shared contract crate, not by embedded-runtime or
+  workflow-service. Workflow-service may orchestrate against the shared port,
+  and embedded-runtime may implement it, but neither crate may define a
+  parallel DTO shape.
+- The shared runtime-host crate must remain a boundary/contract crate. It may
+  define DTOs, validated wrappers, typed errors, the async execution port
+  trait, and synchronous request/response validation helpers. It must not own
+  scheduler policy, workflow orchestration, runtime loading, Pumas
+  load-target resolution, node-engine execution, concrete I/O, spawned task
+  lifecycle, or Tokio runtime creation.
+- Runtime-host contract migration must be replacement work. The slice must
+  remove the embedded-runtime-owned DTO/port/dispatcher definitions or replace
+  them with imports from the shared owner; aliases, mirrored types,
+  compatibility modules, and alternate successful launch paths are not allowed.
+- The shared crate must include crate-level docs, a source-directory README,
+  public re-exports from `lib.rs`, typed error enums, `TryFrom` validated
+  wrappers, and executable JSON fixture tests for dispatch-selected request
+  validation, readiness-only rejection, unknown/path-field rejection,
+  response-correlation validation, and failed/rejected response diagnostics.
+- Runtime-host contract-crate verification must include focused shared-crate
+  tests, embedded-runtime runtime-host dispatch/load-target tests,
+  workflow-service compile checks proving the dependency cycle is gone,
+  default/all-features/no-default-features checks for touched crates, and
+  `git diff --check`.
 - Shared contracts, generated DTOs, saved workflow fixtures, lockfiles, README
   files, and plan files remain serial integration-owner work. Any sub-agent
   slice must have a non-overlapping write set and a report path.
@@ -347,3 +380,31 @@ durable task orchestration path.
   `puma-lib` behavior so topology validation covers the real graph boundary.
   Remaining follow-up: implement the scheduler task orchestrator application
   shell that consumes these ready/blocked binding outcomes.
+- 2026-05-23: Re-plan direction chosen for the runtime-host execution contract
+  boundary before the orchestrator slice. The orchestrator belongs in
+  `pantograph-workflow-service`, but the current runtime-host execution
+  contracts and dispatcher live in `pantograph-embedded-runtime`, which already
+  depends on workflow-service. Importing those contracts from workflow-service
+  would create a crate dependency cycle. Use option 1: move
+  `RuntimeHostExecutionRequest`, `RuntimeHostExecutionResponse`, validated
+  wrappers, diagnostics, `RuntimeHostExecutionPort`,
+  `SchedulerRuntimeHostDispatcher`, and typed port/dispatch errors into a
+  lower-level shared contract crate before implementing orchestrator dispatch.
+  Workflow-service will depend on that shared crate and call the port;
+  embedded-runtime will depend on it and implement the port with
+  runtime-specific Pumas load-target resolution. Rejected alternatives:
+  adding runtime execution to `WorkflowHost`, moving the orchestrator into
+  embedded-runtime, or mirroring DTOs in workflow-service. This preserves the
+  no-fallback rule because runtime inference still launches only from an
+  actual dispatch-selected `SchedulerRuntimeHandoff`, and the move removes the
+  embedded-runtime-owned duplicate contract boundary instead of preserving
+  legacy or compatibility shapes.
+- 2026-05-23: Standards iteration for the runtime-host contract-crate re-plan
+  completed. The plan now records the shared crate as a narrow
+  boundary/contract crate, not an orchestration or runtime implementation
+  crate. It requires dependency ownership checks, crate-level docs, README
+  traceability, typed Rust APIs, executable JSON contract fixtures, async only
+  at the port boundary, no spawned task/runtime lifecycle in the shared crate,
+  replacement/removal of embedded-runtime-owned definitions, feature-matrix
+  checks for touched crates, and explicit rejection of aliases or mirrored
+  DTOs. No source implementation changed in this standards pass.

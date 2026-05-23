@@ -9658,6 +9658,66 @@ Worker rules:
   - Remaining follow-up: the scheduler task orchestrator application shell is
     the next Milestone 5c item and must consume the resolver's ready/blocked
     outcomes without reviving whole-workflow execution.
+- 2026-05-23 Milestone 5c runtime-host contract-crate re-plan decision:
+  - Re-plan boundary: the scheduler task orchestrator belongs in
+    `pantograph-workflow-service`, but the current runtime-host execution
+    request/response, validation wrappers, execution port, dispatcher, and
+    typed dispatch errors live in `pantograph-embedded-runtime`. Since
+    embedded-runtime already depends on workflow-service, importing those
+    contracts into workflow-service would create a crate dependency cycle.
+  - Decision: use option 1. Move runtime-host execution contracts and the
+    dispatcher into a lower-level shared contract crate before implementing
+    the orchestrator. The shared crate should depend only on lower-level
+    contracts such as `pantograph-scheduler`, `serde`, `async-trait`, and
+    `thiserror`; it must not depend on workflow-service, embedded-runtime,
+    node-engine, Pumas Library, or inference runtime crates.
+  - Ownership after the move: workflow-service orchestrates against the shared
+    runtime-host port; embedded-runtime implements that port and owns
+    runtime-specific Pumas load-target resolution; scheduler owns
+    `SchedulerRuntimeHandoff`; node-engine remains limited to non-runtime task
+    execution from materialized inputs.
+  - Rejected alternatives: adding runtime execution methods to `WorkflowHost`,
+    moving the orchestrator into embedded-runtime, or mirroring runtime-host
+    DTOs in workflow-service.
+  - No-fallback/no-legacy confirmation: remove the embedded-runtime-owned
+    contract definitions after the shared-crate move rather than preserving
+    parallel DTOs, aliases, compatibility shims, or reduced-plan launch
+    branches. Runtime inference still launches only from an actual
+    dispatch-selected `SchedulerRuntimeHandoff`.
+  - Next implementation slice: create/move the shared runtime-host contract
+    crate and update embedded-runtime to implement/re-export through the new
+    owner only after the old definitions are removed.
+- 2026-05-23 Standards iteration for runtime-host contract-crate re-plan:
+  - Standards reviewed: coding standards for file decomposition, layered
+    ownership, single owner for stateful flows, and documentation; plan
+    standards for re-plan triggers, worktree hygiene, serial ownership of
+    shared contracts, and verification; architecture patterns for monorepo
+    package roles and executable boundary contracts; dependency standards for
+    narrow crate dependency ownership; Rust API standards for typed validated
+    public contracts; Rust async standards for sync-core/async-shell and task
+    lifecycle; and testing standards for vertical slice and executable
+    contract coverage.
+  - Plan updates made: the shared runtime-host crate is explicitly constrained
+    to DTOs, validated wrappers, typed errors, the async port trait, and
+    synchronous validation/correlation helpers. It must not own scheduler
+    policy, workflow orchestration, runtime loading, Pumas load-target
+    resolution, node-engine execution, concrete I/O, spawned tasks, or Tokio
+    runtime lifecycle.
+  - Required implementation guardrails added: crate-level docs, source
+    README, public `lib.rs` re-exports, `TryFrom` validated wrappers,
+    `#[must_use]`/`#[non_exhaustive]` public API discipline, workspace
+    dependency ownership checks, no new third-party dependency without
+    standards justification, and executable JSON fixtures for request/response
+    validation.
+  - Required replacement guardrails added: remove or convert the existing
+    embedded-runtime-owned runtime-host DTO/port/dispatcher definitions to use
+    the shared owner. Do not preserve aliases, mirrored DTOs, compatibility
+    modules, or alternate successful runtime launch paths.
+  - Required verification added: focused shared-crate contract tests,
+    embedded-runtime runtime-host dispatch/load-target tests,
+    workflow-service compile checks proving the dependency cycle is gone,
+    default/all-features/no-default-features checks for touched crates, and
+    `git diff --check`.
 
 ### Traceability Links
 

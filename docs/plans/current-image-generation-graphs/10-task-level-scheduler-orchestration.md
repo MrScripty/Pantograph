@@ -66,6 +66,12 @@ inputs are ready.
 - **Runtime host:** consumes only dispatch-selected runtime-host execution
   requests, resolves Pumas-approved load targets at the host boundary, and
   executes runtime-specific work.
+- **Runtime-host contract crate:** owns the shared runtime-host execution DTOs,
+  validated request/response wrappers, execution port trait, dispatcher, and
+  typed port/dispatch errors. This crate must sit below both
+  `pantograph-workflow-service` and `pantograph-embedded-runtime` so
+  workflow-service can orchestrate runtime tasks while embedded-runtime
+  implements the port without a dependency cycle.
 - **Graph editor/frontend:** displays task/capability/diagnostic state and
   submits optional typed user constraints. It does not rank candidates, resolve
   paths, join Pumas storage, or optimistically mark backend-owned task state.
@@ -93,6 +99,12 @@ inputs are ready.
 - `SchedulerTaskExecutionPort`: application-owned async port for executing one
   admitted task. Runtime inference variants call the runtime-host dispatch
   port; non-runtime variants call a narrow node-engine task execution adapter.
+- `RuntimeHostExecutionRequest` / `RuntimeHostExecutionResponse` /
+  `RuntimeHostExecutionPort`: shared runtime-host execution contracts moved
+  out of `pantograph-embedded-runtime` into a lower-level contract crate. The
+  request must carry only a dispatch-selected `SchedulerRuntimeHandoff`; it
+  must reject readiness-only handoffs, reduced execution-plan projections,
+  graph paths, local Pumas load targets, and worker launch metadata.
 - `SchedulerTaskStateReadModel`: backend-owned status for graph editor,
   run-inspection, and diagnostics views. It exposes waiting/running/failed
   facts, not scheduler internals or executable load targets.
@@ -149,23 +161,111 @@ but the ownership and data boundaries must remain explicit.
    ready, blocked, unavailable, or invalid typed outcomes without consulting
    graph paths, reduced execution plans, runtime handoff, or node-engine
    output demand.
-7. Add the scheduler task orchestrator with a synchronous policy core and an
+7. Move runtime-host execution contracts and dispatcher out of
+   `pantograph-embedded-runtime` into a lower-level shared contract crate
+   before orchestrator implementation. `pantograph-workflow-service` must
+   depend on the shared crate and call the runtime-host port from the
+   orchestrator; `pantograph-embedded-runtime` must depend on the shared crate
+   and implement the port. Remove the embedded-runtime-owned contract
+   definitions after the move rather than preserving parallel DTOs or
+   compatibility shims.
+8. Add the scheduler task orchestrator with a synchronous policy core and an
    async shell for dependency readiness, runtime-host dispatch, ledger writes,
    cancellation, retries, and shutdown.
-8. Add non-runtime single-task execution through node-engine using
+9. Add non-runtime single-task execution through node-engine using
    materialized scheduler-owned inputs and task results. Do not use output-node
    demand to drive runtime inference.
-9. Add runtime task dispatch from actual dispatch-selected
-   `SchedulerRuntimeHandoff` into the existing runtime-host execution port.
-10. Replace session execution so the scheduler task orchestrator, not
+10. Add runtime task dispatch from actual dispatch-selected
+   `SchedulerRuntimeHandoff` into the shared runtime-host execution port.
+11. Replace session execution so the scheduler task orchestrator, not
    node-engine output demand, advances workflow progress.
-11. Remove planned-inference launch ownership and legacy resolver/path
+12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.
-12. Add recovery, replay, cancellation, duplicate-dispatch prevention,
+13. Add recovery, replay, cancellation, duplicate-dispatch prevention,
    reservation release, and retry/defer idempotency tests.
-13. Add multi-workflow acceptance coverage proving a workflow can pause between
+14. Add multi-workflow acceptance coverage proving a workflow can pause between
     tasks while another user's compatible task runs or batches.
+
+## Runtime-Host Contract Crate Replan
+
+The scheduler task orchestrator belongs in `pantograph-workflow-service`, but
+the current runtime-host execution request/response/port/dispatcher types live
+in `pantograph-embedded-runtime`. Since `pantograph-embedded-runtime` already
+depends on `pantograph-workflow-service`, importing those types from
+workflow-service would create a crate dependency cycle. The chosen option is
+to move the shared runtime-host execution contract into a lower-level crate,
+such as `pantograph-runtime-host-contracts`, before implementing the
+orchestrator.
+
+The shared crate should own:
+
+- `RuntimeHostExecutionRequest`, `ValidatedRuntimeHostExecutionRequest`, and
+  the execution contract version.
+- `RuntimeHostExecutionResponse`, `ValidatedRuntimeHostExecutionResponse`,
+  execution state, diagnostics, and contract errors.
+- `RuntimeHostExecutionPort`, `SchedulerRuntimeHostDispatcher`, typed
+  execution-port errors, dispatch errors, and response-correlation validation.
+
+The shared crate may depend on `pantograph-scheduler`, `serde`,
+`async-trait`, and `thiserror`. It must not depend on
+`pantograph-workflow-service`, `pantograph-embedded-runtime`, node-engine,
+Pumas Library, or inference runtime crates. After the move,
+workflow-service consumes the shared port trait from the orchestrator, and
+embedded-runtime implements that port and owns runtime-specific Pumas
+load-target resolution.
+
+Standards guardrails for the shared crate:
+
+- Keep the crate role narrow. It is a contract/boundary crate for DTOs,
+  validation wrappers, the runtime-host port trait, and response-correlation
+  helper logic only. It must not own scheduler policy, workflow orchestration,
+  runtime loading, Pumas load-target resolution, node-engine execution,
+  process management, or concrete I/O.
+- Keep the async surface at the boundary. The port trait may be async because
+  runtime execution is external I/O, but validation, request construction, and
+  response-correlation checks must remain synchronous. The shared crate must
+  not create Tokio runtimes, spawn tasks, hold locks across `.await`, or own
+  background lifecycle.
+- Use correct-by-construction Rust APIs: crate-level `//!` docs, public
+  re-exports from `lib.rs`, typed error enums with `thiserror`, validated
+  wrappers with `TryFrom`, `#[must_use]` on validated wrappers/dispatcher
+  results, and `#[non_exhaustive]` where runtime-host states, diagnostics, or
+  errors will evolve.
+- Preserve executable boundary contracts. Keep JSON fixture coverage for
+  dispatch-selected request/response shapes, readiness-only rejection,
+  unknown-field/path-field rejection, response-correlation validation, and
+  failed/rejected response diagnostic requirements.
+- Follow dependency ownership rules. Before adding the crate, confirm direct
+  dependency ownership and use workspace dependency inheritance for shared
+  crates already in the root manifest. Do not add third-party dependencies
+  beyond `serde`, `async-trait`, and `thiserror` unless a new standards
+  justification is recorded.
+- Keep documentation traceability. Add a source-directory README and crate
+  docs for the new crate, update `pantograph-embedded-runtime` README to name
+  itself as implementation owner only, and update workflow-service README when
+  it begins orchestrating through the shared port.
+- Verify the move as a replacement, not an additive shim. The implementation
+  slice must remove the old embedded-runtime-owned DTO/port/dispatcher modules
+  or convert them into imports from the shared owner; no aliases, mirrored
+  types, compatibility modules, or alternate successful request paths may
+  remain.
+- Required verification for the move: focused shared-crate contract tests,
+  embedded-runtime runtime-host dispatch/load-target tests, workflow-service
+  compile checks proving it can depend on the shared port without a cycle,
+  default/all-features/no-default-features checks for touched crates, and
+  `git diff --check`.
+
+Rejected alternatives:
+
+- Put runtime execution on `WorkflowHost`: rejected because it broadens the
+  workflow host with runtime execution ownership and makes task dispatch
+  harder to reason about.
+- Put the orchestrator in `pantograph-embedded-runtime`: rejected because
+  workflow-service owns workflow state, task state, diagnostics, and run
+  progression.
+- Mirror DTOs in workflow-service: rejected because parallel runtime-host
+  contracts would drift and violate the no-legacy/no-fallback rule.
 
 ## Task Result Materialization Plan
 
