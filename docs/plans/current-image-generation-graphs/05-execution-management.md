@@ -8945,6 +8945,28 @@ Worker rules:
   - Remaining follow-up: replace node-engine dependency preflight output with
     typed readiness proof after this non-legacy host handoff seam, then delete
     the legacy `ModelRefV2` preflight production path without a bridge.
+- 2026-05-22 Milestone 5a re-plan trigger before node-engine preflight output
+  replacement:
+  - Finding: the next source replacement is broader than the preflight return
+    type. `enforce_dependency_preflight` still returns `Option<ModelRefV2>`,
+    but PyTorch, llama.cpp, and audio execution also read `model_path` inputs
+    for successful model loading and emit `ModelRefV2` outputs through
+    `build_model_ref_v2`. Embedded-runtime dependency preflight still resolves
+    `ModelRefV2` as well.
+  - No-fallback/no-legacy impact: changing only the preflight output to
+    `DependencyPreflightResult` would not remove the successful
+    `model_path`/`ModelRefV2` execution path. Converting
+    `SchedulerRuntimeHandoff` or readiness proof back into `ModelRefV2` would
+    be a compatibility bridge and is not allowed.
+  - Required re-plan: choose the source replacement sequence for runtime-host
+    load-target resolution and node-engine legacy removal before editing
+    node-engine execution. Viable options are: replace the runtime host path so
+    host dispatch consumes scheduler handoff and resolves Pumas-approved load
+    targets at the runtime boundary, then remove `ModelRefV2`/`model_path`
+    successful execution paths; temporarily fail closed for affected runtime
+    nodes until host dispatch is wired; or split a new milestone if the host
+    replacement is too broad for Milestone 5a. Do not implement a
+    `SchedulerRuntimeHandoff` to `ModelRefV2` adapter.
 
 ### Traceability Links
 
