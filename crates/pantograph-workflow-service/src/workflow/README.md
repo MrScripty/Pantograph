@@ -38,6 +38,7 @@ public exports out of the service crate.
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, optional schedulable task intents, and typed projection diagnostics. |
 | `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs and projection diagnostic enums re-exported through the workflow facade. |
+| `task_state_read_model.rs` | Presentation-neutral scheduler task-state projection from validated queue records for graph editor and run inspection consumers. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
@@ -91,6 +92,10 @@ facade test module.
   coverage so scheduler-bound capacity assertions stay focused.
 - Scheduler snapshot shape coverage is separate from scheduler diagnostics
   projection coverage.
+- Scheduler task-state read models project only path-free, presentation-neutral
+  facts from canonical queue records. They must not expose transition ids,
+  state versions, runtime handoff, executable Pumas load targets, or worker
+  launch details.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.

@@ -26,6 +26,8 @@ stay reviewable as more tests are split.
 | `session_runtime_preflight.rs` | Session runtime preflight cache invalidation and keep-alive preflight failure tests. |
 | `session_runtime_state.rs` | Session runtime loaded-state invalidation tests. |
 | `session_stale_cleanup.rs` | Stale session cleanup, session inspection, and stale cleanup worker lifecycle tests. |
+| `task_graph.rs` | Path-free scheduler task graph projection tests for canonical inference intent and projection diagnostics. |
+| `task_state_read_model.rs` | Scheduler task-state read-model tests proving path-free presentation facts and hidden execution internals. |
 | `workflow_capabilities.rs` | Workflow capability discovery and default capability derivation tests. |
 | `workflow_graph_inspection.rs` | Saved graph inspection facade tests for backend-owned stale graph diagnostics. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |

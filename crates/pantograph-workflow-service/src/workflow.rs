@@ -47,6 +47,7 @@ mod session_runtime;
 mod session_runtime_load_lifecycle;
 mod task_graph;
 mod task_graph_contracts;
+mod task_state_read_model;
 mod validation;
 mod workflow_run_api;
 
@@ -108,6 +109,11 @@ pub use self::task_graph_contracts::{
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+};
+pub use self::task_state_read_model::{
+    workflow_scheduler_task_state_read_models, WorkflowSchedulerTaskStateReadModel,
+    WorkflowSchedulerTaskStateTraitSettingReadModel,
+    WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,
 };
 pub(crate) use self::validation::validate_workflow_id;
 

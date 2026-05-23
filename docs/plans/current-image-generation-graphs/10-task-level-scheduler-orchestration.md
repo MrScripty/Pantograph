@@ -110,7 +110,9 @@ but the ownership and data boundaries must remain explicit.
    scheduler crate; durable workflow-service persistence, replay, diagnostics
    ledger projection, and orchestrator consumption remain staged work.
 3. Add task-state read models and diagnostics projection for graph editor and
-   run inspection.
+   run inspection. Initial path-free workflow-service read-model projection
+   completed 2026-05-23; diagnostics-ledger joins and facade route wiring
+   remain staged work.
 4. Add the scheduler task orchestrator with a synchronous policy core and an
    async shell for dependency readiness, runtime-host dispatch, ledger writes,
    cancellation, retries, and shutdown.

@@ -9461,6 +9461,28 @@ Worker rules:
     pantograph-scheduler --all-features`, `cargo check -p pantograph-scheduler
     --no-default-features`, `cargo fmt -p pantograph-scheduler -- --check`,
     and `git diff --check`.
+- 2026-05-23 Milestone 5c scheduler task-state read-model slice completed:
+  - Smallest useful vertical slice: add a path-free presentation read-model
+    projection from durable scheduler queue records before route wiring or
+    diagnostics-ledger joins.
+  - Allowed write set: workflow-service workflow facade/module/test/readme
+    files, the Milestone 5c plan, the task-orchestration design note, and this
+    execution log.
+  - Implementation notes: `workflow_scheduler_task_state_read_models`
+    validates `SchedulerQueueTaskRecord` inputs and returns sorted
+    presentation facts with workflow/run/node/task correlation, task type,
+    model id, queue state, optional requested runtime/device constraints, and
+    typed trait settings.
+  - No-fallback/no-legacy confirmation: the read model does not expose raw
+    task intent, transition ids, state versions, runtime handoff, executable
+    Pumas load targets, worker launch details, `ModelRefV2`, `model_path`, or
+    `local_load_path`, and it does not execute or dispatch tasks.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service
+    workflow::tests::task_state_read_model`, `cargo check -p
+    pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+    --all-features`, and `cargo check -p pantograph-workflow-service
+    --no-default-features`.
 
 ### Traceability Links
 

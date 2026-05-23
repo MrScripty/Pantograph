@@ -143,3 +143,17 @@ durable task orchestration path.
   `cargo check -p pantograph-scheduler`, `cargo check -p pantograph-scheduler
   --all-features`, and `cargo check -p pantograph-scheduler
   --no-default-features`.
+- 2026-05-23: Fourth implementation slice started the task-state read-model
+  boundary. `pantograph-workflow-service` now exposes
+  `workflow_scheduler_task_state_read_models`, a path-free projection from
+  validated `SchedulerQueueTaskRecord` values to presentation-neutral graph
+  editor/run-inspection facts. The projection exposes workflow/run/node/task
+  correlation, task type, model id, queue state, optional requested
+  runtime/device constraints, and typed trait settings while intentionally
+  hiding transition ids, state versions, scheduler runtime handoff, executable
+  load targets, worker launch details, and raw task intent. Verification
+  passed: `cargo test -p pantograph-workflow-service
+  workflow::tests::task_state_read_model`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+  --all-features`, and `cargo check -p pantograph-workflow-service
+  --no-default-features`.

@@ -31,6 +31,7 @@ mod session_runtime_preflight;
 mod session_runtime_state;
 mod session_stale_cleanup;
 mod task_graph;
+mod task_state_read_model;
 mod workflow_capabilities;
 mod workflow_graph_inspection;
 mod workflow_io;
