@@ -1,0 +1,68 @@
+{
+  "contract_version": 1,
+  "task_type": "image_generation",
+  "model_ref": {
+    "model_id": "pumas://models/juggernaut-xl-v10",
+    "revision": "main",
+    "selected_artifact_id": "diffusers-bundle"
+  },
+  "runtimes": [
+    {
+      "runtime_id": "diffusers-pytorch",
+      "state": "available"
+    },
+    {
+      "runtime_id": "candle",
+      "state": "not_implemented",
+      "diagnostics": [
+        {
+          "severity": "info",
+          "code": "not_implemented",
+          "message": "Candle image generation is planned but not implemented for this task."
+        }
+      ]
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "cuda:0",
+      "state": "available"
+    },
+    {
+      "device_id": "metal:0",
+      "state": "unavailable",
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "device_unavailable",
+          "message": "Metal is not available on this host."
+        }
+      ]
+    }
+  ],
+  "trait_options": [
+    {
+      "trait_id": "denoising_scheduler",
+      "state": "available",
+      "required": false,
+      "values": [
+        {
+          "label": "Euler",
+          "value": {
+            "kind": "string",
+            "value": "EulerDiscreteScheduler"
+          },
+          "state": "available"
+        },
+        {
+          "label": "Flow Match Euler",
+          "value": {
+            "kind": "string",
+            "value": "FlowMatchEulerDiscreteScheduler"
+          },
+          "state": "available"
+        }
+      ]
+    }
+  ]
+}

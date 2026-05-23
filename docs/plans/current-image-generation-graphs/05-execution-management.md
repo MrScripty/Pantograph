@@ -8829,6 +8829,30 @@ Worker rules:
     `cargo fmt -p pantograph-scheduler -- --check`.
   - Remaining follow-up: continue Milestone 5a with backend-owned capability
     hints for graph editor and option-provider consumers.
+- 2026-05-22 Milestone 5a capability hint contract slice completed:
+  - Smallest useful vertical slice: add backend-owned capability hint contracts
+    and validation in `pantograph-scheduler` without wiring frontend or option
+    provider consumers.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan notes,
+    and this execution log.
+  - Implementation: added `SchedulerCapabilityHintSnapshot`,
+    `ValidatedSchedulerCapabilityHintSnapshot`, availability states, runtime
+    hints, device hints, trait option hints, option values, diagnostic
+    severities, and typed diagnostic codes with fixture-backed serde tests.
+  - No-fallback/no-legacy confirmation: capability hints expose possibilities
+    and diagnostics only. Tests reject final `selected_runtime_id` and
+    `local_load_path` fields so the graph/editor side cannot receive final
+    scheduler decisions, executable Pumas load targets, local paths,
+    `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+    `modelPath`, reservations, batching groups, or worker launch facts.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`, and
+    `cargo fmt -p pantograph-scheduler -- --check`.
+  - Remaining follow-up: continue Milestone 5a by replacing node-engine
+    dependency preflight output with typed readiness proof rather than
+    `ModelRefV2`.
 
 ### Traceability Links
 

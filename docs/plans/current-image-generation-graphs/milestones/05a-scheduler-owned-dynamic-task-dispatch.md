@@ -24,7 +24,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   trait/settings intent, dependency override intent, and bounded estimate
   hints. Raw graph or IPC input must parse into validated ids, enums, and
   bounded values before internal scheduler policy receives it.
-- [ ] Define a backend-owned capability hint contract for graph editor and
+- [x] Define a backend-owned capability hint contract for graph editor and
   option-provider consumers. It must expose possible runtimes/devices, trait
   options, unavailable/not-installed/not-implemented states, and typed
   diagnostics without exposing local paths, load targets, package-manager
@@ -162,3 +162,20 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: define
   backend-owned capability hints for graph editor and option-provider
   consumers without exposing final scheduler decisions.
+- 2026-05-22 capability hint contract slice completed. Smallest useful
+  vertical slice: add backend-owned `SchedulerCapabilityHintSnapshot` contracts
+  and validation without wiring frontend or option-provider consumers.
+  Allowed write set: `crates/pantograph-scheduler/`, this milestone file, and
+  execution notes. No-fallback confirmation: capability hints expose possible
+  runtimes, devices, trait options, availability states, and typed diagnostics
+  only; they reject final selected runtime fields and executable load-target
+  fields, and do not expose local paths, `ModelDependencyRequest`,
+  `ModelRefV2`, graph `model_path`, frontend `modelPath`, reservations,
+  batching groups, or worker launch facts. Verification passed:
+  `cargo fmt -p pantograph-scheduler`, `cargo test -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`, and
+  `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: replace
+  node-engine dependency preflight output with typed readiness proof rather
+  than `ModelRefV2`.

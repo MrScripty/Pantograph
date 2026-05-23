@@ -135,6 +135,10 @@ pub enum SchedulerTraitValue {
 
 impl SchedulerTraitValue {
     fn validate(&self) -> Result<(), SchedulerContractError> {
+        self.validate_for_capability_hint()
+    }
+
+    pub(crate) fn validate_for_capability_hint(&self) -> Result<(), SchedulerContractError> {
         if let SchedulerTraitValue::String(value) = self {
             validate_text("trait_setting.value", value)?;
         }

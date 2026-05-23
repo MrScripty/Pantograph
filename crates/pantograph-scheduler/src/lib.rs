@@ -5,10 +5,17 @@
 //! boundaries. It does not execute workflow nodes, inspect Pumas storage, launch
 //! runtimes, expose frontend actions, or resolve local model paths.
 
+mod capability;
 mod error;
 mod intent;
 mod ownership;
 
+pub use capability::{
+    CapabilityAvailabilityState, SchedulerCapabilityDiagnostic, SchedulerCapabilityDiagnosticCode,
+    SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,
+    SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
+    ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
+};
 pub use error::SchedulerContractError;
 pub use intent::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerEstimateHintKind, SchedulerFairnessKey,
