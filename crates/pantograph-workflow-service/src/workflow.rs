@@ -112,6 +112,8 @@ pub use self::task_graph_contracts::{
 };
 pub use self::task_state_read_model::{
     workflow_scheduler_task_state_read_models, WorkflowSchedulerTaskStateReadModel,
+    WorkflowSchedulerTaskStateReadModelQueryRequest,
+    WorkflowSchedulerTaskStateReadModelQueryResponse,
     WorkflowSchedulerTaskStateTraitSettingReadModel,
     WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,
 };

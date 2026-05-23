@@ -111,8 +111,9 @@ but the ownership and data boundaries must remain explicit.
    ledger projection, and orchestrator consumption remain staged work.
 3. Add task-state read models and diagnostics projection for graph editor and
    run inspection. Initial path-free workflow-service read-model projection
-   completed 2026-05-23; diagnostics-ledger joins and facade route wiring
-   remain staged work.
+   and dedicated active-run query boundary completed 2026-05-23;
+   diagnostics-ledger joins and broader frontend route wiring remain staged
+   work.
 4. Add the scheduler task orchestrator with a synchronous policy core and an
    async shell for dependency readiness, runtime-host dispatch, ledger writes,
    cancellation, retries, and shutdown.

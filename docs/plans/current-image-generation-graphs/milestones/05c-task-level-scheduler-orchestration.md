@@ -157,3 +157,16 @@ durable task orchestration path.
   pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
   --all-features`, and `cargo check -p pantograph-workflow-service
   --no-default-features`.
+- 2026-05-23: Fifth implementation slice added the dedicated workflow-service
+  query boundary for active-run scheduler task-state read models.
+  `workflow_get_scheduler_task_state_read_models` validates session/run input,
+  reads canonical active-run task records from the scheduler store, and returns
+  the same path-free read models without modifying queue item or scheduler
+  snapshot DTOs. This keeps task progress display facts separate from
+  admission/snapshot facts and does not expose executable handoff or Pumas load
+  targets. Verification passed: `cargo test -p pantograph-workflow-service
+  workflow::tests::task_state_read_model`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+  --all-features`, `cargo check -p pantograph-workflow-service
+  --no-default-features`, and `cargo fmt -p pantograph-workflow-service
+  -- --check`.

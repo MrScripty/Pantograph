@@ -5,7 +5,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::WorkflowServiceError;
+use super::{WorkflowService, WorkflowServiceError};
 
 /// Current schema version for workflow-visible scheduler task state.
 pub const WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION: u16 = 1;
@@ -37,6 +37,56 @@ pub struct WorkflowSchedulerTaskStateReadModel {
 pub struct WorkflowSchedulerTaskStateTraitSettingReadModel {
     pub trait_id: String,
     pub value: SchedulerTraitValue,
+}
+
+/// Request for active-run scheduler task-state read models.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowSchedulerTaskStateReadModelQueryRequest {
+    pub session_id: String,
+    pub workflow_run_id: String,
+}
+
+/// Response containing path-free scheduler task-state read models.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowSchedulerTaskStateReadModelQueryResponse {
+    pub session_id: String,
+    pub workflow_run_id: String,
+    #[serde(default)]
+    pub tasks: Vec<WorkflowSchedulerTaskStateReadModel>,
+}
+
+impl WorkflowService {
+    pub async fn workflow_get_scheduler_task_state_read_models(
+        &self,
+        request: WorkflowSchedulerTaskStateReadModelQueryRequest,
+    ) -> Result<WorkflowSchedulerTaskStateReadModelQueryResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+
+        let records = {
+            let mut store = self.session_store_guard()?;
+            store.touch_session(session_id)?;
+            store.active_run_scheduler_task_records(session_id, workflow_run_id)?
+        };
+        let tasks = workflow_scheduler_task_state_read_models(&records)?;
+        Ok(WorkflowSchedulerTaskStateReadModelQueryResponse {
+            session_id: session_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
+            tasks,
+        })
+    }
 }
 
 /// Projects durable scheduler queue records into presentation-neutral task

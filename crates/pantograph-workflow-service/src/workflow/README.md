@@ -96,6 +96,9 @@ facade test module.
   facts from canonical queue records. They must not expose transition ids,
   state versions, runtime handoff, executable Pumas load targets, or worker
   launch details.
+- Scheduler task-state queries are dedicated workflow-service read endpoints.
+  They do not extend session queue items or scheduler snapshots with task
+  internals, keeping queue admission facts separate from task progress facts.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.

@@ -9483,6 +9483,28 @@ Worker rules:
     pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
     --all-features`, and `cargo check -p pantograph-workflow-service
     --no-default-features`.
+- 2026-05-23 Milestone 5c active-run task-state query slice completed:
+  - Smallest useful vertical slice: expose the path-free scheduler task-state
+    read models through a dedicated workflow-service query for active runs
+    without changing queue item or scheduler snapshot DTOs.
+  - Allowed write set: workflow-service task-state read-model module/tests,
+    workflow facade exports, workflow README, the Milestone 5c plan, the
+    task-orchestration design note, and this execution log.
+  - Implementation notes:
+    `workflow_get_scheduler_task_state_read_models` validates session/run ids,
+    reads canonical active-run scheduler queue records from the session store,
+    and projects them through `workflow_scheduler_task_state_read_models`.
+  - No-fallback/no-legacy confirmation: the query returns presentation facts
+    only. It does not expose runtime handoff, executable Pumas load targets,
+    transition ids, state versions, raw task intent, worker launch details, or
+    session-level admission internals.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service
+    workflow::tests::task_state_read_model`, `cargo check -p
+    pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+    --all-features`, `cargo check -p pantograph-workflow-service
+    --no-default-features`, and `cargo fmt -p pantograph-workflow-service
+    -- --check`.
 
 ### Traceability Links
 
