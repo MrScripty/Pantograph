@@ -36,6 +36,8 @@ public exports out of the service crate.
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, session-scoped queue controls, and first-pass GUI-admin queued-run cancel facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
+| `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, optional schedulable task intents, and typed projection diagnostics. |
+| `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs and projection diagnostic enums re-exported through the workflow facade. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
@@ -193,6 +195,11 @@ facade test module.
   device, task, optional model ref, bounded diagnostics, and policy trace ids.
   It must not store graph inputs, raw node payloads, full Pumas facts, worker
   envelopes, image bytes, local filesystem paths, or scheduler internals.
+- Workflow scheduler task graph projection is path-free. `task_graph.rs` may
+  carry canonical `pumas_model_ref` values, graph input bindings, optional hard
+  runtime/device constraints, and scheduler trait settings, but it must not
+  read or preserve legacy `model_path`/`model_ref` identity or executable Pumas
+  load targets.
 - Workflow execution-plan DTOs are correct-by-construction: public builders and
   serde deserialization validate schema version, attribution ids, node ids,
   selected task/device facts, bounded diagnostic vectors, and policy trace ids.

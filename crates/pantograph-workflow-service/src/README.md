@@ -168,6 +168,12 @@ ids, node ids, selected task/runtime/device facts, optional model ref, bounded
 diagnostics, and trace ids only; it must not carry graph inputs, full Pumas
 facts, worker envelopes, image bytes, local paths, or mutable scheduler
 internals.
+Workflow scheduler task graph projection now lives behind the workflow facade
+as a path-free bridge from validated workflow topology to scheduler-owned task
+contracts. It preserves graph dependency bindings and canonical scheduler
+identifier parsing, emits typed projection diagnostics for missing canonical
+inference facts, and never treats legacy `model_path` or `model_ref` fields as
+runtime identity.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

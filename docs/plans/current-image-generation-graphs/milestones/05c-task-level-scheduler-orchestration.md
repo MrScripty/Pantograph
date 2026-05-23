@@ -13,7 +13,7 @@ durable task orchestration path.
 
 **Tasks:**
 
-- [ ] Add a path-free run-scoped scheduler task graph projection from validated
+- [x] Add a path-free run-scoped scheduler task graph projection from validated
   workflow topology and graph inputs. It must carry workflow/run/node/task
   correlation, dependencies, task kind, Pumas model refs, optional hard
   runtime/device constraints, typed trait settings, and estimate hints without
@@ -100,3 +100,21 @@ durable task orchestration path.
   dispatch-selected `SchedulerRuntimeHandoff` values at the task boundary.
   This milestone must be completed before the remaining Milestone 5b
   production runtime-host wiring and legacy execution deletion continue.
+- 2026-05-23: First implementation slice completed. `pantograph-workflow-service`
+  now exposes `workflow_scheduler_task_graph` plus path-free
+  `WorkflowSchedulerTaskGraph` DTOs. The projection uses validated workflow
+  topology, preserves dependency/input bindings, parses scheduler-owned
+  workflow/run/node/task ids, emits typed projection diagnostics for missing
+  canonical inference inputs, and only creates `SchedulableTaskIntent` when
+  canonical `pumas_model_ref` and explicit `task_kind` are valid. Legacy
+  `model_ref` and `model_path` are not accepted as scheduler identity.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`,
+  `cargo test -p pantograph-workflow-service workflow::tests::task_graph`,
+  `cargo check -p pantograph-workflow-service`,
+  `cargo check -p pantograph-workflow-service --all-features`, and
+  `cargo check -p pantograph-workflow-service --no-default-features`.
+  Discovered issue for later task-trait slices: the current scheduler
+  `SchedulerTraitValue` supports string, bool, signed integer, and unsigned
+  integer values only. Floating-point generation traits such as guidance scale
+  need an explicit typed contract extension before they can be projected
+  without loss.

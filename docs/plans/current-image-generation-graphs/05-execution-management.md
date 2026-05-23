@@ -9387,6 +9387,33 @@ Worker rules:
     `modelPath`, and planned-inference launch as successful branches.
   - Verification passed: documentation standards review against plan,
     architecture, and concurrency standards; `git diff --check -- docs/plans/current-image-generation-graphs`.
+- 2026-05-23 Milestone 5c path-free scheduler task graph projection slice
+  completed:
+  - Smallest useful vertical slice: add run-scoped task graph projection from
+    validated workflow topology without changing execution behavior.
+  - Allowed write set: `crates/pantograph-workflow-service/Cargo.toml`,
+    `Cargo.lock`, workflow-service facade/README/test files,
+    `workflow/task_graph.rs`, the Milestone 5c plan, the task-orchestration
+    design note, and this execution log.
+  - Implementation notes: workflow-service now depends on the canonical
+    scheduler/dependency-planning contracts and exposes
+    `workflow_scheduler_task_graph`. The projection emits one task per
+    topology node, preserves dependency/input bindings, parses scheduler-owned
+    workflow/run/node/task ids, creates `SchedulableTaskIntent` only for
+    canonical inference nodes with valid `pumas_model_ref` and explicit
+    `task_kind`, and carries typed projection diagnostics otherwise.
+  - No-fallback/no-legacy confirmation: legacy `model_ref`, `model_path`,
+    `ModelRefV2`, execution plans, backend projections, and Pumas executable
+    load targets are not scheduler identity sources in this slice.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service workflow::tests::task_graph`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-workflow-service --all-features`, and
+    `cargo check -p pantograph-workflow-service --no-default-features`.
+  - Discovered issue: scheduler trait settings cannot currently represent
+    floating-point generation options such as guidance scale. Future trait
+    projection work must extend the typed scheduler trait value contract rather
+    than silently dropping or stringifying floats.
 
 ### Traceability Links
 

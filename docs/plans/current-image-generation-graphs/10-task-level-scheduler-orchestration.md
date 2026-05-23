@@ -100,6 +100,9 @@ but the ownership and data boundaries must remain explicit.
 
 1. Add task graph extraction from validated workflow topology and graph inputs.
    This is inspection/persistence only and must not change execution behavior.
+   Completed 2026-05-23 as a path-free workflow-service projection that emits
+   typed diagnostics instead of accepting legacy `model_ref`/`model_path`
+   identity.
 2. Add durable task state records and transition tests for pending, ready,
    blocked, waiting for dependency readiness, waiting for resources, waiting
    for batch, running, paused/deferred, retryable failed, terminal failed, and

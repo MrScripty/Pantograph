@@ -30,6 +30,8 @@ pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 pantograph-timing-contracts = { path = "../pantograph-timing-contracts" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
+pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
+pantograph-scheduler = { path = "../pantograph-scheduler" }
 pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
 pantograph-media-conversion = { path = "../pantograph-media-conversion" }
