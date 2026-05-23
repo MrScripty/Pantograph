@@ -8891,6 +8891,32 @@ Worker rules:
     scheduler decisions, and deterministic Milestone 8 release validation
     assumptions. Each checkpoint must replace stale systems or stop for a
     focused re-plan; none may preserve retired resolver/path behavior.
+- 2026-05-22 Milestone 5a readiness admission contract slice completed:
+  - Smallest useful vertical slice: add scheduler-owned readiness admission
+    request/decision contracts and validation in `pantograph-scheduler`,
+    without wiring node-engine or runtime host execution.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerReadinessAdmissionRequest`,
+    `SchedulerReadinessAdmissionDecision`,
+    `SchedulerDependencyReadinessProof`, typed readiness admission state,
+    action, diagnostic severity/code, validated wrappers, public exports,
+    README coverage, and a JSON fixture-backed public contract test suite.
+  - No-fallback/no-legacy confirmation: ready admission requires matching
+    path-free `DependencyPreflightResult` proof; deferred and terminal failed
+    states require typed diagnostics and cannot carry ready proof. The new
+    contract does not expose executable Pumas load targets, local paths,
+    `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+    `modelPath`, selected runtime/device dispatch decisions, reservations,
+    batching groups, or worker launch facts.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`, and
+    `cargo fmt -p pantograph-scheduler -- --check`.
+  - Remaining follow-up: continue Milestone 5a with the non-legacy runtime
+    handoff seam so runtime/execution hosts can consume readiness admission
+    without converting back to `ModelRefV2`.
 
 ### Traceability Links
 

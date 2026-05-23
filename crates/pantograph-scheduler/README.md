@@ -13,6 +13,7 @@ ownership.
 | `src/capability.rs` | Backend-owned capability hint contract for graph editor and option-provider consumers. |
 | `src/intent.rs` | Path-free schedulable task intent contract, validated workflow/run/node/task ids, runtime/device constraints, typed trait settings, and bounded estimate hints. |
 | `src/ownership.rs` | Scheduler-owned capability and non-scheduler consumer ownership boundary enums. |
+| `src/readiness.rs` | Scheduler-owned readiness admission request/decision contracts and host-ready dependency readiness proof wrapper. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
 
 ## Problem
@@ -72,6 +73,11 @@ resolver behavior.
   availability states, and diagnostics, but must not contain selected runtime,
   selected device, load target, reservation, batching, worker launch, or final
   scheduler decision fields.
+- `SchedulerReadinessAdmissionDecision` is the scheduler-owned admission result
+  before runtime host handoff. A ready decision must carry
+  `SchedulerDependencyReadinessProof`, whose `DependencyPreflightResult` is
+  validated as path-free and ready. Deferred and terminal failed decisions must
+  carry typed diagnostics and must not carry ready proof.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -123,10 +129,16 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   raw `SchedulableTaskIntent` DTOs decoded from graph, IPC, saved-workflow, or
   queue payloads. Graph editor and option-provider consumers may also consume
   raw `SchedulerCapabilityHintSnapshot` DTOs produced by backend services.
+  Scheduler admission may consume raw `SchedulerReadinessAdmissionRequest`
+  values containing validated task intent plus dependency readiness policy.
 - Outputs: the canonical owner for scheduler capabilities, explicit deny-policy
   checks for non-scheduler consumers, and `ValidatedSchedulableTaskIntent`
   values for internal scheduler policy. Capability consumers receive
   `ValidatedSchedulerCapabilityHintSnapshot` values after boundary validation.
+  Runtime host handoff slices may consume
+  `ValidatedSchedulerReadinessAdmissionDecision` values once this crate has
+  validated that ready decisions carry matching path-free dependency readiness
+  proof.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -146,7 +158,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   typed trait setting value kinds, and estimate hint kinds;
   `SchedulerCapabilityHintSnapshot` task type, optional model ref, runtime
   hints, device hints, trait option hints, availability states, diagnostic
-  severities, and diagnostic codes.
+  severities, and diagnostic codes; `SchedulerReadinessAdmissionRequest` task
+  intent and policy fields; `SchedulerReadinessAdmissionDecision` action,
+  state, readiness proof, and typed diagnostics.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -154,7 +168,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   may consume scheduler facts but not own policy. Estimate hint variants are
   hints only; scheduler policy owns final resource admission. Capability
   availability states are display and validation hints only; scheduler policy
-  owns final dispatch/admission decisions.
+  owns final dispatch/admission decisions. Readiness admission state describes
+  whether dependency readiness allows dispatch now, defers for later work, or
+  fails terminally; it is not a runtime/device selection result.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait

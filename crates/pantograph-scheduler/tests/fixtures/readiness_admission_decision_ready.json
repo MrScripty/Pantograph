@@ -1,0 +1,73 @@
+{
+  "contract_version": 1,
+  "task_intent": {
+    "contract_version": 1,
+    "workflow_id": "workflow.image_generation",
+    "workflow_run_id": "run.2026-05-22.001",
+    "node_id": "node.llm_inference",
+    "task_id": "task.image_generation.001",
+    "fairness_key": "user.local",
+    "task_type": "image_generation",
+    "model_ref": {
+      "model_id": "pumas://models/juggernaut-xl-v10",
+      "revision": "main",
+      "selected_artifact_id": "diffusers-bundle"
+    },
+    "constraints": {
+      "requested_runtime_id": "diffusers-pytorch",
+      "requested_device_id": "cuda:0"
+    },
+    "trait_settings": [
+      {
+        "trait_id": "denoising_scheduler",
+        "value": {
+          "kind": "string",
+          "value": "EulerDiscreteScheduler"
+        }
+      },
+      {
+        "trait_id": "seed",
+        "value": {
+          "kind": "u64",
+          "value": 42
+        }
+      }
+    ],
+    "estimate_hints": [
+      {
+        "kind": "batch_size",
+        "value": 1
+      },
+      {
+        "kind": "peak_vram_bytes",
+        "value": 8589934592
+      }
+    ]
+  },
+  "policy": "check_only",
+  "action": "admit_for_dispatch",
+  "state": "ready",
+  "readiness_proof": {
+    "preflight_result": {
+      "contract_version": 1,
+      "identity_key": {
+        "model_ref": {
+          "model_id": "pumas://models/juggernaut-xl-v10",
+          "revision": "main",
+          "selected_artifact_id": "diffusers-bundle"
+        },
+        "task_id": "image_generation",
+        "scheduler_intent": {
+          "requested_runtime_id": "diffusers-pytorch",
+          "requested_device_id": "cuda:0"
+        }
+      },
+      "readiness_state": "ready",
+      "dependency_requirements_id": "deps.pytorch_diffusers.image_generation",
+      "environment_ref": {
+        "environment_id": "env.pytorch_diffusers",
+        "manifest_id": "manifest.pytorch_diffusers"
+      }
+    }
+  }
+}

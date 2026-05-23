@@ -29,7 +29,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   options, unavailable/not-installed/not-implemented states, and typed
   diagnostics without exposing local paths, load targets, package-manager
   internals, or final scheduler decisions.
-- [ ] Define the scheduler-owned readiness admission contract before replacing
+- [x] Define the scheduler-owned readiness admission contract before replacing
   node-engine preflight. It must accept validated `SchedulableTaskIntent`,
   apply scheduler dependency policy, and return typed ready/defer/fail
   admission results with dependency readiness proof when ready. It must not
@@ -222,3 +222,23 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   across concurrent workflow runs without graph/editor execution facts, project
   capability hints without final scheduler decisions, or run Milestone 8
   release validation without deterministic environment assumptions.
+- 2026-05-22 readiness admission contract slice completed. Smallest useful
+  vertical slice: add scheduler-owned readiness admission request/decision
+  contracts and validation in `pantograph-scheduler`, without wiring
+  node-engine or runtime host execution. Allowed write set:
+  `crates/pantograph-scheduler/`, this milestone file, and execution notes.
+  No-fallback confirmation: ready admission requires matching path-free
+  `DependencyPreflightResult` proof and rejects ready states without proof;
+  deferred and terminal failed states require typed diagnostics and cannot
+  carry ready proof. The contract does not expose executable Pumas load
+  targets, local paths, `ModelDependencyRequest`, `ModelRefV2`, graph
+  `model_path`, frontend `modelPath`, selected runtime/device dispatch
+  decisions, reservations, batching groups, or worker launch facts.
+  Verification passed: `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`, and
+  `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: define
+  the non-legacy runtime handoff seam that runtime/execution hosts can consume
+  after readiness admission without converting readiness proof back to
+  `ModelRefV2`.
