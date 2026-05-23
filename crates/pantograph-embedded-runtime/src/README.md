@@ -67,6 +67,9 @@ packages.
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
 | `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas owner API, explicit Pumas selector access, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
+| `runtime_host_execution.rs` | Defines the Milestone 5b runtime-host execution request/response boundary that consumes scheduler handoff facts without exposing `ModelRefV2`, graph `model_path`, executable load targets, or worker launch internals. |
+| `runtime_host_execution_tests.rs` | Focused runtime-host execution contract tests and fixture-backed legacy-field rejection coverage. |
+| `runtime_host_execution_tests/` | Structured fixture documentation and JSON examples for runtime-host execution request/response payloads. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
 | `runtime_registry_tests.rs` | Embedded runtime-registry translation, sync, reclaim, restore, and warmup coordination tests extracted from the production runtime-registry module. |
@@ -183,6 +186,12 @@ Workflow session load no longer starts llama.cpp from this crate with a raw
 `auto` device when the requested model is inactive. Until the canonical
 runtime/device decision path supplies a selected runtime, the helper fails
 closed with a runtime diagnostic instead of launching a backend-owned fallback.
+Runtime-host execution requests must consume dispatch-selected
+`SchedulerRuntimeHandoff` values and fail validation before runtime
+orchestration if the handoff is readiness-only. The request/response boundary
+must not expose executable Pumas load targets, local paths, `ModelRefV2`,
+graph `model_path`, frontend `modelPath`, reservations, batching groups, or
+worker launch internals to graph/node-engine contracts.
 Dependency-environment preflight ignores legacy `runtime_hint` as a backend
 preference input, and canonical Python-backed execution no longer derives
 backend selection from explicit `backend_key` fields, Pumas package hints,

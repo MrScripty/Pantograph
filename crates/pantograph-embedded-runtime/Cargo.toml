@@ -37,6 +37,7 @@ pantograph-node-contracts = { path = "../pantograph-node-contracts" }
 pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 pantograph-runtime-registry = { path = "../pantograph-runtime-registry" }
+pantograph-scheduler = { path = "../pantograph-scheduler" }
 
 serde.workspace = true
 serde_json.workspace = true

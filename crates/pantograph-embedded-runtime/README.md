@@ -9,6 +9,11 @@ and RAG adapters into a reusable backend runtime. The boundary exists so Tauri
 and host-language bindings can consume one Rust runtime facade instead of each
 assembling workflow execution infrastructure independently.
 
+Milestone 5b adds the runtime-host execution request/response contract that
+consumes scheduler-owned handoff facts without exposing `ModelRefV2`, graph
+`model_path`, executable Pumas load targets, or worker launch internals to
+graph/node-engine contracts.
+
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |

@@ -1,0 +1,16 @@
+{
+  "contract_version": 1,
+  "execution_request_id": "runtime-host.request.001",
+  "workflow_id": "workflow.image_generation",
+  "workflow_run_id": "run.2026-05-22.001",
+  "node_id": "node.image_generation",
+  "task_id": "task.image_generation.001",
+  "state": "accepted",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "handoff_accepted",
+      "message": "Runtime host accepted the scheduler dispatch handoff."
+    }
+  ]
+}

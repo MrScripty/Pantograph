@@ -36,6 +36,7 @@ pub mod runtime_capabilities;
 mod runtime_config;
 mod runtime_extensions;
 pub mod runtime_health;
+pub mod runtime_host_execution;
 pub mod runtime_recovery;
 pub mod runtime_registry;
 mod runtime_registry_controller;
@@ -91,6 +92,13 @@ pub use runtime_config::{EmbeddedRuntimeConfig, EmbeddedRuntimeError};
 pub use runtime_extensions::{
     apply_runtime_extensions, apply_runtime_extensions_for_execution, RuntimeExtensionsSnapshot,
     SharedExtensions,
+};
+pub use runtime_host_execution::{
+    RuntimeHostExecutionContractError, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
 pub(crate) use workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;

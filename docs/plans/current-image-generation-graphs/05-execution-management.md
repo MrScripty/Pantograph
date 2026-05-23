@@ -9264,6 +9264,34 @@ Worker rules:
     scheduler-handoff-to-`ModelRefV2` adapters, path repair, compatibility
     branches, and deleting legacy before a canonical replacement path exists.
   - Verification: documentation-only plan review and `git diff --check`.
+- 2026-05-22 Milestone 5b runtime-host request/response contract slice
+  completed:
+  - Smallest useful vertical slice: add the embedded-runtime host-facing
+    execution request/response DTOs, validated wrappers, typed diagnostics,
+    and JSON fixtures without resolving Pumas load targets or launching
+    runtimes.
+  - Allowed write set: `crates/pantograph-embedded-runtime/`, Milestone 5b
+    plan notes, and this execution log.
+  - Implementation notes: added `RuntimeHostExecutionRequest`,
+    `RuntimeHostExecutionResponse`, typed response state and diagnostics,
+    validated wrappers, public exports, fixture-backed tests, and README
+    coverage for the new host boundary.
+  - No-fallback/no-legacy confirmation: the request consumes a
+    dispatch-selected `SchedulerRuntimeHandoff` and rejects readiness-only
+    handoff; request/response contracts expose no executable load target,
+    local path, `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`,
+    frontend `modelPath`, path repair, reservation/batching internals, or
+    worker launch details.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime runtime_host_execution`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --all-features`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`,
+    `cargo fmt -p pantograph-embedded-runtime -- --check`,
+    `git diff --check`, README coverage review, and source/test fixture
+    directory coverage review, and file-size standards check for new
+    runtime-host source/test files.
+  - Remaining follow-up: add host-owned Pumas load-target resolution service.
 
 ### Traceability Links
 

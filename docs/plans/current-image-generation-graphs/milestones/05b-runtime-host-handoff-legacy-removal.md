@@ -15,7 +15,7 @@ host-owned Pumas load-target resolution must exist before old successful
 
 **Tasks:**
 
-- [ ] Define the runtime-host execution request/response contract first. It must
+- [x] Define the runtime-host execution request/response contract first. It must
   consume `SchedulerRuntimeHandoff`, scheduler dispatch decision, dependency
   environment ref, and Pumas model/artifact identity without exposing
   `ModelRefV2`, `model_path`, executable load targets, reservations, batching
@@ -96,3 +96,22 @@ host-owned Pumas load-target resolution must exist before old successful
   load-target resolution, then runtime migrations and deletion. Do not create
   a scheduler-handoff-to-`ModelRefV2` adapter or a path-repair bridge while
   crossing this boundary.
+- 2026-05-22 runtime-host request/response contract slice completed. Smallest
+  useful vertical slice: add the embedded-runtime host-facing execution
+  request/response DTOs, validated wrappers, typed diagnostics, and JSON
+  fixtures without resolving Pumas load targets or launching runtimes. Allowed
+  write set: `crates/pantograph-embedded-runtime/`, this milestone file, and
+  execution notes. No-fallback confirmation: the request consumes a
+  dispatch-selected `SchedulerRuntimeHandoff` and rejects readiness-only
+  handoff; request/response contracts expose no executable load target, local
+  path, `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+  `modelPath`, path repair, reservation/batching internals, or worker launch
+  details. Verification passed: `cargo fmt -p pantograph-embedded-runtime`,
+  `cargo test -p pantograph-embedded-runtime runtime_host_execution`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo check -p pantograph-embedded-runtime --all-features`,
+  `cargo check -p pantograph-embedded-runtime --no-default-features`,
+  `cargo fmt -p pantograph-embedded-runtime -- --check`, `git diff --check`,
+  README coverage review, source/test fixture directory coverage review, and
+  file-size standards check for new runtime-host source/test files. Remaining
+  follow-up: add host-owned Pumas load-target resolution service.
