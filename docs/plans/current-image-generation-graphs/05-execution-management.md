@@ -9884,6 +9884,26 @@ Worker rules:
   - Remaining follow-up: graph-editor/run-inspection read models still need
     waiting reasons, timing, attempts, and ledger-backed diagnostics from the
     orchestrator lifecycle slices.
+- 2026-05-23 Milestone 5c orchestrator initialization slice completed:
+  - Smallest useful vertical slice: add the workflow-service orchestrator
+    method that turns immutable `WorkflowSchedulerTaskGraph` tasks into
+    initial `SchedulerTaskStateRecord` values before dependency readiness or
+    runtime dispatch begins.
+  - Allowed write set: workflow-service task orchestrator module/tests and
+    current plan notes.
+  - No-fallback confirmation: initialization does not call node-engine output
+    demand, synthesize model paths, create dummy Pumas refs, or launch runtime
+    inference. Valid schedulable tasks start as `Ready`, unresolved/template
+    tasks start as `AwaitingInputs`, and projection-diagnostic tasks start as
+    `Invalid` with typed scheduler diagnostics.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `cargo check -p pantograph-workflow-service
+    --no-default-features`.
+  - Remaining follow-up: production store initialization, dependency readiness
+    calls, runtime-host dispatch lifecycle, ledger writes, bounded queues,
+    cancellation, retry/defer, and panic handling remain open.
 
 ### Traceability Links
 

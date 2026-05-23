@@ -6,7 +6,19 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     RuntimeHostExecutionState, SchedulerRuntimeHostDispatcher,
 };
-use pantograph_scheduler::SchedulerRuntimeHandoffState;
+use pantograph_scheduler::{
+    SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
+    SchedulerRuntimeHandoffState, SchedulerTaskId, SchedulerTaskState,
+    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerWorkflowId,
+    SchedulerWorkflowRunId,
+};
+
+use crate::workflow::{
+    WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskIntentTemplate,
+    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowSchedulerTaskProjectionDiagnosticSeverity,
+    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+};
 
 use super::{WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError};
 
@@ -99,6 +111,101 @@ async fn orchestrator_rejects_readiness_only_handoff_before_runtime_host_port() 
     assert!(port.requests().is_empty());
 }
 
+#[test]
+fn orchestrator_initializes_ready_state_for_schedulable_task() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].task_id.as_str(), task_intent.task_id.as_str());
+    assert_eq!(records[0].state_version, 1);
+    assert!(matches!(records[0].state, SchedulerTaskState::Ready { .. }));
+}
+
+#[test]
+fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+        task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+        node_type: "llm-inference".to_string(),
+        dependency_task_ids: vec![SchedulerTaskId::parse("model-task").expect("task id")],
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: Some(WorkflowSchedulerTaskIntentTemplate {
+            task_type: "image_generation".parse().expect("task type"),
+            constraints: SchedulerRuntimeDeviceConstraints::default(),
+            trait_settings: Vec::new(),
+            dependency_override_patches: Vec::new(),
+            estimate_hints: Vec::new(),
+        }),
+        diagnostics: Vec::new(),
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].state,
+        SchedulerTaskState::AwaitingInputs { .. }
+    ));
+}
+
+#[test]
+fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+        task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+        node_type: "llm-inference".to_string(),
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        diagnostics: vec![WorkflowSchedulerTaskProjectionDiagnostic {
+            severity: WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error,
+            code: WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
+            node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+            port_id: Some("pumas_model_ref".to_string()),
+            message: "inference scheduler tasks require canonical pumas_model_ref input"
+                .to_string(),
+        }],
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    let SchedulerTaskState::Invalid { diagnostics } = &records[0].state else {
+        panic!("expected invalid task state");
+    };
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].severity,
+        SchedulerTaskStateDiagnosticSeverity::Error
+    );
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::InvalidTask
+    );
+    assert!(diagnostics[0]
+        .hint
+        .as_deref()
+        .expect("diagnostic hint")
+        .contains("pumas_model_ref"));
+}
+
 fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     serde_json::from_str(include_str!(
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -111,4 +218,50 @@ fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_accepted.json"
     ))
     .expect("runtime host response fixture")
+}
+
+fn orchestrator_without_runtime_host_response() -> WorkflowSchedulerTaskOrchestrator {
+    WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(Arc::new(
+        RecordingRuntimeHostPort::default(),
+    )))
+}
+
+fn task_graph(tasks: Vec<WorkflowSchedulerTask>) -> WorkflowSchedulerTaskGraph {
+    let workflow_id = tasks
+        .first()
+        .map(|task| task.workflow_id.clone())
+        .unwrap_or_else(scheduler_workflow_id);
+    let workflow_run_id = tasks
+        .first()
+        .map(|task| task.workflow_run_id.clone())
+        .unwrap_or_else(scheduler_workflow_run_id);
+    WorkflowSchedulerTaskGraph {
+        schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        workflow_id,
+        workflow_run_id,
+        tasks,
+    }
+}
+
+fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask {
+    WorkflowSchedulerTask {
+        workflow_id: task_intent.workflow_id.clone(),
+        workflow_run_id: task_intent.workflow_run_id.clone(),
+        node_id: task_intent.node_id.clone(),
+        task_id: task_intent.task_id.clone(),
+        node_type: "llm-inference".to_string(),
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: Some(task_intent),
+        schedulable_intent_template: None,
+        diagnostics: Vec::new(),
+    }
+}
+
+fn scheduler_workflow_id() -> SchedulerWorkflowId {
+    SchedulerWorkflowId::parse("workflow.image_generation").expect("workflow id")
+}
+
+fn scheduler_workflow_run_id() -> SchedulerWorkflowRunId {
+    SchedulerWorkflowRunId::parse("run.001").expect("workflow run id")
 }

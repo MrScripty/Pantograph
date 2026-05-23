@@ -590,3 +590,22 @@ durable task orchestration path.
   this does not close the broader read-model checklist item because waiting
   reasons, timings, attempts, and ledger-backed diagnostics still depend on
   orchestrator lifecycle integration.
+- 2026-05-23 orchestrator initialization slice completed. Smallest useful
+  vertical slice: add the workflow-service orchestrator method that converts
+  immutable `WorkflowSchedulerTaskGraph` tasks into initial
+  `SchedulerTaskStateRecord` values before dependency readiness or runtime
+  dispatch begins. Allowed write set: workflow-service task orchestrator module
+  and tests plus this plan. No-fallback confirmation: initialization does not
+  call node-engine output demand, synthesize model paths, create dummy Pumas
+  refs, or launch runtime inference. Tasks with complete validated
+  `SchedulableTaskIntent` start as `Ready`; tasks with templates or unresolved
+  inputs start as `AwaitingInputs`; tasks with projection diagnostics start as
+  `Invalid` with typed scheduler diagnostics. Verification passed: `cargo
+  test -p pantograph-workflow-service scheduler::task_orchestrator --lib`,
+  `cargo check -p pantograph-workflow-service`, `cargo check -p
+  pantograph-workflow-service --all-features`, and `cargo check -p
+  pantograph-workflow-service --no-default-features`. Remaining follow-up:
+  the orchestrator checklist item stays open because state persistence
+  initialization, dependency readiness calls, runtime-host dispatch lifecycle,
+  ledger writes, bounded queues, cancellation, retry/defer, and panic handling
+  are not wired into production session execution yet.

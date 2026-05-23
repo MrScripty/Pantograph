@@ -275,7 +275,10 @@ implementation can be considered complete:
    compatibility shims.
 8. Add the scheduler task orchestrator with a synchronous policy core and an
    async shell for dependency readiness, runtime-host dispatch, ledger writes,
-   cancellation, retries, and shutdown.
+   cancellation, retries, and shutdown. Initial task-state creation from
+   `WorkflowSchedulerTaskGraph` completed 2026-05-23; production store wiring,
+   dependency readiness, dispatch lifecycle, ledger writes, bounded queues,
+   cancellation, retry/defer, and panic handling remain open.
 9. Add non-runtime single-task execution through node-engine using
    materialized scheduler-owned inputs and task results. Do not use output-node
    demand to drive runtime inference.
