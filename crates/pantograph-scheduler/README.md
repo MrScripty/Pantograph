@@ -22,7 +22,9 @@ ownership.
 | `src/resource.rs` | Platform-neutral resource/residency snapshot, reservation, runtime-readiness, load/warmup, batching-memory, and observer contracts. |
 | `src/resource_types.rs` | Shared resource/residency enums and diagnostics used by scheduler observation contracts. |
 | `src/supervision.rs` | Scheduler lifecycle supervision contract for long-running queue, dependency, resource, runtime-host, retry, and reservation-cleanup services. |
+| `src/README.md` | Source-directory contract map and no-legacy invariants for scheduler modules. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
+| `tests/fixtures/` | Canonical structured payloads for persisted or transported scheduler DTOs. |
 
 ## Problem
 Pantograph workflows can pause between ready DAG tasks while concurrent users,

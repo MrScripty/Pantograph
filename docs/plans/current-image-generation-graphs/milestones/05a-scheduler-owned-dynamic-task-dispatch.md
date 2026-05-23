@@ -79,7 +79,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
 - [x] Wire runtime/execution host handoff through dispatch decisions. The host
   may resolve Pumas-approved load targets only at the runtime boundary that
   needs executable facts.
-- [ ] Update or add README/crate documentation for every new public contract,
+- [x] Update or add README/crate documentation for every new public contract,
   source directory, lifecycle owner, platform observer, persisted queue state,
   structured fixture, and host-facing API.
 - [ ] Delete or replace retired successful paths:
@@ -460,3 +460,22 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   file-size standards check for modified scheduler handoff files. Remaining
   follow-up: update documentation coverage and deletion tracking for any public
   contract or source directory gaps left in Milestone 5a.
+- 2026-05-22 scheduler documentation coverage slice completed. Smallest useful
+  vertical slice: add standards-compliant source and test README coverage for
+  `pantograph-scheduler` after all Milestone 5a public contracts existed,
+  without changing scheduler behavior. Allowed write set:
+  `crates/pantograph-scheduler/README.md`,
+  `crates/pantograph-scheduler/src/README.md`,
+  `crates/pantograph-scheduler/tests/README.md`,
+  `crates/pantograph-scheduler/tests/fixtures/README.md`, this milestone file,
+  and execution notes. No-fallback confirmation: documentation records that
+  scheduler source/tests reject executable load targets, local paths,
+  `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+  `modelPath`, worker launch facts, and compatibility DTOs instead of
+  preserving them. Verification passed: `git diff --check`; README section
+  review against documentation standards; source/test directory coverage
+  review for `crates/pantograph-scheduler/src/` and
+  `crates/pantograph-scheduler/tests/` plus structured fixture coverage review
+  for `crates/pantograph-scheduler/tests/fixtures/`. Remaining follow-up:
+  decide the final Milestone 5a retired-path deletion boundary before editing
+  non-scheduler source files.
