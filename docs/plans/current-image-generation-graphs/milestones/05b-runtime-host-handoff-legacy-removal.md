@@ -31,7 +31,7 @@ alternate successful launch path.
   executable load targets only from scheduler-selected Pumas refs/artifact
   identity at runtime dispatch, and return typed unavailable/stale/invalid
   diagnostics instead of falling back to paths.
-- [ ] Add the scheduler-owned runtime-host execution dispatch port. It must
+- [x] Add the scheduler-owned runtime-host execution dispatch port. It must
   accept only `RuntimeHostExecutionRequest`, return
   `RuntimeHostExecutionResponse`, and keep request/cancellation/retry
   correlation in scheduler/application orchestration rather than runtime
@@ -176,3 +176,25 @@ alternate successful launch path.
   from node-engine, then migrate PyTorch/llama.cpp/audio execution. No
   scheduler-handoff synthesis from reduced plans, no backend-decision bridge,
   and no alternate planned-inference successful branch are allowed.
+- 2026-05-23 scheduler-owned runtime-host execution dispatch port slice
+  completed. Smallest useful vertical slice: add the embedded-runtime
+  scheduler dispatch port and dispatcher that builds
+  `RuntimeHostExecutionRequest` only from an actual
+  `SchedulerRuntimeHandoff`, validates dispatch-selected request shape before
+  calling the runtime-host port, and validates runtime-host response
+  correlation before returning a validated response. Allowed write set:
+  `crates/pantograph-embedded-runtime/`, this milestone file, and execution
+  notes. No-fallback confirmation: the dispatcher exposes no constructor from
+  `WorkflowExecutionPlan`, `WorkflowExecutionPlanNodeDecision`,
+  `BackendExecutionDecision`, graph inputs, `ModelRefV2`, or `model_path`; it
+  rejects readiness-only handoff before the runtime-host port is called and
+  does not wire or preserve planned-inference launch behavior. Verification
+  passed: `cargo fmt -p pantograph-embedded-runtime`, `cargo test -p
+  pantograph-embedded-runtime runtime_host_dispatch`, `cargo check -p
+  pantograph-embedded-runtime`, `cargo check -p pantograph-embedded-runtime
+  --all-features`, `cargo check -p pantograph-embedded-runtime
+  --no-default-features`, `cargo fmt -p pantograph-embedded-runtime --
+  --check`, `git diff --check`, README coverage review, and file-size
+  standards check. Remaining follow-up: wire scheduler dispatch to call the
+  runtime-host execution port from the actual dispatch-selected scheduler
+  handoff.

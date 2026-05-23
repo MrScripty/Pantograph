@@ -9339,6 +9339,32 @@ Worker rules:
     `ModelDependencyResolver`, `ModelRefV2`, or `model_path` fixtures as
     alternate successful execution branches.
   - Verification: documentation-only plan review and `git diff --check`.
+- 2026-05-23 Milestone 5b scheduler-owned runtime-host execution dispatch
+  port slice completed:
+  - Smallest useful vertical slice: add the embedded-runtime scheduler
+    dispatch port and dispatcher without wiring production execution yet.
+  - Allowed write set: `crates/pantograph-embedded-runtime/`, Milestone 5b
+    plan notes, and this execution log.
+  - Implementation notes: added `RuntimeHostExecutionPort`,
+    `SchedulerRuntimeHostDispatcher`, typed port/dispatch errors, request
+    validation before port invocation, response correlation validation, public
+    crate exports, README coverage, and focused tests.
+  - No-fallback/no-legacy confirmation: the dispatcher can only build
+    `RuntimeHostExecutionRequest` from a scheduler handoff. It exposes no
+    API from `WorkflowExecutionPlan`, `WorkflowExecutionPlanNodeDecision`,
+    `BackendExecutionDecision`, graph input, `ModelRefV2`, or `model_path`,
+    rejects readiness-only handoff before the port is called, and does not
+    wire or preserve planned-inference launch behavior.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime runtime_host_dispatch`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --all-features`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`,
+    `cargo fmt -p pantograph-embedded-runtime -- --check`,
+    `git diff --check`, README coverage review, and file-size standards
+    check.
+  - Remaining follow-up: wire scheduler dispatch to call the runtime-host
+    execution port from the actual dispatch-selected scheduler handoff.
 
 ### Traceability Links
 

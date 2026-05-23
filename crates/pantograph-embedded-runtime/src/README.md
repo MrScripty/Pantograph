@@ -67,6 +67,8 @@ packages.
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
 | `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas owner API, explicit Pumas selector access, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
+| `runtime_host_dispatch.rs` | Owns the scheduler-to-runtime-host execution port and dispatcher that accepts only dispatch-selected scheduler handoff facts, validates runtime-host response correlation, and avoids reduced execution-plan launch paths. |
+| `runtime_host_dispatch_tests.rs` | Focused tests proving scheduler dispatch passes only dispatch-selected handoff to the runtime-host port and rejects readiness-only or mismatched responses. |
 | `runtime_host_execution.rs` | Defines the Milestone 5b runtime-host execution request/response boundary that consumes scheduler handoff facts without exposing `ModelRefV2`, graph `model_path`, executable load targets, or worker launch internals. |
 | `runtime_host_execution_tests.rs` | Focused runtime-host execution contract tests and fixture-backed legacy-field rejection coverage. |
 | `runtime_host_execution_tests/` | Structured fixture documentation and JSON examples for runtime-host execution request/response payloads. |
