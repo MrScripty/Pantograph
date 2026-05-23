@@ -11,6 +11,7 @@ ownership.
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for scheduler boundary and task intent contracts. |
 | `src/capability.rs` | Backend-owned capability hint contract for graph editor and option-provider consumers. |
+| `src/dispatch.rs` | Scheduler-selected dispatch decision contract for runtime/device/model/dependency/reservation/batch facts. |
 | `src/handoff.rs` | Non-legacy runtime handoff envelope consumed after scheduler readiness admission. |
 | `src/intent.rs` | Path-free schedulable task intent contract, validated workflow/run/node/task ids, runtime/device constraints, typed trait settings, and bounded estimate hints. |
 | `src/lifecycle.rs` | Backend-owned scheduler task lifecycle diagnostic snapshots for graph/run inspection. |
@@ -103,6 +104,11 @@ resolver behavior.
   dependency-readiness action, resource-observation loop, runtime-host
   dispatch, retry loop, and reservation-cleanup components exactly once, with
   bounded queues where asynchronous work may accumulate.
+- `SchedulerDispatchDecision` is the scheduler-selected execution admission
+  contract. It carries runtime/device/model/dependency/reservation/batch facts
+  and runtime trait projection for host handoff, but it must not carry
+  executable Pumas load targets, local paths, worker launch details, or graph
+  inputs.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -176,6 +182,11 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   `ValidatedSchedulerLifecycleOwnerSnapshot` values after the backend validates
   required component ownership, bounded queues, cancellation state, panic
   state, shutdown state, and diagnostics.
+  Runtime-host handoff consumers may use
+  `ValidatedSchedulerDispatchDecision` after selected runtime, selected
+  devices, selected Pumas model/artifact identity, dependency proof,
+  environment ref, reservation lease, batching group, and runtime trait
+  projection are validated.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -207,7 +218,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   diagnostic severity, code, bounded message, and optional hint fields;
   `SchedulerLifecycleOwnerSnapshot` owner id, component kind, component state,
   cancellation state, panic state, queue bounds, and lifecycle diagnostic
-  fields.
+  fields; `SchedulerDispatchDecision` correlation, selected runtime, optional
+  runtime variant, selected device set, selected model ref, readiness proof,
+  environment ref, optional batching group, reservation lease, runtime trait
+  settings, and dispatch diagnostic fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -225,7 +239,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   facts are separate contracts. Lifecycle diagnostic codes must be compatible
   with the queue state they explain. Lifecycle supervision component states
   describe service ownership and health only; they do not select runtime,
-  device, dependency, resource, or batching policy.
+  device, dependency, resource, or batching policy. Dispatch decisions are
+  short-lived scheduler-owned facts and must not become graph inputs or
+  executable load-target carriers.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait

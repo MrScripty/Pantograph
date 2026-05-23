@@ -9072,6 +9072,37 @@ Worker rules:
     `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
   - Remaining follow-up: define the scheduler dispatch decision contract
     without leaking executable load targets or graph/runtime legacy identity.
+- 2026-05-22 Milestone 5a scheduler dispatch decision contract slice
+  completed:
+  - Smallest useful vertical slice: add scheduler-selected dispatch decision
+    contracts in `pantograph-scheduler`, without wiring runtime host
+    execution, resolving Pumas load targets, implementing resource reservation
+    storage, or adding batching policy.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerDispatchDecision`,
+    `SchedulerRuntimeVariantId`, `SchedulerBatchingGroupId`,
+    `SchedulerReservationLeaseId`, `SchedulerDispatchDiagnostic`,
+    dispatch diagnostic enums, validated wrapper, public exports, README
+    coverage, and a JSON fixture-backed public contract test suite.
+  - No-fallback/no-legacy confirmation: dispatch decisions carry correlation
+    ids, path-free task intent, selected runtime/runtime variant, selected
+    device set, selected Pumas model/artifact identity, dependency readiness
+    proof, environment ref, optional batching group, reservation lease id,
+    runtime trait projection, and typed diagnostics only. They validate hard
+    runtime/device requirements, selected model consistency, dependency
+    environment proof, duplicate devices, and bounded diagnostics while
+    rejecting executable load targets, local paths, `ModelDependencyRequest`,
+    `ModelRefV2`, graph `model_path`, frontend `modelPath`, worker launch
+    facts, and runtime host internals.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  - Remaining follow-up: add the resource/residency manager abstraction for
+    admission-time snapshots, reservations, residency, runtime readiness, and
+    typed impossible-fit diagnostics.
 
 ### Traceability Links
 

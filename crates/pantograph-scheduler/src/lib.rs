@@ -6,6 +6,7 @@
 //! runtimes, expose frontend actions, or resolve local model paths.
 
 mod capability;
+mod dispatch;
 mod error;
 mod handoff;
 mod intent;
@@ -20,6 +21,12 @@ pub use capability::{
     SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,
     SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
+};
+pub use dispatch::{
+    SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,
+    SchedulerDispatchDiagnosticCode, SchedulerDispatchDiagnosticSeverity,
+    SchedulerReservationLeaseId, SchedulerRuntimeVariantId, ValidatedSchedulerDispatchDecision,
+    SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION,
 };
 pub use error::SchedulerContractError;
 pub use handoff::{
