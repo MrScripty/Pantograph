@@ -35,6 +35,7 @@ pantograph-workflow-service = { path = "../pantograph-workflow-service" }
 pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
 pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
+pantograph-runtime-host-contracts = { path = "../pantograph-runtime-host-contracts" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 pantograph-runtime-registry = { path = "../pantograph-runtime-registry" }
 pantograph-scheduler = { path = "../pantograph-scheduler" }

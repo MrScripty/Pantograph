@@ -67,11 +67,6 @@ packages.
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
 | `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas owner API, explicit Pumas selector access, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
-| `runtime_host_dispatch.rs` | Owns the scheduler-to-runtime-host execution port and dispatcher that accepts only dispatch-selected scheduler handoff facts, validates runtime-host response correlation, and avoids reduced execution-plan launch paths. |
-| `runtime_host_dispatch_tests.rs` | Focused tests proving scheduler dispatch passes only dispatch-selected handoff to the runtime-host port and rejects readiness-only or mismatched responses. |
-| `runtime_host_execution.rs` | Defines the Milestone 5b runtime-host execution request/response boundary that consumes scheduler handoff facts without exposing `ModelRefV2`, graph `model_path`, executable load targets, or worker launch internals. |
-| `runtime_host_execution_tests.rs` | Focused runtime-host execution contract tests and fixture-backed legacy-field rejection coverage. |
-| `runtime_host_execution_tests/` | Structured fixture documentation and JSON examples for runtime-host execution request/response payloads. |
 | `runtime_host_load_target.rs` | Owns host-only Pumas artifact load-target request building, ready/unavailable response mapping, and typed diagnostics for scheduler-dispatched runtime execution. |
 | `runtime_host_load_target_tests.rs` | Focused tests proving host load-target resolution uses scheduler-selected Pumas refs and returns typed unavailable diagnostics. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
@@ -190,12 +185,11 @@ Workflow session load no longer starts llama.cpp from this crate with a raw
 `auto` device when the requested model is inactive. Until the canonical
 runtime/device decision path supplies a selected runtime, the helper fails
 closed with a runtime diagnostic instead of launching a backend-owned fallback.
-Runtime-host execution requests must consume dispatch-selected
-`SchedulerRuntimeHandoff` values and fail validation before runtime
-orchestration if the handoff is readiness-only. The request/response boundary
-must not expose executable Pumas load targets, local paths, `ModelRefV2`,
-graph `model_path`, frontend `modelPath`, reservations, batching groups, or
-worker launch internals to graph/node-engine contracts.
+Runtime-host execution requests are owned by the shared
+`pantograph-runtime-host-contracts` crate. This crate implements host-specific
+runtime execution and Pumas load-target resolution against those shared
+contracts; it must not define parallel runtime-host DTOs, dispatcher shims, or
+compatibility aliases.
 Runtime-host Pumas load-target resolution is host-only. It builds Pumas
 requests from scheduler-selected model/artifact identity and maps missing,
 stale, invalid, or unavailable Pumas states into typed host diagnostics instead

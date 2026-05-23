@@ -7387,6 +7387,7 @@ dependencies = [
  "pantograph-diagnostics-ledger",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
+ "pantograph-runtime-host-contracts",
  "pantograph-runtime-identity",
  "pantograph-runtime-registry",
  "pantograph-scheduler",
@@ -7474,6 +7475,18 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "uuid",
+]
+
+[[package]]
+name = "pantograph-runtime-host-contracts"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "pantograph-scheduler",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]

@@ -49,7 +49,7 @@ durable task orchestration path.
   unavailable, or invalid values must emit typed diagnostics and keep the task
   blocked/deferred/failed according to scheduler policy rather than falling
   back to graph-local paths or whole-workflow node-engine demand.
-- [ ] Move runtime-host execution contracts, response contracts, execution
+- [x] Move runtime-host execution contracts, response contracts, execution
   port, dispatcher, and typed dispatch errors out of
   `pantograph-embedded-runtime` into a lower-level shared contract crate before
   implementing the orchestrator. `pantograph-workflow-service` must consume the
@@ -408,3 +408,36 @@ durable task orchestration path.
   replacement/removal of embedded-runtime-owned definitions, feature-matrix
   checks for touched crates, and explicit rejection of aliases or mirrored
   DTOs. No source implementation changed in this standards pass.
+- 2026-05-23 runtime-host shared contract crate slice completed. Smallest
+  useful vertical slice: move `RuntimeHostExecutionRequest`,
+  `RuntimeHostExecutionResponse`, validated wrappers, diagnostics,
+  `RuntimeHostExecutionPort`, `SchedulerRuntimeHostDispatcher`, and typed
+  port/dispatch errors into the new `pantograph-runtime-host-contracts`
+  crate, update embedded-runtime load-target resolution to consume that crate,
+  and delete the embedded-runtime-owned DTO/dispatcher modules and fixtures.
+  Allowed write set: workspace manifest, new
+  `crates/pantograph-runtime-host-contracts` contract crate, embedded-runtime
+  manifest/imports/docs/load-target tests, and Milestone 5c plan notes.
+  No-fallback confirmation: no compatibility aliases, mirrored DTOs, old
+  embedded-runtime contract modules, or alternate runtime launch paths were
+  retained. Runtime-host Pumas load-target resolution still consumes only the
+  validated shared request and keeps executable paths host-only. Verification
+  passed: `cargo test -p pantograph-runtime-host-contracts`, `cargo test -p
+  pantograph-embedded-runtime runtime_host_load_target --lib`, `cargo check -p
+  pantograph-runtime-host-contracts`, `cargo check -p
+  pantograph-embedded-runtime`, `cargo check -p pantograph-workflow-service`,
+  `cargo check -p pantograph-runtime-host-contracts --all-features`, `cargo
+  check -p pantograph-runtime-host-contracts --no-default-features`, `cargo
+  check -p pantograph-embedded-runtime --all-features`, `cargo check -p
+  pantograph-embedded-runtime --no-default-features`, `cargo check -p
+  pantograph-workflow-service --all-features`, `cargo check -p
+  pantograph-workflow-service --no-default-features`, `cargo fmt -p
+  pantograph-runtime-host-contracts -p pantograph-embedded-runtime --
+  --check`, `git diff --check`, targeted `rg` deletion checks for
+  embedded-runtime-owned runtime-host modules, and file-size review for the
+  new/touched runtime-host files. Verification deviation: workflow-service
+  compile checks prove the workspace remains cycle-free after the contract
+  extraction, but workflow-service does not yet depend on the shared port in
+  this slice because adding an unused dependency would violate dependency
+  ownership standards. The actual workflow-service consumer wiring remains in
+  the next orchestrator slice.

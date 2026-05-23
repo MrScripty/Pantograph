@@ -1,11 +1,10 @@
+use pantograph_runtime_host_contracts::{
+    RuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionRequest,
+};
 use pumas_library::models::{
     AssetValidationState, ModelArtifactState, ModelEntryPathState, PackageArtifactKind,
     PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
     PumasArtifactLoadTargetDiagnosticCode, ResolveModelArtifactLoadTargetResponse, StorageKind,
-};
-
-use crate::runtime_host_execution::{
-    RuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionRequest,
 };
 
 use super::{
@@ -106,7 +105,7 @@ fn unavailable_load_target_response_returns_typed_error() {
 
 fn validated_runtime_host_request() -> ValidatedRuntimeHostExecutionRequest {
     let request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
     ))
     .expect("runtime host execution request fixture must decode");
     ValidatedRuntimeHostExecutionRequest::try_from(request)

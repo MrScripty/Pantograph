@@ -9718,6 +9718,31 @@ Worker rules:
     workflow-service compile checks proving the dependency cycle is gone,
     default/all-features/no-default-features checks for touched crates, and
     `git diff --check`.
+- 2026-05-23 Milestone 5c runtime-host shared contract crate slice:
+  - Smallest useful vertical slice: move runtime-host execution DTOs,
+    validation wrappers, diagnostics, execution port, dispatcher, and typed
+    errors into the new `pantograph-runtime-host-contracts` shared boundary
+    crate; update embedded-runtime load-target resolution to import the shared
+    validated request; delete the embedded-runtime-owned DTO/dispatcher
+    modules, tests, and fixtures.
+  - No-fallback/no-legacy confirmation: no aliases, mirrored DTOs,
+    compatibility modules, or alternate runtime launch paths were retained.
+    Runtime-host Pumas load-target resolution remains host-only and consumes
+    only scheduler-selected model refs from the validated shared request.
+  - Verification passed: `cargo test -p pantograph-runtime-host-contracts`,
+    `cargo test -p pantograph-embedded-runtime runtime_host_load_target --lib`,
+    `cargo check -p pantograph-runtime-host-contracts`, `cargo check -p
+    pantograph-embedded-runtime`, `cargo check -p
+    pantograph-workflow-service`, default/all-features/no-default-features
+    checks for the shared contract crate, embedded-runtime, and
+    workflow-service, `cargo fmt -p pantograph-runtime-host-contracts -p
+    pantograph-embedded-runtime -- --check`, `git diff --check`, targeted
+    deletion `rg` checks, and file-size review for the new/touched
+    runtime-host files.
+  - Deviation recorded: workflow-service does not yet depend on the shared
+    port because the orchestrator slice has not introduced a real use. The
+    consumer dependency will be added with orchestrator wiring to preserve
+    dependency ownership standards and avoid unused dependencies.
 
 ### Traceability Links
 

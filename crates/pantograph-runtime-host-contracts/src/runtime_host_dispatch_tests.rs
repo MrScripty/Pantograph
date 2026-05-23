@@ -7,7 +7,7 @@ use super::{
     RuntimeHostDispatchError, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
     SchedulerRuntimeHostDispatcher,
 };
-use crate::runtime_host_execution::{
+use crate::{
     RuntimeHostExecutionContractError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     RuntimeHostExecutionState,
 };
@@ -125,14 +125,14 @@ async fn dispatcher_rejects_mismatched_runtime_host_response_correlation() {
 
 fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
     ))
     .expect("runtime host request fixture")
 }
 
 fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
     serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_response_accepted.json"
+        "../tests/fixtures/runtime_host_execution_response_accepted.json"
     ))
     .expect("runtime host response fixture")
 }

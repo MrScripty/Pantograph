@@ -255,6 +255,15 @@ Standards guardrails for the shared crate:
   compile checks proving it can depend on the shared port without a cycle,
   default/all-features/no-default-features checks for touched crates, and
   `git diff --check`.
+- 2026-05-23 implementation status: the shared
+  `pantograph-runtime-host-contracts` crate now owns the runtime-host
+  execution DTOs, validation wrappers, diagnostics, execution port,
+  dispatcher, typed errors, README, and JSON fixture tests. Embedded-runtime
+  imports the shared request wrapper for host-only Pumas load-target
+  resolution, and its old runtime-host DTO/dispatcher source, tests, and
+  fixtures were removed rather than retained as shims. Workflow-service
+  consumer wiring remains with the orchestrator slice so the dependency is
+  introduced only when it owns a real application-layer use.
 
 Rejected alternatives:
 

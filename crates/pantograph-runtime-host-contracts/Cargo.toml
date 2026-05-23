@@ -1,0 +1,23 @@
+[package]
+name = "pantograph-runtime-host-contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Shared runtime-host execution contracts for Pantograph scheduler dispatch"
+
+[lints]
+workspace = true
+
+[dependencies]
+pantograph-scheduler = { path = "../pantograph-scheduler" }
+
+async-trait.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tokio.workspace = true

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
 use pumas_library::models::{
     PumasArtifactConsumer, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
     PumasArtifactLoadTargetResolutionMode, ResolveModelArtifactLoadTargetRequest,
@@ -7,8 +8,6 @@ use pumas_library::models::{
 };
 use pumas_library::PumasError;
 use thiserror::Error;
-
-use crate::runtime_host_execution::ValidatedRuntimeHostExecutionRequest;
 
 const PANTOGRAPH_RUNTIME_HOST_CONSUMER: &str = "pantograph-embedded-runtime";
 const MAX_DIAGNOSTICS: usize = 4;

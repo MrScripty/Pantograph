@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoff;
 use thiserror::Error;
 
-use crate::runtime_host_execution::{
+use crate::{
     RuntimeHostExecutionContractError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,

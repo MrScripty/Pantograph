@@ -10,7 +10,7 @@ use super::{
 #[test]
 fn runtime_host_execution_request_fixture_decodes_and_validates() {
     let request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
     ))
     .expect("runtime host request fixture must decode");
 
@@ -31,7 +31,7 @@ fn runtime_host_execution_request_fixture_decodes_and_validates() {
 #[test]
 fn runtime_host_execution_request_rejects_readiness_only_handoff() {
     let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
     ))
     .expect("runtime host request fixture must decode");
     request.handoff.state = SchedulerRuntimeHandoffState::ReadinessAdmitted;
@@ -52,7 +52,7 @@ fn runtime_host_execution_request_rejects_readiness_only_handoff() {
 #[test]
 fn runtime_host_execution_request_rejects_path_shaped_fields() {
     let mut value: serde_json::Value = serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
     ))
     .expect("runtime host request fixture must decode as value");
     value["model_path"] = json!("/models/juggernaut");
@@ -69,7 +69,7 @@ fn runtime_host_execution_request_rejects_path_shaped_fields() {
 #[test]
 fn runtime_host_execution_response_fixture_decodes_and_validates() {
     let response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_response_accepted.json"
+        "../tests/fixtures/runtime_host_execution_response_accepted.json"
     ))
     .expect("runtime host response fixture must decode");
 
@@ -85,7 +85,7 @@ fn runtime_host_execution_response_fixture_decodes_and_validates() {
 #[test]
 fn runtime_host_failed_response_requires_diagnostics() {
     let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
-        "runtime_host_execution_tests/fixtures/runtime_host_execution_response_accepted.json"
+        "../tests/fixtures/runtime_host_execution_response_accepted.json"
     ))
     .expect("runtime host response fixture must decode");
     response.state = RuntimeHostExecutionState::Failed;
