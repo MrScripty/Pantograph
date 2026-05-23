@@ -1,5 +1,5 @@
 use pantograph_scheduler::{
-    SchedulerContractError, SchedulerRuntimeHandoff, SchedulerRuntimeHandoffSelection,
+    SchedulerContractError, SchedulerDispatchDecision, SchedulerRuntimeHandoff,
     SchedulerRuntimeHandoffState, ValidatedSchedulerRuntimeHandoff,
     SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
 };
@@ -21,7 +21,7 @@ fn valid_runtime_handoff_fixture_decodes_and_validates() {
         validated.as_ref().state,
         SchedulerRuntimeHandoffState::ReadinessAdmitted
     );
-    assert!(validated.as_ref().dispatch_selection.is_none());
+    assert!(validated.as_ref().dispatch_decision.is_none());
 }
 
 #[test]
@@ -123,32 +123,27 @@ fn environment_ref_must_match_readiness_proof() {
 }
 
 #[test]
-fn readiness_admitted_handoff_must_not_carry_dispatch_selection() {
+fn readiness_admitted_handoff_must_not_carry_dispatch_decision() {
     let mut handoff: SchedulerRuntimeHandoff = serde_json::from_str(include_str!(
         "fixtures/runtime_handoff_readiness_admitted.json"
     ))
     .expect("fixture must decode");
-    handoff.dispatch_selection = Some(SchedulerRuntimeHandoffSelection {
-        selected_runtime_id: "diffusers-pytorch"
-            .parse()
-            .expect("test runtime id must parse"),
-        selected_device_id: Some("cuda:0".parse().expect("test device id must parse")),
-    });
+    handoff.dispatch_decision = Some(valid_dispatch_decision());
 
     let error = ValidatedSchedulerRuntimeHandoff::try_from(handoff)
-        .expect_err("readiness-admitted handoff must not carry dispatch selection");
+        .expect_err("readiness-admitted handoff must not carry dispatch decision");
 
     assert_eq!(
         error,
         SchedulerContractError::InvalidField {
-            field: "dispatch_selection",
-            reason: "readiness-admitted handoff must not carry dispatch selection"
+            field: "dispatch_decision",
+            reason: "readiness-admitted handoff must not carry dispatch decision"
         }
     );
 }
 
 #[test]
-fn dispatch_selected_handoff_requires_selection() {
+fn dispatch_selected_handoff_requires_dispatch_decision() {
     let mut handoff: SchedulerRuntimeHandoff = serde_json::from_str(include_str!(
         "fixtures/runtime_handoff_readiness_admitted.json"
     ))
@@ -156,36 +151,55 @@ fn dispatch_selected_handoff_requires_selection() {
     handoff.state = SchedulerRuntimeHandoffState::DispatchSelected;
 
     let error = ValidatedSchedulerRuntimeHandoff::try_from(handoff)
-        .expect_err("dispatch-selected handoff must carry scheduler selection");
+        .expect_err("dispatch-selected handoff must carry scheduler dispatch decision");
 
     assert_eq!(
         error,
         SchedulerContractError::MissingField {
-            field: "dispatch_selection"
+            field: "dispatch_decision"
         }
     );
 }
 
 #[test]
-fn dispatch_selection_must_satisfy_hard_runtime_requirement() {
+fn dispatch_selected_handoff_accepts_matching_dispatch_decision() {
     let mut handoff: SchedulerRuntimeHandoff = serde_json::from_str(include_str!(
         "fixtures/runtime_handoff_readiness_admitted.json"
     ))
     .expect("fixture must decode");
     handoff.state = SchedulerRuntimeHandoffState::DispatchSelected;
-    handoff.dispatch_selection = Some(SchedulerRuntimeHandoffSelection {
-        selected_runtime_id: "other-runtime".parse().expect("test runtime id must parse"),
-        selected_device_id: Some("cuda:0".parse().expect("test device id must parse")),
-    });
+    handoff.dispatch_decision = Some(matching_dispatch_decision_for(&handoff));
+
+    let validated = ValidatedSchedulerRuntimeHandoff::try_from(handoff)
+        .expect("matching dispatch decision should validate for runtime host handoff");
+
+    assert_eq!(
+        validated.as_ref().state,
+        SchedulerRuntimeHandoffState::DispatchSelected
+    );
+    assert!(validated.as_ref().dispatch_decision.is_some());
+}
+
+#[test]
+fn dispatch_decision_must_match_handoff_environment_ref() {
+    let mut handoff: SchedulerRuntimeHandoff = serde_json::from_str(include_str!(
+        "fixtures/runtime_handoff_readiness_admitted.json"
+    ))
+    .expect("fixture must decode");
+    handoff.state = SchedulerRuntimeHandoffState::DispatchSelected;
+    let mut decision = matching_dispatch_decision_for(&handoff);
+    decision.environment_ref.environment_id =
+        "env.other".parse().expect("test environment id must parse");
+    handoff.dispatch_decision = Some(decision);
 
     let error = ValidatedSchedulerRuntimeHandoff::try_from(handoff)
-        .expect_err("dispatch selection must satisfy hard runtime requirements");
+        .expect_err("dispatch decision environment must match runtime handoff");
 
     assert_eq!(
         error,
         SchedulerContractError::InvalidField {
-            field: "dispatch_selection.selected_runtime_id",
-            reason: "selected runtime must satisfy the task intent runtime requirement"
+            field: "environment_ref",
+            reason: "dispatch decision environment ref must match readiness proof"
         }
     );
 }
@@ -208,4 +222,22 @@ fn rejects_unsupported_runtime_handoff_contract_version() {
             reason: "unsupported scheduler runtime handoff contract version"
         }
     );
+}
+
+fn valid_dispatch_decision() -> SchedulerDispatchDecision {
+    serde_json::from_str(include_str!("fixtures/dispatch_decision_valid.json"))
+        .expect("dispatch decision fixture must decode")
+}
+
+fn matching_dispatch_decision_for(handoff: &SchedulerRuntimeHandoff) -> SchedulerDispatchDecision {
+    let mut decision = valid_dispatch_decision();
+    decision.workflow_id = handoff.workflow_id.clone();
+    decision.workflow_run_id = handoff.workflow_run_id.clone();
+    decision.node_id = handoff.node_id.clone();
+    decision.task_id = handoff.task_id.clone();
+    decision.task_intent = handoff.task_intent.clone();
+    decision.selected_model_ref = handoff.task_intent.model_ref.clone();
+    decision.readiness_proof = handoff.readiness_proof.clone();
+    decision.environment_ref = handoff.environment_ref.clone();
+    decision
 }

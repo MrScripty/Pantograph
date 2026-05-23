@@ -1,8 +1,7 @@
-use pantograph_dependency_planning::{
-    DependencyEnvironmentRef, DependencyPlanningContractError, DeviceIntentId, RuntimeIntentId,
-};
+use pantograph_dependency_planning::{DependencyEnvironmentRef, DependencyPlanningContractError};
 use serde::{Deserialize, Serialize};
 
+use crate::dispatch::SchedulerDispatchDecision;
 use crate::error::SchedulerContractError;
 use crate::intent::SchedulableTaskIntent;
 use crate::readiness::{SchedulerDependencyReadinessProof, SchedulerReadinessAdmissionDiagnostic};
@@ -10,7 +9,7 @@ use crate::readiness::{SchedulerDependencyReadinessProof, SchedulerReadinessAdmi
 /// Current contract version for scheduler-owned runtime handoff.
 pub const SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION: u16 = 1;
 
-/// Runtime handoff state before or after scheduler dispatch selection.
+/// Runtime handoff state before or after scheduler dispatch decision.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -19,21 +18,11 @@ pub enum SchedulerRuntimeHandoffState {
     DispatchSelected,
 }
 
-/// Runtime/device facts selected by scheduler dispatch policy.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct SchedulerRuntimeHandoffSelection {
-    pub selected_runtime_id: RuntimeIntentId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_device_id: Option<DeviceIntentId>,
-}
-
 /// Non-legacy runtime handoff envelope produced after readiness admission.
 ///
 /// This envelope is path-free. It carries scheduler-owned readiness proof and
-/// optional scheduler-selected runtime/device facts, but never `ModelRefV2`,
-/// executable Pumas load targets, local paths, worker launch data, reservations,
-/// or batching groups.
+/// optional scheduler dispatch decision facts, but never `ModelRefV2`,
+/// executable Pumas load targets, local paths, or worker launch data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SchedulerRuntimeHandoff {
@@ -48,7 +37,7 @@ pub struct SchedulerRuntimeHandoff {
     pub readiness_proof: SchedulerDependencyReadinessProof,
     pub environment_ref: DependencyEnvironmentRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dispatch_selection: Option<SchedulerRuntimeHandoffSelection>,
+    pub dispatch_decision: Option<SchedulerDispatchDecision>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<SchedulerReadinessAdmissionDiagnostic>,
 }
@@ -119,44 +108,47 @@ impl SchedulerRuntimeHandoff {
     fn validate_dispatch_state(&self) -> Result<(), SchedulerContractError> {
         match self.state {
             SchedulerRuntimeHandoffState::ReadinessAdmitted => {
-                if self.dispatch_selection.is_some() {
+                if self.dispatch_decision.is_some() {
                     return Err(SchedulerContractError::InvalidField {
-                        field: "dispatch_selection",
-                        reason: "readiness-admitted handoff must not carry dispatch selection",
+                        field: "dispatch_decision",
+                        reason: "readiness-admitted handoff must not carry dispatch decision",
                     });
                 }
                 Ok(())
             }
             SchedulerRuntimeHandoffState::DispatchSelected => {
-                let Some(selection) = &self.dispatch_selection else {
+                let Some(decision) = &self.dispatch_decision else {
                     return Err(SchedulerContractError::MissingField {
-                        field: "dispatch_selection",
+                        field: "dispatch_decision",
                     });
                 };
-                self.validate_dispatch_selection(selection)
+                self.validate_dispatch_decision(decision)
             }
         }
     }
 
-    fn validate_dispatch_selection(
+    fn validate_dispatch_decision(
         &self,
-        selection: &SchedulerRuntimeHandoffSelection,
+        decision: &SchedulerDispatchDecision,
     ) -> Result<(), SchedulerContractError> {
-        if let Some(requested_runtime_id) = &self.task_intent.constraints.requested_runtime_id {
-            if requested_runtime_id != &selection.selected_runtime_id {
-                return Err(SchedulerContractError::InvalidField {
-                    field: "dispatch_selection.selected_runtime_id",
-                    reason: "selected runtime must satisfy the task intent runtime requirement",
-                });
-            }
+        decision.validate()?;
+        if decision.task_intent != self.task_intent {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_decision.task_intent",
+                reason: "dispatch decision task intent must match runtime handoff task intent",
+            });
         }
-        if let Some(requested_device_id) = &self.task_intent.constraints.requested_device_id {
-            if Some(requested_device_id) != selection.selected_device_id.as_ref() {
-                return Err(SchedulerContractError::InvalidField {
-                    field: "dispatch_selection.selected_device_id",
-                    reason: "selected device must satisfy the task intent device requirement",
-                });
-            }
+        if decision.readiness_proof != self.readiness_proof {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_decision.readiness_proof",
+                reason: "dispatch decision readiness proof must match runtime handoff proof",
+            });
+        }
+        if decision.environment_ref != self.environment_ref {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_decision.environment_ref",
+                reason: "dispatch decision environment ref must match runtime handoff environment",
+            });
         }
         Ok(())
     }

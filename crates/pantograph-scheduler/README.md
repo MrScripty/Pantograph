@@ -90,10 +90,9 @@ resolver behavior.
   policy mapping from host preflight state into scheduler admission decisions.
 - `SchedulerRuntimeHandoff` is the path-free host-facing envelope after
   readiness admission. It carries task correlation, task intent, scheduler-owned
-  readiness proof, matching dependency environment ref, and optionally later
-  scheduler dispatch selection. It must not carry executable Pumas load targets,
-  local paths, `ModelRefV2`, reservations, batching groups, or worker launch
-  facts.
+  readiness proof, matching dependency environment ref, and optionally the
+  scheduler dispatch decision. It must not carry executable Pumas load targets,
+  local paths, `ModelRefV2`, or worker launch facts.
 - `SchedulerQueueTaskRecord` and `SchedulerQueueTransition` are durable,
   replayable queue contracts for one schedulable task. They carry task
   correlation, task intent, queue state, state version, and transition id only.
@@ -191,7 +190,7 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   preflight result to produce check, install-missing, defer, retry, fail, or
   admit decisions without node-engine resolver discovery. Runtime hosts may
   consume `ValidatedSchedulerRuntimeHandoff` values once correlation,
-  environment refs, readiness proof, and optional dispatch selection have been
+  environment refs, readiness proof, and optional dispatch decision have been
   validated. Queue persistence and replay consumers may use
   `ValidatedSchedulerQueueTaskRecord`,
   `ValidatedSchedulerQueueTransition`, and
@@ -240,7 +239,7 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   intent and policy fields; `SchedulerReadinessAdmissionDecision` action,
   state, readiness proof, and typed diagnostics; `SchedulerRuntimeHandoff`
   correlation fields, state, readiness proof, environment ref, and optional
-  dispatch selection fields; `SchedulerQueueTaskRecord` correlation, task
+  dispatch decision fields; `SchedulerQueueTaskRecord` correlation, task
   intent, state, state version, and last transition id fields;
   `SchedulerQueueTransition` correlation, task intent, expected previous state,
   next state, and transition id fields;
@@ -272,8 +271,8 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   whether dependency readiness allows dispatch now, defers for later work,
   failed in a retryable way, or fails terminally; it is not a runtime/device
   selection result. Runtime handoff state separates readiness-admitted handoff
-  from dispatch-selected handoff so runtime/device facts are added only by
-  scheduler dispatch policy.
+  from dispatch-selected handoff so runtime/device/model/reservation/batch
+  facts are added only by the scheduler dispatch decision.
   Queue task states describe durable scheduler progress only; lifecycle
   diagnostics, resource reservations, batching groups, and runtime dispatch
   facts are separate contracts. Lifecycle diagnostic codes must be compatible

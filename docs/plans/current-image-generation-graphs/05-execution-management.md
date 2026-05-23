@@ -9193,6 +9193,34 @@ Worker rules:
     file-size standards check for new scheduler batching files.
   - Remaining follow-up: wire runtime/execution host handoff through dispatch
     decisions.
+- 2026-05-22 Milestone 5a runtime handoff dispatch-decision slice completed:
+  - Smallest useful vertical slice: replace the parallel lightweight runtime
+    handoff selection shape with the canonical `SchedulerDispatchDecision` in
+    `SchedulerRuntimeHandoff`, without wiring runtime execution or resolving
+    Pumas load targets.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: removed `SchedulerRuntimeHandoffSelection`,
+    changed runtime handoff to carry optional `SchedulerDispatchDecision`,
+    validated dispatch decision/task intent/readiness proof/environment
+    correlation, updated public exports, README coverage, and runtime handoff
+    tests for readiness-only, dispatch-selected, and mismatch cases.
+  - No-fallback/no-legacy confirmation: runtime host handoff now carries
+    dispatch-selected runtime/device/model/reservation/batch facts only through
+    the scheduler dispatch decision. It validates handoff, task intent,
+    readiness proof, and environment correlation while rejecting executable
+    load targets, local paths, `ModelDependencyRequest`, `ModelRefV2`, graph
+    `model_path`, frontend `modelPath`, worker launch facts, and the removed
+    parallel dispatch-selection DTO.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+    file-size standards check for modified scheduler handoff files.
+  - Remaining follow-up: update documentation coverage and deletion tracking
+    for any public contract or source directory gaps left in Milestone 5a.
 
 ### Traceability Links
 
