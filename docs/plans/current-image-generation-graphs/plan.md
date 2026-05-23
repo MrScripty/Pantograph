@@ -44,7 +44,7 @@ risk, lifecycle, and execution-management content.
    - Required GGUF metadata facts
    - Snapshot/cache/update-feed behavior
    - Early P0-P1 producer-contract start after Pantograph Milestone 0
-   - P2-P5 producer-fact completion gate before Pantograph Milestone 5a/6
+   - P2-P5 producer-fact completion gate before Pantograph Milestone 5a/5b/6
    - Cross-repo fixtures and verification
 
 6. [Scheduler-Owned Dynamic Task Dispatch](08-scheduler-owned-dynamic-task-dispatch.md)
@@ -57,11 +57,18 @@ risk, lifecycle, and execution-management content.
    - Resource/residency and batching requirements
    - Legacy removal targets
 
-7. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)
+7. [Runtime Host Handoff And Legacy Execution Removal](09-runtime-host-handoff-legacy-removal.md)
+   - Runtime host handoff objective
+   - Pumas load-target boundary
+   - PyTorch, llama.cpp, and audio migration
+   - Node-engine preflight replacement
+   - Legacy resolver/path deletion sequence
+
+8. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)
    - Risk table
    - Definition of done
 
-8. [Milestones](04-milestones.md)
+9. [Milestones](04-milestones.md)
    - Contract gate
    - Current Juggernaut graph slice
    - Retired node producer removal
@@ -69,11 +76,12 @@ risk, lifecycle, and execution-management content.
    - IO inspector stale graph presentation
    - Device and runtime variant selection
    - Scheduler-owned dynamic task dispatch
+   - Runtime host handoff and legacy execution removal
    - PyTorch/diffusers image generation execution slice
    - Candle guardrail
    - Release build and user validation
 
-9. [Execution Management](05-execution-management.md)
+10. [Execution Management](05-execution-management.md)
    - Execution notes
    - Commit cadence
    - Optional worker assignment
@@ -92,8 +100,9 @@ Pumas ordering rule: the Pumas plan is not implemented as the final Pantograph
 step. Pumas P0-P1 starts immediately after Pantograph Milestone 0 freezes the
 expected contract. Pumas P2-P5 may run in parallel with Pantograph Milestones
 1-5, but must complete and be pinned before Pantograph Milestone 5a consumes
-production model facts for scheduler dispatch and before Milestone 6 implements
-real PyTorch/diffusers image execution.
+production model facts for scheduler dispatch, before Milestone 5b resolves
+runtime-host load targets, and before Milestone 6 implements real
+PyTorch/diffusers image execution.
 
 ## Standards Rule
 

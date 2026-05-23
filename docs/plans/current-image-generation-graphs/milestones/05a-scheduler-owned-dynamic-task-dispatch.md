@@ -41,10 +41,11 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   and later scheduler-selected runtime/device facts. It must not convert
   readiness proof back into `ModelRefV2` or require graph/node-engine access to
   executable load paths.
-- [ ] Replace node-engine dependency preflight output with typed readiness
-  proof after the readiness admission and runtime handoff seam exists.
-  Non-ready states must fail or defer with typed diagnostics. Do not adapt
-  readiness proof back into `ModelDependencyRequest` or `ModelRefV2`.
+- [x] Re-plan node-engine dependency preflight replacement into Milestone 5b
+  after discovering that successful runtime execution also reads `model_path`
+  and emits `ModelRefV2`. Milestone 5a keeps the scheduler handoff contracts;
+  Milestone 5b owns runtime-host load-target resolution and legacy path
+  deletion.
 - [ ] Add durable scheduler queue state for task-level workflow progress:
   pending, ready, blocked, waiting for dependency readiness, waiting for
   resources, waiting for batch, running, paused/deferred, retryable failed,
@@ -282,3 +283,12 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   for affected runtime nodes until host dispatch is wired; or reject the legacy
   replacement as too broad and split a new milestone. Do not implement a
   `SchedulerRuntimeHandoff` to `ModelRefV2` adapter.
+- 2026-05-22 re-plan decision: use Option 3 planning structure with Option 1
+  implementation direction. Created Milestone 5b for runtime-host handoff and
+  legacy execution removal. Milestone 5a no longer owns direct node-engine
+  preflight replacement; it continues with scheduler queue state, diagnostics,
+  lifecycle, resource admission, batching, and dispatch policy. Milestone 5b
+  must replace host execution so PyTorch, llama.cpp, and audio runtime paths
+  consume scheduler handoff and host-resolved Pumas load targets before
+  deleting `ModelRefV2`, `ModelDependencyRequest`, `ModelDependencyResolver`,
+  `build_model_ref_v2`, and successful `model_path` fixtures.

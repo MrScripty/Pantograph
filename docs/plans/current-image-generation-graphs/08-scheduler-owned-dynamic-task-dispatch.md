@@ -246,7 +246,8 @@ optimistic backend-owned readiness.
 2. Define capability hint and schedulable task intent contracts.
 3. Add scheduler-owned readiness admission and the non-legacy runtime handoff
    seam that runtime hosts will consume.
-4. Replace dependency preflight output with typed readiness proof, not
+4. Defer node-engine/runtime legacy execution replacement to Milestone 5b
+   because successful runtime execution still reads `model_path` and emits
    `ModelRefV2`.
 5. Add scheduler queue state and typed task lifecycle diagnostics.
 6. Add dispatch decision contract and host handoff shape.
@@ -322,7 +323,8 @@ branches or preserve retired systems.
   would either break the current runtime input path or require converting back
   into `ModelRefV2`. Use the selected Option 3 ordering: add
   scheduler-owned readiness admission and a non-legacy runtime handoff seam
-  first, then delete `ModelRefV2` preflight production.
+  first, then complete Milestone 5b to replace runtime-host execution and
+  delete `ModelRefV2`/`model_path` successful paths.
 - **Scheduler queue persistence:** durable task state must have one owner. If
   existing ledger tables cannot represent replayable queue state without
   overloading diagnostics, create scheduler-owned persistence instead of

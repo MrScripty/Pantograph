@@ -19,6 +19,7 @@ dispatch.
 | `06-device-runtime-selection.md` | Device policy, runtime variant, adapter boundary, and scheduler decision design. |
 | `07-pumas-library-image-generation-facts.md` | Pumas Library producer-fact plan for image-generation family facts, diffusers component evidence, GGUF metadata, summaries, and update cursors. |
 | `08-scheduler-owned-dynamic-task-dispatch.md` | Scheduler-owned dynamic task dispatch design for concurrent workflow tasks, batching, resource admission, capability hints, and dispatch decisions. |
+| `09-runtime-host-handoff-legacy-removal.md` | Runtime-host handoff replacement plan for removing `model_path`/`ModelRefV2` successful execution paths. |
 | `milestones/` | Per-slice implementation checklists and verification gates. |
 
 ## Problem
@@ -48,11 +49,19 @@ static planning the wrong abstraction. Ready workflow DAG nodes become
 schedulable task units; scheduler policy owns queueing, batching, fairness,
 resource admission, runtime/device selection, and dependency readiness policy.
 
+Runtime-host handoff and legacy execution removal are split into a follow-on
+design section and Milestone 5b. Scheduler handoff contracts alone are not
+enough to remove legacy execution because the current runtime nodes still read
+`model_path` and emit `ModelRefV2`; the host must consume scheduler handoff,
+resolve Pumas-approved load targets at the runtime boundary, and then delete
+the old resolver/path contracts.
+
 Pumas is split across the execution order. Pumas P0-P1 starts after Pantograph
 Milestone 0 so the package-facts contract is available early. Pumas P2-P5 may
 run in parallel with Pantograph Milestones 1-5, but must complete and be pinned
 before Pantograph Milestone 5a consumes production model facts for scheduler
-dispatch and before Milestone 6 consumes real image-generation package facts.
+dispatch, before Milestone 5b resolves runtime-host load targets, and before
+Milestone 6 consumes real image-generation package facts.
 
 ## Alternatives Rejected
 - Single large plan file: rejected because the plan already spans graph,

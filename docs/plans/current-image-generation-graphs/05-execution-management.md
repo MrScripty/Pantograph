@@ -68,8 +68,9 @@ Update during implementation:
   Pantograph Milestones 1-5, but Pumas fact extraction, summaries, update
   cursors, selected-artifact semantics, and cache migration/backfill must be
   complete and pinned before Pantograph Milestone 5a consumes production model
-  facts for scheduler dispatch and before Milestone 6 begins real
-  PyTorch/diffusers image execution.
+  facts for scheduler dispatch, before Milestone 5b resolves runtime-host load
+  targets, and before Milestone 6 begins real PyTorch/diffusers image
+  execution.
 - 2026-05-10: Committed the plan directory as the initial documentation slice.
   Milestone 0 then completed as a contract-gate documentation slice with write
   scope limited to this plan. The frozen decisions name the planned graph
@@ -8967,6 +8968,26 @@ Worker rules:
     nodes until host dispatch is wired; or split a new milestone if the host
     replacement is too broad for Milestone 5a. Do not implement a
     `SchedulerRuntimeHandoff` to `ModelRefV2` adapter.
+- 2026-05-22 Milestone 5b runtime-host legacy-removal re-plan decision:
+  - Decision: use Option 3 planning structure with Option 1 implementation
+    direction. Split the source replacement work into
+    `milestones/05b-runtime-host-handoff-legacy-removal.md` and
+    `09-runtime-host-handoff-legacy-removal.md`.
+  - Scope change: Milestone 5a keeps scheduler-owned contracts and dynamic
+    dispatch work. Milestone 5b owns runtime-host execution request/response,
+    Pumas load-target resolution at the host boundary, PyTorch/llama.cpp/audio
+    migration off graph `model_path`, node-engine preflight replacement, and
+    deletion of `ModelDependencyResolver`, `ModelDependencyRequest`,
+    `ModelRefV2`, `build_model_ref_v2`, frontend `modelPath` actions, and
+    path-shaped success fixtures.
+  - No-fallback/no-legacy confirmation: fail-closed behavior is allowed only
+    when canonical scheduler handoff is missing, and must emit typed
+    diagnostics. No scheduler-handoff-to-`ModelRefV2` adapter, path repair, or
+    alternate successful legacy branch is permitted.
+  - Remaining follow-up: before the next source slice, choose the smallest
+    Milestone 5a or 5b item that can be completed without editing outside its
+    allowed write set. If continuing legacy removal, start Milestone 5b with
+    the host execution input contract before touching runtime loading code.
 
 ### Traceability Links
 
