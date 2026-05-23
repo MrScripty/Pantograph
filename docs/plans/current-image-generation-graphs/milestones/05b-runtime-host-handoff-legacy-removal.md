@@ -8,11 +8,15 @@ This milestone is split out of Milestone 5a because replacing node-engine
 dependency preflight alone would preserve the legacy successful execution path.
 Milestone 5a owns scheduler contracts and dynamic dispatch. Milestone 5b owns
 runtime-host handoff wiring and deletion of the old resolver/path contracts.
+Milestone 5b is a hard gate before real image-generation execution slices can
+depend on runtime loading: the canonical runtime-host request/response and
+host-owned Pumas load-target resolution must exist before old successful
+`ModelRefV2`/`model_path` paths are deleted.
 
 **Tasks:**
 
-- [ ] Define the runtime-host execution request/response contract. It must
-  consume `SchedulerRuntimeHandoff`, scheduler dispatch selection, dependency
+- [ ] Define the runtime-host execution request/response contract first. It must
+  consume `SchedulerRuntimeHandoff`, scheduler dispatch decision, dependency
   environment ref, and Pumas model/artifact identity without exposing
   `ModelRefV2`, `model_path`, executable load targets, reservations, batching
   groups, or worker launch internals to graph/node-engine contracts.
@@ -38,7 +42,8 @@ runtime-host handoff wiring and deletion of the old resolver/path contracts.
 - [ ] Remove retired node-engine contracts and helpers:
   `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
   `build_model_ref_v2`, path repair helpers, and successful `model_path` test
-  fixtures.
+  fixtures only after the runtime-host request/response and load-target
+  resolution path are wired.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.
@@ -84,3 +89,10 @@ runtime-host handoff wiring and deletion of the old resolver/path contracts.
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy
   execution removal; Milestone 5a continues scheduler-owned dynamic dispatch.
+- 2026-05-22: Milestone 5a closeout decision recorded. Option 2 selected:
+  close Milestone 5a as scheduler-contract complete and keep actual legacy
+  deletion in this milestone as the hard gate. Implementation must begin with
+  the runtime-host execution request/response contract, then host-owned Pumas
+  load-target resolution, then runtime migrations and deletion. Do not create
+  a scheduler-handoff-to-`ModelRefV2` adapter or a path-repair bridge while
+  crossing this boundary.

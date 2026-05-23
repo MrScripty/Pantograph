@@ -82,10 +82,15 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
 - [x] Update or add README/crate documentation for every new public contract,
   source directory, lifecycle owner, platform observer, persisted queue state,
   structured fixture, and host-facing API.
-- [ ] Delete or replace retired successful paths:
+- [x] Re-plan retired successful-path deletion into Milestone 5b as a hard
+  gate. Milestone 5a must not delete or replace
   `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
   `model_path` dependency identity, frontend `modelPath` dependency actions,
-  and saved/mock success fixtures using path-shaped dependency identity.
+  or saved/mock success fixtures directly because doing so before the
+  runtime-host execution request/response exists would either break execution
+  broadly or pressure the implementation into a forbidden compatibility bridge.
+  Milestone 5b owns the actual deletion after the canonical runtime-host
+  replacement path exists.
 
 **Verification:**
 
@@ -139,7 +144,10 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
 
 **Status:**
 
-- [ ] Not started.
+- [x] Scheduler-contract scope complete. Actual retired successful-path
+  deletion is intentionally owned by Milestone 5b after the runtime-host
+  execution request/response and host-owned Pumas load-target resolution
+  contracts exist.
 - 2026-05-22: Created from the Option 4 re-plan discussion. This milestone
   defines dynamic scheduler-owned task dispatch, not whole-workflow static
   planning.
@@ -479,3 +487,16 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   for `crates/pantograph-scheduler/tests/fixtures/`. Remaining follow-up:
   decide the final Milestone 5a retired-path deletion boundary before editing
   non-scheduler source files.
+- 2026-05-22 Milestone 5a/5b retired-path boundary decision completed.
+  Smallest useful vertical slice: update the plan to close Milestone 5a's
+  deletion item as a re-plan decision, not as implementation of deletion.
+  Allowed write set: Milestone 5a plan, Milestone 5b plan, runtime-host
+  replacement plan, and execution notes. Decision: use Option 2, closing
+  Milestone 5a as scheduler-contract complete and moving actual removal of
+  `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+  `model_path`, frontend `modelPath`, and path-shaped success fixtures to
+  Milestone 5b as a hard gate. No-fallback confirmation: the plan rejects
+  scheduler-handoff-to-`ModelRefV2` adapters, path repair, and compatibility
+  branches; Milestone 5b must start by defining the canonical runtime-host
+  execution request/response before deleting legacy execution paths.
+  Verification: documentation-only plan review and `git diff --check`.

@@ -13,6 +13,11 @@ This is the selected re-plan outcome: split the work into Milestone 5b and use
 the runtime-host replacement direction. Do not implement a
 `SchedulerRuntimeHandoff` to `ModelRefV2` adapter.
 
+Milestone 5a is closed as scheduler-contract complete. Milestone 5b is the hard
+gate for actual legacy deletion: define the canonical runtime-host
+request/response and host-owned Pumas load-target resolution first, then delete
+the old successful `ModelRefV2`/`model_path` execution paths.
+
 ## Problem
 
 Milestone 5a established scheduler-owned readiness admission and runtime
@@ -51,7 +56,7 @@ compatibility bridge and is not allowed.
 Use the clean replacement path:
 
 1. Define host-facing execution input that consumes `SchedulerRuntimeHandoff`
-   plus scheduler dispatch selection and carries no `ModelRefV2`.
+   plus scheduler dispatch decision and carries no `ModelRefV2`.
 2. Add runtime-host load-target resolution from Pumas refs/artifact identity to
    executable facts at the host boundary only.
 3. Replace PyTorch, llama.cpp, and audio node execution so successful execution
@@ -110,6 +115,9 @@ typed diagnostics.
 - Deletion checks proving `ModelDependencyResolver`, `ModelDependencyRequest`,
   `ModelRefV2`, `build_model_ref_v2`, and successful `model_path` fixtures are
   gone or replaced by canonical contracts.
+- Milestone-order check proving legacy deletion did not start before the
+  runtime-host execution request/response and host-owned Pumas load-target
+  resolution contracts existed.
 
 ## Re-Plan Triggers
 

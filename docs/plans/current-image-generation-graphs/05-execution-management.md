@@ -9246,6 +9246,24 @@ Worker rules:
     review for `crates/pantograph-scheduler/tests/fixtures/`.
   - Remaining follow-up: decide the final Milestone 5a retired-path deletion
     boundary before editing non-scheduler source files.
+- 2026-05-22 Milestone 5a/5b retired-path boundary planning slice completed:
+  - Smallest useful vertical slice: update the plans to close Milestone 5a's
+    deletion item as a re-plan decision, not as implementation of deletion.
+  - Allowed write set: Milestone 5a plan, Milestone 5b plan, runtime-host
+    replacement plan, and this execution log.
+  - Decision: use Option 2. Milestone 5a is scheduler-contract complete;
+    Milestone 5b owns actual removal of `ModelDependencyResolver`,
+    `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+    `modelPath`, path repair helpers, and path-shaped success fixtures as a
+    hard gate before real image-generation execution can depend on runtime
+    loading.
+  - Sequencing requirement: Milestone 5b must start with the runtime-host
+    execution request/response contract, then host-owned Pumas load-target
+    resolution, then runtime migrations and deletion.
+  - No-fallback/no-legacy confirmation: the plan rejects
+    scheduler-handoff-to-`ModelRefV2` adapters, path repair, compatibility
+    branches, and deleting legacy before a canonical replacement path exists.
+  - Verification: documentation-only plan review and `git diff --check`.
 
 ### Traceability Links
 
