@@ -69,7 +69,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   impossible-fit diagnostics. Platform-specific collectors must live behind a
   shared observer trait with thin Linux, Windows, and macOS modules; scheduler
   policy consumes only platform-neutral observations.
-- [ ] Move dependency readiness policy into scheduler admission/dispatch.
+- [x] Move dependency readiness policy into scheduler admission/dispatch.
   Scheduler policy decides check-only, install-missing, defer, retry, or fail;
   node-engine must not perform dependency resolver discovery as an execution
   fallback.
@@ -399,3 +399,24 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   follow-up: move dependency readiness policy into scheduler admission/dispatch
   so node-engine cannot perform dependency resolver discovery as an execution
   fallback.
+- 2026-05-22 scheduler dependency-readiness policy slice completed. Smallest
+  useful vertical slice: add a pure scheduler readiness policy function in
+  `pantograph-scheduler` that maps a validated admission request plus optional
+  host preflight result into check, install-missing, defer, retry, fail, or
+  admit decisions, without wiring node-engine execution or dependency service
+  calls. Allowed write set: `crates/pantograph-scheduler/`, this milestone
+  file, and execution notes. No-fallback confirmation: scheduler policy now
+  owns the readiness action decision and returns typed admission diagnostics
+  for missing, failed, unavailable, not-implemented, unsupported, or mismatched
+  preflight states. The slice does not call `ModelDependencyResolver`, build
+  `ModelDependencyRequest`, produce `ModelRefV2`, expose graph `model_path` or
+  frontend `modelPath`, resolve executable Pumas load targets, or add a
+  node-engine fallback branch. Verification passed:
+  `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`,
+  `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+  file-size standards check for modified scheduler readiness files. Remaining
+  follow-up: add batching policy surface for compatible tasks across workflow
+  runs.

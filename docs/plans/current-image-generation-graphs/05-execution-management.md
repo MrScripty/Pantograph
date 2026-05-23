@@ -9133,6 +9133,37 @@ Worker rules:
   - Remaining follow-up: move dependency readiness policy into scheduler
     admission/dispatch so node-engine cannot perform dependency resolver
     discovery as an execution fallback.
+- 2026-05-22 Milestone 5a scheduler dependency-readiness policy slice
+  completed:
+  - Smallest useful vertical slice: add a pure scheduler readiness policy
+    function in `pantograph-scheduler` that maps a validated admission request
+    plus optional host preflight result into check, install-missing, defer,
+    retry, fail, or admit decisions, without wiring node-engine execution or
+    dependency service calls.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `plan_scheduler_readiness_admission`, retryable
+    readiness admission state/action variants, validation for retryable
+    decisions, public exports, README coverage, and focused policy tests for
+    no preflight, ready proof, missing dependency install/defer policy,
+    retryable failed readiness, terminal unavailable readiness, and mismatched
+    proof diagnostics.
+  - No-fallback/no-legacy confirmation: scheduler policy now owns the readiness
+    action decision and returns typed admission diagnostics for missing,
+    failed, unavailable, not-implemented, unsupported, or mismatched preflight
+    states. The slice does not call `ModelDependencyResolver`, build
+    `ModelDependencyRequest`, produce `ModelRefV2`, expose graph `model_path`
+    or frontend `modelPath`, resolve executable Pumas load targets, or add a
+    node-engine fallback branch.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+    file-size standards check for modified scheduler readiness files.
+  - Remaining follow-up: add batching policy surface for compatible tasks
+    across workflow runs.
 
 ### Traceability Links
 

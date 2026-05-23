@@ -83,8 +83,10 @@ resolver behavior.
 - `SchedulerReadinessAdmissionDecision` is the scheduler-owned admission result
   before runtime host handoff. A ready decision must carry
   `SchedulerDependencyReadinessProof`, whose `DependencyPreflightResult` is
-  validated as path-free and ready. Deferred and terminal failed decisions must
-  carry typed diagnostics and must not carry ready proof.
+  validated as path-free and ready. Deferred, retryable failed, and terminal
+  failed decisions must carry typed diagnostics and must not carry ready proof.
+  `plan_scheduler_readiness_admission` owns the check/install/defer/retry/fail
+  policy mapping from host preflight state into scheduler admission decisions.
 - `SchedulerRuntimeHandoff` is the path-free host-facing envelope after
   readiness admission. It carries task correlation, task intent, scheduler-owned
   readiness proof, matching dependency environment ref, and optionally later
@@ -178,9 +180,13 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   Runtime host handoff slices may consume
   `ValidatedSchedulerReadinessAdmissionDecision` values once this crate has
   validated that ready decisions carry matching path-free dependency readiness
-  proof. Runtime hosts may consume `ValidatedSchedulerRuntimeHandoff` values
-  once correlation, environment refs, readiness proof, and optional dispatch
-  selection have been validated. Queue persistence and replay consumers may use
+  proof. Scheduler admission policy may call
+  `plan_scheduler_readiness_admission` with a validated request and optional
+  preflight result to produce check, install-missing, defer, retry, fail, or
+  admit decisions without node-engine resolver discovery. Runtime hosts may
+  consume `ValidatedSchedulerRuntimeHandoff` values once correlation,
+  environment refs, readiness proof, and optional dispatch selection have been
+  validated. Queue persistence and replay consumers may use
   `ValidatedSchedulerQueueTaskRecord`,
   `ValidatedSchedulerQueueTransition`, and
   `apply_scheduler_queue_transition` to validate idempotent task-state replay.
@@ -248,10 +254,11 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   hints only; scheduler policy owns final resource admission. Capability
   availability states are display and validation hints only; scheduler policy
   owns final dispatch/admission decisions. Readiness admission state describes
-  whether dependency readiness allows dispatch now, defers for later work, or
-  fails terminally; it is not a runtime/device selection result. Runtime
-  handoff state separates readiness-admitted handoff from dispatch-selected
-  handoff so runtime/device facts are added only by scheduler dispatch policy.
+  whether dependency readiness allows dispatch now, defers for later work,
+  failed in a retryable way, or fails terminally; it is not a runtime/device
+  selection result. Runtime handoff state separates readiness-admitted handoff
+  from dispatch-selected handoff so runtime/device facts are added only by
+  scheduler dispatch policy.
   Queue task states describe durable scheduler progress only; lifecycle
   diagnostics, resource reservations, batching groups, and runtime dispatch
   facts are separate contracts. Lifecycle diagnostic codes must be compatible

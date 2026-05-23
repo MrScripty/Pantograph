@@ -19,6 +19,7 @@ pub const SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION: u16 = 1;
 pub enum SchedulerReadinessAdmissionState {
     Ready,
     Deferred,
+    RetryableFailed,
     TerminalFailed,
 }
 
@@ -30,6 +31,7 @@ pub enum SchedulerReadinessAdmissionAction {
     AdmitForDispatch,
     CheckDependencies,
     InstallMissingDependencies,
+    RetryDependencyReadiness,
     Defer,
     Fail,
 }
@@ -201,6 +203,26 @@ impl SchedulerReadinessAdmissionDecision {
                 }
                 Ok(())
             }
+            SchedulerReadinessAdmissionState::RetryableFailed => {
+                if self.readiness_proof.is_some() {
+                    return Err(SchedulerContractError::InvalidField {
+                        field: "readiness_proof",
+                        reason: "retryable scheduler admission failure must not carry ready proof",
+                    });
+                }
+                if self.action != SchedulerReadinessAdmissionAction::RetryDependencyReadiness {
+                    return Err(SchedulerContractError::InvalidField {
+                        field: "readiness_admission.action",
+                        reason: "retryable scheduler admission failure must use retry action",
+                    });
+                }
+                if self.diagnostics.is_empty() {
+                    return Err(SchedulerContractError::MissingField {
+                        field: "readiness_admission.diagnostics",
+                    });
+                }
+                Ok(())
+            }
             SchedulerReadinessAdmissionState::TerminalFailed => {
                 if self.readiness_proof.is_some() {
                     return Err(SchedulerContractError::InvalidField {
@@ -223,6 +245,25 @@ impl SchedulerReadinessAdmissionDecision {
             }
         }
     }
+}
+
+/// Applies scheduler-owned dependency readiness policy to one task.
+pub fn plan_scheduler_readiness_admission(
+    request: ValidatedSchedulerReadinessAdmissionRequest,
+    preflight_result: Option<DependencyPreflightResult>,
+) -> Result<ValidatedSchedulerReadinessAdmissionDecision, SchedulerContractError> {
+    let request = request.into_inner();
+    let decision = match preflight_result {
+        None => build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::Deferred,
+            SchedulerReadinessAdmissionAction::CheckDependencies,
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyNotReady,
+            "Dependency readiness has not been checked for this task.",
+        ),
+        Some(result) => plan_from_preflight_result(request, result)?,
+    };
+    ValidatedSchedulerReadinessAdmissionDecision::try_from(decision)
 }
 
 /// Validated scheduler readiness admission request for internal policy.
@@ -274,6 +315,111 @@ impl TryFrom<SchedulerReadinessAdmissionDecision> for ValidatedSchedulerReadines
     fn try_from(value: SchedulerReadinessAdmissionDecision) -> Result<Self, Self::Error> {
         value.validate()?;
         Ok(Self(value))
+    }
+}
+
+fn plan_from_preflight_result(
+    request: SchedulerReadinessAdmissionRequest,
+    result: DependencyPreflightResult,
+) -> Result<SchedulerReadinessAdmissionDecision, SchedulerContractError> {
+    let _validated = ValidatedDependencyPreflightResult::try_from(result.clone())
+        .map_err(map_dependency_error)?;
+    if result.identity_key.model_ref != request.task_intent.model_ref
+        || result.identity_key.task_id != request.task_intent.task_type
+    {
+        return Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::TerminalFailed,
+            SchedulerReadinessAdmissionAction::Fail,
+            SchedulerReadinessAdmissionDiagnosticCode::InvalidReadinessProof,
+            "Dependency readiness proof does not match the scheduler task intent.",
+        ));
+    }
+
+    match result.readiness_state {
+        DependencyEnvironmentReadinessState::Ready => Ok(SchedulerReadinessAdmissionDecision {
+            contract_version: SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+            task_intent: request.task_intent,
+            policy: request.policy,
+            action: SchedulerReadinessAdmissionAction::AdmitForDispatch,
+            state: SchedulerReadinessAdmissionState::Ready,
+            readiness_proof: Some(SchedulerDependencyReadinessProof {
+                preflight_result: result,
+            }),
+            diagnostics: Vec::new(),
+        }),
+        DependencyEnvironmentReadinessState::Missing
+            if request.policy == DependencyReadinessPolicy::AutoInstallMissing =>
+        {
+            Ok(build_non_ready_decision(
+                request,
+                SchedulerReadinessAdmissionState::Deferred,
+                SchedulerReadinessAdmissionAction::InstallMissingDependencies,
+                SchedulerReadinessAdmissionDiagnosticCode::DependencyNotReady,
+                "Dependency readiness is missing; scheduler policy selected install.",
+            ))
+        }
+        DependencyEnvironmentReadinessState::Unknown
+        | DependencyEnvironmentReadinessState::Resolved => Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::Deferred,
+            SchedulerReadinessAdmissionAction::CheckDependencies,
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyNotReady,
+            "Dependency readiness requires another scheduler-owned check.",
+        )),
+        DependencyEnvironmentReadinessState::Missing => Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::Deferred,
+            SchedulerReadinessAdmissionAction::Defer,
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyPolicyRejected,
+            "Dependency readiness is missing and scheduler policy does not allow install.",
+        )),
+        DependencyEnvironmentReadinessState::Failed => Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::RetryableFailed,
+            SchedulerReadinessAdmissionAction::RetryDependencyReadiness,
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyUnavailable,
+            "Dependency readiness check failed and may be retried by scheduler policy.",
+        )),
+        DependencyEnvironmentReadinessState::Unavailable
+        | DependencyEnvironmentReadinessState::Invalid
+        | DependencyEnvironmentReadinessState::NotImplemented => Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::TerminalFailed,
+            SchedulerReadinessAdmissionAction::Fail,
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyUnavailable,
+            "Dependency readiness cannot be satisfied for this task.",
+        )),
+        _ => Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::TerminalFailed,
+            SchedulerReadinessAdmissionAction::Fail,
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyUnavailable,
+            "Dependency readiness state is not supported by scheduler policy.",
+        )),
+    }
+}
+
+fn build_non_ready_decision(
+    request: SchedulerReadinessAdmissionRequest,
+    state: SchedulerReadinessAdmissionState,
+    action: SchedulerReadinessAdmissionAction,
+    code: SchedulerReadinessAdmissionDiagnosticCode,
+    message: &'static str,
+) -> SchedulerReadinessAdmissionDecision {
+    SchedulerReadinessAdmissionDecision {
+        contract_version: SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+        task_intent: request.task_intent,
+        policy: request.policy,
+        action,
+        state,
+        readiness_proof: None,
+        diagnostics: vec![SchedulerReadinessAdmissionDiagnostic {
+            severity: SchedulerReadinessAdmissionSeverity::Warning,
+            code,
+            message: message.to_string(),
+            hint: None,
+        }],
     }
 }
 
