@@ -280,14 +280,21 @@ implementation can be considered complete:
    dependency readiness, dispatch lifecycle, ledger writes, bounded queues,
    cancellation, retry/defer, and panic handling remain open. The orchestrator
    active-run persistence method was added 2026-05-23; production session
-   execution still needs to call it after task graph extraction.
+   execution still needs to call it after task graph extraction. The
+   production cutover must use a workflow-service-owned orchestrator dependency
+   and a dedicated scheduler-task execution path, not ad hoc construction in
+   `run_workflow_execution_session`.
 9. Add non-runtime single-task execution through node-engine using
    materialized scheduler-owned inputs and task results. Do not use output-node
    demand to drive runtime inference.
 10. Add runtime task dispatch from actual dispatch-selected
    `SchedulerRuntimeHandoff` into the shared runtime-host execution port.
 11. Replace session execution so the scheduler task orchestrator, not
-   node-engine output demand, advances workflow progress.
+   node-engine output demand, advances workflow progress. The replacement path
+   must delegate from `run_workflow_execution_session` into a focused
+   scheduler-task execution entrypoint after admission and task graph
+   extraction, then remove or make unreachable the old scheduler-managed
+   inference launch path.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.
@@ -391,6 +398,99 @@ Rejected alternatives:
   progression.
 - Mirror DTOs in workflow-service: rejected because parallel runtime-host
   contracts would drift and violate the no-legacy/no-fallback rule.
+
+## Production Orchestrator Ownership Replan
+
+The next production cutover slice must decide ownership before touching
+session execution. The selected design is service-owned orchestrator injection
+plus a dedicated scheduler-task execution entrypoint.
+
+`WorkflowService` must own or be configured with
+`WorkflowSchedulerTaskOrchestrator` and the orchestrator's
+`SchedulerRuntimeHostDispatcher`. This keeps runtime inference dispatch on one
+canonical path:
+
+1. `WorkflowSchedulerTaskGraph` and scheduler task-state records define task
+   progress.
+2. Scheduler policy produces dependency readiness, resource admission,
+   dispatch decisions, and `SchedulerRuntimeHandoff`.
+3. The workflow-service orchestrator calls the shared runtime-host execution
+   port.
+
+`run_workflow_execution_session` must not construct the orchestrator locally or
+assemble runtime-host dispatch plumbing ad hoc. After queue admission and task
+graph extraction it should delegate to a focused scheduler-task execution
+entrypoint that initializes active-run task state and later advances
+dependency readiness, dispatch, materialized results, ledger writes, retry /
+defer, cancellation, and completion.
+
+Production cutover standards gates:
+
+- Wire the orchestrator through the workflow-service composition path. The
+  production `WorkflowService` constructor/configuration must receive the
+  orchestrator and shared runtime-host dispatcher as explicit dependencies or
+  build them in one documented service-owned composition boundary. Do not use
+  globals, lazy singletons, hidden default construction, or local construction
+  inside `run_workflow_execution_session`.
+- Keep `run_workflow_execution_session` narrow. It may own admission,
+  graph/topology extraction, task graph extraction, and delegation, but task
+  progression belongs in a focused scheduler-task execution entrypoint. If the
+  current function would grow another responsibility, split before continuing.
+- Preserve sync-core/async-shell separation. Scheduler readiness, resource,
+  batching, runtime selection, retry/defer, and terminal-state policy must
+  stay synchronous and pure. Async work is limited to workflow-service shell
+  boundaries: store access, dependency readiness I/O, runtime-host dispatch,
+  ledger writes, node-engine non-runtime adapter calls, timers, and shutdown.
+- Keep lock and transaction scopes bounded. Session store, active-run result
+  storage, task-state storage, and ledger handles must not be held across
+  dependency readiness, runtime-host dispatch, node-engine calls, timers, or
+  other `.await` points. Copy immutable snapshots out of locked state, release
+  the guard, then perform I/O. Durable state changes must be transactional,
+  idempotent, or explicitly compensating at cancellation points.
+- Own task lifecycle explicitly. Any background workers, queues, or spawned
+  tasks added by the cutover must be bounded, tracked, cancellable, and drained
+  or aborted during shutdown. Task panics must map to typed task diagnostics
+  and lifecycle-owner logs; unobserved fire-and-forget tasks are not allowed.
+- Use typed contracts at every boundary. Production code must return typed
+  errors/diagnostics for missing dependencies, unavailable runtime-host
+  dispatch, stale state versions, duplicate dispatch, failed cancellation, and
+  terminal closure. Do not add `Result<T, String>`, string parsing, untyped
+  metadata maps, `unwrap`, or `expect` in production orchestration paths.
+- Remove staged compatibility and dead-code allowances as the cutover consumes
+  them. The implementation slice must either use or delete staged orchestrator
+  APIs and retire the old scheduler-managed inference launch path. Do not
+  leave both paths selectable behind config, feature flags, or fallback
+  branches.
+- Keep dependency ownership narrow. The production cutover should not require
+  new third-party crates. If a crate is genuinely needed, stop and record the
+  owning crate, transitive cost, feature-contract impact, lockfile impact, and
+  verification commands before changing manifests.
+- Update documentation where ownership changes. Workflow-service README/crate
+  docs must describe the orchestrator dependency, task execution entrypoint,
+  lifecycle/shutdown behavior, error semantics, no-fallback runtime-host
+  dispatch boundary, and rejected old execution paths.
+- Verification must include a vertical production-entrypoint test proving a
+  submitted workflow reaches the scheduler-task execution entrypoint, creates
+  task state, and does not call node-engine output demand for runtime
+  inference. Focused tests must cover fake dependency readiness, fake
+  runtime-host dispatch, fake non-runtime node-engine adapter, fake ledger
+  writes, cancellation, retry/defer, duplicate dispatch/idempotency, terminal
+  closure, panic handling when workers are introduced, and no lock-held-across
+  I/O behavior where testable. Run deletion searches for old successful
+  planned-inference launch branches and feature-matrix checks for touched
+  crates.
+
+Rejected alternatives:
+
+- Construct the orchestrator inside `run_workflow_execution_session`: rejected
+  because it spreads runtime-host ownership across session execution and makes
+  scheduler policy easier to fragment.
+- Continue running scheduler-managed inference through whole-workflow
+  node-engine output demand while adding task-state observation: rejected
+  because it preserves the legacy launch path instead of replacing it.
+- Keep both old and new execution paths behind a compatibility branch:
+  rejected because Milestone 5c requires direct replacement and removal of
+  superseded runtime inference execution behavior.
 
 ## Task Result Materialization Plan
 

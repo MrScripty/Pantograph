@@ -9924,6 +9924,57 @@ Worker rules:
     initialization after task graph extraction, then advance state through
     dependency readiness, dispatch, result materialization, ledger writes,
     retry/defer, and cancellation policy.
+- 2026-05-23 Milestone 5c production orchestrator ownership re-plan update:
+  - Smallest useful vertical slice: update planning only, after the
+    implementation slices exposed that production session execution needs a
+    single owner for the orchestrator and runtime-host dispatcher before
+    replacing whole-workflow node-engine output demand.
+  - Allowed write set: current image-generation plan files only. Existing
+    unrelated proposal Markdown changes remain ignored.
+  - Decision: combine service-owned orchestrator injection with a dedicated
+    scheduler-task execution entrypoint. `WorkflowService` must own or be
+    configured with `WorkflowSchedulerTaskOrchestrator` and
+    `SchedulerRuntimeHostDispatcher`; `run_workflow_execution_session` should
+    delegate to a focused scheduler-task execution path after queue admission
+    and task graph extraction.
+  - Rejected alternatives: construct the orchestrator locally inside
+    `run_workflow_execution_session`, continue scheduler-managed inference via
+    whole-workflow node-engine output demand, or keep old and new execution
+    paths behind compatibility branches.
+  - No-fallback/no-legacy confirmation: the plan requires direct replacement
+    of the old scheduler-managed inference launch path. The graph editor and
+    node engine remain path-free consumers of backend facts; runtime inference
+    dispatch must flow through scheduler handoff and the shared runtime-host
+    execution port.
+  - Verification passed for this docs-only standards pass:
+    `git diff --check -- docs/plans/current-image-generation-graphs/05-execution-management.md docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+    Per user instruction, this plan update is not committed yet.
+- 2026-05-23 Milestone 5c production orchestrator standards iteration:
+  - Scope: docs-only standards pass over the current production-orchestrator
+    cutover plan. Existing unrelated proposal Markdown changes remain ignored.
+  - Standards reviewed:
+    `PLAN-STANDARDS.md`, `CODING-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `CONCURRENCY-STANDARDS.md`,
+    `TESTING-STANDARDS.md`, `DEPENDENCY-STANDARDS.md`,
+    `DOCUMENTATION-STANDARDS.md`, `languages/rust/RUST-API-STANDARDS.md`,
+    and `languages/rust/RUST-ASYNC-STANDARDS.md`.
+  - Findings: the selected service-owned orchestrator direction is
+    standards-aligned, but the plan needed explicit production cutover gates
+    for composition-root wiring, narrow session-execution delegation,
+    sync-core/async-shell separation, bounded lock/transaction scopes,
+    tracked task lifecycle, typed error/diagnostic boundaries, dependency
+    ownership, README updates, dead-code allowance cleanup, legacy launch-path
+    deletion, and vertical production-entrypoint verification.
+  - Plan updates: added production cutover standards gates to the task-level
+    orchestration plan and mirrored the critical guardrails in the Milestone
+    5c standards section.
+  - No-fallback/no-legacy confirmation: this standards pass does not approve
+    globals, local orchestrator construction, lazy singleton dispatchers,
+    compatibility branches, old/new execution feature flags, untyped
+    metadata, string parsing, or retained scheduler-managed inference launch
+    paths.
+  - Verification planned for this docs-only slice: `git diff --check`. Per
+    user instruction, this plan update is not committed yet.
 
 ### Traceability Links
 
