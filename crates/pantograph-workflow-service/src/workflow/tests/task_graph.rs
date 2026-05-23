@@ -32,6 +32,7 @@ fn graph_with_inline_inference_ref() -> WorkflowGraph {
                 data: json!({
                     "task_kind": "image_generation",
                     "runtime": "pytorch",
+                    "device": "cuda:0",
                     "denoising_scheduler": "euler_discrete",
                     "pumas_model_ref": {
                         "model_id": "image/example/tiny-diffusion",
@@ -114,6 +115,14 @@ fn scheduler_task_graph_projects_path_free_inference_intent() {
             .as_ref()
             .map(|id| id.as_str()),
         Some("pytorch")
+    );
+    assert_eq!(
+        intent
+            .constraints
+            .requested_device_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("cuda:0")
     );
     assert_eq!(intent.trait_settings.len(), 1);
     assert_eq!(

@@ -9521,6 +9521,77 @@ Worker rules:
     demanding workflow output nodes, synthesizing runtime handoff from reduced
     execution plans, or treating graph-local model paths as materialized
     scheduler identity.
+- 2026-05-23 Task materialization re-plan direction selected:
+  - Decision: implement option 2 now with option 3 discipline. Add a typed
+    `WorkflowSchedulerTaskResult` contract plus active-run result storage and
+    dependency-to-input resolution before building the orchestrator.
+  - Contract requirements: stable schema version, workflow/run/node/task
+    correlation, typed result status, typed output variants, bounded
+    diagnostics, invalid/unavailable states, and no executable paths or worker
+    launch details.
+  - Active-run storage is a staged implementation boundary only. The DTO and
+    validation must be shaped so durable diagnostics-ledger persistence and
+    replay can replace active-run storage later without changing graph editor,
+    node-engine, scheduler, or runtime-host semantics.
+  - Resolution rule: a runtime inference task becomes scheduler-admissible only
+    after required upstream materialized values validate into canonical typed
+    inputs such as `PumasModelRef`, scalar settings, media/artifact refs, and
+    diagnostics. Missing, wrong-type, unavailable, invalid, or ambiguous
+    materialized values must produce typed diagnostics and scheduler task
+    state, not fallback execution.
+  - Follow-up: durable event-sourced task-result replay remains the later
+    option 3 objective after the orchestrator can operate against the typed
+    materialization contract.
+- 2026-05-23 Standards iteration for task-result materialization planning:
+  - Reviewed the plan against the coding, plan, Rust API, testing,
+    documentation, concurrency, and architecture standards.
+  - Plan guardrails now require focused workflow-service modules, typed and
+    validated public DTOs, explicit materialized value variants instead of
+    incidental metadata maps, staged active-run storage that stays
+    replay-ready, clear workflow-service/scheduler/node-engine/runtime-host
+    ownership, no locks held across await points, bounded async orchestration,
+    README updates, and focused contract/storage/binding/vertical tests.
+  - Shared contracts, generated DTOs, saved workflow fixtures, lockfiles,
+    README files, and plan files remain serial integration-owner work; any
+    sub-agent work must have non-overlapping adapter or test write sets.
+- 2026-05-23 Milestone 5c graph-visible scheduler constraint alignment slice
+  completed:
+  - Smallest useful vertical slice: align optional scheduler runtime/device
+    constraints across the canonical inference node descriptor,
+    workflow-service task graph projection, backend port-option query context,
+    frontend selection-input provider context/cache, and UniFFI smoke fixture.
+  - Allowed write set: `workflow-nodes` inference descriptor/tests,
+    `node-engine` port-option context/tests, workflow-service task graph test,
+    focused frontend selection-input/cache types/tests, frontend mock node
+    definition, UniFFI runtime test fixture, Milestone 5c plan, task-level
+    orchestration plan, and this execution log.
+  - Implementation notes: added the optional `device` port beside `runtime` on
+    `llm-inference`; task graph projection now has test coverage proving
+    `device` becomes `requested_device_id`; port-option context now uses
+    `requestedRuntimeId` and `requestedDeviceId` instead of `backendId` and
+    `runtimeVariantId`.
+  - No-fallback/no-legacy confirmation: this slice only carries typed graph
+    constraints into scheduler-facing planning/display contracts. It does not
+    expose executable Pumas load targets, revive `backend_key` as graph-visible
+    scheduler policy, synthesize runtime handoff, or route runtime inference
+    through node-engine output demand.
+  - Verification passed: `cargo fmt -p workflow-nodes -p node-engine -p
+    pantograph-workflow-service -p pantograph-uniffi`, `cargo test -p
+    workflow-nodes processing::inference --lib`, `cargo test -p
+    pantograph-workflow-service workflow::tests::task_graph --lib`,
+    `cargo test -p node-engine port_options --lib`, `node
+    --experimental-strip-types --test
+    src/components/nodes/workflow/selectionInputProviderOptions.test.ts
+    src/services/workflow/portOptionsCache.test.ts
+    src/services/workflow/WorkflowService.commands.test.ts`, `npm run
+    typecheck`, `cargo check -p node-engine -p workflow-nodes -p
+    pantograph-workflow-service -p pantograph-uniffi`, `cargo check -p
+    node-engine -p workflow-nodes -p pantograph-workflow-service -p
+    pantograph-uniffi --all-features`, `cargo check -p node-engine -p
+    workflow-nodes -p pantograph-workflow-service -p pantograph-uniffi
+    --no-default-features`, and `git diff --check`.
+  - Remaining follow-up: typed task-result materialization and active-run
+    result storage remain the next Milestone 5c implementation item.
 
 ### Traceability Links
 

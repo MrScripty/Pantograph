@@ -1663,8 +1663,8 @@ export interface PortOptionsQueryContext {
   taskKind?: string;
   selectedModelRef?: string;
   packageFactsSummaryCursor?: string;
-  backendId?: string;
-  runtimeVariantId?: string;
+  requestedRuntimeId?: string;
+  requestedDeviceId?: string;
 }
 
 /** Query parameters for backend-owned port options */

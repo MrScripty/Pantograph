@@ -27,14 +27,14 @@ test('portOptionsCacheKey includes provider context refs in stable order', () =>
     context: {
       selectedModelRef: 'pumas://models/diffusion/tiny',
       packageFactsSummaryCursor: 'model-library-updates:2',
-      backendId: 'pytorch',
+      requestedRuntimeId: 'pytorch',
     },
   };
   const right: PortOptionsCommandArgs = {
     nodeType: 'llm-inference',
     portId: 'denoising_scheduler',
     context: {
-      backendId: 'pytorch',
+      requestedRuntimeId: 'pytorch',
       packageFactsSummaryCursor: 'model-library-updates:2',
       selectedModelRef: 'pumas://models/diffusion/tiny',
     },
@@ -67,8 +67,8 @@ test('loadPortOptions caches rows by node port and provider context', async () =
       targetNodeId: 'node-a',
       selectedModelRef: 'pumas://models/diffusion/tiny',
       packageFactsSummaryCursor: 'model-library-updates:1',
-      backendId: 'pytorch',
-      runtimeVariantId: 'pytorch.cuda',
+      requestedRuntimeId: 'pytorch',
+      requestedDeviceId: 'cuda:0',
     },
   };
 
@@ -79,7 +79,7 @@ test('loadPortOptions caches rows by node port and provider context', async () =
       ...base,
       context: {
         ...base.context,
-        runtimeVariantId: 'pytorch.cpu',
+        requestedDeviceId: 'cpu',
       },
     },
     {},

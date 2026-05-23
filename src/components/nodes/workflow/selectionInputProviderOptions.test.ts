@@ -43,6 +43,8 @@ test('buildSelectionInputProviderQuery carries stable context refs without packa
       id: 'image-node',
       data: {
         task_kind: 'image_generation',
+        runtime: 'pytorch',
+        device: 'cuda:0',
         backend_key: 'pytorch',
         runtime_variant_id: 'pytorch.cuda',
         package_facts_summary_cursor: 'model-library-updates:7',
@@ -65,9 +67,11 @@ test('buildSelectionInputProviderQuery carries stable context refs without packa
     taskKind: 'image_generation',
     selectedModelRef: 'tiny-sd@main@diffusers',
     packageFactsSummaryCursor: 'model-library-updates:7',
-    backendId: 'pytorch',
-    runtimeVariantId: 'pytorch.cuda',
+    requestedRuntimeId: 'pytorch',
+    requestedDeviceId: 'cuda:0',
   });
+  assert.equal(JSON.stringify(query.args.context).includes('backendId'), false);
+  assert.equal(JSON.stringify(query.args.context).includes('runtimeVariantId'), false);
   assert.equal(JSON.stringify(query.args.context).includes('must/not/cross'), false);
 });
 
@@ -118,23 +122,23 @@ test('loadLatestSelectionInputProviderOptions discards stale provider responses'
   const pending = new Map<string, (value: PortOptionsResult) => void>();
   const loader = async (args: PortOptionsCommandArgs): Promise<PortOptionsResult> =>
     new Promise((resolve) => {
-      pending.set(args.context?.runtimeVariantId ?? 'unknown', resolve);
+      pending.set(args.context?.requestedRuntimeId ?? 'unknown', resolve);
     });
 
-  const first = queryForRuntime('pytorch.cpu');
-  const second = queryForRuntime('pytorch.cuda');
+  const first = queryForRuntime('pytorch');
+  const second = queryForRuntime('diffusers-pytorch');
   latestKey = first.requestKey;
   const firstPromise = loadLatestSelectionInputProviderOptions(first, () => latestKey, loader);
 
   latestKey = second.requestKey;
   const secondPromise = loadLatestSelectionInputProviderOptions(second, () => latestKey, loader);
 
-  pending.get('pytorch.cuda')?.(result('CUDA'));
-  pending.get('pytorch.cpu')?.(result('CPU'));
+  pending.get('diffusers-pytorch')?.(result('Diffusers'));
+  pending.get('pytorch')?.(result('PyTorch'));
 
   assert.deepEqual(await secondPromise, {
     status: 'applied',
-    options: [{ label: 'CUDA', value: 'cuda' }],
+    options: [{ label: 'Diffusers', value: 'diffusers' }],
   });
   assert.deepEqual(await firstPromise, {
     status: 'stale',
@@ -142,13 +146,13 @@ test('loadLatestSelectionInputProviderOptions discards stale provider responses'
   });
 });
 
-function queryForRuntime(runtimeVariantId: string): SelectionInputProviderQuery {
+function queryForRuntime(runtime: string): SelectionInputProviderQuery {
   const query = buildSelectionInputProviderQuery(
     {
       id: 'image-node',
       data: {
         task_kind: 'image_generation',
-        runtime_variant_id: runtimeVariantId,
+        runtime,
         pumas_model_ref: 'pumas://models/tiny-sd',
       },
     },

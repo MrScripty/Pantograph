@@ -101,7 +101,9 @@ test('mock node definitions expose intent-only Pumas inference ports', () => {
   assert.equal(pumaLib.outputs.some((port) => port.id === 'resolved_model_package_facts'), false);
   assert.ok(pumaLib.outputs.some((port) => port.id === 'dependency_requirements'));
   assert.ok(llmInference.inputs.some((port) => port.id === 'task_kind'));
-  assert.ok(llmInference.inputs.some((port) => port.id === 'backend_key'));
+  assert.ok(llmInference.inputs.some((port) => port.id === 'runtime'));
+  assert.ok(llmInference.inputs.some((port) => port.id === 'device'));
+  assert.ok(!llmInference.inputs.some((port) => port.id === 'backend_key'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'runtime_hint'));
   assert.equal(llmInference.inputs.some((port) => port.id === 'resolved_model_source'), false);
   assert.equal(

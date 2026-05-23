@@ -26,13 +26,33 @@ durable task orchestration path.
   and diagnostics views. Read models may expose typed state, waiting reasons,
   timings, attempts, and diagnostics; they must not expose scheduler internals
   or executable load targets.
+- [x] Align graph-visible scheduler constraints before materialization relies
+  on them. The workflow-service task graph currently models optional hard
+  `runtime` and `device` constraints, while the canonical inference node
+  descriptor exposes `runtime` and not `device`. Add the optional typed
+  `device` input and matching option/read-model tests, or remove `device`
+  from the current task-result/admission scope until the graph contract can
+  provide it. Frontend option-provider context must use scheduler constraint
+  vocabulary and must not revive `backend_key` or `runtime_variant_id` as
+  graph-visible scheduler policy.
+- [ ] Add the typed task result materialization contract and active-run result
+  storage before implementing the orchestrator. Results must represent
+  scheduler-owned task outputs as typed values, including `PumasModelRef`,
+  scalar settings, media/artifact refs, diagnostics, invalid/unavailable
+  states, and no executable paths. The active-run storage is an implementation
+  stage only; the contract must be shaped so diagnostics-ledger persistence and
+  replay can replace the storage later without changing graph, node-engine, or
+  runtime-host semantics.
+- [ ] Add dependency-to-input binding resolution from materialized task
+  results. Resolution must produce a valid `SchedulableTaskIntent` only after
+  required canonical values are materialized; missing, wrong-type,
+  unavailable, or invalid values must emit typed diagnostics and keep the task
+  blocked/deferred/failed according to scheduler policy rather than falling
+  back to graph-local paths or whole-workflow node-engine demand.
 - [ ] Add the scheduler task orchestrator as the workflow-service application
   layer async shell around the synchronous scheduler policy core. It owns
   dependency readiness calls, runtime-host dispatch calls, ledger writes,
   cancellation, retries, shutdown, bounded queues, and task panic handling.
-- [ ] Add task result materialization for node outputs, media/artifact refs,
-  scalar values, and diagnostics so dependent tasks can resume without relying
-  on whole-workflow output-node demand.
 - [ ] Add a narrow node-engine single-task execution adapter for non-runtime
   graph tasks using materialized scheduler-owned inputs. Runtime inference
   nodes must not launch through this adapter.
@@ -55,6 +75,10 @@ durable task orchestration path.
 
 - Contract tests for scheduler task graph extraction, task records, task
   result materialization, and task-state read models.
+- Descriptor/projection tests proving optional scheduler constraints are
+  consistent across workflow-nodes, workflow-service task graph extraction,
+  task-state read models, and frontend option-provider context before `device`
+  is used for admission.
 - Store transition tests for every legal task state transition and focused
   negative tests for illegal transitions.
 - Scheduler orchestration tests using deterministic dependency readiness,
@@ -90,6 +114,50 @@ durable task orchestration path.
   runtime adapters, or inference workers own scheduler policy.
 - Do not expose executable Pumas load targets outside runtime host execution.
 - Do not add compatibility shims for retired runtime execution contracts.
+
+**Standards Guardrails:**
+
+- New task-result materialization and binding-resolution code must be split
+  into focused workflow-service modules and tests. Do not grow existing large
+  scheduler/store/workflow files except for narrow integration calls or
+  removal of retired code. Expected workflow-service ownership should be split
+  across focused task-result contract, active-run task-result storage, and
+  dependency binding-resolution modules rather than added to queue, session
+  execution, node-engine inference, or planned-inference host files.
+- `WorkflowSchedulerTaskResult` and related DTOs must be typed, versioned,
+  serializable, and validated. Use explicit value variants and typed
+  diagnostics; do not use incidental metadata maps, stringified unsupported
+  values, or executable path fields. If materialization needs floating-point
+  generation settings, add the explicit scheduler/workflow value contract
+  first instead of encoding those values as strings.
+- Active-run result storage is a staged implementation boundary. It must be
+  documented and implemented so durable diagnostics-ledger persistence/replay
+  can replace storage later without changing graph editor, node-engine,
+  scheduler, or runtime-host semantics. Do not generalize the current
+  whole-run `active_run` shape into the long-term task scheduler truth for
+  concurrent users, batching, or multi-device orchestration.
+- Binding resolution must consume materialized typed outputs and produce
+  scheduler-admissible intent only after validation. Missing, wrong-type,
+  unavailable, invalid, or ambiguous inputs must produce typed diagnostics and
+  task state, not compatibility behavior.
+- Keep async orchestration as a shell around synchronous scheduler policy. Do
+  not hold store locks across await points, and use bounded queues plus typed
+  cancellation/task state for concurrent execution.
+- Future frontend task-state work must use focused DTO, presenter, and query
+  modules rather than growing large scheduler page, I/O inspector, or shared
+  type files. Future diagnostics-ledger durability work must use focused
+  task-result event/projection/sqlite modules rather than adding task-result
+  replay logic directly to existing large ledger files.
+- `PlannedInferenceExecutionHost`, reduced execution-plan launch projection,
+  `ModelRefV2`, `model_path`, and frontend `modelPath` successful branches
+  are deletion targets after replacement. Do not expand them while
+  implementing task-result materialization or orchestration.
+- Shared contracts, generated DTOs, saved workflow fixtures, lockfiles, README
+  files, and plan files remain serial integration-owner work. Any sub-agent
+  slice must have a non-overlapping write set and a report path.
+- Every slice must update module documentation where ownership changes and run
+  focused tests plus relevant Rust format/check/test commands, including
+  default/all-features/no-default checks when public feature contracts change.
 
 **Status:**
 
@@ -185,3 +253,46 @@ durable task orchestration path.
   closed diagnostics for missing materialized inputs, persistence/replay
   ownership, and the handoff point where a materialized inference task becomes
   a scheduler-admissible `SchedulableTaskIntent`.
+- 2026-05-23: Re-plan direction chosen. Implement option 2 now with option 3
+  discipline: add a typed `WorkflowSchedulerTaskResult` contract plus active-run
+  result storage/resolution first, designed as if it will later be persisted
+  through the diagnostics ledger. The next code slices must not introduce
+  incidental metadata maps, node-engine output-demand fallback, reduced
+  execution-plan handoff synthesis, or Pumas path exposure. Durable
+  event-sourced task-result replay remains the later objective after the
+  orchestrator can run against the typed contract.
+- 2026-05-23: Standards and blast-radius review updated the milestone before
+  the next code slice. Findings captured here: graph-visible `device`
+  constraints must be aligned with the inference descriptor before admission
+  depends on them; materialization must be added in focused workflow-service
+  modules rather than oversized queue/session/node-engine files; active-run
+  result storage is staged and must not become the long-term scheduler state
+  model; floating-point generation settings require a typed contract extension
+  before use; frontend task-state and diagnostics-ledger durability work must
+  be decomposed into focused files; and legacy planned-inference/model-path
+  execution branches remain deletion targets, not extension points.
+- 2026-05-23: Graph-visible scheduler constraint alignment slice completed.
+  `workflow-nodes` now exposes optional typed `runtime` and `device` inputs on
+  the canonical `llm-inference` descriptor. `pantograph-workflow-service`
+  task-graph tests now prove graph `device` values project into
+  `SchedulerRuntimeDeviceConstraints`. `node-engine` port-option context and
+  frontend selection-input/cache contracts now carry `requestedRuntimeId` and
+  `requestedDeviceId` rather than graph-visible `backendId` or
+  `runtimeVariantId`; frontend mocks and UniFFI smoke fixtures were updated to
+  use the same context. This preserves the no-fallback rule because the graph
+  can provide typed scheduler constraints without exposing executable paths,
+  Pumas load targets, backend policy, or runtime-host launch details.
+  Verification passed: `cargo fmt -p workflow-nodes -p node-engine -p
+  pantograph-workflow-service -p pantograph-uniffi`, `cargo test -p
+  workflow-nodes processing::inference --lib`, `cargo test -p
+  pantograph-workflow-service workflow::tests::task_graph --lib`, `cargo test
+  -p node-engine port_options --lib`, `node --experimental-strip-types --test
+  src/components/nodes/workflow/selectionInputProviderOptions.test.ts
+  src/services/workflow/portOptionsCache.test.ts
+  src/services/workflow/WorkflowService.commands.test.ts`, `npm run
+  typecheck`, `cargo check -p node-engine -p workflow-nodes -p
+  pantograph-workflow-service -p pantograph-uniffi`, `cargo check -p
+  node-engine -p workflow-nodes -p pantograph-workflow-service -p
+  pantograph-uniffi --all-features`, `cargo check -p node-engine -p
+  workflow-nodes -p pantograph-workflow-service -p pantograph-uniffi
+  --no-default-features`, and `git diff --check`.

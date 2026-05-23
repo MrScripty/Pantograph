@@ -214,7 +214,8 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     io_binding_origin: 'integrated',
     inputs: [
       { id: 'task_kind', label: 'Task Kind', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
-      { id: 'backend_key', label: 'Backend Key', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'runtime', label: 'Runtime', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'device', label: 'Device', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
       { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
       { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false, inference_payloads: EMBEDDING_TEXT_PAYLOADS },
       { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false, inference_payloads: RERANK_INPUT_PAYLOADS },

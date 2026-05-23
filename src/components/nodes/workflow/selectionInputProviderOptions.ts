@@ -51,8 +51,8 @@ export function buildSelectionInputProviderQuery(
       taskKind: extractTaskKind(targetNode, targetPort),
       selectedModelRef: extractSelectedModelRef(targetNode.data?.pumas_model_ref),
       packageFactsSummaryCursor: extractString(targetNode.data?.package_facts_summary_cursor),
-      backendId: extractString(targetNode.data?.backend_key),
-      runtimeVariantId: extractString(targetNode.data?.runtime_variant_id),
+      requestedRuntimeId: extractString(targetNode.data?.runtime),
+      requestedDeviceId: extractString(targetNode.data?.device),
     }),
   };
 

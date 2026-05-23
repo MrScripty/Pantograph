@@ -740,8 +740,8 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
                     "taskKind": "image_generation",
                     "selectedModelRef": "pumas://models/llm/imported/uniffi-test-gguf",
                     "packageFactsSummaryCursor": "model-library-updates:1",
-                    "backendId": "pytorch",
-                    "runtimeVariantId": "pytorch.cpu"
+                    "requestedRuntimeId": "pytorch",
+                    "requestedDeviceId": "cpu"
                 }
             })
             .to_string(),

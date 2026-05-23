@@ -160,12 +160,12 @@ pub struct PortOptionsQueryContext {
     /// Package-facts summary/update cursor used for cache invalidation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_facts_summary_cursor: Option<PortOptionsContextId>,
-    /// Optional selected or constrained backend id.
+    /// Optional graph-authored scheduler runtime requirement.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend_id: Option<PortOptionsContextId>,
-    /// Optional selected or constrained runtime variant id.
+    pub requested_runtime_id: Option<PortOptionsContextId>,
+    /// Optional graph-authored scheduler device requirement.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_variant_id: Option<PortOptionsContextId>,
+    pub requested_device_id: Option<PortOptionsContextId>,
 }
 
 /// Query parameters for fetching port options.
@@ -289,8 +289,8 @@ mod tests {
                 package_facts_summary_cursor: Some(
                     PortOptionsContextId::new("model-library-updates:42").unwrap(),
                 ),
-                backend_id: Some(PortOptionsContextId::new("pytorch").unwrap()),
-                runtime_variant_id: Some(PortOptionsContextId::new("pytorch.cuda").unwrap()),
+                requested_runtime_id: Some(PortOptionsContextId::new("pytorch").unwrap()),
+                requested_device_id: Some(PortOptionsContextId::new("cuda:0").unwrap()),
             }),
         };
 
@@ -305,6 +305,10 @@ mod tests {
             json["context"]["packageFactsSummaryCursor"],
             "model-library-updates:42"
         );
+        assert_eq!(json["context"]["requestedRuntimeId"], "pytorch");
+        assert_eq!(json["context"]["requestedDeviceId"], "cuda:0");
+        assert!(json["context"]["backendId"].is_null());
+        assert!(json["context"]["runtimeVariantId"].is_null());
 
         let round_trip: PortOptionsQuery = serde_json::from_value(json).unwrap();
         let context = round_trip.context.expect("context should round trip");
