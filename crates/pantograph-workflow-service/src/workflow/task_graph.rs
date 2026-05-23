@@ -13,7 +13,8 @@ use serde_json::Value;
 
 use super::task_graph_contracts::{
     WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskInputBinding,
-    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
+    WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
@@ -56,14 +57,16 @@ pub fn workflow_scheduler_task_graph(
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
         let dependency_task_ids = dependency_task_ids(&input_bindings);
         let data = node_data_by_id.get(node.node_id.as_str()).copied();
-        let (schedulable_intent, diagnostics) = schedulable_intent_for_node(
-            &workflow_id,
-            &workflow_run_id,
-            &node_id,
-            &task_id,
-            &node.node_type,
-            data,
-        );
+        let (schedulable_intent, schedulable_intent_template, diagnostics) =
+            schedulable_intent_for_node(
+                &workflow_id,
+                &workflow_run_id,
+                &node_id,
+                &task_id,
+                &node.node_type,
+                data,
+                &input_bindings,
+            );
 
         tasks.push(WorkflowSchedulerTask {
             workflow_id: workflow_id.clone(),
@@ -74,6 +77,7 @@ pub fn workflow_scheduler_task_graph(
             dependency_task_ids,
             input_bindings,
             schedulable_intent,
+            schedulable_intent_template,
             diagnostics,
         });
     }
@@ -128,16 +132,19 @@ fn schedulable_intent_for_node(
     task_id: &SchedulerTaskId,
     node_type: &str,
     data: Option<&Value>,
+    input_bindings: &[WorkflowSchedulerTaskInputBinding],
 ) -> (
     Option<SchedulableTaskIntent>,
+    Option<WorkflowSchedulerTaskIntentTemplate>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 ) {
     if node_type != NODE_TYPE_LLM_INFERENCE {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     }
 
     let Some(data) = data else {
         return (
+            None,
             None,
             vec![
                 diagnostic(
@@ -157,16 +164,33 @@ fn schedulable_intent_for_node(
     };
 
     let mut diagnostics = Vec::new();
-    let model_ref = required_model_ref(node_id, data, &mut diagnostics);
+    let model_ref =
+        optional_materializable_model_ref(node_id, data, input_bindings, &mut diagnostics);
     let task_type = required_task_type(node_id, data, &mut diagnostics);
     let constraints = runtime_device_constraints(node_id, data, &mut diagnostics);
     let trait_settings = trait_settings(node_id, data, &mut diagnostics);
     let estimate_hints = Vec::<SchedulerEstimateHint>::new();
 
-    if diagnostics.is_empty() {
-        if let (Some(model_ref), Some(task_type), Some(constraints), Some(trait_settings)) =
-            (model_ref, task_type, constraints, trait_settings)
+    let schedulable_intent_template = if diagnostics.is_empty() {
+        if let (Some(task_type), Some(constraints), Some(trait_settings)) =
+            (task_type, constraints, trait_settings)
         {
+            Some(WorkflowSchedulerTaskIntentTemplate {
+                task_type,
+                constraints,
+                trait_settings,
+                dependency_override_patches: Vec::new(),
+                estimate_hints,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let (Some(model_ref), Some(template)) = (model_ref, schedulable_intent_template.as_ref()) {
+        if diagnostics.is_empty() {
             return (
                 Some(SchedulableTaskIntent {
                     contract_version:
@@ -176,33 +200,40 @@ fn schedulable_intent_for_node(
                     node_id: node_id.clone(),
                     task_id: task_id.clone(),
                     fairness_key: None,
-                    task_type,
+                    task_type: template.task_type.clone(),
                     model_ref,
-                    constraints,
-                    trait_settings,
-                    dependency_override_patches: Vec::new(),
-                    estimate_hints,
+                    constraints: template.constraints.clone(),
+                    trait_settings: template.trait_settings.clone(),
+                    dependency_override_patches: template.dependency_override_patches.clone(),
+                    estimate_hints: template.estimate_hints.clone(),
                 }),
+                schedulable_intent_template,
                 diagnostics,
             );
         }
     }
 
-    (None, diagnostics)
+    (None, schedulable_intent_template, diagnostics)
 }
 
-fn required_model_ref(
+fn optional_materializable_model_ref(
     node_id: &SchedulerNodeId,
     data: &Value,
+    input_bindings: &[WorkflowSchedulerTaskInputBinding],
     diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 ) -> Option<PumasModelRef> {
     let Some(value) = data.get(PORT_PUMAS_MODEL_REF) else {
-        diagnostics.push(diagnostic(
-            node_id,
-            Some(PORT_PUMAS_MODEL_REF),
-            WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
-            "inference scheduler tasks require canonical pumas_model_ref input",
-        ));
+        if !input_bindings
+            .iter()
+            .any(|binding| binding.target_port_id == PORT_PUMAS_MODEL_REF)
+        {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(PORT_PUMAS_MODEL_REF),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
+                "inference scheduler tasks require canonical pumas_model_ref input",
+            ));
+        }
         return None;
     };
     match serde_json::from_value::<PumasModelRef>(value.clone()) {

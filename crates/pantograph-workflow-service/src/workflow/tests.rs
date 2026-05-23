@@ -30,6 +30,7 @@ mod session_queue;
 mod session_runtime_preflight;
 mod session_runtime_state;
 mod session_stale_cleanup;
+mod task_binding_resolution;
 mod task_graph;
 mod task_result_contracts;
 mod task_state_read_model;

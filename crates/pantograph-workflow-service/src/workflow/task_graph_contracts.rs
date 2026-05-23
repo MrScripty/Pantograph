@@ -1,5 +1,7 @@
+use pantograph_dependency_planning::DependencyOverridePatchV1;
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerNodeId, SchedulerTaskId, SchedulerWorkflowId,
+    SchedulableTaskIntent, SchedulerEstimateHint, SchedulerNodeId,
+    SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitSetting, SchedulerWorkflowId,
     SchedulerWorkflowRunId,
 };
 use serde::{Deserialize, Serialize};
@@ -30,6 +32,8 @@ pub struct WorkflowSchedulerTask {
     pub input_bindings: Vec<WorkflowSchedulerTaskInputBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedulable_intent: Option<SchedulableTaskIntent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedulable_intent_template: Option<WorkflowSchedulerTaskIntentTemplate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 }
@@ -41,6 +45,20 @@ pub struct WorkflowSchedulerTaskInputBinding {
     pub source_task_id: SchedulerTaskId,
     pub source_port_id: String,
     pub target_port_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowSchedulerTaskIntentTemplate {
+    pub task_type: pantograph_dependency_planning::DependencyTaskId,
+    #[serde(default)]
+    pub constraints: SchedulerRuntimeDeviceConstraints,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trait_settings: Vec<SchedulerTraitSetting>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_override_patches: Vec<DependencyOverridePatchV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub estimate_hints: Vec<SchedulerEstimateHint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

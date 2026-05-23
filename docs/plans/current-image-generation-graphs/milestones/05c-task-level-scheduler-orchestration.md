@@ -43,7 +43,7 @@ durable task orchestration path.
   stage only; the contract must be shaped so diagnostics-ledger persistence and
   replay can replace the storage later without changing graph, node-engine, or
   runtime-host semantics.
-- [ ] Add dependency-to-input binding resolution from materialized task
+- [x] Add dependency-to-input binding resolution from materialized task
   results. Resolution must produce a valid `SchedulableTaskIntent` only after
   required canonical values are materialized; missing, wrong-type,
   unavailable, or invalid values must emit typed diagnostics and keep the task
@@ -323,3 +323,27 @@ durable task orchestration path.
   Remaining follow-up: implement dependency-to-input binding resolution from
   materialized task results before the scheduler task orchestrator can admit
   downstream runtime tasks.
+- 2026-05-23: Dependency-to-input binding resolution slice completed.
+  `pantograph-workflow-service` now carries a path-free
+  `WorkflowSchedulerTaskIntentTemplate` on scheduler task graph records when
+  graph-supplied runtime/device/task-type/trait settings are valid but a
+  canonical model reference is expected from an upstream task. The new focused
+  binding-resolution module consumes the task template plus materialized
+  `WorkflowSchedulerTaskResult` values and produces a validated
+  `SchedulableTaskIntent` only when the required `PumasModelRef` output is
+  present, completed, and correctly typed. Missing materialized output keeps
+  the task blocked; unavailable, invalid, failed, or wrong-type upstream
+  results return typed diagnostics instead of falling back to graph-local
+  paths, reduced execution plans, node-engine output demand, or Pumas load
+  targets. Verification passed: `cargo test -p pantograph-workflow-service
+  workflow::tests::task_binding_resolution --lib`, `cargo test -p
+  pantograph-workflow-service workflow::tests::task_graph --lib`, `cargo fmt
+  -p pantograph-workflow-service -- --check`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+  --all-features`, `cargo check -p pantograph-workflow-service
+  --no-default-features`, and `git diff --check`. Verification deviation
+  fixed during the slice: the first binding resolver tests used an
+  unregistered synthetic model-selector node; the fixture now uses registered
+  `puma-lib` behavior so topology validation covers the real graph boundary.
+  Remaining follow-up: implement the scheduler task orchestrator application
+  shell that consumes these ready/blocked binding outcomes.

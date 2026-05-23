@@ -45,6 +45,7 @@ mod session_lifecycle_api;
 mod session_queue_api;
 mod session_runtime;
 mod session_runtime_load_lifecycle;
+mod task_binding_resolution;
 mod task_graph;
 mod task_graph_contracts;
 mod task_result_contracts;
@@ -104,10 +105,16 @@ pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub use self::media_capability_contracts::*;
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
+pub use self::task_binding_resolution::{
+    workflow_scheduler_resolve_task_intent, WorkflowSchedulerTaskBindingDiagnostic,
+    WorkflowSchedulerTaskBindingDiagnosticCode, WorkflowSchedulerTaskBindingDiagnosticSeverity,
+    WorkflowSchedulerTaskBindingResolution, WorkflowSchedulerTaskBindingResolutionStatus,
+};
 pub use self::task_graph::workflow_scheduler_task_graph;
 pub use self::task_graph_contracts::{
     WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskInputBinding,
-    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
+    WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };

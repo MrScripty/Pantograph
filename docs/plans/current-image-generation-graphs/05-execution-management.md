@@ -9626,6 +9626,38 @@ Worker rules:
   - Remaining follow-up: dependency-to-input binding resolution from
     materialized task results is the next Milestone 5c item before the
     orchestrator can admit downstream runtime tasks.
+- 2026-05-23 Milestone 5c dependency-to-input binding resolution slice
+  completed:
+  - Smallest useful vertical slice: add path-free task intent templates and a
+    focused workflow-service resolver that turns materialized upstream task
+    outputs into scheduler-admissible intents.
+  - Allowed write set: workflow-service task graph contracts/projection/tests,
+    new focused binding-resolution module and tests, workflow exports/test
+    registration, workflow README, Milestone 5c plan, task-level orchestration
+    plan, and this execution log.
+  - Implementation notes: inference tasks now retain a
+    `WorkflowSchedulerTaskIntentTemplate` when task type, scheduler
+    runtime/device constraints, and trait settings are valid but
+    `pumas_model_ref` is expected from an upstream binding. The resolver
+    consumes `WorkflowSchedulerTaskResult` values and returns ready, blocked,
+    unavailable, or invalid typed outcomes.
+  - No-fallback/no-legacy confirmation: the resolver only accepts typed
+    materialized `PumasModelRef` outputs. It does not read graph-local
+    `model_path`, `ModelRefV2`, frontend `modelPath`, reduced execution plans,
+    runtime handoff, Pumas load targets, or node-engine output-demand state.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    workflow::tests::task_binding_resolution --lib`, `cargo test -p
+    pantograph-workflow-service workflow::tests::task_graph --lib`, `cargo
+    fmt -p pantograph-workflow-service -- --check`, `cargo check -p
+    pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+    --all-features`, `cargo check -p pantograph-workflow-service
+    --no-default-features`, and `git diff --check`.
+  - Verification deviation fixed: the first binding resolver fixture used an
+    unregistered synthetic model-selector node and failed topology validation;
+    the test now uses registered `puma-lib` behavior.
+  - Remaining follow-up: the scheduler task orchestrator application shell is
+    the next Milestone 5c item and must consume the resolver's ready/blocked
+    outcomes without reviving whole-workflow execution.
 
 ### Traceability Links
 

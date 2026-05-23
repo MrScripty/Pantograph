@@ -142,7 +142,13 @@ but the ownership and data boundaries must remain explicit.
    runtime inference task becomes scheduler-admissible only when required
    typed values have been materialized into a valid `SchedulableTaskIntent`.
    Missing, wrong-type, unavailable, or invalid inputs must become typed
-   diagnostics and scheduler task state, not graph-path fallback.
+   diagnostics and scheduler task state, not graph-path fallback. Completed
+   2026-05-23 as a focused workflow-service binding-resolution module plus
+   path-free task intent templates. The resolver materializes upstream
+   `PumasModelRef` task outputs into validated schedulable intents and returns
+   ready, blocked, unavailable, or invalid typed outcomes without consulting
+   graph paths, reduced execution plans, runtime handoff, or node-engine
+   output demand.
 7. Add the scheduler task orchestrator with a synchronous policy core and an
    async shell for dependency readiness, runtime-host dispatch, ledger writes,
    cancellation, retries, and shutdown.
