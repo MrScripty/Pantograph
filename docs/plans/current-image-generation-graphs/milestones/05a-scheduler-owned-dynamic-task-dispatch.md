@@ -46,7 +46,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   and emits `ModelRefV2`. Milestone 5a keeps the scheduler handoff contracts;
   Milestone 5b owns runtime-host load-target resolution and legacy path
   deletion.
-- [ ] Add durable scheduler queue state for task-level workflow progress:
+- [x] Add durable scheduler queue state for task-level workflow progress:
   pending, ready, blocked, waiting for dependency readiness, waiting for
   resources, waiting for batch, running, paused/deferred, retryable failed,
   terminal failed, and completed. Queue transitions must be idempotent and
@@ -292,3 +292,22 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   consume scheduler handoff and host-resolved Pumas load targets before
   deleting `ModelRefV2`, `ModelDependencyRequest`, `ModelDependencyResolver`,
   `build_model_ref_v2`, and successful `model_path` fixtures.
+- 2026-05-22 durable scheduler queue state slice completed. Smallest useful
+  vertical slice: add a pure scheduler queue-state contract and idempotent
+  transition replay helper inside `pantograph-scheduler`, without adding a
+  worker, persistence adapter, runtime dispatch, or lifecycle owner.
+  Allowed write set: `crates/pantograph-scheduler/`, this milestone file, and
+  execution notes. No-fallback confirmation: queue records and transitions
+  carry task correlation, path-free task intent, queue state, state version,
+  and transition id only; they reject path/load-target fields and do not expose
+  executable Pumas load targets, local paths, `ModelDependencyRequest`,
+  `ModelRefV2`, graph `model_path`, frontend `modelPath`, reservations,
+  batching groups, worker launch facts, or runtime host execution data.
+  Verification passed: `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`,
+  `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  Remaining follow-up: add typed scheduler task lifecycle diagnostics so users
+  and graph/run inspection can explain waiting, deferred, unavailable, failed,
+  and completed states without frontend inference.

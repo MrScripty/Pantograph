@@ -10,6 +10,7 @@ mod error;
 mod handoff;
 mod intent;
 mod ownership;
+mod queue;
 mod readiness;
 
 pub use capability::{
@@ -32,6 +33,12 @@ pub use intent::{
 pub use ownership::{
     owner_for_capability, SchedulerBoundaryConsumer, SchedulerBoundaryOwner,
     SchedulerOwnedCapability, SCHEDULER_CONTRACT_VERSION,
+};
+pub use queue::{
+    apply_scheduler_queue_transition, SchedulerQueueTaskRecord, SchedulerQueueTaskState,
+    SchedulerQueueTransition, SchedulerQueueTransitionApplyResult, SchedulerQueueTransitionId,
+    ValidatedSchedulerQueueTaskRecord, ValidatedSchedulerQueueTransition,
+    SCHEDULER_QUEUE_STATE_CONTRACT_VERSION,
 };
 pub use readiness::{
     SchedulerDependencyReadinessProof, SchedulerReadinessAdmissionAction,

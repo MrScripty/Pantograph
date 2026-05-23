@@ -8988,6 +8988,33 @@ Worker rules:
     Milestone 5a or 5b item that can be completed without editing outside its
     allowed write set. If continuing legacy removal, start Milestone 5b with
     the host execution input contract before touching runtime loading code.
+- 2026-05-22 Milestone 5a durable scheduler queue state slice completed:
+  - Smallest useful vertical slice: add a pure durable queue-state contract and
+    idempotent transition replay helper in `pantograph-scheduler`, without
+    introducing a worker, persistence adapter, runtime dispatch, or lifecycle
+    owner.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerQueueTaskState`,
+    `SchedulerQueueTaskRecord`, `SchedulerQueueTransition`,
+    `SchedulerQueueTransitionId`, validated wrappers,
+    `SchedulerQueueTransitionApplyResult`, and
+    `apply_scheduler_queue_transition`, plus README coverage and a JSON
+    fixture-backed public contract test suite.
+  - No-fallback/no-legacy confirmation: queue records and transitions carry
+    task correlation, path-free task intent, queue state, state version, and
+    transition id only. They reject path/load-target fields and do not expose
+    executable Pumas load targets, local paths, `ModelDependencyRequest`,
+    `ModelRefV2`, graph `model_path`, frontend `modelPath`, reservations,
+    batching groups, worker launch facts, or runtime host execution data.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  - Remaining follow-up: add typed scheduler task lifecycle diagnostics so
+    graph editor and run inspection can explain waiting, deferred, unavailable,
+    failed, and completed task states without frontend inference.
 
 ### Traceability Links
 

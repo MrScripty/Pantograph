@@ -14,6 +14,7 @@ ownership.
 | `src/handoff.rs` | Non-legacy runtime handoff envelope consumed after scheduler readiness admission. |
 | `src/intent.rs` | Path-free schedulable task intent contract, validated workflow/run/node/task ids, runtime/device constraints, typed trait settings, and bounded estimate hints. |
 | `src/ownership.rs` | Scheduler-owned capability and non-scheduler consumer ownership boundary enums. |
+| `src/queue.rs` | Durable scheduler task queue state and idempotent transition replay contract. |
 | `src/readiness.rs` | Scheduler-owned readiness admission request/decision contracts and host-ready dependency readiness proof wrapper. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
 
@@ -85,6 +86,11 @@ resolver behavior.
   scheduler dispatch selection. It must not carry executable Pumas load targets,
   local paths, `ModelRefV2`, reservations, batching groups, or worker launch
   facts.
+- `SchedulerQueueTaskRecord` and `SchedulerQueueTransition` are durable,
+  replayable queue contracts for one schedulable task. They carry task
+  correlation, task intent, queue state, state version, and transition id only.
+  They must not carry executable Pumas load targets, local paths,
+  `ModelRefV2`, worker launch details, reservations, or batching groups.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -147,7 +153,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   validated that ready decisions carry matching path-free dependency readiness
   proof. Runtime hosts may consume `ValidatedSchedulerRuntimeHandoff` values
   once correlation, environment refs, readiness proof, and optional dispatch
-  selection have been validated.
+  selection have been validated. Queue persistence and replay consumers may use
+  `ValidatedSchedulerQueueTaskRecord`,
+  `ValidatedSchedulerQueueTransition`, and
+  `apply_scheduler_queue_transition` to validate idempotent task-state replay.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -171,7 +180,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   intent and policy fields; `SchedulerReadinessAdmissionDecision` action,
   state, readiness proof, and typed diagnostics; `SchedulerRuntimeHandoff`
   correlation fields, state, readiness proof, environment ref, and optional
-  dispatch selection fields.
+  dispatch selection fields; `SchedulerQueueTaskRecord` correlation, task
+  intent, state, state version, and last transition id fields;
+  `SchedulerQueueTransition` correlation, task intent, expected previous state,
+  next state, and transition id fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -184,6 +196,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   fails terminally; it is not a runtime/device selection result. Runtime
   handoff state separates readiness-admitted handoff from dispatch-selected
   handoff so runtime/device facts are added only by scheduler dispatch policy.
+  Queue task states describe durable scheduler progress only; lifecycle
+  diagnostics, resource reservations, batching groups, and runtime dispatch
+  facts are separate contracts.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait
