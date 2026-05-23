@@ -1,17 +1,24 @@
 # Milestone 5b: Runtime Host Handoff And Legacy Execution Removal
 
 **Goal:** Replace successful `model_path`/`ModelRefV2` runtime execution with
-runtime-host execution that consumes scheduler-owned handoff facts and resolves
-Pumas-approved load targets only at the host boundary.
+direct scheduler-to-runtime-host execution that consumes scheduler-owned
+handoff facts and resolves Pumas-approved load targets only at the host
+boundary.
 
 This milestone is split out of Milestone 5a because replacing node-engine
 dependency preflight alone would preserve the legacy successful execution path.
 Milestone 5a owns scheduler contracts and dynamic dispatch. Milestone 5b owns
 runtime-host handoff wiring and deletion of the old resolver/path contracts.
 Milestone 5b is a hard gate before real image-generation execution slices can
-depend on runtime loading: the canonical runtime-host request/response and
-host-owned Pumas load-target resolution must exist before old successful
-`ModelRefV2`/`model_path` paths are deleted.
+depend on runtime loading: the canonical runtime-host request/response,
+host-owned Pumas load-target resolution, and direct scheduler dispatch caller
+must exist before old successful `ModelRefV2`/`model_path` paths are deleted.
+
+Selected re-plan direction as of 2026-05-23: use option 3. Runtime execution
+must be initiated by scheduler dispatch with the actual dispatch-selected
+`SchedulerRuntimeHandoff`. Do not synthesize handoff from
+`WorkflowExecutionPlanNodeDecision`, and do not keep planned inference as an
+alternate successful launch path.
 
 **Tasks:**
 
@@ -24,26 +31,41 @@ host-owned Pumas load-target resolution must exist before old successful
   executable load targets only from scheduler-selected Pumas refs/artifact
   identity at runtime dispatch, and return typed unavailable/stale/invalid
   diagnostics instead of falling back to paths.
+- [ ] Add the scheduler-owned runtime-host execution dispatch port. It must
+  accept only `RuntimeHostExecutionRequest`, return
+  `RuntimeHostExecutionResponse`, and keep request/cancellation/retry
+  correlation in scheduler/application orchestration rather than runtime
+  adapters.
+- [ ] Wire scheduler dispatch to call runtime-host execution directly from the
+  actual dispatch-selected `SchedulerRuntimeHandoff`. The reduced
+  `WorkflowExecutionPlan` may remain an inspection/diagnostics projection but
+  must not be used to launch inference or build handoff.
+- [ ] Retire node-engine planned-inference launch ownership for runtime
+  inference nodes. Affected nodes must submit or reference scheduler task
+  intent and consume scheduler task state/results; missing scheduler task state
+  must fail closed with typed diagnostics.
 - [ ] Replace PyTorch execution so successful model loading consumes
-  host-owned executable facts and no longer reads graph `model_path` or emits
-  `ModelRefV2`.
+  scheduler-dispatched runtime-host requests plus host-owned executable facts
+  and no longer reads graph `model_path`, reduced execution-plan projections,
+  or emits `ModelRefV2`.
 - [ ] Replace llama.cpp execution so successful model loading consumes
-  host-owned executable facts and no longer reads graph `model_path` or emits
-  `ModelRefV2`.
+  scheduler-dispatched runtime-host requests plus host-owned executable facts
+  and no longer reads graph `model_path`, reduced execution-plan projections,
+  or emits `ModelRefV2`.
 - [ ] Replace audio execution so successful model loading consumes host-owned
-  executable facts and no longer reads graph `model_path` or emits
-  `ModelRefV2`.
+  executable facts and no longer reads graph `model_path`, reduced
+  execution-plan projections, or emits `ModelRefV2`.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
-  scheduler handoff facts after the host execution request exists. Missing
-  scheduler handoff must fail closed with typed diagnostics, not repair old
-  inputs.
+  scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
+  Missing scheduler task state must fail closed with typed diagnostics, not
+  repair old inputs.
 - [ ] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
   paths after runtime host load-target resolution is wired.
 - [ ] Remove retired node-engine contracts and helpers:
   `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
-  `build_model_ref_v2`, path repair helpers, and successful `model_path` test
-  fixtures only after the runtime-host request/response and load-target
-  resolution path are wired.
+  `build_model_ref_v2`, `PlannedInferenceExecutionHost`, path repair helpers,
+  and successful `model_path` test fixtures only after scheduler-to-runtime-host
+  dispatch and load-target resolution are wired.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.
@@ -59,14 +81,23 @@ host-owned Pumas load-target resolution must exist before old successful
   and scheduler handoff payloads reject executable path fields.
 - Runtime-host tests proving Pumas load targets are resolved only at the host
   boundary and unavailable states produce typed diagnostics.
+- Scheduler dispatch tests proving runtime-host requests are created only from
+  dispatch-selected `SchedulerRuntimeHandoff`, not from
+  `WorkflowExecutionPlanNodeDecision` or backend-decision projections.
+- Workflow/session execution tests proving scheduler task dispatch calls the
+  runtime-host execution port, records typed responses, preserves
+  cancellation/retry correlation, and does not launch inference through
+  node-engine.
 - PyTorch, llama.cpp, and audio tests proving successful execution no longer
-  reads graph `model_path` or emits `ModelRefV2`.
+  reads graph `model_path`, launches from reduced execution-plan projections,
+  or emits `ModelRefV2`.
 - Node-engine tests proving affected runtime nodes fail closed when scheduler
-  handoff is missing and do not call `ModelDependencyResolver`.
+  task state is missing and do not call `ModelDependencyResolver` or
+  `PlannedInferenceExecutionHost`.
 - Deletion/search checks proving successful production paths no longer contain
   `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
-  `build_model_ref_v2`, frontend `modelPath` dependency actions, or path-shaped
-  success fixtures.
+  `build_model_ref_v2`, `PlannedInferenceExecutionHost`, frontend `modelPath`
+  dependency actions, or path-shaped success fixtures.
 - Focused crate checks for every touched Rust crate, including default,
   all-features, and no-default-features checks when public feature contracts
   change.
@@ -74,9 +105,13 @@ host-owned Pumas load-target resolution must exist before old successful
 **No-Fallback Requirements:**
 
 - Do not adapt scheduler readiness or handoff facts back into `ModelRefV2`.
+- Do not synthesize scheduler handoff from reduced workflow execution-plan
+  facts or backend execution projections.
 - Do not preserve `model_path`/`modelPath` as successful runtime execution
   identity.
 - Do not leave old resolver calls as alternate successful execution branches.
+- Do not leave `PlannedInferenceExecutionHost` as an alternate successful
+  inference launch branch after direct scheduler dispatch is wired.
 - Do not let node-engine, runtime adapters, frontend actions, or Tauri commands
   choose scheduler runtime/device/dependency policy.
 - Do not expose executable Pumas load targets outside the runtime host
@@ -84,7 +119,7 @@ host-owned Pumas load-target resolution must exist before old successful
 
 **Status:**
 
-- [ ] Not started.
+- [ ] In progress.
 - 2026-05-22: Created from the Milestone 5a node-engine legacy boundary
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy
@@ -129,6 +164,15 @@ host-owned Pumas load-target resolution must exist before old successful
   pantograph-embedded-runtime`, `cargo test -p pantograph-embedded-runtime
   runtime_host_load_target`, `cargo test -p pantograph-embedded-runtime
   runtime_host_execution`, crate check matrix, fmt check, diff checks, README
-  coverage review, and file-size standards check. Remaining follow-up: wire
-  PyTorch execution to consume host-owned executable facts instead of graph
-  `model_path`.
+  coverage review, and file-size standards check. Remaining follow-up before
+  PyTorch migration: wire scheduler dispatch to call runtime-host execution
+  directly from the actual dispatch-selected scheduler handoff.
+- 2026-05-23: Re-plan boundary recorded before the PyTorch migration slice.
+  Decision: use option 3. The existing `EmbeddedPlannedInferenceExecutionHost`
+  launches from a reduced `WorkflowExecutionPlanNodeDecision`; that projection
+  cannot be the source of truth for `RuntimeHostExecutionRequest`. The next
+  implementation must first add scheduler-owned direct dispatch to the
+  runtime-host execution port, then retire planned-inference launch ownership
+  from node-engine, then migrate PyTorch/llama.cpp/audio execution. No
+  scheduler-handoff synthesis from reduced plans, no backend-decision bridge,
+  and no alternate planned-inference successful branch are allowed.

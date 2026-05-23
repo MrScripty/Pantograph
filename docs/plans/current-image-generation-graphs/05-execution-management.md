@@ -9315,8 +9315,30 @@ Worker rules:
     `cargo test -p pantograph-embedded-runtime runtime_host_execution`, crate
     check matrix, fmt check, diff checks, README coverage review, and file-size
     standards check.
-  - Remaining follow-up: wire PyTorch execution to consume host-owned
-    executable facts instead of graph `model_path`.
+  - Remaining follow-up before PyTorch migration: wire scheduler dispatch to
+    call runtime-host execution directly from the actual dispatch-selected
+    scheduler handoff.
+- 2026-05-23 Milestone 5b scheduler-to-runtime-host re-plan slice completed:
+  - Smallest useful vertical slice: update the plan to replace the prior
+    reduced-plan launch direction with direct scheduler-to-runtime-host
+    dispatch before touching runtime execution code.
+  - Allowed write set: `04-milestones.md`,
+    `08-scheduler-owned-dynamic-task-dispatch.md`,
+    `09-runtime-host-handoff-legacy-removal.md`, the Milestone 5b plan, and
+    this execution log.
+  - Decision: use option 3. Scheduler dispatch is the only successful caller
+    of runtime-host execution, and it must build `RuntimeHostExecutionRequest`
+    from the actual dispatch-selected `SchedulerRuntimeHandoff`.
+  - Boundary clarification: `WorkflowExecutionPlanNodeDecision` remains a
+    reduced inspection/diagnostics projection. It must not be used to
+    synthesize scheduler handoff, launch inference, or feed a backend-decision
+    compatibility bridge.
+  - No-fallback/no-legacy confirmation: retire node-engine planned-inference
+    launch ownership after direct scheduler dispatch is wired; do not keep
+    `PlannedInferenceExecutionHost`, `EmbeddedPlannedInferenceExecutionHost`,
+    `ModelDependencyResolver`, `ModelRefV2`, or `model_path` fixtures as
+    alternate successful execution branches.
+  - Verification: documentation-only plan review and `git diff --check`.
 
 ### Traceability Links
 

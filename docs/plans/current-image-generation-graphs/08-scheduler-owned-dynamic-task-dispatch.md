@@ -50,9 +50,10 @@ batching groups, warmup/load ordering, or runtime/device ranking policy.
 - **Dependency readiness service:** resolve/check/install dependency
   environments when directed by scheduler policy and return typed readiness
   proof or diagnostics.
-- **Runtime/execution host:** consume a short-lived scheduler dispatch plan and
-  execute it. Pumas-approved load targets may be resolved here only when the
-  selected runtime needs executable facts.
+- **Runtime/execution host:** consume a short-lived runtime-host execution
+  request built from dispatch-selected scheduler handoff and execute it.
+  Pumas-approved load targets may be resolved here only when the selected
+  runtime needs executable facts.
 - **Diagnostics/history ledger:** record typed waiting, unavailable, failed,
   completed, timing, dependency, resource, runtime, and batching facts for
   users and future scheduling policy.
@@ -245,7 +246,7 @@ optimistic backend-owned readiness.
    including which shared contracts remain serial integration-owner work.
 2. Define capability hint and schedulable task intent contracts.
 3. Add scheduler-owned readiness admission and the non-legacy runtime handoff
-   seam that runtime hosts will consume.
+   that runtime hosts will consume.
 4. Defer node-engine/runtime legacy execution replacement to Milestone 5b
    because successful runtime execution still reads `model_path` and emits
    `ModelRefV2`.
@@ -255,8 +256,12 @@ optimistic backend-owned readiness.
 8. Add resource/residency snapshot admission and reservation ids behind the
    platform-neutral observer abstraction.
 9. Add batching policy surface for compatible ready tasks across workflows.
-10. Wire runtime host execution through dispatch decisions.
-11. Delete retired resolver/path contracts and successful legacy fixtures.
+10. Wire scheduler dispatch to call runtime-host execution directly with the
+    actual dispatch-selected `SchedulerRuntimeHandoff`; do not launch runtime
+    inference from reduced workflow execution-plan projections.
+11. Retire node-engine planned-inference launch ownership for runtime
+    inference nodes after scheduler-to-runtime-host dispatch is wired.
+12. Delete retired resolver/path contracts and successful legacy fixtures.
 
 ## Legacy Removal Targets
 
@@ -291,6 +296,9 @@ add compatibility shims or alternate successful branches.
   compile checks for supported Rust targets.
 - Cross-layer acceptance path from graph intent to scheduler dispatch to host
   execution without graph or node-engine path exposure.
+- Scheduler-to-runtime-host acceptance proving `RuntimeHostExecutionRequest`
+  is built from the real dispatch-selected handoff, not from
+  `WorkflowExecutionPlanNodeDecision` or backend-decision projections.
 - Multi-workflow acceptance covering at least two ready tasks from different
   workflow runs, proving queue ownership and fair deferral rather than
   whole-workflow static execution.
@@ -322,9 +330,15 @@ branches or preserve retired systems.
 - **Readiness admission ordering:** replacing node-engine preflight directly
   would either break the current runtime input path or require converting back
   into `ModelRefV2`. Use the selected Option 3 ordering: add
-  scheduler-owned readiness admission and a non-legacy runtime handoff seam
-  first, then complete Milestone 5b to replace runtime-host execution and
-  delete `ModelRefV2`/`model_path` successful paths.
+  scheduler-owned readiness admission and non-legacy runtime handoff first,
+  then complete Milestone 5b to wire scheduler dispatch directly into
+  runtime-host execution and delete `ModelRefV2`/`model_path` successful
+  paths.
+- **Reduced execution-plan boundary:** `WorkflowExecutionPlanNodeDecision` is
+  an inspection/diagnostics projection, not executable scheduler state. If
+  runtime launch needs full dispatch facts, use the actual
+  `SchedulerRuntimeHandoff`; do not synthesize handoff or backend execution
+  decisions from the reduced plan.
 - **Scheduler queue persistence:** durable task state must have one owner. If
   existing ledger tables cannot represent replayable queue state without
   overloading diagnostics, create scheduler-owned persistence instead of
