@@ -7490,6 +7490,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-scheduler"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "pantograph-timing-contracts"
 version = "0.1.0"
 dependencies = [

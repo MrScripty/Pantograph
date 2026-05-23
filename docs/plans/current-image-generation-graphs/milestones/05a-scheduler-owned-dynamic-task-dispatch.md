@@ -12,7 +12,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
 
 **Tasks:**
 
-- [ ] Establish the scheduler-owned implementation boundary before adding new
+- [x] Establish the scheduler-owned implementation boundary before adding new
   execution behavior. Decide whether an existing crate cleanly owns scheduler
   queue, policy, resource admission, and dispatch contracts or create a focused
   scheduler crate/module. Record allowed write sets and keep shared contracts,
@@ -131,3 +131,17 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   cross-platform standards. Added explicit ownership, validated contract,
   lifecycle, resource observer, recovery/idempotency, README, and no-legacy
   gates before implementation.
+- 2026-05-22 boundary crate slice completed. Smallest useful vertical slice:
+  create `pantograph-scheduler` as the scheduler-owned boundary before adding
+  execution behavior. Allowed write set: root `Cargo.toml`, `Cargo.lock`,
+  `crates/README.md`, `crates/pantograph-scheduler/`, and this plan file plus
+  execution notes. No-fallback confirmation: this slice does not wire
+  `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+  `model_path`, frontend `modelPath`, or runtime/device/dependency fallback
+  paths. Verification passed: `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`, and
+  `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up: define
+  path-free schedulable task intent contracts in the scheduler crate without
+  exposing local paths or executable Pumas load targets.

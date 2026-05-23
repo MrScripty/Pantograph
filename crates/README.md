@@ -19,6 +19,7 @@ app crate unless the app is the actual composition root.
 | `pantograph-embedded-runtime/` | Pantograph runtime composition layer binding workflow service to inference, Pumas, Python, RAG, and runtime registry helpers. |
 | `pantograph-runtime-registry/` | Backend-owned runtime residency, reservation, admission, reclaim, warmup, and technical-fit state machine. |
 | `pantograph-runtime-identity/` | Shared runtime id, backend key, display label, and alias normalization helpers. |
+| `pantograph-scheduler/` | Scheduler-owned dynamic task dispatch boundary for queue policy, resource admission, batching, dispatch decisions, and lifecycle ownership. |
 | `pantograph-frontend-http-adapter/` | Optional HTTP transport adapter implementing workflow host contracts for frontend-modular surfaces. |
 | `pantograph-uniffi/` | UniFFI wrapper crate and bindgen entrypoint for generated host-language bindings. |
 | `pantograph-rustler/` | Rustler NIF wrapper crate for BEAM/Elixir integration. |
@@ -41,6 +42,9 @@ workflow behavior.
   documented as the workspace hardening milestone lands.
 - Runtime policy belongs in backend/runtime crates, not in Tauri or generated
   host bindings.
+- Dynamic workflow task dispatch policy belongs in `pantograph-scheduler`, not
+  in graph editor, node-engine, frontend/Tauri adapters, runtime adapters, or
+  binding wrappers.
 
 ## Decision
 Keep Rust backend code in dedicated workspace members with role-oriented crate
@@ -60,6 +64,9 @@ forcing consumers to import implementation modules directly.
 ## Invariants
 - `node-engine`, `pantograph-workflow-service`, and runtime-registry crates own
   backend contracts before adapters project them outward.
+- `pantograph-scheduler` owns scheduler queue policy, task dispatch,
+  dependency-readiness policy, resource admission, batching, and scheduler
+  lifecycle boundaries before adapters or runtime hosts consume those facts.
 - `pantograph-uniffi` and `pantograph-rustler` expose curated binding surfaces
   and must not own canonical workflow semantics.
 - `src-tauri` composes the desktop app but should not become the reusable Rust

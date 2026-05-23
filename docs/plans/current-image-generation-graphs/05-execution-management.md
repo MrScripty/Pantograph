@@ -8782,6 +8782,31 @@ Worker rules:
     logic, or keep `ModelDependencyResolver`, `ModelDependencyRequest`,
     `ModelRefV2`, `model_path`, or frontend `modelPath` as successful
     alternate paths.
+- 2026-05-22 Milestone 5a boundary crate slice completed:
+  - Smallest useful vertical slice: establish a dedicated scheduler-owned crate
+    before adding queue, policy, resource admission, batching, or dispatch
+    behavior.
+  - Allowed write set: root `Cargo.toml`, `Cargo.lock`, `crates/README.md`,
+    `crates/pantograph-scheduler/`, Milestone 5a plan notes, and this execution
+    log.
+  - Implementation: added `pantograph-scheduler` to workspace members and
+    default members, added crate README and crate-level docs, and added typed
+    scheduler ownership-boundary enums plus tests proving graph/editor,
+    node-engine, frontend/Tauri adapters, runtime adapters, runtime host,
+    dependency readiness service, capability service, and diagnostics ledger do
+    not own scheduler capabilities.
+  - No-fallback/no-legacy confirmation: the slice does not touch legacy
+    execution paths and does not preserve `ModelDependencyResolver`,
+    `ModelDependencyRequest`, `ModelRefV2`, graph-visible `model_path`, or
+    frontend `modelPath` as successful alternate paths.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`, and
+    `cargo fmt -p pantograph-scheduler -- --check`.
+  - Remaining follow-up: continue Milestone 5a with path-free schedulable task
+    intent contracts in `pantograph-scheduler` and focused boundary validation
+    tests.
 
 ### Traceability Links
 
