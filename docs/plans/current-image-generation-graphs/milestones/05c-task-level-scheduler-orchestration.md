@@ -170,3 +170,18 @@ durable task orchestration path.
   --all-features`, `cargo check -p pantograph-workflow-service
   --no-default-features`, and `cargo fmt -p pantograph-workflow-service
   -- --check`.
+- 2026-05-23: Re-plan boundary reached before the scheduler task orchestrator
+  implementation slice. The current plan defines the target ownership, but the
+  next code slice must first choose the task-result materialization contract
+  used by the orchestrator. Runtime inference tasks cannot always be admitted
+  with complete `SchedulableTaskIntent` at run admission because upstream
+  non-runtime graph tasks can produce required values such as `PumasModelRef`,
+  scalar generation inputs, media refs, or diagnostics after the workflow has
+  already started. Implementing the orchestrator without that contract would
+  either preserve whole-workflow node-engine output demand or force scheduler
+  task intent from incomplete graph inputs, both of which violate this
+  milestone's no-fallback rule. The next planning pass must define:
+  materialized task-result DTOs, dependency-to-input binding resolution,
+  closed diagnostics for missing materialized inputs, persistence/replay
+  ownership, and the handoff point where a materialized inference task becomes
+  a scheduler-admissible `SchedulableTaskIntent`.

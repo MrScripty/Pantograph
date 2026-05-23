@@ -9505,6 +9505,22 @@ Worker rules:
     --all-features`, `cargo check -p pantograph-workflow-service
     --no-default-features`, and `cargo fmt -p pantograph-workflow-service
     -- --check`.
+- 2026-05-23 Re-plan boundary reached before the scheduler task orchestrator:
+  - The next implementation step needs a materialized task-result contract
+    before code can safely replace whole-workflow output-node demand.
+  - Reason: inference task intent may depend on upstream non-runtime graph
+    tasks producing `PumasModelRef`, scalar settings, media refs, or
+    diagnostics after run admission. Building scheduler intent directly from
+    incomplete graph inputs would either fail valid composed workflows or
+    preserve a legacy node-engine fallback path.
+  - Required planning: define task result DTOs, dependency binding resolution,
+    missing-input diagnostics, persistence/replay ownership, and the exact
+    point where materialized values become a `SchedulableTaskIntent` for
+    scheduler admission.
+  - No-fallback/no-legacy confirmation: do not implement the orchestrator by
+    demanding workflow output nodes, synthesizing runtime handoff from reduced
+    execution plans, or treating graph-local model paths as materialized
+    scheduler identity.
 
 ### Traceability Links
 

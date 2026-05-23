@@ -206,6 +206,9 @@ shortcuts.
 ## Re-Plan Triggers
 
 - Task graph extraction requires executable paths or full Pumas package facts.
+- Scheduler task orchestration reaches a point where runtime inference task
+  intent depends on upstream materialized outputs that are not available at run
+  admission.
 - Node-engine cannot execute non-runtime tasks without owning scheduler policy.
 - Runtime-host dispatch cannot be triggered from a dispatch-selected handoff.
 - Durable task state cannot represent pause, retry, cancellation, or replay
