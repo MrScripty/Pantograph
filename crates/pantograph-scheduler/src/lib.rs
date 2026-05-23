@@ -13,6 +13,7 @@ mod lifecycle;
 mod ownership;
 mod queue;
 mod readiness;
+mod supervision;
 
 pub use capability::{
     CapabilityAvailabilityState, SchedulerCapabilityDiagnostic, SchedulerCapabilityDiagnosticCode,
@@ -54,6 +55,14 @@ pub use readiness::{
     SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState,
     ValidatedSchedulerReadinessAdmissionDecision, ValidatedSchedulerReadinessAdmissionRequest,
     SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+};
+pub use supervision::{
+    SchedulerLifecycleCancellationState, SchedulerLifecycleComponent,
+    SchedulerLifecycleComponentSnapshot, SchedulerLifecycleComponentState,
+    SchedulerLifecycleOwnerDiagnostic, SchedulerLifecycleOwnerDiagnosticCode,
+    SchedulerLifecycleOwnerDiagnosticSeverity, SchedulerLifecycleOwnerId,
+    SchedulerLifecycleOwnerSnapshot, SchedulerLifecyclePanicState, SchedulerLifecycleQueueBound,
+    ValidatedSchedulerLifecycleOwnerSnapshot, SCHEDULER_LIFECYCLE_SUPERVISION_CONTRACT_VERSION,
 };
 
 #[cfg(test)]

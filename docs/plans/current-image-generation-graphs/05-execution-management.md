@@ -9043,6 +9043,35 @@ Worker rules:
   - Remaining follow-up: add one scheduler lifecycle owner for long-running
     queue workers, dependency readiness actions, resource observation loops,
     and runtime host dispatch.
+- 2026-05-22 Milestone 5a scheduler lifecycle supervision contract slice
+  completed:
+  - Smallest useful vertical slice: add the scheduler-owned lifecycle
+    supervision contract in `pantograph-scheduler`, without spawning workers,
+    adding async runtime code, wiring persistence, or implementing resource,
+    dependency, retry, reservation, or runtime-host loops.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerLifecycleOwnerSnapshot`,
+    `SchedulerLifecycleComponentSnapshot`, component/state/cancellation/panic
+    enums, queue-bound contract, lifecycle diagnostics, validated wrapper,
+    public exports, README coverage, and a JSON fixture-backed public contract
+    test suite.
+  - No-fallback/no-legacy confirmation: lifecycle supervision records one
+    owner for queue worker, dependency-readiness action, resource-observation
+    loop, runtime-host dispatch, retry loop, and reservation cleanup
+    components. It requires bounded queues where work can accumulate, validates
+    cancellation, shutdown/stop, panic, failure, and diagnostic state, and
+    rejects path/runtime internals. It does not expose executable Pumas load
+    targets, local paths, `ModelDependencyRequest`, `ModelRefV2`, graph
+    `model_path`, frontend `modelPath`, scheduler dispatch decisions, batching
+    groups, worker launch facts, or runtime host execution data.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  - Remaining follow-up: define the scheduler dispatch decision contract
+    without leaking executable load targets or graph/runtime legacy identity.
 
 ### Traceability Links
 

@@ -54,7 +54,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
 - [x] Add typed scheduler task lifecycle diagnostics so graph editor and run
   inspection can explain why a task is waiting, deferred, unavailable, failed,
   or completed without frontend inference.
-- [ ] Add one scheduler lifecycle owner for long-running queue workers,
+- [x] Add one scheduler lifecycle owner for long-running queue workers,
   dependency readiness actions, resource observation loops, and runtime host
   dispatch. It must own bounded queues, cancellation, shutdown, retry-loop
   termination, task panic handling, and reservation cleanup.
@@ -331,3 +331,25 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   Remaining follow-up: add one scheduler lifecycle owner for long-running queue
   workers, dependency readiness actions, resource observation loops, and
   runtime host dispatch.
+- 2026-05-22 scheduler lifecycle supervision contract slice completed.
+  Smallest useful vertical slice: add the scheduler-owned lifecycle
+  supervision contract in `pantograph-scheduler`, without spawning workers,
+  adding async runtime code, wiring persistence, or implementing resource,
+  dependency, retry, reservation, or runtime-host loops. Allowed write set:
+  `crates/pantograph-scheduler/`, this milestone file, and execution notes.
+  No-fallback confirmation: lifecycle supervision records one owner for queue
+  worker, dependency-readiness action, resource-observation loop,
+  runtime-host dispatch, retry loop, and reservation cleanup components. It
+  requires bounded queues where work can accumulate, validates cancellation,
+  shutdown/stop, panic, failure, and diagnostic state, and rejects path/runtime
+  internals. It does not expose executable Pumas load targets, local paths,
+  `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+  `modelPath`, scheduler dispatch decisions, batching groups, worker launch
+  facts, or runtime host execution data. Verification passed:
+  `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`,
+  `cargo fmt -p pantograph-scheduler -- --check`, and `git diff --check`.
+  Remaining follow-up: define the scheduler dispatch decision contract without
+  leaking executable load targets or graph/runtime legacy identity.

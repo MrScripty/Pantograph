@@ -1,0 +1,62 @@
+{
+  "contract_version": 1,
+  "owner_id": "scheduler.lifecycle.main",
+  "components": [
+    {
+      "component": "queue_worker",
+      "state": "running",
+      "cancellation": "not_requested",
+      "panic_state": "none",
+      "queue_bound": {
+        "max_in_flight": 4,
+        "max_buffered": 256
+      }
+    },
+    {
+      "component": "dependency_readiness_action",
+      "state": "running",
+      "cancellation": "not_requested",
+      "panic_state": "none",
+      "queue_bound": {
+        "max_in_flight": 2,
+        "max_buffered": 64
+      }
+    },
+    {
+      "component": "resource_observation_loop",
+      "state": "running",
+      "cancellation": "not_requested",
+      "panic_state": "none",
+      "queue_bound": {
+        "max_in_flight": 1,
+        "max_buffered": 16
+      }
+    },
+    {
+      "component": "runtime_host_dispatch",
+      "state": "running",
+      "cancellation": "not_requested",
+      "panic_state": "none",
+      "queue_bound": {
+        "max_in_flight": 4,
+        "max_buffered": 128
+      }
+    },
+    {
+      "component": "retry_loop",
+      "state": "running",
+      "cancellation": "not_requested",
+      "panic_state": "none",
+      "queue_bound": {
+        "max_in_flight": 1,
+        "max_buffered": 128
+      }
+    },
+    {
+      "component": "reservation_cleanup",
+      "state": "running",
+      "cancellation": "not_requested",
+      "panic_state": "none"
+    }
+  ]
+}

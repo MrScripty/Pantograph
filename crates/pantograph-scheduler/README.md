@@ -17,6 +17,7 @@ ownership.
 | `src/ownership.rs` | Scheduler-owned capability and non-scheduler consumer ownership boundary enums. |
 | `src/queue.rs` | Durable scheduler task queue state and idempotent transition replay contract. |
 | `src/readiness.rs` | Scheduler-owned readiness admission request/decision contracts and host-ready dependency readiness proof wrapper. |
+| `src/supervision.rs` | Scheduler lifecycle supervision contract for long-running queue, dependency, resource, runtime-host, retry, and reservation-cleanup services. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
 
 ## Problem
@@ -97,6 +98,11 @@ resolver behavior.
   explain waiting, deferred, unavailable, failed, and completed states with
   typed diagnostics, but it must not expose frontend-inferred states,
   executable paths, runtime host internals, reservations, or batching groups.
+- `SchedulerLifecycleOwnerSnapshot` is the single scheduler lifecycle owner
+  contract for long-running scheduler services. It must include queue worker,
+  dependency-readiness action, resource-observation loop, runtime-host
+  dispatch, retry loop, and reservation-cleanup components exactly once, with
+  bounded queues where asynchronous work may accumulate.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -166,6 +172,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   Graph editor and run-inspection consumers may display
   `ValidatedSchedulerTaskLifecycleDiagnosticSnapshot` values after the backend
   validates state-compatible diagnostic codes and bounded messages.
+  Composition roots and health checks may consume
+  `ValidatedSchedulerLifecycleOwnerSnapshot` values after the backend validates
+  required component ownership, bounded queues, cancellation state, panic
+  state, shutdown state, and diagnostics.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -194,7 +204,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   `SchedulerQueueTransition` correlation, task intent, expected previous state,
   next state, and transition id fields;
   `SchedulerTaskLifecycleDiagnosticSnapshot` correlation, queue state,
-  diagnostic severity, code, bounded message, and optional hint fields.
+  diagnostic severity, code, bounded message, and optional hint fields;
+  `SchedulerLifecycleOwnerSnapshot` owner id, component kind, component state,
+  cancellation state, panic state, queue bounds, and lifecycle diagnostic
+  fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -210,7 +223,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   Queue task states describe durable scheduler progress only; lifecycle
   diagnostics, resource reservations, batching groups, and runtime dispatch
   facts are separate contracts. Lifecycle diagnostic codes must be compatible
-  with the queue state they explain.
+  with the queue state they explain. Lifecycle supervision component states
+  describe service ownership and health only; they do not select runtime,
+  device, dependency, resource, or batching policy.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait
