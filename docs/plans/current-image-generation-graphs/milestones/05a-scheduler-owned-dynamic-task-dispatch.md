@@ -35,7 +35,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   admission results with dependency readiness proof when ready. It must not
   expose executable Pumas load targets, local paths, `ModelDependencyRequest`,
   or `ModelRefV2`.
-- [ ] Define the non-legacy runtime handoff seam that runtime/execution hosts
+- [x] Define the non-legacy runtime handoff seam that runtime/execution hosts
   will consume after readiness admission. The seam must carry correlation ids,
   scheduler-owned readiness proof, dependency environment refs when applicable,
   and later scheduler-selected runtime/device facts. It must not convert
@@ -242,3 +242,26 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   the non-legacy runtime handoff seam that runtime/execution hosts can consume
   after readiness admission without converting readiness proof back to
   `ModelRefV2`.
+- 2026-05-22 runtime handoff seam contract slice completed. Smallest useful
+  vertical slice: add path-free `SchedulerRuntimeHandoff` contracts and
+  validation in `pantograph-scheduler`, without wiring node-engine or host
+  execution. Allowed write set: `crates/pantograph-scheduler/`, this milestone
+  file, and execution notes. No-fallback confirmation: the handoff carries
+  correlation ids, validated task intent, scheduler-owned readiness proof,
+  matching dependency environment ref, and optional scheduler dispatch
+  selection only. It rejects path/load-target fields through typed serde
+  boundaries, validates correlation against task intent, validates
+  environment refs against readiness proof, requires dispatch selection only
+  in dispatch-selected state, and enforces explicit runtime/device hard
+  requirements when dispatch selection is present. It does not expose
+  executable Pumas load targets, local paths, `ModelDependencyRequest`,
+  `ModelRefV2`, graph `model_path`, frontend `modelPath`, reservations,
+  batching groups, or worker launch facts. Verification passed:
+  `cargo fmt -p pantograph-scheduler`, `cargo test -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`, and
+  `cargo fmt -p pantograph-scheduler -- --check`. Remaining follow-up:
+  replace node-engine dependency preflight output with typed readiness proof
+  after this non-legacy host handoff seam, then delete the legacy
+  `ModelRefV2` preflight production path without a bridge.

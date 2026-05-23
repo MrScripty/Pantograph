@@ -70,7 +70,7 @@ pub struct SchedulerReadinessAdmissionDiagnostic {
 }
 
 impl SchedulerReadinessAdmissionDiagnostic {
-    fn validate(&self) -> Result<(), SchedulerContractError> {
+    pub(crate) fn validate(&self) -> Result<(), SchedulerContractError> {
         validate_text("readiness_admission_diagnostic.message", &self.message)?;
         if let Some(hint) = &self.hint {
             validate_text("readiness_admission_diagnostic.hint", hint)?;
@@ -90,7 +90,7 @@ pub struct SchedulerDependencyReadinessProof {
 }
 
 impl SchedulerDependencyReadinessProof {
-    fn validate_for_intent(
+    pub(crate) fn validate_for_intent(
         &self,
         intent: &SchedulableTaskIntent,
     ) -> Result<(), SchedulerContractError> {

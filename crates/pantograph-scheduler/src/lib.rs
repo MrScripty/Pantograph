@@ -7,6 +7,7 @@
 
 mod capability;
 mod error;
+mod handoff;
 mod intent;
 mod ownership;
 mod readiness;
@@ -18,6 +19,10 @@ pub use capability::{
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
 };
 pub use error::SchedulerContractError;
+pub use handoff::{
+    SchedulerRuntimeHandoff, SchedulerRuntimeHandoffSelection, SchedulerRuntimeHandoffState,
+    ValidatedSchedulerRuntimeHandoff, SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
+};
 pub use intent::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerEstimateHintKind, SchedulerFairnessKey,
     SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitId,

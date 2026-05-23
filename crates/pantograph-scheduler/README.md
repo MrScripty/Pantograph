@@ -11,6 +11,7 @@ ownership.
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for scheduler boundary and task intent contracts. |
 | `src/capability.rs` | Backend-owned capability hint contract for graph editor and option-provider consumers. |
+| `src/handoff.rs` | Non-legacy runtime handoff envelope consumed after scheduler readiness admission. |
 | `src/intent.rs` | Path-free schedulable task intent contract, validated workflow/run/node/task ids, runtime/device constraints, typed trait settings, and bounded estimate hints. |
 | `src/ownership.rs` | Scheduler-owned capability and non-scheduler consumer ownership boundary enums. |
 | `src/readiness.rs` | Scheduler-owned readiness admission request/decision contracts and host-ready dependency readiness proof wrapper. |
@@ -78,6 +79,12 @@ resolver behavior.
   `SchedulerDependencyReadinessProof`, whose `DependencyPreflightResult` is
   validated as path-free and ready. Deferred and terminal failed decisions must
   carry typed diagnostics and must not carry ready proof.
+- `SchedulerRuntimeHandoff` is the path-free host-facing envelope after
+  readiness admission. It carries task correlation, task intent, scheduler-owned
+  readiness proof, matching dependency environment ref, and optionally later
+  scheduler dispatch selection. It must not carry executable Pumas load targets,
+  local paths, `ModelRefV2`, reservations, batching groups, or worker launch
+  facts.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -138,7 +145,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   Runtime host handoff slices may consume
   `ValidatedSchedulerReadinessAdmissionDecision` values once this crate has
   validated that ready decisions carry matching path-free dependency readiness
-  proof.
+  proof. Runtime hosts may consume `ValidatedSchedulerRuntimeHandoff` values
+  once correlation, environment refs, readiness proof, and optional dispatch
+  selection have been validated.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -160,7 +169,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   hints, device hints, trait option hints, availability states, diagnostic
   severities, and diagnostic codes; `SchedulerReadinessAdmissionRequest` task
   intent and policy fields; `SchedulerReadinessAdmissionDecision` action,
-  state, readiness proof, and typed diagnostics.
+  state, readiness proof, and typed diagnostics; `SchedulerRuntimeHandoff`
+  correlation fields, state, readiness proof, environment ref, and optional
+  dispatch selection fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -170,7 +181,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   availability states are display and validation hints only; scheduler policy
   owns final dispatch/admission decisions. Readiness admission state describes
   whether dependency readiness allows dispatch now, defers for later work, or
-  fails terminally; it is not a runtime/device selection result.
+  fails terminally; it is not a runtime/device selection result. Runtime
+  handoff state separates readiness-admitted handoff from dispatch-selected
+  handoff so runtime/device facts are added only by scheduler dispatch policy.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait

@@ -1,0 +1,228 @@
+use pantograph_dependency_planning::{
+    DependencyEnvironmentRef, DependencyPlanningContractError, DeviceIntentId, RuntimeIntentId,
+};
+use serde::{Deserialize, Serialize};
+
+use crate::error::SchedulerContractError;
+use crate::intent::SchedulableTaskIntent;
+use crate::readiness::{SchedulerDependencyReadinessProof, SchedulerReadinessAdmissionDiagnostic};
+
+/// Current contract version for scheduler-owned runtime handoff.
+pub const SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION: u16 = 1;
+
+/// Runtime handoff state before or after scheduler dispatch selection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SchedulerRuntimeHandoffState {
+    ReadinessAdmitted,
+    DispatchSelected,
+}
+
+/// Runtime/device facts selected by scheduler dispatch policy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SchedulerRuntimeHandoffSelection {
+    pub selected_runtime_id: RuntimeIntentId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_id: Option<DeviceIntentId>,
+}
+
+/// Non-legacy runtime handoff envelope produced after readiness admission.
+///
+/// This envelope is path-free. It carries scheduler-owned readiness proof and
+/// optional scheduler-selected runtime/device facts, but never `ModelRefV2`,
+/// executable Pumas load targets, local paths, worker launch data, reservations,
+/// or batching groups.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SchedulerRuntimeHandoff {
+    #[serde(default = "default_scheduler_runtime_handoff_contract_version")]
+    pub contract_version: u16,
+    pub workflow_id: crate::SchedulerWorkflowId,
+    pub workflow_run_id: crate::SchedulerWorkflowRunId,
+    pub node_id: crate::SchedulerNodeId,
+    pub task_id: crate::SchedulerTaskId,
+    pub task_intent: SchedulableTaskIntent,
+    pub state: SchedulerRuntimeHandoffState,
+    pub readiness_proof: SchedulerDependencyReadinessProof,
+    pub environment_ref: DependencyEnvironmentRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatch_selection: Option<SchedulerRuntimeHandoffSelection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<SchedulerReadinessAdmissionDiagnostic>,
+}
+
+impl SchedulerRuntimeHandoff {
+    /// Validates this raw runtime handoff before host/runtime code consumes it.
+    pub fn validate(&self) -> Result<(), SchedulerContractError> {
+        validate_contract_version(self.contract_version)?;
+        self.task_intent.validate()?;
+        self.readiness_proof
+            .validate_for_intent(&self.task_intent)?;
+        self.environment_ref
+            .validate()
+            .map_err(map_dependency_error)?;
+        self.validate_correlation()?;
+        self.validate_environment_ref()?;
+        self.validate_dispatch_state()?;
+        for diagnostic in &self.diagnostics {
+            diagnostic.validate()?;
+        }
+        Ok(())
+    }
+
+    fn validate_correlation(&self) -> Result<(), SchedulerContractError> {
+        if self.workflow_id != self.task_intent.workflow_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "workflow_id",
+                reason: "runtime handoff workflow id must match task intent",
+            });
+        }
+        if self.workflow_run_id != self.task_intent.workflow_run_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "workflow_run_id",
+                reason: "runtime handoff workflow run id must match task intent",
+            });
+        }
+        if self.node_id != self.task_intent.node_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "node_id",
+                reason: "runtime handoff node id must match task intent",
+            });
+        }
+        if self.task_id != self.task_intent.task_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "task_id",
+                reason: "runtime handoff task id must match task intent",
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_environment_ref(&self) -> Result<(), SchedulerContractError> {
+        let Some(proof_environment_ref) = &self.readiness_proof.preflight_result.environment_ref
+        else {
+            return Err(SchedulerContractError::MissingField {
+                field: "readiness_proof.preflight_result.environment_ref",
+            });
+        };
+        if proof_environment_ref != &self.environment_ref {
+            return Err(SchedulerContractError::InvalidField {
+                field: "environment_ref",
+                reason: "runtime handoff environment ref must match readiness proof",
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_dispatch_state(&self) -> Result<(), SchedulerContractError> {
+        match self.state {
+            SchedulerRuntimeHandoffState::ReadinessAdmitted => {
+                if self.dispatch_selection.is_some() {
+                    return Err(SchedulerContractError::InvalidField {
+                        field: "dispatch_selection",
+                        reason: "readiness-admitted handoff must not carry dispatch selection",
+                    });
+                }
+                Ok(())
+            }
+            SchedulerRuntimeHandoffState::DispatchSelected => {
+                let Some(selection) = &self.dispatch_selection else {
+                    return Err(SchedulerContractError::MissingField {
+                        field: "dispatch_selection",
+                    });
+                };
+                self.validate_dispatch_selection(selection)
+            }
+        }
+    }
+
+    fn validate_dispatch_selection(
+        &self,
+        selection: &SchedulerRuntimeHandoffSelection,
+    ) -> Result<(), SchedulerContractError> {
+        if let Some(requested_runtime_id) = &self.task_intent.constraints.requested_runtime_id {
+            if requested_runtime_id != &selection.selected_runtime_id {
+                return Err(SchedulerContractError::InvalidField {
+                    field: "dispatch_selection.selected_runtime_id",
+                    reason: "selected runtime must satisfy the task intent runtime requirement",
+                });
+            }
+        }
+        if let Some(requested_device_id) = &self.task_intent.constraints.requested_device_id {
+            if Some(requested_device_id) != selection.selected_device_id.as_ref() {
+                return Err(SchedulerContractError::InvalidField {
+                    field: "dispatch_selection.selected_device_id",
+                    reason: "selected device must satisfy the task intent device requirement",
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Validated scheduler runtime handoff for host/runtime consumers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub struct ValidatedSchedulerRuntimeHandoff(SchedulerRuntimeHandoff);
+
+impl ValidatedSchedulerRuntimeHandoff {
+    #[must_use]
+    pub fn as_ref(&self) -> &SchedulerRuntimeHandoff {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_inner(self) -> SchedulerRuntimeHandoff {
+        self.0
+    }
+}
+
+impl TryFrom<SchedulerRuntimeHandoff> for ValidatedSchedulerRuntimeHandoff {
+    type Error = SchedulerContractError;
+
+    fn try_from(value: SchedulerRuntimeHandoff) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
+fn default_scheduler_runtime_handoff_contract_version() -> u16 {
+    SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION
+}
+
+fn validate_contract_version(value: u16) -> Result<(), SchedulerContractError> {
+    if value == SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION {
+        Ok(())
+    } else {
+        Err(SchedulerContractError::InvalidField {
+            field: "contract_version",
+            reason: "unsupported scheduler runtime handoff contract version",
+        })
+    }
+}
+
+fn map_dependency_error(error: DependencyPlanningContractError) -> SchedulerContractError {
+    match error {
+        DependencyPlanningContractError::MissingField { field } => {
+            SchedulerContractError::MissingField { field }
+        }
+        DependencyPlanningContractError::FieldTooLong { field, max_len } => {
+            SchedulerContractError::FieldTooLong { field, max_len }
+        }
+        DependencyPlanningContractError::InvalidIdentifier { field } => {
+            SchedulerContractError::InvalidIdentifier { field }
+        }
+        DependencyPlanningContractError::InvalidText { field } => {
+            SchedulerContractError::InvalidText { field }
+        }
+        DependencyPlanningContractError::InvalidField { field, reason } => {
+            SchedulerContractError::InvalidField { field, reason }
+        }
+        _ => SchedulerContractError::InvalidField {
+            field: "dependency_planning",
+            reason: "dependency planning contract value is invalid",
+        },
+    }
+}
