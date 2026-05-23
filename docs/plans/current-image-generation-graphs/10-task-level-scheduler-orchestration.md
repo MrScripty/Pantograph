@@ -84,11 +84,18 @@ inputs are ready.
 - `WorkflowSchedulerTaskGraph`: path-free run-scoped DAG task projection with
   workflow/run/node/task correlation, dependency edges, task kind, model ref,
   typed trait settings, optional hard runtime/device constraints, and bounded
-  estimate hints.
-- `WorkflowSchedulerTaskRecord`: durable task state projection from
-  scheduler queue state plus workflow-service run attribution. It carries
-  state, attempt, dependencies, task inputs/materialized references,
-  diagnostics, cancellation state, and terminal result metadata.
+  estimate hints. It remains the immutable workflow-service task definition
+  owner for dependency edges, input bindings, and intent templates; scheduler
+  lifecycle state must not duplicate graph bindings or become a second graph
+  definition source.
+- `SchedulerTaskStateRecord` and `SchedulerTaskTransition`: scheduler-owned
+  durable lifecycle contracts that replace the current intent-required
+  `SchedulerQueueTaskRecord` and `SchedulerQueueTransition` shapes. The record
+  carries workflow/run/node/task correlation, state version, transition
+  correlation, bounded diagnostics, and a state-specific payload. Pre-intent
+  states such as awaiting materialized inputs, invalid graph projection, or
+  input-unavailable must not carry `SchedulableTaskIntent`; schedulable states
+  carry a validated intent as part of the state payload.
 - `WorkflowSchedulerTaskResult`: typed task completion value that stores
   output references, media/artifact refs, scalar values, and diagnostics
   without executable paths. The first implementation stage uses active-run
@@ -112,6 +119,95 @@ inputs are ready.
 The names are planning names. Implementation may choose shorter local names,
 but the ownership and data boundaries must remain explicit.
 
+## Task Definition And Task State Replan
+
+The current `pantograph-scheduler` queue contracts require a complete
+`SchedulableTaskIntent` on every durable task record and transition. That no
+longer matches the task-level scheduler architecture: a workflow task can
+exist, be visible to users, and be blocked on upstream materialized outputs
+before it can become a valid scheduler intent.
+
+The chosen replacement keeps two separate truths:
+
+- `WorkflowSchedulerTaskGraph` is immutable run-scoped task definition owned
+  by workflow-service. It carries topology, dependency edges, input bindings,
+  and `WorkflowSchedulerTaskIntentTemplate` values.
+- `SchedulerTaskStateRecord` is mutable lifecycle state owned by the scheduler
+  crate. It carries only lifecycle phase, transition/version metadata, bounded
+  diagnostics, and phase-specific payload.
+
+`SchedulableTaskIntent` remains strict. It is introduced only when
+workflow-service binding resolution has validated materialized inputs. Scheduler
+readiness, resource admission, batching, dispatch, and runtime handoff policy
+must operate only on state variants that carry a validated intent.
+
+Rejected approaches:
+
+- Lazy-create scheduler records only after intent materialization. This hides
+  blocked tasks from scheduler state and user-visible run status.
+- Add `Option<SchedulableTaskIntent>` to the current record shape. This makes
+  invalid state combinations representable and forces every policy consumer to
+  rediscover whether a task is actually schedulable.
+- Move workflow graph input bindings/templates into the scheduler crate. This
+  couples scheduler policy to graph composition and makes future runtime or
+  graph changes harder to reason about.
+
+### Task-State Replacement Standards Gates
+
+The task-state replacement slice must satisfy these gates before source
+implementation can be considered complete:
+
+- Implement the scheduler lifecycle contract in focused scheduler modules and
+  tests. Do not grow unrelated dispatch, readiness, batching, or handoff files
+  except for narrow imports or deletion of old queue exports. If a touched file
+  crosses the repository decomposition threshold, record a split or an explicit
+  short-term exception in this plan before continuing.
+- Use correct-by-construction Rust APIs. Represent lifecycle as an enum or
+  equivalent typed payload structure where only schedulable states can contain
+  `SchedulableTaskIntent`. Use stable contract/schema versions, typed ids,
+  bounded diagnostics, `serde(deny_unknown_fields)`, `TryFrom` validated
+  wrappers for raw persisted/IPC values, typed error enums, `#[must_use]` on
+  validation/transition results, and `#[non_exhaustive]` where public states or
+  diagnostics are expected to evolve.
+- Keep scheduler policy synchronous. State validation, transition application,
+  readiness eligibility, resource eligibility, batching eligibility, and
+  dispatch eligibility must be synchronous pure policy. Async remains in the
+  workflow-service orchestrator shell for store access, runtime-host calls,
+  ledger writes, dependency readiness I/O, and task lifecycle management.
+- Preserve dependency ownership. The replacement should not require new
+  third-party crates. If implementation discovers a genuine dependency need,
+  stop and record the dependency owner, transitive cost, feature impact, and
+  verification plan before editing manifests or lockfiles.
+- Replace old queue contracts directly. Remove or rewrite public exports,
+  workflow-service active-run storage, read models, tests, and documentation
+  that depend on `SchedulerQueueTaskRecord` or `SchedulerQueueTransition`.
+  Do not keep aliases, adapters, compatibility modules, or dual successful
+  queue/state paths.
+- Treat persisted artifacts and fixtures as contract artifacts. Because this
+  plan intentionally does not preserve legacy compatibility, old queue-shaped
+  fixtures or saved workflow artifacts must be regenerated to the new
+  phase-aware contract or rejected with typed diagnostics. Do not add silent
+  migration, best-effort parsing, or fallback hydration from old shapes.
+- Update source-directory READMEs and crate docs for any directory whose
+  ownership changes. The docs must explain scheduler state ownership,
+  workflow-service task-definition ownership, transition invariants, rejected
+  alternatives, lifecycle/cancellation expectations, and consumer contract
+  behavior for read models.
+- Add vertical acceptance coverage for pre-intent lifecycle states. Tests must
+  prove a task can be created as awaiting inputs, shown in read models,
+  resolved into a schedulable intent after materialization, admitted through
+  scheduler policy, and dispatched through runtime host without node-engine
+  output demand or reduced-plan handoff synthesis.
+- Add replay/idempotency coverage for every state transition, including
+  duplicate transition ids, stale expected state, terminal-state closure,
+  cancellation, retry/defer, and recovery after partial progress. Run affected
+  suites with normal parallelism and isolate durable test state paths.
+- Add targeted deletion checks to verification, including searches for old
+  successful uses of `SchedulerQueueTaskRecord`, `SchedulerQueueTransition`,
+  planned-inference runtime launch ownership, reduced-plan handoff synthesis,
+  `ModelRefV2`, `model_path`, frontend `modelPath`, and executable Pumas load
+  target exposure outside runtime host.
+
 ## Staged Implementation
 
 1. Add task graph extraction from validated workflow topology and graph inputs.
@@ -119,17 +215,21 @@ but the ownership and data boundaries must remain explicit.
    Completed 2026-05-23 as a path-free workflow-service projection that emits
    typed diagnostics instead of accepting legacy `model_ref`/`model_path`
    identity.
-2. Add durable task state records and transition tests for pending, ready,
-   blocked, waiting for dependency readiness, waiting for resources, waiting
-   for batch, running, paused/deferred, retryable failed, terminal failed, and
-   completed. Queue-state transition coverage completed 2026-05-23 in the
-   scheduler crate; durable workflow-service persistence, replay, diagnostics
-   ledger projection, and orchestrator consumption remain staged work.
+2. Replace the current intent-required queue records with phase-aware durable
+   scheduler task-state records and transition tests for awaiting inputs,
+   input-unavailable, invalid, ready, waiting for dependency readiness,
+   waiting for resources, waiting for batch, running, paused/deferred,
+   retryable failed, terminal failed, and completed. Queue-state transition
+   coverage completed 2026-05-23 against the old queue contract, but the next
+   implementation must replace that contract rather than preserving it as a
+   compatibility layer.
 3. Add task-state read models and diagnostics projection for graph editor and
-   run inspection. Initial path-free workflow-service read-model projection
-   and dedicated active-run query boundary completed 2026-05-23;
-   diagnostics-ledger joins and broader frontend route wiring remain staged
-   work.
+   run inspection. Read models must join immutable task definition facts with
+   scheduler-owned lifecycle state and must allow model/task-intent fields to
+   be unknown before materialization. Initial path-free workflow-service
+   read-model projection and dedicated active-run query boundary completed
+   2026-05-23 against the old queue record; replacement read-model wiring must
+   move to the phase-aware state contract.
 4. Align graph-visible scheduler constraints before relying on them in
    materialization or admission. The workflow-service task graph already
    models optional hard `runtime` and `device` constraints. Completed

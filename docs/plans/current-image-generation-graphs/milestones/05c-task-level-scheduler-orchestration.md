@@ -18,14 +18,22 @@ durable task orchestration path.
   correlation, dependencies, task kind, Pumas model refs, optional hard
   runtime/device constraints, typed trait settings, and estimate hints without
   local paths or executable Pumas load targets.
-- [ ] Add durable workflow scheduler task records and transition APIs for
-  pending, ready, blocked, waiting for dependency readiness, waiting for
-  resources, waiting for batch, running, paused/deferred, retryable failed,
-  terminal failed, and completed.
+- [ ] Replace the current intent-required `SchedulerQueueTaskRecord` and
+  `SchedulerQueueTransition` contracts with phase-aware scheduler task-state
+  records and transition APIs. The new scheduler-owned state contract must
+  represent pre-intent tasks such as awaiting materialized inputs, invalid
+  graph projection, and input-unavailable states, while carrying
+  `SchedulableTaskIntent` only in schedulable phases such as ready, waiting
+  for dependency readiness, waiting for resources, waiting for batch, running,
+  paused/deferred, retryable failed, and completed. Old queue record types are
+  replacement/removal targets, not compatibility surfaces.
 - [ ] Add scheduler task-state read models for graph editor, run inspection,
-  and diagnostics views. Read models may expose typed state, waiting reasons,
-  timings, attempts, and diagnostics; they must not expose scheduler internals
-  or executable load targets.
+  and diagnostics views. Read models must join immutable
+  `WorkflowSchedulerTaskGraph` definition facts with scheduler-owned lifecycle
+  state, expose optional/unknown model and task-intent fields before
+  materialization, and show typed state, waiting reasons, timings, attempts,
+  and diagnostics without exposing scheduler internals or executable load
+  targets.
 - [x] Align graph-visible scheduler constraints before materialization relies
   on them. The workflow-service task graph currently models optional hard
   `runtime` and `device` constraints, while the canonical inference node
@@ -113,6 +121,10 @@ durable task orchestration path.
 
 - Do not preserve whole-workflow output-node demand as the successful runtime
   inference launch path after task orchestration is wired.
+- Do not fabricate placeholder `SchedulableTaskIntent` values, dummy Pumas
+  model refs, or synthetic task types to satisfy scheduler task-state storage.
+  Missing materialized inputs must remain typed task state and diagnostics
+  until they resolve or fail.
 - Do not synthesize `SchedulerRuntimeHandoff` from `WorkflowExecutionPlan`,
   `WorkflowExecutionPlanNodeDecision`, backend execution projections, graph
   inputs, or node-engine request context.
@@ -148,6 +160,50 @@ durable task orchestration path.
   scheduler-admissible intent only after validation. Missing, wrong-type,
   unavailable, invalid, or ambiguous inputs must produce typed diagnostics and
   task state, not compatibility behavior.
+- Separate task definition from task lifecycle state. `WorkflowSchedulerTaskGraph`
+  is the immutable run-scoped task definition owner for dependency edges,
+  input bindings, and intent templates. The scheduler crate owns mutable task
+  lifecycle state and transitions. Workflow-service may orchestrate and join
+  those facts for read models, but it must not create a second scheduler state
+  machine or move graph binding ownership into scheduler policy.
+- The replacement scheduler task-state contract must be correct by
+  construction. Do not add `Option<SchedulableTaskIntent>` to a single record
+  shape where invalid combinations are possible. Use state-specific payloads
+  so pre-intent states cannot accidentally look schedulable, and so scheduler
+  readiness, resource, batching, dispatch, and runtime handoff policy consume
+  only states that actually carry a validated `SchedulableTaskIntent`.
+- Orchestrator initialization must create scheduler task-state records for
+  every task in the `WorkflowSchedulerTaskGraph`, including tasks that are
+  awaiting materialized inputs or have projection diagnostics. A task may
+  transition into a schedulable state only after workflow-service binding
+  resolution produces a validated `SchedulableTaskIntent`.
+- The task-state replacement must be implemented in focused scheduler modules
+  and tests, with narrow workflow-service integration updates for active-run
+  storage, read models, and orchestrator consumption. Do not grow unrelated
+  dispatch, readiness, batching, handoff, session execution, or frontend files
+  except for narrow imports, call sites, or deletion of retired paths.
+- Public task-state APIs must follow Rust API standards: stable contract
+  versioning, typed ids and diagnostics, `serde(deny_unknown_fields)`,
+  `TryFrom` validated wrappers for raw persisted/IPC values, typed error
+  enums, `#[must_use]` transition/validation results, and `#[non_exhaustive]`
+  public state/diagnostic enums where future scheduler phases may be added.
+- Scheduler lifecycle policy must remain synchronous. Store access,
+  dependency-readiness I/O, runtime-host dispatch, diagnostics-ledger writes,
+  task spawning, cancellation, and shutdown stay in the workflow-service async
+  shell and must not leak async I/O into scheduler ranking/admission policy.
+- The replacement must not add new third-party dependencies unless a new
+  standards note first records the owner crate, reason, transitive cost,
+  feature-contract impact, and verification plan.
+- Old queue-shaped persisted artifacts, fixtures, and tests are contract
+  artifacts. Because this plan does not preserve legacy compatibility, they
+  must be regenerated to the phase-aware contract or rejected with typed
+  diagnostics. Do not add silent migration, best-effort parsing, aliases, or
+  compatibility adapters for old queue shapes.
+- Verification for the replacement must include vertical coverage proving a
+  pre-intent task is created, displayed in read models, resolved after
+  materialized inputs arrive, admitted by scheduler policy, and dispatched
+  through runtime host without node-engine output demand or reduced-plan
+  handoff synthesis.
 - Keep async orchestration as a shell around synchronous scheduler policy. Do
   not hold store locks across await points, and use bounded queues plus typed
   cancellation/task state for concurrent execution.
@@ -465,3 +521,19 @@ durable task orchestration path.
   item remains open because dependency readiness calls, task-state
   transitions, ledger writes, bounded queues, cancellation, retry/defer,
   panic handling, and production runtime-host dispatch are not wired yet.
+- 2026-05-23 task-definition/task-state re-plan direction selected. Codebase
+  review found that the current `SchedulerQueueTaskRecord` and
+  `SchedulerQueueTransition` require a complete `SchedulableTaskIntent`, while
+  `WorkflowSchedulerTaskGraph` can validly contain tasks that only have input
+  bindings and `WorkflowSchedulerTaskIntentTemplate` until upstream task
+  results materialize. The agreed replacement is a phase-aware scheduler
+  task-state contract that keeps `WorkflowSchedulerTaskGraph` as the immutable
+  workflow-service task definition and keeps mutable lifecycle transitions in
+  the scheduler crate. `SchedulableTaskIntent` remains strict and is carried
+  only by schedulable state variants. Rejected approaches: lazy-creating
+  scheduler records only after intent materialization because blocked tasks
+  disappear from scheduler state; adding `Option<SchedulableTaskIntent>` to
+  the existing record because it permits invalid combinations; and moving
+  workflow graph bindings/templates into scheduler because that couples
+  scheduler policy to graph composition. No source implementation changed in
+  this planning update, and no commit was created.

@@ -9761,6 +9761,60 @@ Worker rules:
     session execution wires dependency readiness, task-state transitions,
     ledger writes, bounded queues, cancellation, retry/defer, panic handling,
     and runtime-host dispatch lifecycle.
+- 2026-05-23 Milestone 5c task-definition/task-state re-plan update:
+  - Smallest useful vertical slice: update planning only after codebase review
+    showed the current scheduler queue record requires complete
+    `SchedulableTaskIntent` even for tasks that are validly waiting on
+    upstream materialized inputs.
+  - Allowed write set: Milestone 5c plan, task-level scheduler orchestration
+    design note, and this execution log. No source, test, config, lockfile,
+    generated, build-output, sqlite, or workflow fixture files are part of
+    this planning slice.
+  - Decision: replace the current intent-required `SchedulerQueueTaskRecord`
+    and `SchedulerQueueTransition` with phase-aware scheduler task-state
+    records and transitions. `WorkflowSchedulerTaskGraph` remains the
+    immutable task definition owner in workflow-service; the scheduler crate
+    owns mutable lifecycle state. `SchedulableTaskIntent` stays strict and is
+    present only on state variants that are actually schedulable.
+  - Rejected alternatives: lazy-create scheduler records only after
+    materialization, because blocked tasks disappear from scheduler state;
+    add `Option<SchedulableTaskIntent>` to the current record, because that
+    makes invalid state combinations representable; or move workflow graph
+    bindings/templates into scheduler, because that couples scheduler policy
+    to graph composition.
+  - No-fallback/no-legacy confirmation: do not create dummy Pumas refs,
+    placeholder task intents, synthetic task types, reduced execution-plan
+    handoffs, node-engine output-demand fallback, or compatibility queue
+    shims. Old queue record contracts are replacement/removal targets.
+  - Verification passed for docs-only slice: `git diff --check` against the
+    three touched plan files. Per user instruction, this update is not
+    committed yet.
+- 2026-05-23 Standards iteration for task-state replacement planning:
+  - Standards reviewed: plan standards for worktree hygiene, re-plan triggers,
+    verification, and serial ownership; coding standards for decomposition,
+    backend-owned state, and single-owner state machines; architecture
+    patterns for package roles and executable boundary contracts; Rust API
+    standards for correct-by-construction public APIs; Rust async standards
+    for sync-core/async-shell and lifecycle ownership; dependency standards
+    for narrow dependency ownership; testing standards for vertical slices,
+    recovery, idempotency, and durable resource isolation; frontend standards
+    for backend-owned display state; and documentation standards for README
+    traceability.
+  - Plan updates made: added task-state replacement standards gates requiring
+    focused scheduler modules/tests, state-specific typed payloads instead of
+    optional intents, stable schema/contract versions, validated wrappers,
+    typed errors, bounded diagnostics, synchronous scheduler policy, no new
+    dependency without a recorded standards decision, direct removal of old
+    queue contracts, fixture/artifact regeneration or typed rejection, README
+    updates, vertical pre-intent-to-dispatch coverage, replay/idempotency
+    coverage, durable test-state isolation, and targeted deletion checks.
+  - No-fallback/no-legacy confirmation: the standards pass did not approve any
+    compatibility shim, alias, silent migration, best-effort parser, dummy
+    intent, node-engine runtime fallback, or reduced-plan handoff synthesis.
+    Old queue record contracts remain replacement/removal targets.
+  - Verification passed for this docs-only standards pass: `git diff --check`
+    against the three touched plan files. No source implementation changed,
+    and no commit was created.
 
 ### Traceability Links
 
