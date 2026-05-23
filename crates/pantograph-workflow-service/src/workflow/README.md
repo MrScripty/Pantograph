@@ -40,7 +40,7 @@ public exports out of the service crate.
 | `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, optional schedulable task intents, and typed projection diagnostics. |
 | `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs and projection diagnostic enums re-exported through the workflow facade. |
 | `task_result_contracts.rs` | Public typed scheduler task-result DTOs used by task orchestration materialization before dependency binding resolution. |
-| `task_state_read_model.rs` | Presentation-neutral scheduler task-state projection from validated queue records for graph editor and run inspection consumers. |
+| `task_state_read_model.rs` | Presentation-neutral scheduler task-state projection from immutable task graph facts plus validated task-state records for graph editor and run inspection consumers. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
@@ -95,9 +95,9 @@ facade test module.
 - Scheduler snapshot shape coverage is separate from scheduler diagnostics
   projection coverage.
 - Scheduler task-state read models project only path-free, presentation-neutral
-  facts from canonical queue records. They must not expose transition ids,
-  state versions, runtime handoff, executable Pumas load targets, or worker
-  launch details.
+  facts from immutable task graph definitions joined with canonical scheduler
+  task-state records. They must not expose transition ids, state versions,
+  runtime handoff, executable Pumas load targets, or worker launch details.
 - Scheduler task-state queries are dedicated workflow-service read endpoints.
   They do not extend session queue items or scheduler snapshots with task
   internals, keeping queue admission facts separate from task progress facts.

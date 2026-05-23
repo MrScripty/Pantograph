@@ -1,7 +1,7 @@
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionRunRequest, WorkflowServiceError,
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTaskGraph, WorkflowServiceError,
 };
 #[cfg(test)]
 use crate::WorkflowRunId;
@@ -272,6 +272,7 @@ impl WorkflowExecutionSessionStore {
             priority: queued.priority,
             scheduler_decision_reason,
             execution_plan: None,
+            scheduler_task_graph: None,
             scheduler_task_records: Default::default(),
             scheduler_task_results: Default::default(),
         });
@@ -288,10 +289,11 @@ impl WorkflowExecutionSessionStore {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn set_active_run_scheduler_task_records(
+    pub(crate) fn set_active_run_scheduler_task_state(
         &mut self,
         session_id: &str,
         workflow_run_id: &str,
+        task_graph: WorkflowSchedulerTaskGraph,
         records: Vec<SchedulerTaskStateRecord>,
     ) -> Result<(), WorkflowServiceError> {
         let tick = self.next_tick();
@@ -313,6 +315,7 @@ impl WorkflowExecutionSessionStore {
         }
 
         let mut task_records = std::collections::BTreeMap::new();
+        validate_active_run_task_graph(workflow_run_id, &task_graph)?;
         for record in records {
             validate_active_run_task_record(workflow_run_id, &record)?;
             let task_id = record.task_id.as_str().to_string();
@@ -324,31 +327,47 @@ impl WorkflowExecutionSessionStore {
             }
         }
 
+        active_run.scheduler_task_graph = Some(task_graph);
         active_run.scheduler_task_records = task_records;
         Self::mark_session_access(state, tick);
         Ok(())
     }
 
     #[allow(dead_code)]
-    pub(crate) fn active_run_scheduler_task_records(
+    pub(crate) fn active_run_scheduler_task_state(
         &self,
         session_id: &str,
         workflow_run_id: &str,
-    ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowServiceError> {
+    ) -> Result<
+        Option<(WorkflowSchedulerTaskGraph, Vec<SchedulerTaskStateRecord>)>,
+        WorkflowServiceError,
+    > {
         let state = self.active.get(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
         let Some(active_run) = state.active_run.as_ref() else {
-            return Ok(Vec::new());
+            return Ok(None);
         };
         if active_run.workflow_run_id != workflow_run_id {
-            return Ok(Vec::new());
+            return Ok(None);
         }
-        Ok(active_run
-            .scheduler_task_records
-            .values()
-            .cloned()
-            .collect())
+        let Some(task_graph) = active_run.scheduler_task_graph.as_ref() else {
+            if active_run.scheduler_task_records.is_empty() {
+                return Ok(None);
+            }
+            return Err(WorkflowServiceError::Internal(format!(
+                "session '{}' active run '{}' has scheduler task-state records without task graph",
+                session_id, workflow_run_id
+            )));
+        };
+        Ok(Some((
+            task_graph.clone(),
+            active_run
+                .scheduler_task_records
+                .values()
+                .cloned()
+                .collect(),
+        )))
     }
 
     #[allow(dead_code)]
@@ -694,6 +713,21 @@ fn validate_active_run_task_record(
             "scheduler task '{}' belongs to workflow run '{}' instead of active run '{}'",
             record.task_id.as_str(),
             record.workflow_run_id.as_str(),
+            workflow_run_id
+        )));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn validate_active_run_task_graph(
+    workflow_run_id: &str,
+    task_graph: &WorkflowSchedulerTaskGraph,
+) -> Result<(), WorkflowServiceError> {
+    if task_graph.workflow_run_id.as_str() != workflow_run_id {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler task graph belongs to workflow run '{}' instead of active run '{}'",
+            task_graph.workflow_run_id.as_str(),
             workflow_run_id
         )));
     }

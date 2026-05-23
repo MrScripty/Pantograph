@@ -567,3 +567,26 @@ durable task orchestration path.
   follow-up: the broader graph-editor diagnostics read model item stays open
   because immutable task definition joins, timing/attempt fields, waiting
   reasons, and ledger durability still need the orchestrator integration.
+- 2026-05-23 joined scheduler task-state read-model slice completed. Smallest
+  useful vertical slice: replace records-only read-model projection with a
+  join over immutable `WorkflowSchedulerTaskGraph` facts and mutable
+  `SchedulerTaskStateRecord` values. Allowed write set:
+  workflow-service active-run scheduler task-state storage/read-model modules,
+  tests, README export notes, and this plan. No-fallback confirmation: the
+  graph editor/run-inspection read model now receives backend-owned definition
+  facts plus scheduler lifecycle state; it does not infer dependencies from
+  the frontend, expose Pumas paths, synthesize task intent for pre-intent
+  states, or preserve the old records-only projection as a compatibility
+  path. Implementation notes: active-run storage now keeps the scheduler task
+  graph with task-state records, the read model exposes node type, dependency
+  task ids, input bindings, projection diagnostics, and optional
+  task/model/runtime/device fields, and mismatched graph/state joins fail
+  closed. Verification passed: `cargo test -p pantograph-workflow-service
+  scheduler::store::tests --lib`, `cargo test -p
+  pantograph-workflow-service workflow::tests::task_state_read_model --lib`,
+  `cargo check -p pantograph-workflow-service`, `cargo check -p
+  pantograph-workflow-service --all-features`, and `cargo check -p
+  pantograph-workflow-service --no-default-features`. Remaining follow-up:
+  this does not close the broader read-model checklist item because waiting
+  reasons, timings, attempts, and ledger-backed diagnostics still depend on
+  orchestrator lifecycle integration.

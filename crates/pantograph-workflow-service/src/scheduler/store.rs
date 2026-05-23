@@ -10,7 +10,8 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOve
 use crate::workflow::{
     WorkflowCapabilityModel, WorkflowExecutionPlan, WorkflowLocalRunPlacementRecord,
     WorkflowLocalRunPlacementState, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowRuntimeIssue, WorkflowSchedulerTaskResult, WorkflowServiceError,
+    WorkflowRuntimeIssue, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
+    WorkflowServiceError,
 };
 
 use super::{
@@ -52,6 +53,8 @@ struct WorkflowExecutionSessionActiveRun {
     scheduler_decision_reason: WorkflowSchedulerDecisionReason,
     execution_plan: Option<WorkflowExecutionPlan>,
     // Milestone 5c stages task-state storage before the orchestrator consumes it.
+    #[allow(dead_code)]
+    scheduler_task_graph: Option<WorkflowSchedulerTaskGraph>,
     #[allow(dead_code)]
     scheduler_task_records: BTreeMap<String, SchedulerTaskStateRecord>,
     // Milestone 5c stages task-result storage before durable ledger replay.

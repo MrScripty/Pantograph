@@ -72,13 +72,46 @@ fn state_with_intent(
     }
 }
 
+fn scheduler_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {
+    let workflow_id = SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id");
+    let workflow_run_id = SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id");
+    let image_task_id = SchedulerTaskId::parse("image-task").expect("task id");
+    let upstream_task_id = SchedulerTaskId::parse("prompt-task").expect("task id");
+    WorkflowSchedulerTaskGraph {
+        schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        workflow_id: workflow_id.clone(),
+        workflow_run_id: workflow_run_id.clone(),
+        tasks: vec![WorkflowSchedulerTask {
+            workflow_id,
+            workflow_run_id,
+            node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+            task_id: image_task_id,
+            node_type: "llm-inference".to_string(),
+            dependency_task_ids: vec![upstream_task_id.clone()],
+            input_bindings: vec![WorkflowSchedulerTaskInputBinding {
+                source_node_id: SchedulerNodeId::parse("prompt-task").expect("node id"),
+                source_task_id: upstream_task_id,
+                source_port_id: "prompt".to_string(),
+                target_port_id: "prompt".to_string(),
+            }],
+            schedulable_intent: None,
+            schedulable_intent_template: None,
+            diagnostics: Vec::new(),
+        }],
+    }
+}
+
 #[test]
 fn scheduler_task_state_read_model_projects_path_free_display_facts() {
-    let read_models = workflow_scheduler_task_state_read_models(&[scheduler_record(
-        "run-image-plan",
-        "image-task",
-        SchedulerTaskStateKind::WaitingResources,
-    )])
+    let task_graph = scheduler_task_graph("run-image-plan");
+    let read_models = workflow_scheduler_task_state_read_models(
+        &task_graph,
+        &[scheduler_record(
+            "run-image-plan",
+            "image-task",
+            SchedulerTaskStateKind::WaitingResources,
+        )],
+    )
     .expect("task state read model");
 
     assert_eq!(read_models.len(), 1);
@@ -87,6 +120,11 @@ fn scheduler_task_state_read_model_projects_path_free_display_facts() {
     assert_eq!(read_model.workflow_run_id, "run-image-plan");
     assert_eq!(read_model.node_id, "image-task");
     assert_eq!(read_model.task_id, "image-task");
+    assert_eq!(read_model.node_type, "llm-inference");
+    assert_eq!(read_model.dependency_task_ids, vec!["prompt-task"]);
+    assert_eq!(read_model.input_bindings.len(), 1);
+    assert_eq!(read_model.input_bindings[0].source_task_id, "prompt-task");
+    assert_eq!(read_model.input_bindings[0].target_port_id, "prompt");
     assert_eq!(read_model.task_type.as_deref(), Some("image_generation"));
     assert_eq!(
         read_model.model_id.as_deref(),
@@ -104,11 +142,15 @@ fn scheduler_task_state_read_model_projects_path_free_display_facts() {
 
 #[test]
 fn scheduler_task_state_read_model_does_not_expose_execution_internals() {
-    let read_models = workflow_scheduler_task_state_read_models(&[scheduler_record(
-        "run-image-plan",
-        "image-task",
-        SchedulerTaskStateKind::Ready,
-    )])
+    let task_graph = scheduler_task_graph("run-image-plan");
+    let read_models = workflow_scheduler_task_state_read_models(
+        &task_graph,
+        &[scheduler_record(
+            "run-image-plan",
+            "image-task",
+            SchedulerTaskStateKind::Ready,
+        )],
+    )
     .expect("task state read model");
     let serialized = serde_json::to_string(&read_models).expect("serialize read model");
 
@@ -136,8 +178,9 @@ fn scheduler_task_state_read_model_supports_pre_intent_state() {
             .expect("transition id"),
     };
 
-    let read_models =
-        workflow_scheduler_task_state_read_models(&[record]).expect("task state read model");
+    let task_graph = scheduler_task_graph("run-image-plan");
+    let read_models = workflow_scheduler_task_state_read_models(&task_graph, &[record])
+        .expect("task state read model");
 
     assert_eq!(read_models.len(), 1);
     let read_model = &read_models[0];
@@ -147,6 +190,29 @@ fn scheduler_task_state_read_model_supports_pre_intent_state() {
     assert_eq!(read_model.requested_runtime_id, None);
     assert_eq!(read_model.requested_device_id, None);
     assert!(read_model.trait_settings.is_empty());
+}
+
+#[test]
+fn scheduler_task_state_read_model_fails_when_task_graph_and_state_diverge() {
+    let task_graph = scheduler_task_graph("run-image-plan");
+    let error = workflow_scheduler_task_state_read_models(&task_graph, &[])
+        .expect_err("missing state record should fail closed");
+    assert!(error.to_string().contains("missing task-state records"));
+
+    let empty_task_graph = WorkflowSchedulerTaskGraph {
+        tasks: Vec::new(),
+        ..task_graph
+    };
+    let error = workflow_scheduler_task_state_read_models(
+        &empty_task_graph,
+        &[scheduler_record(
+            "run-image-plan",
+            "different-task",
+            SchedulerTaskStateKind::Ready,
+        )],
+    )
+    .expect_err("extra state record should fail closed");
+    assert!(error.to_string().contains("records outside the task graph"));
 }
 
 #[tokio::test]
@@ -190,9 +256,10 @@ async fn scheduler_task_state_query_reads_active_run_records() {
             .expect("begin queued run")
             .expect("dequeued run");
         store
-            .set_active_run_scheduler_task_records(
+            .set_active_run_scheduler_task_state(
                 &session_id,
                 &workflow_run_id,
+                scheduler_task_graph(&workflow_run_id),
                 vec![scheduler_record(
                     &workflow_run_id,
                     "image-task",

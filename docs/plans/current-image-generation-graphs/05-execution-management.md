@@ -9857,6 +9857,33 @@ Worker rules:
   - Remaining follow-up: full graph-editor/run-inspection task-state views
     still need immutable task-definition joins, waiting reasons, timing,
     attempts, and ledger-backed diagnostics from the orchestrator slices.
+- 2026-05-23 Milestone 5c joined task-state read-model slice completed:
+  - Smallest useful vertical slice: replace records-only scheduler task-state
+    read-model projection with a backend-owned join over immutable
+    `WorkflowSchedulerTaskGraph` facts and mutable `SchedulerTaskStateRecord`
+    values.
+  - Allowed write set: workflow-service active-run scheduler task-state
+    storage/read-model modules and tests, workflow-service README/export notes,
+    and current plan notes.
+  - No-fallback confirmation: the read-model query now obtains task
+    definitions from active-run scheduler task graph state and lifecycle facts
+    from scheduler task-state records. It does not infer graph facts in the
+    frontend, expose executable paths, synthesize task intent for pre-intent
+    states, or keep the old records-only projection as a compatibility path.
+  - Implementation notes: active-run storage now keeps
+    `WorkflowSchedulerTaskGraph` with task-state records; read models expose
+    node type, dependency task ids, input bindings, projection diagnostics,
+    and optional task/model/runtime/device facts; mismatched graph/state joins
+    fail closed.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    scheduler::store::tests --lib`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_state_read_model --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `cargo check -p
+    pantograph-workflow-service --no-default-features`.
+  - Remaining follow-up: graph-editor/run-inspection read models still need
+    waiting reasons, timing, attempts, and ledger-backed diagnostics from the
+    orchestrator lifecycle slices.
 
 ### Traceability Links
 

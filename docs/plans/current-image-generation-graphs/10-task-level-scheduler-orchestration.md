@@ -229,9 +229,11 @@ implementation can be considered complete:
    be unknown before materialization. Initial path-free workflow-service
    read-model projection and dedicated active-run query boundary completed
    2026-05-23, and the replacement task-state slice moved those read models to
-   the phase-aware state contract with optional pre-intent fields. The broader
-   diagnostics/timing/attempt/task-definition join remains open for the
-   orchestrator and ledger slices.
+   the phase-aware state contract with optional pre-intent fields. A later
+   2026-05-23 slice joined immutable task graph facts with task-state records
+   and made mismatched graph/state reads fail closed. The broader
+   diagnostics/timing/attempt projection remains open for the orchestrator and
+   ledger slices.
 4. Align graph-visible scheduler constraints before relying on them in
    materialization or admission. The workflow-service task graph already
    models optional hard `runtime` and `device` constraints. Completed

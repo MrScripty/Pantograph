@@ -1,9 +1,15 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTraitValue};
+use pantograph_scheduler::{
+    SchedulerTaskId, SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTraitValue,
+};
 use serde::{Deserialize, Serialize};
 
-use super::{WorkflowService, WorkflowServiceError};
+use super::{
+    WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskInputBinding,
+    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowService, WorkflowServiceError,
+    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+};
 
 /// Current schema version for workflow-visible scheduler task state.
 pub const WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION: u16 = 1;
@@ -18,6 +24,13 @@ pub struct WorkflowSchedulerTaskStateReadModel {
     pub workflow_run_id: String,
     pub node_id: String,
     pub task_id: String,
+    pub node_type: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_task_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_bindings: Vec<WorkflowSchedulerTaskStateInputBindingReadModel>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub projection_diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -29,6 +42,16 @@ pub struct WorkflowSchedulerTaskStateReadModel {
     pub requested_device_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trait_settings: Vec<WorkflowSchedulerTaskStateTraitSettingReadModel>,
+}
+
+/// Path-free immutable input binding fact joined from the scheduler task graph.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowSchedulerTaskStateInputBindingReadModel {
+    pub source_node_id: String,
+    pub source_task_id: String,
+    pub source_port_id: String,
+    pub target_port_id: String,
 }
 
 /// Path-free user-facing trait setting supplied to the scheduler.
@@ -75,12 +98,17 @@ impl WorkflowService {
             ));
         }
 
-        let records = {
+        let state = {
             let mut store = self.session_store_guard()?;
             store.touch_session(session_id)?;
-            store.active_run_scheduler_task_records(session_id, workflow_run_id)?
+            store.active_run_scheduler_task_state(session_id, workflow_run_id)?
         };
-        let tasks = workflow_scheduler_task_state_read_models(&records)?;
+        let tasks = match state {
+            Some((task_graph, records)) => {
+                workflow_scheduler_task_state_read_models(&task_graph, &records)?
+            }
+            None => Vec::new(),
+        };
         Ok(WorkflowSchedulerTaskStateReadModelQueryResponse {
             session_id: session_id.to_string(),
             workflow_run_id: workflow_run_id.to_string(),
@@ -90,39 +118,97 @@ impl WorkflowService {
 }
 
 /// Projects durable scheduler task-state records into presentation-neutral task
-/// state without exposing transition ids, runtime handoff, or Pumas load
-/// targets.
+/// state joined with immutable task graph facts without exposing transition
+/// ids, runtime handoff, or Pumas load targets.
 pub fn workflow_scheduler_task_state_read_models(
+    task_graph: &WorkflowSchedulerTaskGraph,
     records: &[SchedulerTaskStateRecord],
 ) -> Result<Vec<WorkflowSchedulerTaskStateReadModel>, WorkflowServiceError> {
-    let mut seen_task_ids = BTreeSet::new();
-    let mut read_models = Vec::with_capacity(records.len());
+    validate_task_graph_for_read_model(task_graph)?;
+    let tasks_by_id = task_graph
+        .tasks
+        .iter()
+        .map(|task| (task.task_id.as_str().to_string(), task))
+        .collect::<BTreeMap<_, _>>();
+    if tasks_by_id.len() != task_graph.tasks.len() {
+        return Err(WorkflowServiceError::Internal(
+            "scheduler task graph contains duplicate task ids".to_string(),
+        ));
+    }
+
+    let mut records_by_task_id = BTreeMap::new();
     for record in records {
         record
             .validate()
             .map_err(map_scheduler_task_state_record_error)?;
+        validate_record_matches_task_graph(task_graph, record)?;
         let task_id = record.task_id.as_str().to_string();
-        if !seen_task_ids.insert(task_id.clone()) {
+        if records_by_task_id.insert(task_id.clone(), record).is_some() {
             return Err(WorkflowServiceError::Internal(format!(
-                "scheduler task state read model contains duplicate task '{}'",
+                "scheduler task state read model contains duplicate task-state record '{}'",
                 task_id
             )));
         }
-        read_models.push(read_model_from_record(record));
     }
-    read_models.sort_by(|left, right| left.task_id.cmp(&right.task_id));
+
+    let mut missing_records = Vec::new();
+    for task in &task_graph.tasks {
+        if !records_by_task_id.contains_key(task.task_id.as_str()) {
+            missing_records.push(task.task_id.as_str().to_string());
+        }
+    }
+    if !missing_records.is_empty() {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler task state read model is missing task-state records for tasks: {}",
+            missing_records.join(", ")
+        )));
+    }
+
+    let extra_records = records_by_task_id
+        .keys()
+        .filter(|task_id| !tasks_by_id.contains_key(*task_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !extra_records.is_empty() {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler task state read model contains records outside the task graph: {}",
+            extra_records.join(", ")
+        )));
+    }
+
+    let mut read_models = Vec::with_capacity(task_graph.tasks.len());
+    for task in &task_graph.tasks {
+        let record = records_by_task_id
+            .get(task.task_id.as_str())
+            .expect("record existence checked above");
+        read_models.push(read_model_from_record(task_graph, task, record));
+    }
     Ok(read_models)
 }
 
 fn read_model_from_record(
+    task_graph: &WorkflowSchedulerTaskGraph,
+    task: &WorkflowSchedulerTask,
     record: &SchedulerTaskStateRecord,
 ) -> WorkflowSchedulerTaskStateReadModel {
     WorkflowSchedulerTaskStateReadModel {
         schema_version: WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,
-        workflow_id: record.workflow_id.as_str().to_string(),
-        workflow_run_id: record.workflow_run_id.as_str().to_string(),
-        node_id: record.node_id.as_str().to_string(),
-        task_id: record.task_id.as_str().to_string(),
+        workflow_id: task_graph.workflow_id.as_str().to_string(),
+        workflow_run_id: task_graph.workflow_run_id.as_str().to_string(),
+        node_id: task.node_id.as_str().to_string(),
+        task_id: task.task_id.as_str().to_string(),
+        node_type: task.node_type.clone(),
+        dependency_task_ids: task
+            .dependency_task_ids
+            .iter()
+            .map(|task_id| task_id.as_str().to_string())
+            .collect(),
+        input_bindings: task
+            .input_bindings
+            .iter()
+            .map(input_binding_read_model)
+            .collect(),
+        projection_diagnostics: task.diagnostics.clone(),
         task_type: record
             .state
             .task_intent()
@@ -160,6 +246,69 @@ fn read_model_from_record(
                     .collect()
             })
             .unwrap_or_default(),
+    }
+}
+
+fn validate_task_graph_for_read_model(
+    task_graph: &WorkflowSchedulerTaskGraph,
+) -> Result<(), WorkflowServiceError> {
+    if task_graph.schema_version != WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION {
+        return Err(WorkflowServiceError::Internal(format!(
+            "unsupported scheduler task graph schema version {}",
+            task_graph.schema_version
+        )));
+    }
+    let mut seen_task_ids = BTreeSet::<&SchedulerTaskId>::new();
+    for task in &task_graph.tasks {
+        if task.workflow_id != task_graph.workflow_id {
+            return Err(WorkflowServiceError::Internal(format!(
+                "scheduler task '{}' workflow id does not match task graph",
+                task.task_id.as_str()
+            )));
+        }
+        if task.workflow_run_id != task_graph.workflow_run_id {
+            return Err(WorkflowServiceError::Internal(format!(
+                "scheduler task '{}' workflow run id does not match task graph",
+                task.task_id.as_str()
+            )));
+        }
+        if !seen_task_ids.insert(&task.task_id) {
+            return Err(WorkflowServiceError::Internal(format!(
+                "scheduler task graph contains duplicate task '{}'",
+                task.task_id.as_str()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_record_matches_task_graph(
+    task_graph: &WorkflowSchedulerTaskGraph,
+    record: &SchedulerTaskStateRecord,
+) -> Result<(), WorkflowServiceError> {
+    if record.workflow_id != task_graph.workflow_id {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler task-state record '{}' workflow id does not match task graph",
+            record.task_id.as_str()
+        )));
+    }
+    if record.workflow_run_id != task_graph.workflow_run_id {
+        return Err(WorkflowServiceError::Internal(format!(
+            "scheduler task-state record '{}' workflow run id does not match task graph",
+            record.task_id.as_str()
+        )));
+    }
+    Ok(())
+}
+
+fn input_binding_read_model(
+    binding: &WorkflowSchedulerTaskInputBinding,
+) -> WorkflowSchedulerTaskStateInputBindingReadModel {
+    WorkflowSchedulerTaskStateInputBindingReadModel {
+        source_node_id: binding.source_node_id.as_str().to_string(),
+        source_task_id: binding.source_task_id.as_str().to_string(),
+        source_port_id: binding.source_port_id.clone(),
+        target_port_id: binding.target_port_id.clone(),
     }
 }
 

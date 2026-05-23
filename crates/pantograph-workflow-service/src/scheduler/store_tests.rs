@@ -1,7 +1,8 @@
 use super::*;
 use crate::workflow::{
     WorkflowExecutionPlan, WorkflowExecutionPlanNodeDecision, WorkflowExecutionSessionRunRequest,
-    WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
+    WorkflowInferenceDeviceClass, WorkflowInferenceTaskId, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskGraph,
 };
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -105,6 +106,36 @@ fn scheduler_record(
         state_version: 1,
         last_transition_id: SchedulerTaskStateTransitionId::parse("transition-existing")
             .expect("transition id"),
+    }
+}
+
+fn scheduler_task_graph(workflow_run_id: &str, task_ids: &[&str]) -> WorkflowSchedulerTaskGraph {
+    let workflow_id = SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id");
+    let workflow_run_id = SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id");
+    let tasks = task_ids
+        .iter()
+        .map(|task_id| {
+            let task_id = SchedulerTaskId::parse(task_id).expect("task id");
+            WorkflowSchedulerTask {
+                workflow_id: workflow_id.clone(),
+                workflow_run_id: workflow_run_id.clone(),
+                node_id: pantograph_scheduler::SchedulerNodeId::parse(task_id.as_str())
+                    .expect("node id"),
+                task_id,
+                node_type: "llm-inference".to_string(),
+                dependency_task_ids: Vec::new(),
+                input_bindings: Vec::new(),
+                schedulable_intent: None,
+                schedulable_intent_template: None,
+                diagnostics: Vec::new(),
+            }
+        })
+        .collect();
+    WorkflowSchedulerTaskGraph {
+        schema_version: crate::workflow::WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        workflow_id,
+        workflow_run_id,
+        tasks,
     }
 }
 
@@ -370,38 +401,29 @@ fn active_run_applies_scheduler_task_state_transitions() {
         .expect("begin run")
         .expect("dequeued run");
 
-    let initial = scheduler_transition(
-        &workflow_run_id,
-        "image-task",
-        "transition-pending",
-        None,
-        SchedulerTaskStateKind::AwaitingInputs,
-    );
-    let result = store
-        .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, initial.clone())
-        .expect("initial task transition");
-    assert!(matches!(
-        result,
-        SchedulerTaskStateTransitionApplyResult::Applied(_)
-    ));
+    store
+        .set_active_run_scheduler_task_state(
+            &session_id,
+            &workflow_run_id,
+            scheduler_task_graph(&workflow_run_id, &["image-task"]),
+            vec![scheduler_record(
+                &workflow_run_id,
+                "image-task",
+                SchedulerTaskStateKind::AwaitingInputs,
+            )],
+        )
+        .expect("set task state");
 
-    let records = store
-        .active_run_scheduler_task_records(&session_id, &workflow_run_id)
-        .expect("task records");
+    let (_, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("task state")
+        .expect("active task state");
     assert_eq!(records.len(), 1);
     assert_eq!(
         records[0].state.kind(),
         SchedulerTaskStateKind::AwaitingInputs
     );
     assert_eq!(records[0].state_version, 1);
-
-    let replay = store
-        .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, initial)
-        .expect("replay initial task transition");
-    assert!(matches!(
-        replay,
-        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_)
-    ));
 
     let ready = scheduler_transition(
         &workflow_run_id,
@@ -413,9 +435,14 @@ fn active_run_applies_scheduler_task_state_transitions() {
     let _ready_result = store
         .apply_active_run_scheduler_task_transition(&session_id, &workflow_run_id, ready)
         .expect("ready task transition");
-    let records = store
-        .active_run_scheduler_task_records(&session_id, &workflow_run_id)
-        .expect("task records after ready");
+    assert!(matches!(
+        _ready_result,
+        SchedulerTaskStateTransitionApplyResult::Applied(_)
+    ));
+    let (_, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("task state after ready")
+        .expect("active task state");
     assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Ready);
     assert_eq!(records[0].state_version, 2);
 }
@@ -442,9 +469,10 @@ fn active_run_rejects_task_records_for_different_run() {
         .expect("dequeued run");
 
     let err = store
-        .set_active_run_scheduler_task_records(
+        .set_active_run_scheduler_task_state(
             &session_id,
             &workflow_run_id,
+            scheduler_task_graph(&workflow_run_id, &["image-task"]),
             vec![scheduler_record(
                 "run-other",
                 "image-task",
