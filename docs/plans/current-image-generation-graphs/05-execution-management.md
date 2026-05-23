@@ -9743,6 +9743,24 @@ Worker rules:
     port because the orchestrator slice has not introduced a real use. The
     consumer dependency will be added with orchestrator wiring to preserve
     dependency ownership standards and avoid unused dependencies.
+- 2026-05-23 Milestone 5c workflow-service orchestrator runtime-host
+  boundary slice:
+  - Smallest useful vertical slice: add the focused workflow-service
+    `scheduler/task_orchestrator.rs` async shell and tests proving it dispatches
+    only scheduler-owned `SchedulerRuntimeHandoff` values through the shared
+    runtime-host dispatcher.
+  - No-fallback/no-legacy confirmation: the shell does not import
+    embedded-runtime, resolve model paths, synthesize handoff from reduced
+    execution plans, or call node-engine runtime inference paths.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`, `cargo fmt -p
+    pantograph-workflow-service -- --check`, default/all-features/no-default
+    workflow-service checks, `git diff --check`, and file-size review for the
+    new orchestrator files.
+  - Remaining follow-up: the orchestrator remains staged until production
+    session execution wires dependency readiness, task-state transitions,
+    ledger writes, bounded queues, cancellation, retry/defer, panic handling,
+    and runtime-host dispatch lifecycle.
 
 ### Traceability Links
 

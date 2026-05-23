@@ -15,6 +15,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | `workflow.rs` | Public workflow facade exports, execution/session facade methods, and orchestration logic. |
 | `workflow/` | Private workflow contracts, execution-plan DTOs, host traits, graph API methods, diagnostics ledger query methods, capability/preflight API methods, workflow run and session execution API methods, queue and lifecycle API methods, service configuration, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
+| `scheduler/task_orchestrator.rs` | Workflow-service async shell for task orchestration calls into shared scheduler/runtime-host contracts without owning runtime policy or embedded-runtime implementation details. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
 | `technical_fit.rs` | Technical-fit request/decision DTOs, dependency-readiness proof DTOs, normalization helpers, session context assembly, and runtime-preflight integration. |

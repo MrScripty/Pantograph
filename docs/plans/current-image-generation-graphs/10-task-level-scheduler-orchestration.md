@@ -264,6 +264,13 @@ Standards guardrails for the shared crate:
   fixtures were removed rather than retained as shims. Workflow-service
   consumer wiring remains with the orchestrator slice so the dependency is
   introduced only when it owns a real application-layer use.
+- 2026-05-23 implementation status: workflow-service now has a focused
+  `scheduler/task_orchestrator.rs` async shell that consumes the shared
+  runtime-host dispatcher and proves dispatch-selected handoff reaches a
+  fake runtime-host port while readiness-only handoff fails before the port.
+  This is the first orchestrator boundary slice only; production task
+  progression, dependency readiness, runtime selection, ledger writes,
+  cancellation, retries, and queue lifecycle remain staged follow-ups.
 
 Rejected alternatives:
 

@@ -27,6 +27,7 @@ sysinfo = "0.32"
 node-engine = { path = "../node-engine" }
 workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
+pantograph-runtime-host-contracts = { path = "../pantograph-runtime-host-contracts" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 pantograph-timing-contracts = { path = "../pantograph-timing-contracts" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }

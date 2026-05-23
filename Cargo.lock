@@ -7558,6 +7558,7 @@ dependencies = [
  "pantograph-media-conversion",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
+ "pantograph-runtime-host-contracts",
  "pantograph-runtime-identity",
  "pantograph-scheduler",
  "pantograph-timing-contracts",

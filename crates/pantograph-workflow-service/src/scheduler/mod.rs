@@ -2,6 +2,7 @@ mod contracts;
 mod policy;
 mod store;
 mod store_admission;
+pub(crate) mod task_orchestrator;
 
 pub(crate) use contracts::scheduler_snapshot_workflow_run_id;
 pub use contracts::{

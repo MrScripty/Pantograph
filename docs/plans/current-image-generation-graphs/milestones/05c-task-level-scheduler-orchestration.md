@@ -441,3 +441,27 @@ durable task orchestration path.
   this slice because adding an unused dependency would violate dependency
   ownership standards. The actual workflow-service consumer wiring remains in
   the next orchestrator slice.
+- 2026-05-23 workflow-service orchestrator runtime-host boundary slice
+  completed. Smallest useful vertical slice: add a focused
+  `scheduler/task_orchestrator.rs` async shell in workflow-service that
+  depends on the shared runtime-host contract crate and dispatches
+  scheduler-provided `SchedulerRuntimeHandoff` values through
+  `SchedulerRuntimeHostDispatcher`. Allowed write set: workflow-service
+  manifest, scheduler module wiring, new orchestrator module/tests,
+  workflow-service README, lockfile update, and Milestone 5c plan notes.
+  No-fallback confirmation: the shell accepts only scheduler-owned handoff
+  input and delegates validation/port calls to the shared runtime-host
+  dispatcher; it does not import embedded-runtime, synthesize handoff from
+  reduced plans, resolve Pumas paths, call node-engine, or create alternate
+  launch paths. Verification passed: `cargo test -p
+  pantograph-workflow-service scheduler::task_orchestrator --lib`, `cargo
+  fmt -p pantograph-workflow-service -- --check`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-workflow-service
+  --all-features`, `cargo check -p pantograph-workflow-service
+  --no-default-features`, `git diff --check`, and file-size review for the
+  new orchestrator files. Deviation/remaining follow-up: the orchestrator
+  type is explicitly staged with scoped `dead_code` allowances until the next
+  production session-execution slice calls it. The full orchestrator checklist
+  item remains open because dependency readiness calls, task-state
+  transitions, ledger writes, bounded queues, cancellation, retry/defer,
+  panic handling, and production runtime-host dispatch are not wired yet.
