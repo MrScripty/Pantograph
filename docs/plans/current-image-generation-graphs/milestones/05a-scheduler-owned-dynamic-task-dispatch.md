@@ -63,7 +63,7 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   set, selected Pumas model/artifact identity, dependency readiness proof,
   environment ref when applicable, batching group id, reservation/lease id,
   runtime trait/options projection, and bounded diagnostics.
-- [ ] Add a resource/residency manager abstraction for admission-time resource
+- [x] Add a resource/residency manager abstraction for admission-time resource
   snapshots, per-device reservations, model residency, runtime readiness,
   load/warmup estimates, batching memory impact, and typed unavailable or
   impossible-fit diagnostics. Platform-specific collectors must live behind a
@@ -376,3 +376,26 @@ execution slices that would otherwise keep relying on `ModelRefV2` or
   Remaining follow-up: add the resource/residency manager abstraction for
   admission-time snapshots, reservations, residency, runtime readiness, and
   typed impossible-fit diagnostics.
+- 2026-05-22 resource/residency manager contract slice completed. Smallest
+  useful vertical slice: add the platform-neutral resource/residency snapshot
+  and observer trait contracts in `pantograph-scheduler`, without implementing
+  OS collectors, dispatch policy, reservation storage, batching policy, or
+  runtime host execution. Allowed write set: `crates/pantograph-scheduler/`,
+  this milestone file, and execution notes. No-fallback confirmation: the
+  contracts carry device resource snapshots, active reservation leases, runtime
+  readiness, model residency, load/warmup estimates, batching memory impact,
+  fit assessments, and typed diagnostics only. They validate checked resource
+  arithmetic, duplicate device-resource observations, duplicate reservation
+  leases, unavailable runtime/residency diagnostics, and impossible-fit
+  diagnostics while rejecting executable load targets, local paths,
+  `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+  `modelPath`, worker launch facts, and runtime host internals. Verification
+  passed: `cargo fmt -p pantograph-scheduler`,
+  `cargo test -p pantograph-scheduler`, `cargo check -p pantograph-scheduler`,
+  `cargo check -p pantograph-scheduler --all-features`,
+  `cargo check -p pantograph-scheduler --no-default-features`,
+  `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+  file-size standards check for the new resource modules. Remaining
+  follow-up: move dependency readiness policy into scheduler admission/dispatch
+  so node-engine cannot perform dependency resolver discovery as an execution
+  fallback.

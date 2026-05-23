@@ -14,6 +14,8 @@ mod lifecycle;
 mod ownership;
 mod queue;
 mod readiness;
+mod resource;
+mod resource_types;
 mod supervision;
 
 pub use capability::{
@@ -62,6 +64,18 @@ pub use readiness::{
     SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState,
     ValidatedSchedulerReadinessAdmissionDecision, ValidatedSchedulerReadinessAdmissionRequest,
     SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+};
+pub use resource::{
+    SchedulerBatchingMemoryImpact, SchedulerDeviceResourceSnapshot, SchedulerLoadWarmupEstimate,
+    SchedulerModelResidency, SchedulerResourceFitAssessment, SchedulerResourceObservationError,
+    SchedulerResourceObserver, SchedulerResourceReservation, SchedulerResourceResidencySnapshot,
+    SchedulerRuntimeReadiness, ValidatedSchedulerResourceResidencySnapshot,
+    SCHEDULER_RESOURCE_RESIDENCY_CONTRACT_VERSION,
+};
+pub use resource_types::{
+    SchedulerModelResidencyState, SchedulerResourceDiagnostic, SchedulerResourceDiagnosticCode,
+    SchedulerResourceDiagnosticSeverity, SchedulerResourceFitState, SchedulerResourceKind,
+    SchedulerRuntimeReadinessState,
 };
 pub use supervision::{
     SchedulerLifecycleCancellationState, SchedulerLifecycleComponent,

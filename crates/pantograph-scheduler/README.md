@@ -18,6 +18,8 @@ ownership.
 | `src/ownership.rs` | Scheduler-owned capability and non-scheduler consumer ownership boundary enums. |
 | `src/queue.rs` | Durable scheduler task queue state and idempotent transition replay contract. |
 | `src/readiness.rs` | Scheduler-owned readiness admission request/decision contracts and host-ready dependency readiness proof wrapper. |
+| `src/resource.rs` | Platform-neutral resource/residency snapshot, reservation, runtime-readiness, load/warmup, batching-memory, and observer contracts. |
+| `src/resource_types.rs` | Shared resource/residency enums and diagnostics used by scheduler observation contracts. |
 | `src/supervision.rs` | Scheduler lifecycle supervision contract for long-running queue, dependency, resource, runtime-host, retry, and reservation-cleanup services. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
 
@@ -109,6 +111,13 @@ resolver behavior.
   and runtime trait projection for host handoff, but it must not carry
   executable Pumas load targets, local paths, worker launch details, or graph
   inputs.
+- `SchedulerResourceResidencySnapshot` is the scheduler-owned
+  platform-neutral resource observation contract. It carries device resource
+  snapshots, active reservation leases, runtime readiness, model residency,
+  load/warmup estimates, batching memory impact, fit assessments, and typed
+  diagnostics only. Platform-specific collectors must live behind
+  `SchedulerResourceObserver`; scheduler policy must not depend on OS-specific
+  resource APIs directly.
 
 ## Revisit Triggers
 - A future implementation slice needs to put scheduler policy outside this
@@ -187,6 +196,11 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   devices, selected Pumas model/artifact identity, dependency proof,
   environment ref, reservation lease, batching group, and runtime trait
   projection are validated.
+  Scheduler resource policy may use
+  `ValidatedSchedulerResourceResidencySnapshot` values returned by a
+  `SchedulerResourceObserver` after the backend validates resource arithmetic,
+  reservation identity, runtime readiness diagnostics, residency diagnostics,
+  batching memory impact, and impossible-fit diagnostics.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -221,7 +235,11 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   fields; `SchedulerDispatchDecision` correlation, selected runtime, optional
   runtime variant, selected device set, selected model ref, readiness proof,
   environment ref, optional batching group, reservation lease, runtime trait
-  settings, and dispatch diagnostic fields.
+  settings, and dispatch diagnostic fields;
+  `SchedulerResourceResidencySnapshot` observation timestamp, device resource
+  kind and byte counts, active reservation lease ids, runtime readiness state,
+  model residency state, load/warmup timing, batching memory impact, fit
+  assessment state, and resource diagnostic fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -241,7 +259,10 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   describe service ownership and health only; they do not select runtime,
   device, dependency, resource, or batching policy. Dispatch decisions are
   short-lived scheduler-owned facts and must not become graph inputs or
-  executable load-target carriers.
+  executable load-target carriers. Resource snapshot states describe
+  scheduler-observed availability and fit only; they do not authorize graph,
+  node-engine, frontend, or runtime adapter code to choose executable load
+  targets or bypass dispatch policy.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait

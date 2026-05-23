@@ -1,0 +1,108 @@
+{
+  "contract_version": 1,
+  "observed_at_unix_ms": 1779481200000,
+  "device_resources": [
+    {
+      "device_id": "cpu:0",
+      "resource_kind": "system_ram",
+      "total_bytes": 68719476736,
+      "available_bytes": 34359738368,
+      "reserved_bytes": 8589934592
+    },
+    {
+      "device_id": "cuda:0",
+      "resource_kind": "device_vram",
+      "total_bytes": 25769803776,
+      "available_bytes": 12884901888,
+      "reserved_bytes": 4294967296
+    }
+  ],
+  "active_reservations": [
+    {
+      "reservation_lease_id": "reservation.001",
+      "workflow_run_id": "run.001",
+      "task_id": "task.001",
+      "device_id": "cuda:0",
+      "resource_kind": "device_vram",
+      "reserved_bytes": 4294967296
+    }
+  ],
+  "runtime_readiness": [
+    {
+      "runtime_id": "diffusers-pytorch",
+      "device_ids": ["cuda:0"],
+      "state": "ready"
+    },
+    {
+      "runtime_id": "onnx-runtime",
+      "state": "not_implemented",
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "runtime_not_ready",
+          "message": "The ONNX image runtime is exposed as a future capability but is not implemented."
+        }
+      ]
+    }
+  ],
+  "model_residency": [
+    {
+      "model_ref": {
+        "model_id": "pumas://models/juggernaut-xl-v10",
+        "selected_artifact_id": "artifact.diffusers.bundle"
+      },
+      "runtime_id": "diffusers-pytorch",
+      "device_id": "cuda:0",
+      "state": "resident",
+      "resident_bytes": 9663676416
+    }
+  ],
+  "load_warmup_estimates": [
+    {
+      "model_ref": {
+        "model_id": "pumas://models/juggernaut-xl-v10",
+        "selected_artifact_id": "artifact.diffusers.bundle"
+      },
+      "runtime_id": "diffusers-pytorch",
+      "device_id": "cuda:0",
+      "load_time_ms": 4200,
+      "warmup_time_ms": 850,
+      "peak_additional_bytes": 1073741824
+    }
+  ],
+  "batching_memory_impacts": [
+    {
+      "batching_group_id": "batch.image_generation.001",
+      "runtime_id": "diffusers-pytorch",
+      "device_id": "cuda:0",
+      "batch_size": 2,
+      "additional_reserved_bytes": 2147483648
+    }
+  ],
+  "fit_assessments": [
+    {
+      "workflow_run_id": "run.001",
+      "task_id": "task.001",
+      "state": "fits"
+    },
+    {
+      "workflow_run_id": "run.002",
+      "task_id": "task.002",
+      "state": "waiting_for_resources",
+      "diagnostics": [
+        {
+          "severity": "info",
+          "code": "impossible_fit",
+          "message": "The task is waiting for enough CUDA memory to become available."
+        }
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "scheduler_resource_policy_error",
+      "message": "Resource observation snapshot produced by deterministic test collector."
+    }
+  ]
+}

@@ -9103,6 +9103,36 @@ Worker rules:
   - Remaining follow-up: add the resource/residency manager abstraction for
     admission-time snapshots, reservations, residency, runtime readiness, and
     typed impossible-fit diagnostics.
+- 2026-05-22 Milestone 5a resource/residency manager contract slice completed:
+  - Smallest useful vertical slice: add the platform-neutral
+    resource/residency snapshot and observer trait contracts in
+    `pantograph-scheduler`, without implementing OS collectors, dispatch
+    policy, reservation storage, batching policy, or runtime host execution.
+  - Allowed write set: `crates/pantograph-scheduler/`, Milestone 5a plan
+    notes, and this execution log.
+  - Implementation notes: added `SchedulerResourceResidencySnapshot`,
+    `SchedulerResourceObserver`, device-resource snapshots, active
+    reservation records, runtime-readiness records, model-residency records,
+    load/warmup estimates, batching memory impact, fit assessments, typed
+    resource diagnostics, validated wrapper, public exports, README coverage,
+    and a JSON fixture-backed public contract test suite.
+  - No-fallback/no-legacy confirmation: the snapshot carries scheduler-owned
+    resource and residency facts only. It validates checked byte arithmetic,
+    duplicate device-resource observations, duplicate reservation leases,
+    unavailable runtime/residency diagnostics, and impossible-fit diagnostics
+    while rejecting executable load targets, local paths,
+    `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`, frontend
+    `modelPath`, worker launch facts, and runtime host internals.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`,
+    `cargo test -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-scheduler --all-features`,
+    `cargo check -p pantograph-scheduler --no-default-features`,
+    `cargo fmt -p pantograph-scheduler -- --check`, `git diff --check`, and
+    file-size standards check for the new resource modules.
+  - Remaining follow-up: move dependency readiness policy into scheduler
+    admission/dispatch so node-engine cannot perform dependency resolver
+    discovery as an execution fallback.
 
 ### Traceability Links
 
