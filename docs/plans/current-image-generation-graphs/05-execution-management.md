@@ -11031,6 +11031,37 @@ Worker rules:
     runtime-load/session-admission diagnostics helpers,
     `session_runtime_load_lifecycle`, `workflow_run_internal`, and the old
     media artifactization conversion boundary.
+- 2026-05-24 Milestone 5c retired runtime-load lifecycle cleanup slice
+  completed:
+  - Smallest useful vertical slice: delete the unused
+    `session_runtime_load_lifecycle` module and its private model-lifecycle
+    event request/helper entry point.
+  - Allowed write set: workflow-service module declarations,
+    `session_execution_api.rs`, workflow-service README ownership docs,
+    Milestone 5c/task-level orchestration plan notes, and this execution log.
+    Existing unrelated Pumas proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: the old runtime-load lifecycle helper
+    is not preserved as a compatibility diagnostic path. Runtime load,
+    dispatch, retry, cancellation, and attempt timing diagnostics must be
+    reintroduced through the later scheduler/runtime-host lifecycle owner with
+    task/runtime handoff correlation.
+  - Verification passed: targeted source search for deleted lifecycle symbols;
+    `cargo fmt -p pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: `cargo test -p pantograph-workflow-service
+    workflow::tests::session_capacity --lib` still fails because that broader
+    suite expects legacy runtime/session capacity behavior while current
+    scheduler-task session execution blocks source-input runs or fails closed.
+    Keep those tests as a later conversion/deletion target for the dedicated
+    scheduler/runtime-host lifecycle and source-input materialization slices.
+  - Remaining follow-up: reduced execution-plan active-run storage, remaining
+    retired runtime-load/session-admission diagnostics helpers,
+    `workflow_run_internal`, and the old media artifactization conversion
+    boundary.
 
 ### Traceability Links
 

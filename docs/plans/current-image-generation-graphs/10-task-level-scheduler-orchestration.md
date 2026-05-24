@@ -1417,6 +1417,17 @@ is complete. `WorkflowExecutionSessionDequeuedRun` no longer copies
 session/preflight state and admission/placement projections; the runner handoff
 now carries only fields consumed by active scheduler-task execution.
 
+2026-05-24 implementation status: retired runtime-load lifecycle cleanup is
+complete. The unused `session_runtime_load_lifecycle` module and its private
+model-lifecycle event request/helper were removed instead of being preserved as
+an inactive compatibility diagnostic path. Runtime load lifecycle diagnostics
+remain a later scheduler/runtime-host lifecycle responsibility so they can
+carry task/runtime handoff correlation rather than old session-admission facts.
+The broader `workflow::tests::session_capacity` suite still fails against the
+current cutover state because it expects legacy runtime/session capacity
+behavior; those tests must be converted or deleted with the remaining lifecycle
+and source-input materialization work.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

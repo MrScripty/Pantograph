@@ -7,8 +7,7 @@ use pantograph_diagnostics_ledger::{
     RunResourceObservationRollupQuery, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
     RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerCandidateSetSummary,
     SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload,
-    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
-    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload,
+    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
     SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
     SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
     SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
@@ -62,24 +61,6 @@ use super::{
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
 const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
 const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
-
-pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
-    pub(super) session: &'a WorkflowExecutionSessionSummary,
-    pub(super) snapshot: Option<&'a WorkflowRunSnapshotRecord>,
-    pub(super) workflow_run_id: &'a str,
-    pub(super) workflow_semantic_version: &'a str,
-    pub(super) selected_runtime_id: Option<&'a str>,
-    pub(super) selected_runtime_variant_id: Option<&'a str>,
-    pub(super) execution_plan_summary: Option<&'a SchedulerExecutionPlanSummary>,
-    pub(super) required_backends: &'a [String],
-    pub(super) required_models: &'a [String],
-    pub(super) transition: SchedulerModelLifecycleTransition,
-    pub(super) timing_attempt_id: Option<&'a str>,
-    pub(super) reason: Option<&'a str>,
-    pub(super) duration_ms: Option<u64>,
-    pub(super) error: Option<&'a str>,
-    pub(super) canonical_error_event_id: Option<&'a str>,
-}
 
 struct SchedulerReservationContext {
     selected_runtime_id: Option<String>,
@@ -1326,88 +1307,6 @@ impl WorkflowService {
         )
         .map(|_| ())
         .map_err(WorkflowServiceError::from)
-    }
-
-    pub(super) fn record_scheduler_model_lifecycle_events_if_configured(
-        &self,
-        request: SchedulerModelLifecycleEventRequest<'_>,
-    ) -> Result<(), WorkflowServiceError> {
-        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
-            return Ok(());
-        };
-        if request.required_models.is_empty() {
-            return Ok(());
-        }
-        let workflow_run_id = WorkflowRunId::try_from(request.workflow_run_id.to_string())?;
-        let workflow_id = workflow_id_for_scheduler_event(request.session, request.snapshot)?;
-        let occurred_at_ms = unix_timestamp_ms() as i64;
-        let runtime_id = request
-            .selected_runtime_id
-            .map(str::to_string)
-            .or_else(|| request.required_backends.first().cloned());
-
-        let mut ledger = ledger.lock().map_err(|_| {
-            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
-        })?;
-        for model_id in request.required_models {
-            self.append_diagnostic_event_and_request_projection_refresh(
-                &mut *ledger,
-                DiagnosticEventAppendRequest {
-                    source_component: DiagnosticEventSourceComponent::Scheduler,
-                    source_instance_id: Some("workflow-session-scheduler".to_string()),
-                    occurred_at_ms,
-                    workflow_run_id: Some(workflow_run_id.clone()),
-                    workflow_id: Some(workflow_id.clone()),
-                    workflow_version_id: request
-                        .snapshot
-                        .map(|snapshot| snapshot.workflow_version_id.clone()),
-                    workflow_semantic_version: Some(
-                        request
-                            .snapshot
-                            .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                            .unwrap_or_else(|| request.workflow_semantic_version.to_string()),
-                    ),
-                    node_id: None,
-                    node_type: None,
-                    node_version: None,
-                    runtime_id: runtime_id.clone(),
-                    runtime_version: None,
-                    model_id: Some(model_id.clone()),
-                    model_version: None,
-                    client_id: event_client_id(request.session, request.snapshot)?,
-                    client_session_id: event_client_session_id(request.session, request.snapshot)?,
-                    bucket_id: event_bucket_id(request.session, request.snapshot)?,
-                    scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
-                    retention_policy_id: request
-                        .snapshot
-                        .map(|snapshot| snapshot.retention_policy.clone()),
-                    privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
-                    retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-                    payload_ref: None,
-                    payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
-                        SchedulerModelLifecycleChangedPayload {
-                            transition: request.transition,
-                            cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
-                                request.transition,
-                            )),
-                            execution_plan_summary: request.execution_plan_summary.cloned(),
-                            timing_attempt_id: request.timing_attempt_id.map(str::to_string),
-                            selected_runtime_variant_id: request
-                                .selected_runtime_variant_id
-                                .map(str::to_string),
-                            reason: request.reason.map(str::to_string),
-                            duration_ms: request.duration_ms,
-                            error: request.error.map(str::to_string),
-                            canonical_error_event_id: request
-                                .canonical_error_event_id
-                                .map(str::to_string),
-                        },
-                    ),
-                },
-            )
-            .map_err(WorkflowServiceError::from)?;
-        }
-        Ok(())
     }
 
     fn record_scheduler_run_admitted_event_if_configured(

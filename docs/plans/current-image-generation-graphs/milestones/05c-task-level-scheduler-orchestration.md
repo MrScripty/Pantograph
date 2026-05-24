@@ -333,6 +333,18 @@ durable task orchestration path.
   run handoff carries only queue timing, decision reason, workflow id, and the
   queued request, while finish state carries only the active runner's
   `unload_runtime` decision.
+  2026-05-24 cleanup implementation status: the retired
+  `session_runtime_load_lifecycle` module was deleted together with its
+  private scheduler model-lifecycle event request/helper entry point. Runtime
+  load lifecycle diagnostics are not kept as an unused compatibility surface;
+  the later scheduler/runtime-host lifecycle owner must reintroduce typed
+  runtime-load, dispatch, retry, cancellation, and attempt timing events with
+  task/runtime handoff correlation. A broader existing
+  `workflow::tests::session_capacity` suite still fails because it expects
+  legacy runtime/session capacity behavior while current scheduler-task runs
+  block source-input runs or fail closed; convert or delete those tests when
+  the scheduler/runtime-host lifecycle and source-input materialization slices
+  replace that behavior.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
