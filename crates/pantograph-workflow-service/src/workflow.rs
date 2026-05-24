@@ -18,7 +18,6 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitReq
 
 mod artifact_api;
 mod artifact_contracts;
-mod artifact_output_conversion;
 mod artifact_settings_api;
 mod artifact_store;
 mod attribution_api;
@@ -54,7 +53,6 @@ mod task_result_output_projection;
 mod task_run_summary;
 mod task_state_read_model;
 mod validation;
-mod workflow_run_api;
 
 pub use self::artifact_contracts::*;
 pub use self::artifact_store::{
@@ -210,8 +208,6 @@ pub struct WorkflowService {
     diagnostics_ledger: Option<Arc<Mutex<SqliteDiagnosticsLedger>>>,
     diagnostics_projection_refresh_sink:
         Arc<Mutex<Option<Arc<dyn WorkflowDiagnosticsProjectionRefreshSink>>>>,
-    media_conversion_executor:
-        Arc<Mutex<Option<Arc<dyn pantograph_media_conversion::MediaConversionExecutor>>>>,
     scheduler_diagnostics_provider:
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
     scheduler_task_orchestrator: WorkflowSchedulerTaskOrchestrator,

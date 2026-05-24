@@ -35,11 +35,8 @@ Tauri, and generated binding surfaces.
 ## Decision
 Keep workflow orchestration in a reusable Rust service crate. Transport
 adapters decode boundary payloads and call this crate; runtime hosts implement
-narrow traits. Large internal modules may be decomposed, but public facades
-should be preserved until a breaking API change is explicitly accepted.
-Media conversion is host-injected through `pantograph-media-conversion` so
-workflow-service can build conversion requests and record descriptor metadata
-without owning managed executable resolution or process execution.
+narrow traits. Large internal modules may be decomposed, and retired execution
+facades are removed when scheduler-owned replacements take over.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -67,8 +64,8 @@ without owning managed executable resolution or process execution.
 - `workflow.rs` facade decomposition would require public API changes.
 
 ## Dependencies
-**Internal:** `node-engine`, `workflow-nodes`, `pantograph-runtime-identity`,
-and `pantograph-media-conversion`.
+**Internal:** `node-engine`, `workflow-nodes`, and
+`pantograph-runtime-identity`.
 
 **External:** `async-trait`, `serde`, `serde_json`, `thiserror`, `tokio`,
 `uuid`, `chrono`, and `parking_lot`.

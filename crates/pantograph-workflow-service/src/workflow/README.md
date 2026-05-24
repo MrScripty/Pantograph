@@ -12,7 +12,6 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `artifact_api.rs` | WorkflowService ArtifactStore facade methods for descriptor lookup, binary body reads, consume acknowledgement, policy updates, cleanup, and stats. |
-| `artifact_output_conversion.rs` | Workflow output artifactization, format override resolution, and host-agnostic media conversion executor handoff. |
 | `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
 | `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, format-default, and conversion-attribution DTOs for binary-safe media payload handling. |
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
@@ -45,7 +44,6 @@ public exports out of the service crate.
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
-| `workflow_run_api.rs` | Private scheduler-owned workflow run internals, run timeout handling, output validation, and session-run handoff. |
 
 ## Problem
 `src/workflow.rs` remains a large public facade with service methods. Public
@@ -196,11 +194,10 @@ facade test module.
   access modes, but descriptor format metadata remains queryable so conversion
   status, command identity, and dependency lease attribution survive retention
   or delete-on-consume body deletion.
-- Workflow-service may hold an optional
-  `pantograph_media_conversion::MediaConversionExecutor` injected by a host.
-  Artifact format override mismatches fail closed when no executor is
-  configured, and executor results are the only source for conversion ids,
-  status, command identity, converted bytes, and dependency lease attribution.
+- Workflow-service no longer owns host-injected media conversion execution.
+  Scheduler-task output materialization must provide any future artifact
+  conversion status, command identity, converted bytes, and dependency lease
+  attribution through a dedicated typed boundary.
 - Workflow-service does not acquire managed media leases, resolve executable
   paths, or spawn converter processes. Those remain host-owned concerns behind
   the injected executor boundary.
@@ -295,8 +292,7 @@ facade test module.
 cache contracts, technical-fit overrides, host trait helpers, and
 `pantograph-runtime-identity`.
 
-**External:** `pantograph-media-conversion` for the neutral media conversion
-executor/request/result contracts, plus inherited parent crate dependencies.
+**External:** inherited parent crate dependencies.
 
 Reason: helper modules inherit the parent crate dependency surface so extracted
 workflow internals do not grow new package-level coupling.

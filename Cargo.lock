@@ -7555,7 +7555,6 @@ dependencies = [
  "pantograph-dependency-planning",
  "pantograph-diagnostics-ledger",
  "pantograph-managed-dependencies",
- "pantograph-media-conversion",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
  "pantograph-runtime-host-contracts",

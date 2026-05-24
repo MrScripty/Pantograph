@@ -1437,6 +1437,17 @@ remaining warning surfaces are narrowed to active execution-plan storage, the
 old whole-run `workflow_run_internal` path, and the old media artifactization
 conversion boundary.
 
+2026-05-24 implementation status: old whole-run execution cleanup is complete.
+Workflow-service no longer declares `workflow_run_api` or
+`artifact_output_conversion`, no longer exposes host-injected media conversion
+configuration, no longer depends on `pantograph-media-conversion`, and no
+longer has private tests for direct whole-run host execution. Artifact/media
+output handling is now a future scheduler-task result materialization and
+runtime-host output projection concern. The remaining warning surface is the
+active execution-plan storage read by embedded-runtime planned inference; that
+is a cross-crate bridge replacement boundary, not a local workflow-service
+dead-code deletion.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

@@ -35,7 +35,6 @@ pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
 pantograph-scheduler = { path = "../pantograph-scheduler" }
 pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
-pantograph-media-conversion = { path = "../pantograph-media-conversion" }
 
 [dev-dependencies]
 rusqlite.workspace = true

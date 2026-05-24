@@ -38,5 +38,4 @@ mod workflow_capabilities;
 mod workflow_graph_inspection;
 mod workflow_io;
 mod workflow_preflight;
-mod workflow_run;
 mod workflow_version;

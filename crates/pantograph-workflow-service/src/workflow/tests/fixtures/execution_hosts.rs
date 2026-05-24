@@ -1,27 +1,6 @@
 use super::*;
 use crate::{GraphNode, Position};
 
-pub(in crate::workflow::tests) struct TimeoutAwareHost {
-    pub(in crate::workflow::tests) cancelled: Arc<AtomicBool>,
-    pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
-}
-
-impl TimeoutAwareHost {
-    pub(in crate::workflow::tests) fn new(cancelled: Arc<AtomicBool>) -> Self {
-        Self {
-            cancelled,
-            capabilities: WorkflowHostCapabilities {
-                max_input_bindings: 16,
-                max_output_targets: 16,
-                max_value_bytes: 4096,
-                runtime_requirements: WorkflowRuntimeRequirements::default(),
-                models: Vec::new(),
-                runtime_capabilities: Vec::new(),
-            },
-        }
-    }
-}
-
 #[derive(Clone)]
 pub(in crate::workflow::tests) struct BlockingRunHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
@@ -187,68 +166,6 @@ impl StaleWorkflowGraphHost {
         Self {
             inner: MockWorkflowHost::new(8, 1024),
             run_attempts: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-}
-
-#[async_trait]
-impl WorkflowHost for TimeoutAwareHost {
-    async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
-        Ok(())
-    }
-
-    async fn workflow_graph_fingerprint(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<String, WorkflowServiceError> {
-        Ok("timeout-graph".to_string())
-    }
-
-    async fn workflow_graph(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        Ok(mock_workflow_graph())
-    }
-
-    async fn workflow_capabilities(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
-        Ok(self.capabilities.clone())
-    }
-
-    async fn workflow_io(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
-        MockWorkflowHost::new(8, 1024)
-            .workflow_io(_workflow_id)
-            .await
-    }
-
-    async fn runtime_capabilities(
-        &self,
-    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
-        Ok(self.capabilities.runtime_capabilities.clone())
-    }
-
-    async fn run_workflow(
-        &self,
-        _workflow_id: &str,
-        _inputs: &[WorkflowPortBinding],
-        _output_targets: Option<&[WorkflowOutputTarget]>,
-        _run_options: WorkflowRunOptions,
-        run_handle: WorkflowRunHandle,
-    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
-        loop {
-            if run_handle.is_cancelled() {
-                self.cancelled.store(true, Ordering::SeqCst);
-                return Err(WorkflowServiceError::Cancelled(
-                    "workflow run cancelled".to_string(),
-                ));
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
 }

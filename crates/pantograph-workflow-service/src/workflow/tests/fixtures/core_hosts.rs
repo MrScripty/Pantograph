@@ -3,8 +3,6 @@ use crate::{GraphEdge, GraphNode, Position, WorkflowGraph};
 
 pub(in crate::workflow::tests) struct MockWorkflowHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
-    pub(in crate::workflow::tests) omit_requested_target_output: bool,
-    pub(in crate::workflow::tests) emit_invalid_output_binding: bool,
     pub(in crate::workflow::tests) technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     pub(in crate::workflow::tests) recorded_run_options: Arc<Mutex<Vec<WorkflowRunOptions>>>,
     pub(in crate::workflow::tests) runtime_load_proof: Option<WorkflowSessionRuntimeLoadProof>,
@@ -44,31 +42,9 @@ impl MockWorkflowHost {
                 }],
                 runtime_capabilities: vec![ready_runtime_capability()],
             },
-            omit_requested_target_output: false,
-            emit_invalid_output_binding: false,
             technical_fit_decision: None,
             recorded_run_options: Arc::new(Mutex::new(Vec::new())),
             runtime_load_proof: None,
-        }
-    }
-
-    pub(in crate::workflow::tests) fn with_missing_requested_output(
-        max_input_bindings: usize,
-        max_value_bytes: usize,
-    ) -> Self {
-        Self {
-            omit_requested_target_output: true,
-            ..Self::new(max_input_bindings, max_value_bytes)
-        }
-    }
-
-    pub(in crate::workflow::tests) fn with_invalid_output_binding(
-        max_input_bindings: usize,
-        max_value_bytes: usize,
-    ) -> Self {
-        Self {
-            emit_invalid_output_binding: true,
-            ..Self::new(max_input_bindings, max_value_bytes)
         }
     }
 
@@ -326,9 +302,6 @@ impl WorkflowHost for MockWorkflowHost {
         }
 
         if let Some(targets) = output_targets {
-            if self.omit_requested_target_output && !targets.is_empty() {
-                return Ok(Vec::new());
-            }
             let mut outputs = Vec::with_capacity(targets.len());
             for target in targets {
                 let value = inputs
@@ -346,14 +319,6 @@ impl WorkflowHost for MockWorkflowHost {
                 });
             }
             return Ok(outputs);
-        }
-
-        if self.emit_invalid_output_binding {
-            return Ok(vec![WorkflowPortBinding {
-                node_id: "text-output-1".to_string(),
-                port_id: String::new(),
-                value: serde_json::json!("invalid"),
-            }]);
         }
 
         Ok(vec![WorkflowPortBinding {

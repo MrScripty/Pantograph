@@ -353,6 +353,17 @@ durable task orchestration path.
   writers. Future diagnostics for these phases must be introduced through the
   scheduler-task lifecycle owner with task ids, attempt ids, and runtime
   handoff correlation rather than old whole-session admission facts.
+  2026-05-24 cleanup implementation status: old whole-run execution cleanup
+  removed private `workflow_run_internal`, its test-only caller module, the
+  old `artifact_output_conversion` module, host-injected media conversion
+  configuration, and the workflow-service `pantograph-media-conversion`
+  dependency. Workflow-service no longer keeps a private node-engine
+  whole-run launch or whole-run artifactization compatibility route. Future
+  artifact/media output handling must be introduced through scheduler-task
+  result materialization and runtime-host output projection. Remaining
+  replan boundary: active execution-plan storage still exists because
+  embedded-runtime planned inference reads it; removing it requires replacing
+  that cross-crate bridge with scheduler-selected runtime handoff dispatch.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

@@ -196,17 +196,11 @@ orchestrator validates active-run task bindings against materialized scheduler
 task results and moves `AwaitingInputs` tasks only to ready, input-unavailable,
 or invalid scheduler states; missing upstream results stay blocked without
 calling graph output demand or passing raw graph data to node-engine.
-Artifact format metadata now includes optional typed conversion status,
-conversion command identity, conversion id, and per-conversion dependency
-lease attribution fields. These fields are empty for pass-through
-artifactization and reserved for host-owned managed media conversion so
-workflow-service does not infer lease facts from ambient active versions.
-Workflow artifact output conversion now accepts an optional injected
-`pantograph_media_conversion::MediaConversionExecutor`. When an
-`artifact_format_override` requests a different media type than the payload's
-authoritative media type, workflow-service builds a host-neutral conversion
-request and records the executor result on the artifact descriptor; without an
-executor, the service fails closed.
+Artifact format metadata retains typed conversion status, conversion command
+identity, conversion id, and per-conversion dependency lease attribution
+fields. Scheduler-task output materialization is the replacement boundary for
+new artifactization behavior; the old whole-run host-injected media conversion
+path is removed.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -304,8 +298,7 @@ executor, the service fails closed.
 
 ## Dependencies
 **Internal:** `node-engine`, `workflow-nodes`, `pantograph-runtime-identity`,
-`pantograph-diagnostics-ledger`, `pantograph-media-conversion`, and sibling
-source modules in this crate.
+`pantograph-diagnostics-ledger`, and sibling source modules in this crate.
 
 **External:** `async-trait`, `serde`, `serde_json`, `thiserror`, `tokio`,
 `uuid`, `chrono`, and `parking_lot`.

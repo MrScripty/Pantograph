@@ -11087,6 +11087,36 @@ Worker rules:
   - Remaining follow-up: reduced execution-plan active-run storage,
     `workflow_run_internal`, and the old media artifactization conversion
     boundary.
+- 2026-05-24 Milestone 5c old whole-run execution cleanup slice completed:
+  - Smallest useful vertical slice: remove the private `workflow_run_internal`
+    whole-run host execution path, its test-only caller module, the old
+    `artifact_output_conversion` module, host-injected media conversion
+    configuration, and the now-unused workflow-service
+    `pantograph-media-conversion` dependency.
+  - Allowed write set: workflow-service crate manifest and lockfile,
+    workflow-service module declarations/config/tests/fixtures/READMEs,
+    deleted whole-run/artifactization modules and tests, Milestone 5c/task-
+    level orchestration plan notes, and this execution log. Existing unrelated
+    Pumas proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: the old node-engine whole-run host
+    launch and whole-run artifactization path are removed rather than kept as
+    private compatibility helpers. Future artifact/media output handling must
+    be scheduler-task result materialization and runtime-host output
+    projection work, not `workflow_run_internal` output conversion.
+  - Verification passed: targeted source/doc search for old whole-run and
+    media-conversion symbols; `cargo fmt -p pantograph-workflow-service
+    -- --check`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow::tests::task_result_contracts --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `git diff --check`.
+  - Remaining follow-up/replan boundary: reduced execution-plan active-run
+    storage is still present and read by the embedded-runtime planned
+    inference host. Removing it requires replacing the cross-crate
+    planned-inference bridge with scheduler-selected runtime handoff
+    dispatch, not a workflow-service-only deletion.
 
 ### Traceability Links
 
