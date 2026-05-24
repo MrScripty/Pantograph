@@ -27,6 +27,15 @@ durable task orchestration path.
   for dependency readiness, waiting for resources, waiting for batch, running,
   paused/deferred, retryable failed, and completed. Old queue record types are
   replacement/removal targets, not compatibility surfaces.
+- [ ] Close the non-runtime executable-state gap before running node-engine
+  tasks from the scheduler path. The current phase-aware state contract still
+  requires `SchedulableTaskIntent` on ready/running/completed executable
+  states, which is correct for runtime tasks but wrong for pure non-runtime
+  tasks. Replace that payload with `SchedulerTaskExecutionIntent` or an
+  equivalent state-specific enum where runtime states carry
+  `SchedulableTaskIntent` and non-runtime states carry only a validated
+  non-runtime task intent. Do not fabricate model refs, synthetic runtime task
+  types, or dummy schedulable intents for non-runtime completion.
 - [ ] Add scheduler task-state read models for graph editor, run inspection,
   and diagnostics views. Read models must join immutable
   `WorkflowSchedulerTaskGraph` definition facts with scheduler-owned lifecycle
@@ -81,7 +90,31 @@ durable task orchestration path.
   output-demand removal remain open.
 - [ ] Add a narrow node-engine single-task execution adapter for non-runtime
   graph tasks using materialized scheduler-owned inputs. Runtime inference
-  nodes must not launch through this adapter.
+  nodes must not launch through this adapter. The next implementation slice
+  must add the dedicated scheduler-task execution entrypoint and prove the
+  adapter executes only explicitly non-runtime task kinds whose values are
+  representable in `WorkflowSchedulerTaskResultValue`. Runtime inference tasks
+  remain blocked/deferred/failed with typed scheduler diagnostics until actual
+  scheduler-selected runtime handoff dispatch is wired. The adapter must use a
+  positive first-stage allowlist of output-compatible nodes such as
+  `text-input`, `text-output`, and `boolean-input`; explicit typed
+  input/output conversion between `WorkflowSchedulerTaskResult` and
+  node-engine values; node-type authority from immutable
+  `WorkflowSchedulerTaskGraph`; bounded lock scopes around awaits; and targeted
+  deletion/usage searches proving the new path does not call
+  `workflow_run_internal`, `DemandEngine` output demand,
+  `PlannedInferenceExecutionHost`, or node-engine core `execute_puma_lib`.
+  Exclude `puma-lib`, `model-provider`, `expand-settings`, arbitrary-JSON
+  nodes, floating-point/vector nodes, file I/O, image/audio blob nodes,
+  human/tool nodes, and unknown kinds until each has an explicit typed
+  contract.
+- [ ] Remove stale `puma-lib.model_path` compatibility surfaces before they can
+  conflict with scheduler-task execution. Update workflow-service graph
+  registry tests to assert the canonical `pumas_model_ref` options-provider
+  boundary, and remove or replace graph-persistence behavior/tests that
+  preserve successful `puma-lib` `modelPath`/`model_path` values without
+  canonical Pumas identity. Stale path-shaped graphs must become typed
+  diagnostics, not successful execution inputs.
 - [ ] Wire runtime inference tasks through actual dispatch-selected
   `SchedulerRuntimeHandoff` values and the runtime-host execution port added
   in Milestone 5b. Do not build handoff from reduced execution plans or
@@ -112,6 +145,24 @@ durable task orchestration path.
   negative tests for illegal transitions.
 - Scheduler orchestration tests using deterministic dependency readiness,
   resource observer, runtime-host port, and node-engine task adapter fakes.
+- Focused non-runtime adapter tests proving the scheduler-task execution
+  entrypoint executes a simple non-runtime task from materialized inputs,
+  persists a typed `WorkflowSchedulerTaskResult`, and rejects runtime
+  inference task kinds before node-engine planned-inference or output-demand
+  paths can run.
+- Scheduler state transition tests proving non-runtime ready/running/completed
+  tasks do not carry `SchedulableTaskIntent`, while runtime readiness,
+  resource, batching, dispatch, and handoff policy still reject non-runtime
+  execution intents.
+- Focused stale-contract cleanup tests/searches proving `puma-lib.model_path`
+  and graph-persisted `modelPath`/`model_path` no longer remain successful
+  paths after the cleanup slice.
+- Standards verification for the non-runtime adapter slice must include
+  default/all-features/no-default-features workflow-service checks, normal
+  parallel Rust test execution, `git diff --check`, README updates for touched
+  source directories, and targeted searches proving no new successful path
+  through `workflow_run_internal`, output-node demand, reduced execution-plan
+  handoff synthesis, graph-local model paths, or `PlannedInferenceExecutionHost`.
 - Multi-workflow acceptance test proving task interleaving across two workflow
   runs and at least one defer/resume path.
 - Batching acceptance test proving compatible ready tasks can share a batch
@@ -143,6 +194,9 @@ durable task orchestration path.
   inputs, or node-engine request context.
 - Do not let node-engine dependency preflight, `ModelRefV2`, `model_path`, or
   frontend `modelPath` become successful runtime identity.
+- Do not execute `puma-lib` through node-engine core. Pumas model-reference
+  materialization is a dedicated Pumas selector/host boundary, not a generic
+  non-runtime adapter task.
 - Do not let graph editor, frontend adapters, Tauri commands, node-engine,
   runtime adapters, or inference workers own scheduler policy.
 - Do not expose executable Pumas load targets outside runtime host execution.

@@ -10019,6 +10019,99 @@ Worker rules:
     runtime-host dispatch lifecycle, task result progression, ledger writes,
     bounded workers, cancellation, retry/defer, panic handling, and then
     delete superseded launch paths and remaining staged dead-code allowances.
+- 2026-05-23 Milestone 5c non-runtime adapter first re-plan update:
+  - Scope: docs-only update after the production task-state initialization
+    slice exposed the next cutover boundary. Existing unrelated Pumas proposal
+    Markdown changes remain ignored, and this update is not committed per user
+    instruction.
+  - Decision: use option 2 next. Add the dedicated scheduler-task execution
+    entrypoint plus a narrow non-runtime node-engine single-task adapter
+    before wiring runtime inference dispatch. The slice must execute only
+    explicitly non-runtime task kinds from materialized scheduler-owned inputs
+    and persist typed `WorkflowSchedulerTaskResult` values.
+  - No-fallback/no-legacy confirmation: the selected next slice must not wrap
+    `workflow_run_internal`, must not call node-engine output demand from the
+    new entrypoint, must not use `PlannedInferenceExecutionHost`, and must not
+    route runtime inference through the non-runtime adapter. Runtime inference
+    tasks stay blocked/deferred/failed with typed scheduler diagnostics until
+    actual dispatch-selected `SchedulerRuntimeHandoff` execution is wired.
+  - Rejected alternatives: a minimal wrapper around existing whole-run
+    execution because it preserves the legacy successful path; runtime
+    dispatch first because it depends on the task entrypoint and typed
+    materialization path; full cutover in one slice because it is too broad
+    for validated thin-slice implementation.
+  - Verification planned for this docs-only slice: `git diff --check --
+    docs/plans/current-image-generation-graphs/05-execution-management.md
+    docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md
+    docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+- 2026-05-23 Milestone 5c non-runtime adapter standards iteration:
+  - Scope: docs-only standards pass over the planned scheduler-task
+    entrypoint and non-runtime node-engine adapter slice. Existing unrelated
+    Pumas proposal Markdown changes remain ignored.
+  - Standards reviewed:
+    `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+    `CONCURRENCY-STANDARDS.md`, `TESTING-STANDARDS.md`,
+    `DEPENDENCY-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-ASYNC-STANDARDS.md`.
+  - Codebase findings: node-engine already exposes async single-task
+    execution through `TaskExecutor`/`CoreTaskExecutor`, but that surface can
+    execute inference nodes when given inference task kinds or planned
+    inference extensions. The workflow-service adapter plan therefore needs
+    an explicit positive non-runtime allowlist and typed conversion boundary
+    before it may call node-engine.
+  - Plan updates: added standards gates requiring focused workflow-service
+    modules, no broad growth in session execution or workflow-run internals,
+    positive non-runtime task-kind allowlisting, explicit typed
+    `WorkflowSchedulerTaskResult` to/from node-engine value conversion,
+    bounded lock scopes around awaits, typed diagnostics for every rejection
+    and conversion failure, no dependency/lockfile changes, README updates,
+    normal-parallel test execution, feature checks, and targeted deletion
+    searches.
+  - No-fallback/no-legacy confirmation: implementation must not pass raw
+    serde blobs as a compatibility format, must not accept path-like fields as
+    successful values, must not call `workflow_run_internal`,
+    `DemandEngine::demand`, output-node demand, or
+    `PlannedInferenceExecutionHost`, and must reject runtime inference task
+    kinds before node-engine can execute them.
+  - Verification planned for this docs-only standards pass: `git diff --check
+    -- docs/plans/current-image-generation-graphs/05-execution-management.md
+    docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md
+    docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+- 2026-05-23 Milestone 5c non-runtime adapter codebase investigation update:
+  - Scope: docs-only update after reviewing the scheduler state contract,
+    workflow-service task-result contract, node-engine single-task executor,
+    workflow-node `puma-lib` descriptor, workflow-service graph registry, and
+    graph persistence blast radius. Existing unrelated Pumas proposal Markdown
+    changes remain ignored.
+  - Findings: `WorkflowSchedulerTaskResultValue` does not support arbitrary
+    JSON, finite floating-point numbers, vectors, or generic object payloads,
+    so "non-runtime" is too broad as an adapter category. The adapter must
+    start with an explicit typed-output-compatible allowlist.
+  - Findings: the current phase-aware scheduler task-state contract still
+    requires `SchedulableTaskIntent` on ready/running/completed executable
+    states. That cannot represent a completed pure non-runtime node without a
+    fake runtime intent, so the plan now requires a
+    `SchedulerTaskExecutionIntent`-style payload before real non-runtime task
+    execution.
+  - Findings: node-engine core `puma-lib` still emits `model_path`, while the
+    canonical workflow-node descriptor exposes `pumas_model_ref`. The plan now
+    excludes `puma-lib` from the generic non-runtime adapter and treats the
+    core path-emitting implementation plus stale `puma-lib.model_path`
+    registry/persistence behavior as deletion or typed-diagnostic replacement
+    targets.
+  - Plan updates: added the non-runtime executable-state gap as an open
+    Milestone 5c task, narrowed the initial adapter allowlist to typed
+    `text-input`, `text-output`, and `boolean-input` behavior, required
+    node-type authority from immutable `WorkflowSchedulerTaskGraph`, excluded
+    arbitrary-JSON/floating/vector/file/media/model/Pumas nodes until their
+    explicit contracts exist, and added verification for no fake runtime
+    intent, stale `puma-lib.model_path` cleanup, and no call to node-engine
+    core `execute_puma_lib`.
+  - Verification planned for this docs-only update: `git diff --check --
+    docs/plans/current-image-generation-graphs/05-execution-management.md
+    docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md
+    docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
 
 ### Traceability Links
 

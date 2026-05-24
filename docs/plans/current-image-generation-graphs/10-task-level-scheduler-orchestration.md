@@ -94,8 +94,19 @@ inputs are ready.
   carries workflow/run/node/task correlation, state version, transition
   correlation, bounded diagnostics, and a state-specific payload. Pre-intent
   states such as awaiting materialized inputs, invalid graph projection, or
-  input-unavailable must not carry `SchedulableTaskIntent`; schedulable states
-  carry a validated intent as part of the state payload.
+  input-unavailable must not carry executable intent. Executable states carry a
+  typed execution intent payload; runtime execution states carry a validated
+  `SchedulableTaskIntent`, while non-runtime execution states carry a narrower
+  non-runtime task intent that cannot be used for runtime handoff, resource
+  placement, Pumas load-target resolution, or model execution.
+- `SchedulerTaskExecutionIntent`: typed execution payload for states such as
+  ready, running, paused/deferred, retryable failed, and completed. The runtime
+  variant wraps `SchedulableTaskIntent` and is the only variant accepted by
+  readiness, resource, batching, runtime selection, and handoff policy. The
+  non-runtime variant carries workflow/run/node/task correlation plus a
+  validated non-runtime task kind for the workflow-service node-engine adapter;
+  it must not carry graph bindings, local paths, Pumas load targets, runtime
+  ids, device placement, backend decisions, or reduced execution-plan facts.
 - `WorkflowSchedulerTaskResult`: typed task completion value that stores
   output references, media/artifact refs, scalar values, and diagnostics
   without executable paths. The first implementation stage uses active-run
@@ -137,9 +148,20 @@ The chosen replacement keeps two separate truths:
   diagnostics, and phase-specific payload.
 
 `SchedulableTaskIntent` remains strict. It is introduced only when
-workflow-service binding resolution has validated materialized inputs. Scheduler
-readiness, resource admission, batching, dispatch, and runtime handoff policy
-must operate only on state variants that carry a validated intent.
+workflow-service binding resolution has validated materialized inputs for a
+runtime task. Scheduler readiness, resource admission, batching, dispatch, and
+runtime handoff policy must operate only on execution-intent states carrying
+the runtime variant. Non-runtime tasks may become ready, run, and complete
+through their own non-runtime execution-intent variant, but they must not
+fabricate a runtime intent to satisfy state storage.
+
+2026-05-23 investigation update: the current phase-aware scheduler state
+contract still requires `SchedulableTaskIntent` on `Ready`, `Running`, and
+`Completed`. That is sufficient for runtime tasks, but it cannot represent a
+completed pure non-runtime task without creating a fake runtime intent. Before
+the non-runtime adapter slice executes real tasks, the state contract must be
+updated so executable states carry `SchedulerTaskExecutionIntent` or an
+equivalent typed state-specific payload.
 
 Rejected approaches:
 
@@ -148,6 +170,10 @@ Rejected approaches:
 - Add `Option<SchedulableTaskIntent>` to the current record shape. This makes
   invalid state combinations representable and forces every policy consumer to
   rediscover whether a task is actually schedulable.
+- Reuse `SchedulableTaskIntent` for non-runtime node-engine tasks with dummy
+  model refs or synthetic task types. This hides a contract violation and
+  would let non-runtime tasks leak into runtime readiness, resource, batching,
+  and handoff policy.
 - Move workflow graph input bindings/templates into the scheduler crate. This
   couples scheduler policy to graph composition and makes future runtime or
   graph changes harder to reason about.
@@ -163,12 +189,14 @@ implementation can be considered complete:
   crosses the repository decomposition threshold, record a split or an explicit
   short-term exception in this plan before continuing.
 - Use correct-by-construction Rust APIs. Represent lifecycle as an enum or
-  equivalent typed payload structure where only schedulable states can contain
-  `SchedulableTaskIntent`. Use stable contract/schema versions, typed ids,
-  bounded diagnostics, `serde(deny_unknown_fields)`, `TryFrom` validated
-  wrappers for raw persisted/IPC values, typed error enums, `#[must_use]` on
-  validation/transition results, and `#[non_exhaustive]` where public states or
-  diagnostics are expected to evolve.
+  equivalent typed payload structure where pre-intent states cannot contain an
+  executable intent, runtime execution states contain only validated
+  `SchedulableTaskIntent`, and non-runtime execution states contain only a
+  validated non-runtime execution intent. Use stable contract/schema versions,
+  typed ids, bounded diagnostics, `serde(deny_unknown_fields)`, `TryFrom`
+  validated wrappers for raw persisted/IPC values, typed error enums,
+  `#[must_use]` on validation/transition results, and `#[non_exhaustive]`
+  where public states or diagnostics are expected to evolve.
 - Keep scheduler policy synchronous. State validation, transition application,
   readiness eligibility, resource eligibility, batching eligibility, and
   dispatch eligibility must be synchronous pure policy. Async remains in the
@@ -286,9 +314,14 @@ implementation can be considered complete:
    continuing whole-run node-engine output demand, then consume or delete the
    staged dead-code allowances and old scheduler-managed inference launch
    path.
-9. Add non-runtime single-task execution through node-engine using
-   materialized scheduler-owned inputs and task results. Do not use output-node
-   demand to drive runtime inference.
+9. Add a dedicated scheduler-task execution entrypoint and non-runtime
+   single-task execution through node-engine using materialized
+   scheduler-owned inputs and task results. This slice intentionally executes
+   only non-runtime graph tasks; runtime inference tasks must remain blocked
+   or fail closed with typed scheduler diagnostics until actual
+   scheduler-selected runtime handoff dispatch is wired. Do not wrap
+   `workflow_run_internal`, do not call output-node demand from the new
+   entrypoint, and do not use this adapter for runtime inference nodes.
 10. Add runtime task dispatch from actual dispatch-selected
    `SchedulerRuntimeHandoff` into the shared runtime-host execution port.
 11. Replace session execution so the scheduler task orchestrator, not
@@ -503,6 +536,163 @@ Rejected alternatives:
 - Keep both old and new execution paths behind a compatibility branch:
   rejected because Milestone 5c requires direct replacement and removal of
   superseded runtime inference execution behavior.
+
+## Non-Runtime Adapter First Replan
+
+The selected next slice is option 2: introduce the dedicated scheduler-task
+execution entrypoint and a narrow non-runtime node-engine single-task adapter
+before wiring runtime inference dispatch. This is a staged replacement path,
+not a compatibility wrapper around whole-workflow execution.
+
+The slice must add a workflow-service-owned entrypoint that accepts an
+admitted run's task graph/state context and advances one or more scheduler
+tasks using materialized scheduler-owned inputs. Before that entrypoint can
+complete real non-runtime work, the scheduler task-state contract must support
+non-runtime executable states without `SchedulableTaskIntent`. The entrypoint
+may execute only task kinds that are explicitly non-runtime, allowlisted, and
+already have validated typed inputs/outputs. Runtime inference task kinds must
+not call node-engine planned inference, `PlannedInferenceExecutionHost`,
+`workflow_run_internal`, or output-node demand. Until Milestone 5c item 10
+wires real `SchedulerRuntimeHandoff` dispatch, runtime inference tasks must
+stay in typed blocked/deferred/failed scheduler state with diagnostics that
+name the missing runtime-dispatch capability.
+
+The non-runtime adapter must be narrow and path-free:
+
+- Input: one scheduler task id, validated materialized task inputs, immutable
+  task-definition facts needed by node-engine, and execution correlation ids.
+- Output: `WorkflowSchedulerTaskResult` values and typed diagnostics only.
+- Forbidden data: Pumas local paths, executable load targets, runtime-host
+  handoff, reduced execution-plan nodes, graph-local model paths, worker
+  launch metadata, or frontend-derived scheduler facts.
+- Runtime inference guard: inference/runtime task kinds are rejected before
+  the adapter can call node-engine, and the rejection becomes scheduler task
+  state plus diagnostics rather than a fallback launch.
+- Node-type authority: the adapter must derive the node type from immutable
+  `WorkflowSchedulerTaskGraph` task-definition facts, inject that value into
+  node-engine inputs when needed, and fail closed if node-engine resolution
+  would disagree. It must not trust caller-provided `_data.node_type` or infer
+  execution authority from task id suffixes.
+
+Initial adapter allowlist:
+
+- Allowed first-stage nodes: `text-input`, `text-output`, and `boolean-input`
+  only, plus focused test fakes that use the same typed conversion surface.
+  Each allowed node must have a complete mapping from materialized scheduler
+  inputs to node-engine inputs and from node-engine outputs to
+  `WorkflowSchedulerTaskResultValue`.
+- Excluded until a specific typed contract exists: `number-input` and numeric
+  settings that need floating-point values; `selection-input` with arbitrary
+  option payloads; `vector-input`/`vector-output`; image/audio input and output
+  nodes; `expand-settings`; file I/O nodes; human/tool nodes; `model-provider`;
+  `puma-lib`; and any node that emits arbitrary JSON, executable paths, Pumas
+  load targets, backend decisions, runtime ids, worker launch facts, or hidden
+  dependency facts.
+- `puma-lib` is a dedicated Pumas selector/materialization boundary, not a
+  generic node-engine task. The stale node-engine core `puma-lib` implementation
+  that emits `model_path` is a deletion or replacement target and must not be
+  called by the scheduler-task adapter.
+
+Legacy cleanup required before or with this slice:
+
+- Update stale workflow-service graph registry tests that still expect
+  `puma-lib.model_path`; the canonical output is `pumas_model_ref`.
+- Remove graph-persistence behavior and tests that preserve successful
+  `puma-lib` `modelPath`/`model_path` values without canonical Pumas identity,
+  or replace those cases with typed stale/invalid diagnostics. Do not keep a
+  successful legacy path branch.
+
+Implementation order for the next slice:
+
+1. Extend the scheduler task-state contract so ready/running/completed
+   non-runtime tasks carry a non-runtime execution intent instead of
+   `SchedulableTaskIntent`; add transition tests proving no fake runtime intent
+   is required.
+2. Remove or update stale `puma-lib.model_path` test/persistence behavior that
+   would conflict with the path-free Pumas model-reference boundary.
+3. Add the scheduler-task execution entrypoint contract in workflow-service
+   behind the existing service-owned orchestrator boundary.
+4. Add the non-runtime single-task adapter fake/trait boundary and focused
+   tests using materialized inputs and typed task results.
+5. Wire the entrypoint to execute a simple allowlisted non-runtime task and
+   persist its `WorkflowSchedulerTaskResult`.
+6. Add a negative test proving runtime inference tasks do not call
+   node-engine output demand or `PlannedInferenceExecutionHost` and instead
+   produce typed scheduler diagnostics.
+7. Update README and plan notes, then run focused workflow-service checks.
+
+Standards gates for this slice:
+
+- Keep the implementation in focused workflow-service modules, such as a
+  scheduler-task execution entrypoint module plus a non-runtime adapter module.
+  Do not grow `session_execution_api.rs`, `workflow_run_api.rs`, or
+  `task_orchestrator.rs` beyond narrow delegation/import changes. If a
+  node-engine source change is unavoidable, stop and re-plan the node-engine
+  write set and README impact before editing it.
+- Use the existing node-engine `TaskExecutor`/`CoreTaskExecutor` surface only
+  behind a workflow-service adapter that guards task kind first. The adapter
+  must use a positive allowlist of scheduler task kinds/node families that are
+  explicitly non-runtime and whose output values are representable in
+  `WorkflowSchedulerTaskResultValue`. It must reject `llm-inference`,
+  image-generation/inference, llama.cpp, audio-generation, planned-inference,
+  `puma-lib`, `model-provider`, arbitrary-JSON nodes, file I/O nodes, and any
+  unknown task kind before constructing node-engine inputs or extensions.
+- Convert values explicitly at the adapter boundary. Materialized
+  `WorkflowSchedulerTaskResult` values must be mapped into the node-engine
+  input shape through typed conversion helpers, and node-engine outputs must
+  be mapped back into `WorkflowSchedulerTaskResult` variants. Do not pass raw
+  serde blobs through as an implicit compatibility format, and do not accept
+  path-like fields as successful values. If a node requires a value variant
+  that does not exist yet, such as finite `f64`, typed option payloads, vector
+  values, or bounded JSON settings, stop and plan the explicit value contract
+  before adding the node to the allowlist.
+- Keep the async shell narrow. The entrypoint may await the non-runtime
+  adapter because node-engine's `TaskExecutor` is async, but pure task
+  selection, allowlist validation, state transition choice, and result
+  conversion must stay synchronous. Do not spawn background tasks, create
+  Tokio runtimes, or hold session-store/task-state/ledger locks across the
+  adapter `.await`.
+- Use typed production errors and diagnostics. Runtime-task rejection,
+  unsupported non-runtime kind, missing materialized input, wrong input type,
+  adapter execution failure, output conversion failure, stale task state, and
+  terminal-state closure must map to typed scheduler/workflow diagnostics and
+  state transitions. Do not add `Result<T, String>`, string parsing, `unwrap`,
+  or `expect` in production task execution paths.
+- Keep dependency ownership unchanged. The next slice should use existing
+  workspace crates (`node-engine`, workflow-service, scheduler contracts) and
+  must not change manifests or lockfiles. If a dependency appears necessary,
+  stop and record dependency ownership, transitive cost, feature impact, and
+  verification before editing manifests.
+- Verification must run with normal Rust test parallelism and include:
+  scheduler state transition coverage proving non-runtime completed tasks do
+  not carry `SchedulableTaskIntent`, focused positive allowlisted non-runtime
+  task execution, runtime-task rejection before node-engine call,
+  `puma-lib`/`model-provider` rejection before node-engine call,
+  unsupported-kind rejection, typed input conversion failure, typed output
+  conversion failure, stale `puma-lib.model_path` test cleanup, no
+  lock-held-across-await review where testable, `cargo check -p
+  pantograph-workflow-service` and `cargo check -p pantograph-scheduler` in
+  default, all-features, and no-default-features modes, `cargo fmt -p
+  pantograph-workflow-service -p pantograph-scheduler`, `git diff --check`,
+  and targeted searches proving the new entrypoint does not call
+  `workflow_run_internal`, `DemandEngine::demand`, output-node demand,
+  `PlannedInferenceExecutionHost`, or node-engine core `execute_puma_lib`.
+- Update documentation in the touched source directories. At minimum,
+  workflow-service README/docs must describe the scheduler-task execution
+  entrypoint, non-runtime adapter scope, runtime inference rejection behavior,
+  and remaining runtime-host dispatch follow-up.
+
+Rejected options for this boundary:
+
+- Minimal wrapper around `workflow_run_internal`: rejected because it would
+  rename the legacy output-demand path and preserve the old successful
+  execution behavior.
+- Runtime dispatch first: deferred because dispatch depends on the task
+  entrypoint, materialized inputs/results, diagnostics, cancellation, and host
+  wiring. It remains the following milestone item after the non-runtime
+  adapter proves the scheduler-task execution path.
+- Full cutover in one slice: rejected as too large for validated vertical
+  implementation and too likely to obscure legacy removal mistakes.
 
 ## Task Result Materialization Plan
 
