@@ -45,7 +45,14 @@ durable task orchestration path.
   state, expose optional/unknown model and task-intent fields before
   materialization, and show typed state, waiting reasons, timings, attempts,
   and diagnostics without exposing scheduler internals or executable load
-  targets.
+  targets. Partial 2026-05-23 status: workflow-service read models already
+  join immutable task-graph facts with validated scheduler task-state records
+  for active runs, hide transition ids/state versions/handoffs/load targets,
+  expose pre-intent unknown model/runtime/device facts, and now project
+  scheduler state diagnostics plus runtime/non-runtime execution category.
+  Timing and attempt counters remain open because the scheduler lifecycle
+  record does not yet carry those typed facts; they must be added with the
+  retry/defer/ledger lifecycle slice rather than inferred from state version.
 - [x] Align graph-visible scheduler constraints before materialization relies
   on them. The workflow-service task graph currently models optional hard
   `runtime` and `device` constraints, while the canonical inference node

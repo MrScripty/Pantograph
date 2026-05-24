@@ -98,6 +98,10 @@ facade test module.
   facts from immutable task graph definitions joined with canonical scheduler
   task-state records. They must not expose transition ids, state versions,
   runtime handoff, executable Pumas load targets, or worker launch details.
+- Scheduler task-state read models may expose path-free execution category,
+  non-runtime task kind, and scheduler state diagnostics so graph editor,
+  run inspection, and diagnostics views can explain blocked or failed tasks
+  without reading execution internals.
 - Scheduler task-state queries are dedicated workflow-service read endpoints.
   They do not extend session queue items or scheduler snapshots with task
   internals, keeping queue admission facts separate from task progress facts.

@@ -1,7 +1,9 @@
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
-    SchedulerTaskExecutionIntent, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind,
+    SchedulableTaskIntent, SchedulerNodeId, SchedulerNonRuntimeTaskIntent,
+    SchedulerNonRuntimeTaskKind, SchedulerRuntimeDeviceConstraints, SchedulerTaskExecutionIntent,
+    SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateDiagnostic,
+    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
     SchedulerTaskStateRecord, SchedulerTaskStateTransitionId, SchedulerTraitId,
     SchedulerTraitSetting, SchedulerTraitValue, SchedulerWorkflowId, SchedulerWorkflowRunId,
     SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
@@ -139,11 +141,16 @@ fn scheduler_task_state_read_model_projects_path_free_display_facts() {
     assert_eq!(read_model.input_bindings.len(), 1);
     assert_eq!(read_model.input_bindings[0].source_task_id, "prompt-task");
     assert_eq!(read_model.input_bindings[0].target_port_id, "prompt");
+    assert_eq!(
+        read_model.execution_kind,
+        Some(WorkflowSchedulerTaskStateExecutionKind::Runtime)
+    );
     assert_eq!(read_model.task_type.as_deref(), Some("image_generation"));
     assert_eq!(
         read_model.model_id.as_deref(),
         Some("image/example/tiny-diffusion")
     );
+    assert_eq!(read_model.non_runtime_task_kind, None);
     assert_eq!(read_model.state, SchedulerTaskStateKind::WaitingResources);
     assert_eq!(
         read_model.requested_runtime_id.as_deref(),
@@ -199,11 +206,97 @@ fn scheduler_task_state_read_model_supports_pre_intent_state() {
     assert_eq!(read_models.len(), 1);
     let read_model = &read_models[0];
     assert_eq!(read_model.state, SchedulerTaskStateKind::AwaitingInputs);
+    assert_eq!(read_model.execution_kind, None);
     assert_eq!(read_model.task_type, None);
     assert_eq!(read_model.model_id, None);
+    assert_eq!(read_model.non_runtime_task_kind, None);
     assert_eq!(read_model.requested_runtime_id, None);
     assert_eq!(read_model.requested_device_id, None);
     assert!(read_model.trait_settings.is_empty());
+}
+
+#[test]
+fn scheduler_task_state_read_model_projects_state_diagnostics() {
+    let record = SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse("run-image-plan").expect("run id"),
+        node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+        task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+        state: SchedulerTaskState::InputUnavailable {
+            diagnostics: vec![SchedulerTaskStateDiagnostic {
+                severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                code: SchedulerTaskStateDiagnosticCode::InputUnavailable,
+                message: "required prompt output is unavailable".to_string(),
+                hint: Some("retry after upstream task succeeds".to_string()),
+            }],
+        },
+        state_version: 2,
+        last_transition_id: SchedulerTaskStateTransitionId::parse("transition-input-unavailable")
+            .expect("transition id"),
+    };
+
+    let task_graph = scheduler_task_graph("run-image-plan");
+    let read_models = workflow_scheduler_task_state_read_models(&task_graph, &[record])
+        .expect("task state read model");
+
+    let read_model = &read_models[0];
+    assert_eq!(read_model.state, SchedulerTaskStateKind::InputUnavailable);
+    assert_eq!(read_model.state_diagnostics.len(), 1);
+    assert_eq!(
+        read_model.state_diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::InputUnavailable
+    );
+    assert_eq!(
+        read_model.state_diagnostics[0].hint.as_deref(),
+        Some("retry after upstream task succeeds")
+    );
+    assert_eq!(read_model.execution_kind, None);
+}
+
+#[test]
+fn scheduler_task_state_read_model_projects_non_runtime_execution_kind() {
+    let record = SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse("run-image-plan").expect("run id"),
+        node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+        task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+        state: SchedulerTaskState::Ready {
+            execution_intent: SchedulerTaskExecutionIntent::NonRuntime {
+                task_intent: SchedulerNonRuntimeTaskIntent {
+                    contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+                    workflow_id: SchedulerWorkflowId::parse("workflow-image-plan")
+                        .expect("workflow id"),
+                    workflow_run_id: SchedulerWorkflowRunId::parse("run-image-plan")
+                        .expect("run id"),
+                    node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+                    task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+                    task_kind: SchedulerNonRuntimeTaskKind::parse("text_output")
+                        .expect("task kind"),
+                },
+            },
+        },
+        state_version: 2,
+        last_transition_id: SchedulerTaskStateTransitionId::parse("transition-non-runtime-ready")
+            .expect("transition id"),
+    };
+
+    let task_graph = scheduler_task_graph("run-image-plan");
+    let read_models = workflow_scheduler_task_state_read_models(&task_graph, &[record])
+        .expect("task state read model");
+
+    let read_model = &read_models[0];
+    assert_eq!(
+        read_model.execution_kind,
+        Some(WorkflowSchedulerTaskStateExecutionKind::NonRuntime)
+    );
+    assert_eq!(read_model.task_type, None);
+    assert_eq!(read_model.model_id, None);
+    assert_eq!(
+        read_model.non_runtime_task_kind.as_deref(),
+        Some("text_output")
+    );
 }
 
 #[test]

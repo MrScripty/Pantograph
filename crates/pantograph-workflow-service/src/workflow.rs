@@ -127,8 +127,9 @@ pub use self::task_result_contracts::{
     WORKFLOW_SCHEDULER_TASK_RESULT_MAX_OUTPUTS, WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
 };
 pub use self::task_state_read_model::{
-    workflow_scheduler_task_state_read_models, WorkflowSchedulerTaskStateInputBindingReadModel,
-    WorkflowSchedulerTaskStateReadModel, WorkflowSchedulerTaskStateReadModelQueryRequest,
+    workflow_scheduler_task_state_read_models, WorkflowSchedulerTaskStateExecutionKind,
+    WorkflowSchedulerTaskStateInputBindingReadModel, WorkflowSchedulerTaskStateReadModel,
+    WorkflowSchedulerTaskStateReadModelQueryRequest,
     WorkflowSchedulerTaskStateReadModelQueryResponse,
     WorkflowSchedulerTaskStateTraitSettingReadModel,
     WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,

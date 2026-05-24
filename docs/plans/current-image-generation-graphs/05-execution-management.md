@@ -10179,6 +10179,29 @@ Worker rules:
     `puma-lib.model_path` successful-branch search; and `git diff --check`.
   - Remaining follow-up: add the dedicated scheduler-task execution
     entrypoint and narrow typed non-runtime node-engine adapter.
+- 2026-05-23 Milestone 5c scheduler task-state read-model diagnostics slice
+  completed:
+  - Smallest useful vertical slice: extend the existing workflow-service
+    scheduler task-state read model with path-free execution category and
+    scheduler state diagnostics for graph editor, run inspection, and
+    diagnostics consumers.
+  - Allowed write set: workflow-service task-state read-model contract/tests,
+    workflow facade exports, workflow source README, and current plan docs.
+    Existing unrelated Pumas proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: the read model still hides transition
+    ids, state versions, runtime handoff, executable Pumas load targets,
+    local model paths, and worker launch facts. Non-runtime executable states
+    expose only the non-runtime task kind; pre-intent states do not fabricate
+    model/runtime/device facts.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service workflow::tests::task_state_read_model
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_initializes_scheduler_task_state_before_run_execution
+    --lib`.
+  - Remaining follow-up: add typed scheduler timing and attempt facts with the
+    retry/defer/ledger lifecycle slice instead of inferring them from state
+    version, then add the dedicated scheduler-task execution entrypoint and
+    narrow typed non-runtime node-engine adapter.
 
 ### Traceability Links
 

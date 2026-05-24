@@ -715,6 +715,13 @@ registry options-provider regression now asserts canonical `pumas_model_ref`.
 The dedicated scheduler-task execution entrypoint, non-runtime adapter, and
 runtime-host dispatch cutover remain open.
 
+2026-05-23 implementation status: scheduler task-state read models now expose
+state diagnostics and a path-free execution category. Runtime execution states
+show runtime task facts; non-runtime execution states show only the
+non-runtime task kind. Pre-intent states still show unknown model/runtime/device
+facts without fabricating intent. Timing and attempt counters remain open until
+the retry/defer/ledger lifecycle slice adds typed scheduler facts for them.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

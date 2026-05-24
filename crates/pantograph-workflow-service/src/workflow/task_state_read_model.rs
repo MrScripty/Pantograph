@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use pantograph_scheduler::{
-    SchedulerTaskId, SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTraitValue,
+    SchedulerTaskExecutionIntent, SchedulerTaskId, SchedulerTaskState,
+    SchedulerTaskStateDiagnostic, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTraitValue,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,10 +33,16 @@ pub struct WorkflowSchedulerTaskStateReadModel {
     pub input_bindings: Vec<WorkflowSchedulerTaskStateInputBindingReadModel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub projection_diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub state_diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_kind: Option<WorkflowSchedulerTaskStateExecutionKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_runtime_task_kind: Option<String>,
     pub state: SchedulerTaskStateKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_runtime_id: Option<String>,
@@ -60,6 +68,15 @@ pub struct WorkflowSchedulerTaskStateInputBindingReadModel {
 pub struct WorkflowSchedulerTaskStateTraitSettingReadModel {
     pub trait_id: String,
     pub value: SchedulerTraitValue,
+}
+
+/// Path-free task execution category visible to graph and run inspectors.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowSchedulerTaskStateExecutionKind {
+    Runtime,
+    NonRuntime,
 }
 
 /// Request for active-run scheduler task-state read models.
@@ -209,6 +226,8 @@ fn read_model_from_record(
             .map(input_binding_read_model)
             .collect(),
         projection_diagnostics: task.diagnostics.clone(),
+        state_diagnostics: scheduler_state_diagnostics(&record.state),
+        execution_kind: execution_kind_read_model(record.state.execution_intent()),
         task_type: record
             .state
             .task_intent()
@@ -217,6 +236,11 @@ fn read_model_from_record(
             .state
             .task_intent()
             .map(|intent| intent.model_ref.model_id.clone()),
+        non_runtime_task_kind: record
+            .state
+            .execution_intent()
+            .and_then(SchedulerTaskExecutionIntent::non_runtime_task_intent)
+            .map(|intent| intent.task_kind.as_str().to_string()),
         state: record.state.kind(),
         requested_runtime_id: record.state.task_intent().and_then(|intent| {
             intent
@@ -246,6 +270,38 @@ fn read_model_from_record(
                     .collect()
             })
             .unwrap_or_default(),
+    }
+}
+
+fn scheduler_state_diagnostics(state: &SchedulerTaskState) -> Vec<SchedulerTaskStateDiagnostic> {
+    match state {
+        SchedulerTaskState::AwaitingInputs { diagnostics }
+        | SchedulerTaskState::InputUnavailable { diagnostics }
+        | SchedulerTaskState::Invalid { diagnostics }
+        | SchedulerTaskState::PausedDeferred { diagnostics, .. }
+        | SchedulerTaskState::RetryableFailed { diagnostics, .. }
+        | SchedulerTaskState::TerminalFailed { diagnostics } => diagnostics.clone(),
+        SchedulerTaskState::Ready { .. }
+        | SchedulerTaskState::WaitingDependencyReadiness { .. }
+        | SchedulerTaskState::WaitingResources { .. }
+        | SchedulerTaskState::WaitingBatch { .. }
+        | SchedulerTaskState::Running { .. }
+        | SchedulerTaskState::Completed { .. } => Vec::new(),
+        _ => Vec::new(),
+    }
+}
+
+fn execution_kind_read_model(
+    execution_intent: Option<&SchedulerTaskExecutionIntent>,
+) -> Option<WorkflowSchedulerTaskStateExecutionKind> {
+    match execution_intent {
+        Some(SchedulerTaskExecutionIntent::Runtime { .. }) => {
+            Some(WorkflowSchedulerTaskStateExecutionKind::Runtime)
+        }
+        Some(SchedulerTaskExecutionIntent::NonRuntime { .. }) => {
+            Some(WorkflowSchedulerTaskStateExecutionKind::NonRuntime)
+        }
+        Some(_) | None => None,
     }
 }
 
