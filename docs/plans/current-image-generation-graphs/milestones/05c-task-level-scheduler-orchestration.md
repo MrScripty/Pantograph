@@ -1007,3 +1007,33 @@ durable task orchestration path.
   task results and advances dependents without faking a node-engine `Running`
   state. The staged `external_input_materialization` helper remains
   `dead_code` until that runner integration consumes it.
+- 2026-05-24 source-input materialization store slice completed. Smallest
+  useful vertical slice: add the shared scheduler source-input task-state
+  intent and the workflow-service active-run store operation that atomically
+  records a completed source-input task result with the completed source-input
+  task-state transition. Allowed write set: `pantograph-scheduler` task-state
+  contracts/tests/README, workflow-service scheduler store task-result
+  module/tests/README, task-state read-model exhaustiveness, plan files, and
+  the execution log. No-fallback/no-legacy confirmation: source inputs now
+  materialize through `SchedulerSourceInputTaskIntent` and
+  `materialize_active_run_source_input_task`; the operation requires
+  `AwaitingInputs -> Completed`, `WorkflowSchedulerTaskExecutionClass::SourceInput`,
+  a typed source-input template, completed task-result correlation, and one
+  active-run store mutation. It does not fake a node-engine `Running` state,
+  execute source inputs through runtime/non-runtime adapters, mutate graph node
+  data, call output-node demand, or call `workflow_run_internal`. Verification
+  passed: `cargo fmt -p pantograph-scheduler -p
+  pantograph-workflow-service -- --check`; `cargo test -p pantograph-scheduler
+  --test queue_state`; `cargo test -p pantograph-workflow-service
+  scheduler::store::store_task_results --lib`; `cargo test -p
+  pantograph-workflow-service scheduler::store --lib`; `cargo test -p
+  pantograph-workflow-service workflow::tests::task_state_read_model --lib`;
+  `cargo check -p pantograph-scheduler`; `cargo check -p pantograph-scheduler
+  --no-default-features`; `cargo check -p pantograph-scheduler --all-features`;
+  `cargo check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; `cargo check -p
+  pantograph-workflow-service --all-features`; and `git diff --check`.
+  Remaining follow-up: wire the dedicated session runner to call
+  `materialize_external_workflow_inputs`, complete each source-input task via
+  this store operation, advance dependents, and remove the staged dead-code
+  allowances after consumption.

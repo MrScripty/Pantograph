@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 
 use pantograph_scheduler::{
-    apply_scheduler_task_state_transition, SchedulerTaskStateKind, SchedulerTaskStateTransition,
-    SchedulerTaskStateTransitionApplyResult,
+    apply_scheduler_task_state_transition, SchedulerTaskExecutionIntent, SchedulerTaskStateKind,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
 };
 
-use crate::workflow::{WorkflowSchedulerTaskResult, WorkflowServiceError};
+use crate::workflow::{
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskResult, WorkflowServiceError,
+};
 
 use super::WorkflowExecutionSessionStore;
 
@@ -156,6 +158,111 @@ impl WorkflowExecutionSessionStore {
         Ok(apply_result)
     }
 
+    /// Atomically materialize a request-provided source input as a completed
+    /// scheduler task result and completed source-input task state.
+    #[allow(dead_code)]
+    pub(crate) fn materialize_active_run_source_input_task(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        transition: SchedulerTaskStateTransition,
+        result: WorkflowSchedulerTaskResult,
+    ) -> Result<SchedulerTaskStateTransitionApplyResult, WorkflowServiceError> {
+        let tick = self.next_tick();
+        validate_task_result_for_active_run(&result, workflow_run_id)?;
+        validate_source_input_materialization_transition_for_result(&transition, &result)?;
+
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_mut().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+
+        let task_id = result.task_id.clone();
+        if active_run.scheduler_task_results.contains_key(&task_id) {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task result '{}' is already recorded",
+                task_id
+            )));
+        }
+
+        let task_graph = active_run.scheduler_task_graph.as_ref().ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "workflow run '{}' has no scheduler task graph",
+                workflow_run_id
+            ))
+        })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler source-input task '{}' is not present in the task graph",
+                    task_id
+                ))
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::SourceInput {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be a source-input task before source materialization",
+                task_id
+            )));
+        }
+        if task.source_input_task_template.is_none() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler source-input task '{}' has no typed source-input template",
+                task_id
+            )));
+        }
+
+        let current = active_run
+            .scheduler_task_records
+            .get(&task_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no active task-state record",
+                    task_id
+                ))
+            })?;
+        if current.state.kind() != SchedulerTaskStateKind::AwaitingInputs {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler source-input task '{}' must be awaiting inputs before materialization, found {:?}",
+                task_id,
+                current.state.kind()
+            )));
+        }
+
+        let apply_result = apply_scheduler_task_state_transition(Some(current), transition)
+            .map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "invalid scheduler source-input materialization transition: {error}"
+                ))
+            })?;
+        let SchedulerTaskStateTransitionApplyResult::Applied(record) = &apply_result else {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler source-input task '{}' materialization transition was already applied",
+                task_id
+            )));
+        };
+
+        active_run
+            .scheduler_task_records
+            .insert(task_id.clone(), record.clone());
+        active_run.scheduler_task_results.insert(task_id, result);
+        Self::mark_session_access(state, tick);
+        Ok(apply_result)
+    }
+
     /// Read staged scheduler task results for the active run.
     #[allow(dead_code)]
     pub(crate) fn active_run_scheduler_task_results(
@@ -227,9 +334,50 @@ fn validate_completion_transition_for_result(
             result.task_id
         )));
     }
+    validate_transition_result_correlation(transition, result, "completion")
+}
+
+fn validate_source_input_materialization_transition_for_result(
+    transition: &SchedulerTaskStateTransition,
+    result: &WorkflowSchedulerTaskResult,
+) -> Result<(), WorkflowServiceError> {
+    if result.status != crate::workflow::WorkflowSchedulerTaskResultStatus::Completed {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler source-input task result '{}' must be completed for source materialization",
+            result.task_id
+        )));
+    }
+    if transition.expected_previous_state != Some(SchedulerTaskStateKind::AwaitingInputs) {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler source-input task '{}' materialization must expect awaiting inputs state",
+            result.task_id
+        )));
+    }
+    if transition.next_state.kind() != SchedulerTaskStateKind::Completed {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler source-input task '{}' materialization transition must end completed",
+            result.task_id
+        )));
+    }
+    let Some(SchedulerTaskExecutionIntent::SourceInput { .. }) =
+        transition.next_state.execution_intent()
+    else {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler source-input task '{}' materialization must carry source-input intent",
+            result.task_id
+        )));
+    };
+    validate_transition_result_correlation(transition, result, "materialization")
+}
+
+fn validate_transition_result_correlation(
+    transition: &SchedulerTaskStateTransition,
+    result: &WorkflowSchedulerTaskResult,
+    operation: &str,
+) -> Result<(), WorkflowServiceError> {
     if transition.workflow_id.as_str() != result.workflow_id {
         return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task result '{}' workflow id '{}' does not match completion transition '{}'",
+            "scheduler task result '{}' workflow id '{}' does not match {operation} transition '{}'",
             result.task_id,
             result.workflow_id,
             transition.workflow_id.as_str()
@@ -237,7 +385,7 @@ fn validate_completion_transition_for_result(
     }
     if transition.workflow_run_id.as_str() != result.workflow_run_id {
         return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task result '{}' workflow run id '{}' does not match completion transition '{}'",
+            "scheduler task result '{}' workflow run id '{}' does not match {operation} transition '{}'",
             result.task_id,
             result.workflow_run_id,
             transition.workflow_run_id.as_str()
@@ -245,7 +393,7 @@ fn validate_completion_transition_for_result(
     }
     if transition.node_id.as_str() != result.node_id {
         return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task result '{}' node id '{}' does not match completion transition '{}'",
+            "scheduler task result '{}' node id '{}' does not match {operation} transition '{}'",
             result.task_id,
             result.node_id,
             transition.node_id.as_str()
@@ -253,7 +401,7 @@ fn validate_completion_transition_for_result(
     }
     if transition.task_id.as_str() != result.task_id {
         return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task result '{}' does not match completion transition task '{}'",
+            "scheduler task result '{}' does not match {operation} transition task '{}'",
             result.task_id,
             transition.task_id.as_str()
         )));
@@ -266,15 +414,16 @@ mod tests {
     use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
-        SchedulerTaskExecutionIntent, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind,
-        SchedulerTaskStateRecord, SchedulerTaskStateTransition,
-        SchedulerTaskStateTransitionApplyResult, SchedulerTaskStateTransitionId,
-        SchedulerWorkflowId, SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent,
+        SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+        SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
+        SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+        SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
 
     use crate::workflow::{
-        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowSchedulerTask,
+        WorkflowExecutionSessionRunRequest, WorkflowPortBinding,
+        WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
         WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
         WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultOutput,
         WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue,
@@ -300,6 +449,26 @@ mod tests {
                     selected_artifact_path: None,
                     migration_diagnostics: Vec::new(),
                 }),
+            }],
+            diagnostics: Vec::new(),
+            terminal_metadata: None,
+        }
+    }
+
+    fn source_input_task_result(
+        task_id: &str,
+        workflow_run_id: &str,
+    ) -> WorkflowSchedulerTaskResult {
+        WorkflowSchedulerTaskResult {
+            schema_version: crate::workflow::WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+            workflow_id: "workflow-task-results".to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
+            node_id: task_id.to_string(),
+            task_id: task_id.to_string(),
+            status: WorkflowSchedulerTaskResultStatus::Completed,
+            outputs: vec![WorkflowSchedulerTaskResultOutput {
+                port_id: "text".to_string(),
+                value: WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string()),
             }],
             diagnostics: Vec::new(),
             terminal_metadata: None,
@@ -362,6 +531,33 @@ mod tests {
         }
     }
 
+    fn source_input_task_graph(workflow_run_id: &str, task_id: &str) -> WorkflowSchedulerTaskGraph {
+        let workflow_id = SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id");
+        let workflow_run_id = SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id");
+        WorkflowSchedulerTaskGraph {
+            schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+            workflow_id: workflow_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
+            tasks: vec![WorkflowSchedulerTask {
+                workflow_id,
+                workflow_run_id,
+                node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+                task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+                node_type: "text-input".to_string(),
+                execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
+                dependency_task_ids: Vec::new(),
+                input_bindings: Vec::new(),
+                schedulable_intent: None,
+                schedulable_intent_template: None,
+                non_runtime_task_template: None,
+                source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
+                    port_id: "text".to_string(),
+                }),
+                diagnostics: Vec::new(),
+            }],
+        }
+    }
+
     fn task_intent(workflow_run_id: &str, task_id: &str) -> SchedulableTaskIntent {
         SchedulableTaskIntent {
             contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
@@ -394,6 +590,17 @@ mod tests {
             task_intent: task_intent(workflow_run_id, task_id),
         };
         match state {
+            SchedulerTaskStateKind::AwaitingInputs => SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            },
+            SchedulerTaskStateKind::InputUnavailable => SchedulerTaskState::InputUnavailable {
+                diagnostics: vec![pantograph_scheduler::SchedulerTaskStateDiagnostic {
+                    severity: pantograph_scheduler::SchedulerTaskStateDiagnosticSeverity::Error,
+                    code: pantograph_scheduler::SchedulerTaskStateDiagnosticCode::InputUnavailable,
+                    message: "source input is unavailable".to_string(),
+                    hint: None,
+                }],
+            },
             SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready { execution_intent },
             SchedulerTaskStateKind::Running => SchedulerTaskState::Running { execution_intent },
             SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed { execution_intent },
@@ -437,6 +644,38 @@ mod tests {
         }
     }
 
+    fn source_input_materialization_transition(
+        workflow_run_id: &str,
+        task_id: &str,
+        transition_id: &str,
+    ) -> SchedulerTaskStateTransition {
+        SchedulerTaskStateTransition {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            transition_id: SchedulerTaskStateTransitionId::parse(transition_id)
+                .expect("transition id"),
+            workflow_id: SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+            expected_previous_state: Some(SchedulerTaskStateKind::AwaitingInputs),
+            next_state: SchedulerTaskState::Completed {
+                execution_intent: SchedulerTaskExecutionIntent::SourceInput {
+                    task_intent: SchedulerSourceInputTaskIntent {
+                        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+                        workflow_id: SchedulerWorkflowId::parse("workflow-task-results")
+                            .expect("workflow id"),
+                        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
+                            .expect("run id"),
+                        node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+                        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+                        task_kind: SchedulerSourceInputTaskKind::parse("text-input")
+                            .expect("source-input task kind"),
+                    },
+                },
+            },
+        }
+    }
+
     fn store_running_task(
         store: &mut WorkflowExecutionSessionStore,
         session_id: &str,
@@ -455,6 +694,26 @@ mod tests {
                 )],
             )
             .expect("set running task");
+    }
+
+    fn store_awaiting_source_input_task(
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) {
+        store
+            .set_active_run_scheduler_task_state(
+                session_id,
+                workflow_run_id,
+                source_input_task_graph(workflow_run_id, task_id),
+                vec![task_record(
+                    workflow_run_id,
+                    task_id,
+                    SchedulerTaskStateKind::AwaitingInputs,
+                )],
+            )
+            .expect("set source input task");
     }
 
     #[test]
@@ -520,6 +779,154 @@ mod tests {
             .expect("read results");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].task_id, "model-task");
+    }
+
+    #[test]
+    fn active_run_materializes_source_input_result_and_completed_state() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_awaiting_source_input_task(&mut store, &session_id, &workflow_run_id, "prompt");
+
+        let applied = store
+            .materialize_active_run_source_input_task(
+                &session_id,
+                &workflow_run_id,
+                source_input_materialization_transition(
+                    &workflow_run_id,
+                    "prompt",
+                    "transition.source-input-materialized",
+                ),
+                source_input_task_result("prompt", &workflow_run_id),
+            )
+            .expect("materialize source input");
+
+        assert!(matches!(
+            applied,
+            SchedulerTaskStateTransitionApplyResult::Applied(_)
+        ));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Completed);
+        assert!(records[0]
+            .state
+            .execution_intent()
+            .expect("source input intent")
+            .source_input_task_intent()
+            .is_some());
+        let results = store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].task_id, "prompt");
+        assert_eq!(
+            results[0].outputs[0].value,
+            WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string())
+        );
+    }
+
+    #[test]
+    fn active_run_materialize_source_input_rejects_non_source_task_without_result() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+
+        let error = store
+            .materialize_active_run_source_input_task(
+                &session_id,
+                &workflow_run_id,
+                source_input_materialization_transition(
+                    &workflow_run_id,
+                    "model-task",
+                    "transition.source-input-materialized",
+                ),
+                source_input_task_result("model-task", &workflow_run_id),
+            )
+            .expect_err("non-source input task should be rejected");
+
+        assert!(error.message().contains("must be a source-input task"));
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results")
+            .is_empty());
+    }
+
+    #[test]
+    fn active_run_materialize_source_input_rejects_wrong_state_without_result() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store
+            .set_active_run_scheduler_task_state(
+                &session_id,
+                &workflow_run_id,
+                source_input_task_graph(&workflow_run_id, "prompt"),
+                vec![task_record(
+                    &workflow_run_id,
+                    "prompt",
+                    SchedulerTaskStateKind::InputUnavailable,
+                )],
+            )
+            .expect("set unavailable source input task");
+
+        let error = store
+            .materialize_active_run_source_input_task(
+                &session_id,
+                &workflow_run_id,
+                source_input_materialization_transition(
+                    &workflow_run_id,
+                    "prompt",
+                    "transition.source-input-materialized",
+                ),
+                source_input_task_result("prompt", &workflow_run_id),
+            )
+            .expect_err("unavailable source input task should be rejected");
+
+        assert!(error.message().contains("must be awaiting inputs"));
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results")
+            .is_empty());
+    }
+
+    #[test]
+    fn active_run_materialize_source_input_rejects_non_source_transition_without_result() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_awaiting_source_input_task(&mut store, &session_id, &workflow_run_id, "prompt");
+        let mut transition = source_input_materialization_transition(
+            &workflow_run_id,
+            "prompt",
+            "transition.source-input-materialized",
+        );
+        transition.next_state = SchedulerTaskState::Completed {
+            execution_intent: SchedulerTaskExecutionIntent::NonRuntime {
+                task_intent: pantograph_scheduler::SchedulerNonRuntimeTaskIntent {
+                    contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+                    workflow_id: SchedulerWorkflowId::parse("workflow-task-results")
+                        .expect("workflow id"),
+                    workflow_run_id: SchedulerWorkflowRunId::parse(&workflow_run_id)
+                        .expect("run id"),
+                    node_id: SchedulerNodeId::parse("prompt").expect("node id"),
+                    task_id: SchedulerTaskId::parse("prompt").expect("task id"),
+                    task_kind: pantograph_scheduler::SchedulerNonRuntimeTaskKind::parse(
+                        "text-output",
+                    )
+                    .expect("non-runtime task kind"),
+                },
+            },
+        };
+
+        let error = store
+            .materialize_active_run_source_input_task(
+                &session_id,
+                &workflow_run_id,
+                transition,
+                source_input_task_result("prompt", &workflow_run_id),
+            )
+            .expect_err("non-source transition should be rejected");
+
+        assert!(error.message().contains("source-input intent"));
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results")
+            .is_empty());
     }
 
     #[test]

@@ -304,6 +304,9 @@ fn execution_kind_read_model(
         Some(SchedulerTaskExecutionIntent::Runtime { .. }) => {
             Some(WorkflowSchedulerTaskStateExecutionKind::Runtime)
         }
+        Some(SchedulerTaskExecutionIntent::SourceInput { .. }) => {
+            Some(WorkflowSchedulerTaskStateExecutionKind::SourceInput)
+        }
         Some(SchedulerTaskExecutionIntent::NonRuntime { .. }) => {
             Some(WorkflowSchedulerTaskStateExecutionKind::NonRuntime)
         }

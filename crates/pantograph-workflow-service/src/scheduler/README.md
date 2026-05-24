@@ -85,6 +85,12 @@ module. They persist validated, path-free workflow task outputs for the
 admitted run only until the durable diagnostics-ledger replay slice replaces
 that storage; they are not a second scheduler policy model or runtime launch
 path.
+Request-provided source inputs complete through the same focused store module
+with an atomic result-plus-task-state operation from `AwaitingInputs` to
+`Completed`. That operation validates the immutable task graph class,
+source-input template, source-input transition intent, and task-result
+correlation; it does not fake a node-engine running state or execute source
+inputs through runtime/non-runtime adapters.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.

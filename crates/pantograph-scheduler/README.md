@@ -98,8 +98,11 @@ resolver behavior.
 - `SchedulerTaskStateRecord` and `SchedulerTaskStateTransition` are durable,
   replayable task-state contracts for one workflow task. They carry task
   correlation, phase-aware state, state version, and transition id only.
-  Schedulable phases carry `SchedulableTaskIntent`; pre-intent and terminal
-  invalid phases carry typed diagnostics instead. They must not carry
+  Runtime schedulable phases carry `SchedulableTaskIntent`; source-input
+  materialization phases carry `SchedulerSourceInputTaskIntent`;
+  non-runtime node-engine phases carry `SchedulerNonRuntimeTaskIntent`;
+  pre-intent and terminal invalid phases carry typed diagnostics instead. They
+  must not carry
   executable Pumas load targets, local paths, `ModelRefV2`, worker launch
   details, reservations, or batching groups.
 - `SchedulerTaskLifecycleDiagnosticSnapshot` is a backend-owned explanation of
@@ -279,10 +282,13 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   facts are added only by the scheduler dispatch decision.
   Queue task states describe durable scheduler progress only; lifecycle
   diagnostics, resource reservations, batching groups, and runtime dispatch
-  facts are separate contracts. Lifecycle diagnostic codes must be compatible
-  with the queue state they explain. Lifecycle supervision component states
-  describe service ownership and health only; they do not select runtime,
-  device, dependency, resource, or batching policy. Dispatch decisions are
+  facts are separate contracts. Source-input materialization may complete an
+  awaiting-inputs task only by carrying `SchedulerSourceInputTaskIntent`; it
+  must not pretend the task ran through runtime or non-runtime execution.
+  Lifecycle diagnostic codes must be compatible with the queue state they
+  explain. Lifecycle supervision component states describe service ownership
+  and health only; they do not select runtime, device, dependency, resource,
+  or batching policy. Dispatch decisions are
   short-lived scheduler-owned facts and must not become graph inputs or
   executable load-target carriers. Resource snapshot states describe
   scheduler-observed availability and fit only; they do not authorize graph,

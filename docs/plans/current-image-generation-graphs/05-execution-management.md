@@ -10712,6 +10712,42 @@ Worker rules:
     six-argument API. Remaining follow-up: wire the session runner to a
     store-owned atomic source-input materialization operation and remove the
     staged `external_input_materialization` dead-code allowance when consumed.
+- 2026-05-24 Milestone 5c source-input materialization store slice completed:
+  - Smallest useful vertical slice: add source-input materialization to the
+    shared scheduler task-state contract and workflow-service active-run
+    result/state store boundary.
+  - Allowed write set: `pantograph-scheduler` queue contracts/tests/README,
+    workflow-service scheduler store task-result module/tests/README,
+    task-state read-model exhaustiveness, Milestone 5c/task-level orchestration
+    plan notes, and this execution log. Existing unrelated Pumas proposal
+    Markdown changes remain ignored.
+  - Implementation notes: added `SchedulerSourceInputTaskIntent` and
+    `SchedulerSourceInputTaskKind`; allowed `AwaitingInputs -> Completed` for
+    source-input materialization with source-input intent; added
+    `materialize_active_run_source_input_task` to validate source-input task
+    class/template, completed task-result correlation, current awaiting-inputs
+    state, and the source-input completion transition before atomically storing
+    the result and completed task-state record.
+  - No-fallback/no-legacy confirmation: the slice does not fake node-engine
+    `Running`, does not execute source inputs through runtime/non-runtime
+    adapters, does not mutate graph data, and does not call output demand or
+    `workflow_run_internal`.
+  - Verification passed: `cargo fmt -p pantograph-scheduler -p
+    pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-scheduler --test queue_state`; `cargo test -p
+    pantograph-workflow-service scheduler::store::store_task_results --lib`;
+    `cargo test -p pantograph-workflow-service scheduler::store --lib`; `cargo
+    test -p pantograph-workflow-service workflow::tests::task_state_read_model
+    --lib`; `cargo check -p pantograph-scheduler`; `cargo check -p
+    pantograph-scheduler --no-default-features`; `cargo check -p
+    pantograph-scheduler --all-features`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `git diff --check`.
+  - Remaining follow-up: the dedicated session runner must consume
+    `materialize_external_workflow_inputs`, call the new store materialization
+    operation for each source-input result, advance dependent task readiness,
+    and remove staged dead-code allowances once the helpers are wired.
 
 ### Traceability Links
 

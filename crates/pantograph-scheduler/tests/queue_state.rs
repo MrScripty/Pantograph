@@ -2,7 +2,8 @@ use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_scheduler::{
     apply_scheduler_task_state_transition, SchedulableTaskIntent, SchedulerContractError,
     SchedulerNodeId, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
-    SchedulerRuntimeDeviceConstraints, SchedulerTaskExecutionIntent, SchedulerTaskId,
+    SchedulerRuntimeDeviceConstraints, SchedulerSourceInputTaskIntent,
+    SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent, SchedulerTaskId,
     SchedulerTaskState, SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
     SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
     SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
@@ -129,6 +130,56 @@ fn non_runtime_ready_running_and_completed_states_do_not_expose_runtime_intent()
             .execution_intent()
             .is_some_and(|intent| intent.non_runtime_task_intent().is_some()));
     }
+}
+
+#[test]
+fn source_input_task_can_materialize_from_awaiting_inputs_to_completed() {
+    let awaiting_record = match apply_scheduler_task_state_transition(
+        None,
+        task_transition_to(None, awaiting_inputs_state()),
+    )
+    .expect("source input awaiting state should apply")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("initial transition cannot be already applied")
+        }
+    };
+
+    let completed_record = match apply_scheduler_task_state_transition(
+        Some(&awaiting_record),
+        task_transition_with_id(
+            "transition.source_input_materialized",
+            Some(SchedulerTaskStateKind::AwaitingInputs),
+            completed_source_input_state("text-input"),
+        ),
+    )
+    .expect("source input materialization should complete")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("new transition cannot be already applied")
+        }
+    };
+
+    assert_eq!(
+        completed_record.state.kind(),
+        SchedulerTaskStateKind::Completed
+    );
+    let execution_intent = completed_record
+        .state
+        .execution_intent()
+        .expect("completed source input carries materialization intent");
+    assert!(execution_intent.runtime_task_intent().is_none());
+    assert!(execution_intent.non_runtime_task_intent().is_none());
+    assert_eq!(
+        execution_intent
+            .source_input_task_intent()
+            .expect("source input intent")
+            .task_kind
+            .as_str(),
+        "text-input"
+    );
 }
 
 #[test]
@@ -387,7 +438,7 @@ fn allowed_next_states(previous: SchedulerTaskStateKind) -> &'static [SchedulerT
     };
 
     match previous {
-        AwaitingInputs => &[Ready, InputUnavailable, Invalid, TerminalFailed],
+        AwaitingInputs => &[Ready, InputUnavailable, Invalid, TerminalFailed, Completed],
         InputUnavailable => &[AwaitingInputs, TerminalFailed],
         Invalid => &[TerminalFailed],
         Ready => &[
@@ -513,8 +564,29 @@ fn completed_non_runtime_state(task_kind: &str) -> SchedulerTaskState {
     }
 }
 
+fn completed_source_input_state(task_kind: &str) -> SchedulerTaskState {
+    SchedulerTaskState::Completed {
+        execution_intent: source_input_execution_intent(task_kind),
+    }
+}
+
 fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
     SchedulerTaskExecutionIntent::Runtime { task_intent }
+}
+
+fn source_input_execution_intent(task_kind: &str) -> SchedulerTaskExecutionIntent {
+    SchedulerTaskExecutionIntent::SourceInput {
+        task_intent: SchedulerSourceInputTaskIntent {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                .expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse("run.001").expect("run id"),
+            node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+            task_id: SchedulerTaskId::parse("task.001").expect("task id"),
+            task_kind: SchedulerSourceInputTaskKind::parse(task_kind)
+                .expect("source-input task kind"),
+        },
+    }
 }
 
 fn non_runtime_execution_intent(task_kind: &str) -> SchedulerTaskExecutionIntent {

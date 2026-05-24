@@ -89,6 +89,7 @@ macro_rules! scheduler_task_state_id {
 
 scheduler_task_state_id!(SchedulerTaskStateTransitionId, "transition_id");
 scheduler_task_state_id!(SchedulerNonRuntimeTaskKind, "non_runtime_task_kind");
+scheduler_task_state_id!(SchedulerSourceInputTaskKind, "source_input_task_kind");
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -117,7 +118,10 @@ impl SchedulerTaskStateKind {
         };
 
         match self {
-            AwaitingInputs => matches!(next, Ready | InputUnavailable | Invalid | TerminalFailed),
+            AwaitingInputs => matches!(
+                next,
+                Ready | InputUnavailable | Invalid | TerminalFailed | Completed
+            ),
             InputUnavailable => matches!(next, AwaitingInputs | TerminalFailed),
             Invalid => matches!(next, TerminalFailed),
             Ready => matches!(
@@ -228,6 +232,27 @@ pub struct SchedulerNonRuntimeTaskIntent {
     pub task_kind: SchedulerNonRuntimeTaskKind,
 }
 
+/// Path-free materialization intent for one request-provided workflow input.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SchedulerSourceInputTaskIntent {
+    #[serde(default = "default_scheduler_task_state_contract_version")]
+    pub contract_version: u16,
+    pub workflow_id: SchedulerWorkflowId,
+    pub workflow_run_id: SchedulerWorkflowRunId,
+    pub node_id: SchedulerNodeId,
+    pub task_id: SchedulerTaskId,
+    pub task_kind: SchedulerSourceInputTaskKind,
+}
+
+impl SchedulerSourceInputTaskIntent {
+    /// Validates this raw source-input intent before task-state policy consumes it.
+    pub fn validate(&self) -> Result<(), SchedulerContractError> {
+        validate_contract_version(self.contract_version)?;
+        Ok(())
+    }
+}
+
 impl SchedulerNonRuntimeTaskIntent {
     /// Validates this raw non-runtime execution intent before task-state policy
     /// consumes it.
@@ -245,6 +270,9 @@ pub enum SchedulerTaskExecutionIntent {
     Runtime {
         task_intent: SchedulableTaskIntent,
     },
+    SourceInput {
+        task_intent: SchedulerSourceInputTaskIntent,
+    },
     NonRuntime {
         task_intent: SchedulerNonRuntimeTaskIntent,
     },
@@ -255,16 +283,36 @@ impl SchedulerTaskExecutionIntent {
     pub fn runtime_task_intent(&self) -> Option<&SchedulableTaskIntent> {
         match self {
             Self::Runtime { task_intent } => Some(task_intent),
-            Self::NonRuntime { .. } => None,
+            Self::SourceInput { .. } | Self::NonRuntime { .. } => None,
         }
+    }
+
+    #[must_use]
+    pub fn source_input_task_intent(&self) -> Option<&SchedulerSourceInputTaskIntent> {
+        match self {
+            Self::SourceInput { task_intent } => Some(task_intent),
+            Self::Runtime { .. } | Self::NonRuntime { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub fn source_input_task_kind(&self) -> Option<&SchedulerSourceInputTaskKind> {
+        self.source_input_task_intent()
+            .map(|task_intent| &task_intent.task_kind)
     }
 
     #[must_use]
     pub fn non_runtime_task_intent(&self) -> Option<&SchedulerNonRuntimeTaskIntent> {
         match self {
-            Self::Runtime { .. } => None,
             Self::NonRuntime { task_intent } => Some(task_intent),
+            Self::Runtime { .. } | Self::SourceInput { .. } => None,
         }
+    }
+
+    #[must_use]
+    pub fn non_runtime_task_kind(&self) -> Option<&SchedulerNonRuntimeTaskKind> {
+        self.non_runtime_task_intent()
+            .map(|task_intent| &task_intent.task_kind)
     }
 
     fn validate_for_task(
@@ -278,6 +326,16 @@ impl SchedulerTaskExecutionIntent {
             Self::Runtime { task_intent } => {
                 task_intent.validate()?;
                 validate_runtime_correlation(
+                    workflow_id,
+                    workflow_run_id,
+                    node_id,
+                    task_id,
+                    task_intent,
+                )
+            }
+            Self::SourceInput { task_intent } => {
+                task_intent.validate()?;
+                validate_source_input_correlation(
                     workflow_id,
                     workflow_run_id,
                     node_id,
@@ -708,6 +766,40 @@ fn validate_non_runtime_correlation(
         return Err(SchedulerContractError::InvalidField {
             field: "task_id",
             reason: "task state task id must match non-runtime task intent",
+        });
+    }
+    Ok(())
+}
+
+fn validate_source_input_correlation(
+    workflow_id: &SchedulerWorkflowId,
+    workflow_run_id: &SchedulerWorkflowRunId,
+    node_id: &SchedulerNodeId,
+    task_id: &SchedulerTaskId,
+    task_intent: &SchedulerSourceInputTaskIntent,
+) -> Result<(), SchedulerContractError> {
+    if workflow_id.as_ref() != task_intent.workflow_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "workflow_id",
+            reason: "task state workflow id must match source-input task intent",
+        });
+    }
+    if workflow_run_id.as_ref() != task_intent.workflow_run_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "workflow_run_id",
+            reason: "task state workflow run id must match source-input task intent",
+        });
+    }
+    if node_id.as_ref() != task_intent.node_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "node_id",
+            reason: "task state node id must match source-input task intent",
+        });
+    }
+    if task_id.as_ref() != task_intent.task_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "task_id",
+            reason: "task state task id must match source-input task intent",
         });
     }
     Ok(())

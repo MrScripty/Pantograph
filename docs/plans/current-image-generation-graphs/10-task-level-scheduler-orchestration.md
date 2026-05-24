@@ -1255,11 +1255,23 @@ node-engine-executable non-runtime work for this slice, currently
 node-engine. External input materialization consumes the typed source-input
 template rather than raw node type checks and produces typed
 `WorkflowSchedulerTaskResult` values. Run summaries and task-state read models
-now report source inputs separately from non-runtime node-engine work. The
-remaining session cutover work is a store-owned source-input materialization
-operation and runner integration that records completed source-input results
-and advances dependents without graph mutation, output demand, or a fake
-node-engine `Running` state.
+now report source inputs separately from non-runtime node-engine work.
+
+2026-05-24 implementation status: the scheduler and workflow-service active
+run store now have the canonical source-input materialization boundary. The
+scheduler task-state contract adds `SchedulerSourceInputTaskIntent`, and
+source-input materialization may transition directly from `AwaitingInputs` to
+`Completed` only with source-input intent rather than runtime or non-runtime
+execution intent. Workflow-service adds
+`materialize_active_run_source_input_task`, which validates the active-run task
+graph, requires `WorkflowSchedulerTaskExecutionClass::SourceInput` plus a typed
+source-input template, validates completed task-result correlation, applies the
+source-input transition, and stores the completed task result and completed
+task-state record in one mutation. This removes the need to fake a node-engine
+`Running` state for request inputs. Remaining session cutover work is runner
+integration: materialize request inputs through this store operation, advance
+dependent tasks, project completed task results to requested outputs, and
+remove the staged dead-code allowances when the runner consumes the helpers.
 
 ## Task Result Materialization Plan
 
