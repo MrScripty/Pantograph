@@ -6,7 +6,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 1;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -26,6 +26,7 @@ pub struct WorkflowSchedulerTask {
     pub node_id: SchedulerNodeId,
     pub task_id: SchedulerTaskId,
     pub node_type: String,
+    pub execution_class: WorkflowSchedulerTaskExecutionClass,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependency_task_ids: Vec<SchedulerTaskId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -36,6 +37,16 @@ pub struct WorkflowSchedulerTask {
     pub schedulable_intent_template: Option<WorkflowSchedulerTaskIntentTemplate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowSchedulerTaskExecutionClass {
+    RuntimeInference,
+    NonRuntimeNodeEngine,
+    PumasMaterialization,
+    Unsupported,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

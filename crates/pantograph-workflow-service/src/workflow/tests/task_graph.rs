@@ -4,8 +4,8 @@ use serde_json::json;
 
 use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
 use crate::workflow::{
-    workflow_scheduler_task_graph, WorkflowSchedulerTaskProjectionDiagnosticCode,
-    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    workflow_scheduler_task_graph, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskProjectionDiagnosticCode, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 
 fn workflow_id() -> WorkflowId {
@@ -84,11 +84,25 @@ fn scheduler_task_graph_projects_path_free_inference_intent() {
     );
     assert_eq!(graph.tasks.len(), 3);
 
+    let prompt_task = graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "prompt")
+        .expect("prompt task");
+    assert_eq!(
+        prompt_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+    );
+
     let inference_task = graph
         .tasks
         .iter()
         .find(|task| task.node_id.as_str() == "infer")
         .expect("inference task");
+    assert_eq!(
+        inference_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::RuntimeInference
+    );
     assert_eq!(inference_task.dependency_task_ids.len(), 1);
     assert_eq!(inference_task.dependency_task_ids[0].as_str(), "prompt");
     assert_eq!(
@@ -169,4 +183,46 @@ fn scheduler_task_graph_reports_missing_canonical_inference_inputs() {
         diagnostic.code == WorkflowSchedulerTaskProjectionDiagnosticCode::MissingTaskKind
             && diagnostic.port_id.as_deref() == Some("task_kind")
     }));
+}
+
+#[test]
+fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
+    let mut graph = graph_with_inline_inference_ref();
+    graph.nodes.push(GraphNode {
+        id: "model".to_string(),
+        node_type: "puma-lib".to_string(),
+        position: Position { x: 100.0, y: 100.0 },
+        data: json!({}),
+    });
+    graph.nodes.push(GraphNode {
+        id: "settings".to_string(),
+        node_type: "expand-settings".to_string(),
+        position: Position { x: 100.0, y: 200.0 },
+        data: json!({}),
+    });
+
+    let task_graph =
+        workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).expect("graph");
+
+    let model_task = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "model")
+        .expect("model task");
+    assert_eq!(
+        model_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::PumasMaterialization
+    );
+    assert!(model_task.schedulable_intent.is_none());
+
+    let settings_task = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "settings")
+        .expect("settings task");
+    assert_eq!(
+        settings_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::Unsupported
+    );
+    assert!(settings_task.schedulable_intent.is_none());
 }

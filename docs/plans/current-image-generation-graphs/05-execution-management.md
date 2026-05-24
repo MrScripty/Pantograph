@@ -10285,6 +10285,45 @@ Worker rules:
     generalized materialized-input readiness, scheduler-task execution
     entrypoint, non-runtime adapter conversion, and runtime-task fail-closed
     diagnostics before any scheduler-owned non-runtime workflow task executes.
+- 2026-05-23 Milestone 5c workflow-service task-classification slice
+  completed:
+  - Smallest useful vertical slice: add the workflow-service classification
+    boundary required before scheduler-task entrypoint or non-runtime adapter
+    execution. This slice does not execute tasks or alter runtime dispatch.
+  - Allowed write set: workflow-service task classification module,
+    task-graph DTO/projection/tests, narrow workflow facade exports and test
+    helpers, workflow README, and current plan docs. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - Implementation notes: added schema-versioned
+    `WorkflowSchedulerTaskExecutionClass` to `WorkflowSchedulerTask`; added
+    `task_execution_classification.rs` as the only workflow-service mapping
+    from immutable node type plus canonical node-contract facts into
+    `RuntimeInference`, `NonRuntimeNodeEngine`, `PumasMaterialization`, or
+    `Unsupported`; moved the existing inference-intent branch to consume that
+    class; and covered `llm-inference`, `puma-lib`, first-stage scalar
+    node-engine nodes, excluded nodes, unknown nodes, and mismatched
+    contracts.
+  - No-fallback/no-legacy confirmation: the slice removes the task-graph
+    projection's scattered `llm-inference` special case and does not add any
+    compatibility path, raw node-data execution, graph-local path, Pumas load
+    target exposure, node-engine output demand, planned-inference host call,
+    runtime-host dispatch, or scheduler policy bypass.
+  - Verification: `cargo fmt -p pantograph-workflow-service`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_graph --lib`; `cargo
+    test -p pantograph-workflow-service task_execution_classification --lib`;
+    `cargo test -p pantograph-workflow-service scheduler::task_orchestrator
+    --lib`; `cargo test -p pantograph-workflow-service
+    scheduler::store::tests --lib`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_state_read_model --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted search over the
+    new classifier/projection modules for forbidden execution paths; and
+    `git diff --check`.
+  - Remaining follow-up: generalized materialized-input readiness,
+    scheduler-task execution entrypoint, non-runtime adapter conversion, and
+    runtime-task fail-closed diagnostics before any scheduler-owned
+    non-runtime workflow task executes.
 
 ### Traceability Links
 

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use pantograph_dependency_planning::{
     DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId,
 };
+use pantograph_node_contracts::NodeTypeContract;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerNodeId,
@@ -11,17 +12,17 @@ use pantograph_scheduler::{
 };
 use serde_json::Value;
 
+use super::task_execution_classification::classify_workflow_scheduler_task;
 use super::task_graph_contracts::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskInputBinding,
-    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
-    WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
+    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 use super::WorkflowServiceError;
 use crate::graph::{workflow_executable_topology, WorkflowGraph};
 
-const NODE_TYPE_LLM_INFERENCE: &str = "llm-inference";
 const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
 const PORT_TASK_KIND: &str = "task_kind";
 const PORT_RUNTIME: &str = "runtime";
@@ -36,6 +37,7 @@ pub fn workflow_scheduler_task_graph(
     let workflow_id = scheduler_workflow_id(workflow_id)?;
     let workflow_run_id = scheduler_workflow_run_id(workflow_run_id)?;
     let topology = workflow_executable_topology(graph)?;
+    let node_contracts = builtin_contracts_by_node_type()?;
     let node_data_by_id = graph
         .nodes
         .iter()
@@ -57,13 +59,17 @@ pub fn workflow_scheduler_task_graph(
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
         let dependency_task_ids = dependency_task_ids(&input_bindings);
         let data = node_data_by_id.get(node.node_id.as_str()).copied();
+        let execution_class = classify_workflow_scheduler_task(
+            &node.node_type,
+            node_contracts.get(node.node_type.as_str()),
+        );
         let (schedulable_intent, schedulable_intent_template, diagnostics) =
             schedulable_intent_for_node(
                 &workflow_id,
                 &workflow_run_id,
                 &node_id,
                 &task_id,
-                &node.node_type,
+                execution_class,
                 data,
                 &input_bindings,
             );
@@ -74,6 +80,7 @@ pub fn workflow_scheduler_task_graph(
             node_id,
             task_id,
             node_type: node.node_type.clone(),
+            execution_class,
             dependency_task_ids,
             input_bindings,
             schedulable_intent,
@@ -88,6 +95,22 @@ pub fn workflow_scheduler_task_graph(
         workflow_run_id,
         tasks,
     })
+}
+
+fn builtin_contracts_by_node_type(
+) -> Result<BTreeMap<String, NodeTypeContract>, WorkflowServiceError> {
+    workflow_nodes::builtin_node_contracts()
+        .map_err(|error| {
+            WorkflowServiceError::CapabilityViolation(format!(
+                "failed to load built-in node contracts: {error}"
+            ))
+        })
+        .map(|contracts| {
+            contracts
+                .into_iter()
+                .map(|contract| (contract.node_type.as_str().to_string(), contract))
+                .collect()
+        })
 }
 
 fn input_bindings(
@@ -130,7 +153,7 @@ fn schedulable_intent_for_node(
     workflow_run_id: &SchedulerWorkflowRunId,
     node_id: &SchedulerNodeId,
     task_id: &SchedulerTaskId,
-    node_type: &str,
+    execution_class: WorkflowSchedulerTaskExecutionClass,
     data: Option<&Value>,
     input_bindings: &[WorkflowSchedulerTaskInputBinding],
 ) -> (
@@ -138,7 +161,7 @@ fn schedulable_intent_for_node(
     Option<WorkflowSchedulerTaskIntentTemplate>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 ) {
-    if node_type != NODE_TYPE_LLM_INFERENCE {
+    if execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
         return (None, None, Vec::new());
     }
 

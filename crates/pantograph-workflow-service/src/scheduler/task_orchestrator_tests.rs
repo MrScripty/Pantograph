@@ -14,9 +14,9 @@ use pantograph_scheduler::{
 };
 
 use crate::workflow::{
-    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskGraph,
-    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
-    WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskIntentTemplate,
+    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
@@ -138,6 +138,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
         node_id: SchedulerNodeId::parse("image-task").expect("node id"),
         task_id: SchedulerTaskId::parse("image-task").expect("task id"),
         node_type: "llm-inference".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
         dependency_task_ids: vec![SchedulerTaskId::parse("model-task").expect("task id")],
         input_bindings: Vec::new(),
         schedulable_intent: None,
@@ -171,6 +172,7 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         node_id: SchedulerNodeId::parse("image-task").expect("node id"),
         task_id: SchedulerTaskId::parse("image-task").expect("task id"),
         node_type: "llm-inference".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
         dependency_task_ids: Vec::new(),
         input_bindings: Vec::new(),
         schedulable_intent: None,
@@ -217,6 +219,7 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
         node_id: SchedulerNodeId::parse("image-task").expect("node id"),
         task_id: SchedulerTaskId::parse("image-task").expect("task id"),
         node_type: "llm-inference".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
         dependency_task_ids: Vec::new(),
         input_bindings: Vec::new(),
         schedulable_intent: None,
@@ -308,6 +311,7 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         node_id: task_intent.node_id.clone(),
         task_id: task_intent.task_id.clone(),
         node_type: "llm-inference".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
         dependency_task_ids: Vec::new(),
         input_bindings: Vec::new(),
         schedulable_intent: Some(task_intent),

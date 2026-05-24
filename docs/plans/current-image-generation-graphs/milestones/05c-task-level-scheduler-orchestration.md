@@ -130,8 +130,12 @@ durable task orchestration path.
   explicit node type into core inputs, creates local graph-flow context and
   empty executor extensions, executes one `CoreTaskExecutor` task, and fails
   closed for malformed `_data` or task-id suffix authority. Workflow-service
-  classification, generalized input readiness, scheduler-task entrypoint, and
-  the non-runtime adapter remain open.
+  now also owns a focused task-classification boundary and schema-versioned
+  task-graph execution class that maps canonical node contracts into
+  runtime-inference, first-stage non-runtime node-engine, Pumas-materialization,
+  or unsupported classes before any adapter can choose a path. Generalized
+  input readiness, scheduler-task entrypoint, non-runtime adapter conversion,
+  and runtime-task fail-closed diagnostics remain open.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider

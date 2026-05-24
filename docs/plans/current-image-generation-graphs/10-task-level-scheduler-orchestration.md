@@ -322,6 +322,11 @@ implementation can be considered complete:
    scheduler-selected runtime handoff dispatch is wired. Do not wrap
    `workflow_run_internal`, do not call output-node demand from the new
    entrypoint, and do not use this adapter for runtime inference nodes.
+   Classification prerequisite completed 2026-05-23: workflow-service now
+   projects a schema-versioned `WorkflowSchedulerTaskExecutionClass` from
+   immutable node type plus canonical node-contract facts, so later entrypoint
+   and adapter code must consume that class instead of rechecking scattered
+   node-type strings.
 10. Add runtime task dispatch from actual dispatch-selected
    `SchedulerRuntimeHandoff` into the shared runtime-host execution port.
 11. Replace session execution so the scheduler task orchestrator, not

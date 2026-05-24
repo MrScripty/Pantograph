@@ -46,6 +46,7 @@ mod session_queue_api;
 mod session_runtime;
 mod session_runtime_load_lifecycle;
 mod task_binding_resolution;
+mod task_execution_classification;
 mod task_graph;
 mod task_graph_contracts;
 mod task_result_contracts;
@@ -112,9 +113,9 @@ pub use self::task_binding_resolution::{
 };
 pub use self::task_graph::workflow_scheduler_task_graph;
 pub use self::task_graph_contracts::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskInputBinding,
-    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
-    WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
+    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };

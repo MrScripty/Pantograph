@@ -103,6 +103,7 @@ fn scheduler_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {
             node_id: SchedulerNodeId::parse("image-task").expect("node id"),
             task_id: image_task_id,
             node_type: "llm-inference".to_string(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
             dependency_task_ids: vec![upstream_task_id.clone()],
             input_bindings: vec![WorkflowSchedulerTaskInputBinding {
                 source_node_id: SchedulerNodeId::parse("prompt-task").expect("node id"),

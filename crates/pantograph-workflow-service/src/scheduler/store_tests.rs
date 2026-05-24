@@ -2,7 +2,7 @@ use super::*;
 use crate::workflow::{
     WorkflowExecutionPlan, WorkflowExecutionPlanNodeDecision, WorkflowExecutionSessionRunRequest,
     WorkflowInferenceDeviceClass, WorkflowInferenceTaskId, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
 };
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -123,6 +123,7 @@ fn scheduler_task_graph(workflow_run_id: &str, task_ids: &[&str]) -> WorkflowSch
                     .expect("node id"),
                 task_id,
                 node_type: "llm-inference".to_string(),
+                execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
                 dependency_task_ids: Vec::new(),
                 input_bindings: Vec::new(),
                 schedulable_intent: None,
