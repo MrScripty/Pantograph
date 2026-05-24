@@ -1289,6 +1289,23 @@ advance dependent task readiness, execute ready non-runtime tasks, project
 completed scheduler results to requested outputs, and remove the orchestrator
 staging allowances after production consumption.
 
+2026-05-24 implementation status: non-runtime-only session runs now use a
+dedicated scheduler-task session path. `run_workflow_execution_session`
+precomputes the immutable scheduler task graph and initial task-state records
+before runtime admission, summarizes the run class, skips runtime
+admission/preflight/load for non-runtime-only graphs, materializes request
+source inputs through the orchestrator, advances dependent non-runtime task
+readiness, executes ready non-runtime tasks through the node-engine single-task
+adapter, projects requested outputs from completed scheduler task results, and
+finishes the active run without calling `workflow_run_internal`. Runtime
+containing runs still use the existing path until dispatch-selected
+runtime-host handoff is wired. Remaining cutover work: replace the
+runtime-containing branch with scheduler-selected runtime-host dispatch,
+update legacy session tests that intentionally expect whole-run host/runtime
+behavior to use runtime-task graphs or new scheduler diagnostics, and remove
+the remaining staged orchestrator `dead_code` allowances when runtime dispatch
+is consumed.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

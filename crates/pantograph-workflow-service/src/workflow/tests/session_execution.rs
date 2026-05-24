@@ -30,7 +30,7 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
-                    node_id: "text-output-1".to_string(),
+                    node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
                     value: serde_json::json!("hello session"),
                 }],
@@ -49,6 +49,13 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
     assert_eq!(
         response.outputs[0].value,
         serde_json::json!("hello session")
+    );
+    assert!(
+        host.recorded_run_options
+            .lock()
+            .expect("run options lock")
+            .is_empty(),
+        "non-runtime-only session runs must not call the legacy whole-run host path"
     );
 
     let closed = service

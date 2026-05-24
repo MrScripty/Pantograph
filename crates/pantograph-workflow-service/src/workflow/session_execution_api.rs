@@ -18,6 +18,7 @@ use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
     WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
 };
+use pantograph_scheduler::SchedulerTaskStateKind;
 use pantograph_timing_contracts::{checked_timing_duration_ms, WorkflowTimingAttemptId};
 
 use crate::graph::{
@@ -36,28 +37,31 @@ use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
     WorkflowDiagnosticRuntimeModelScope, WorkflowDiagnosticSchedulerScope,
 };
+use super::io_contract::validate_workflow_io;
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
 use super::session_runtime_load_lifecycle::{
     WorkflowRuntimeLoadLifecycleContext, WorkflowRuntimeLoadLifecycleEvent,
 };
 use super::validation::{
-    validate_bindings, validate_output_targets, validate_timeout_ms,
+    validate_bindings, validate_host_output_bindings, validate_output_targets,
+    validate_output_targets_against_io, validate_requested_outputs_produced, validate_timeout_ms,
     validate_workflow_graph_submit_readiness, validate_workflow_id,
     validate_workflow_semantic_version,
 };
 use super::{
-    build_workflow_execution_plan_from_admission, workflow_scheduler_task_graph,
-    AttributionRepository, WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink,
-    WorkflowExecutionPlan, WorkflowExecutionSessionAttributedCreateRequest,
-    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
+    build_workflow_execution_plan_from_admission, project_scheduler_task_results_to_outputs,
+    workflow_scheduler_task_graph, workflow_scheduler_task_run_summary, AttributionRepository,
+    WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink, WorkflowExecutionPlan,
+    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
     WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
-    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
-    WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
+    WorkflowSchedulerDecisionReason, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary,
+    WorkflowService, WorkflowServiceError, WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -297,11 +301,61 @@ impl WorkflowService {
             )?);
         }
 
+        let scheduler_task_graph = match self
+            .scheduler_task_graph_for_session_run(host, &session.workflow_id, &workflow_run_id)
+            .await
+        {
+            Ok(task_graph) => task_graph,
+            Err(error) => {
+                if let Ok(mut store) = self.session_store.lock() {
+                    let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
+                }
+                return Err(self.record_scheduler_admission_failure_error(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &workflow_run_id,
+                    Some(&request.workflow_semantic_version),
+                    error,
+                )?);
+            }
+        };
+        let initial_scheduler_task_records = match self
+            .scheduler_task_orchestrator
+            .initial_task_state_records(&scheduler_task_graph)
+        {
+            Ok(records) => records,
+            Err(error) => {
+                if let Ok(mut store) = self.session_store.lock() {
+                    let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
+                }
+                return Err(self.record_scheduler_admission_failure_error(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &workflow_run_id,
+                    Some(&request.workflow_semantic_version),
+                    WorkflowServiceError::Internal(format!(
+                        "scheduler task-state initialization failed: {error}"
+                    )),
+                )?);
+            }
+        };
+        let scheduler_task_run_summary = workflow_scheduler_task_run_summary(
+            &scheduler_task_graph,
+            &initial_scheduler_task_records,
+        )
+        .map_err(|error| {
+            WorkflowServiceError::Internal(format!(
+                "scheduler task run summary failed before admission: {error}"
+            ))
+        })?;
+
         let mut runtime_admission_delay_recorded = false;
         let queued_run = loop {
             let session_ready_to_load = {
                 let mut store = self.session_store_guard()?;
-                if !store.queued_run_is_admission_candidate(&session_id, &workflow_run_id)? {
+                if scheduler_task_run_summary.is_non_runtime_only()
+                    || !store.queued_run_is_admission_candidate(&session_id, &workflow_run_id)?
+                {
                     None
                 } else {
                     Some(store.session_summary(&session_id)?)
@@ -359,15 +413,12 @@ impl WorkflowService {
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
         let queued_graph_run_settings = decode_queued_graph_run_settings(run_snapshot.as_ref())?;
-        if let Err(error) = self
-            .initialize_scheduler_task_state_for_admitted_run(
-                host,
-                &queued_run.workflow_id,
-                &session_id,
-                &workflow_run_id,
-            )
-            .await
-        {
+        if let Err(error) = self.set_scheduler_task_state_for_admitted_run(
+            scheduler_task_graph.clone(),
+            initial_scheduler_task_records,
+            &session_id,
+            &workflow_run_id,
+        ) {
             self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             let terminal_result = Err(error);
             self.record_run_terminal_event_if_configured(
@@ -378,6 +429,59 @@ impl WorkflowService {
                 &terminal_result,
             )?;
             return terminal_result;
+        }
+
+        if scheduler_task_run_summary.is_non_runtime_only() {
+            self.record_run_started_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &queued_run,
+            )?;
+            let run_started_at = std::time::Instant::now();
+            let run_result = self
+                .run_non_runtime_only_scheduler_session(
+                    host,
+                    &session_id,
+                    &workflow_run_id,
+                    &queued_run.workflow_id,
+                    &queued_run.queued.inputs,
+                    queued_run.queued.output_targets.as_deref(),
+                    &scheduler_task_run_summary,
+                    run_started_at,
+                )
+                .await;
+            let finish_state = {
+                let mut store = self.session_store_guard()?;
+                store.finish_run(&session_id, &workflow_run_id)?
+            };
+            if let Err(record_error) = self.record_run_terminal_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                Some(&queued_workflow_semantic_version),
+                &run_result,
+            ) {
+                if let Err(error) = run_result {
+                    return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                        workflow_run_id: Some(workflow_run_id),
+                        diagnostic_event_id: None,
+                        diagnostics_unavailable: Some(record_error.message().to_string()),
+                    }));
+                }
+                return Err(record_error);
+            }
+            if let Ok(response) = run_result.as_ref() {
+                self.record_workflow_io_artifact_events_if_configured(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &workflow_run_id,
+                    &queued_workflow_semantic_version,
+                    &queued_workflow_inputs,
+                    &response.outputs,
+                )?;
+            }
+            debug_assert!(!finish_state.unload_runtime);
+            return run_result;
         }
         let mut reservation_context = scheduler_reservation_context(
             run_snapshot.as_ref(),
@@ -817,31 +921,253 @@ impl WorkflowService {
         Ok(())
     }
 
-    async fn initialize_scheduler_task_state_for_admitted_run<H: WorkflowHost>(
+    async fn scheduler_task_graph_for_session_run<H: WorkflowHost>(
         &self,
         host: &H,
         workflow_id: &str,
-        session_id: &str,
         workflow_run_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
+    ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
         let graph = host.workflow_graph(workflow_id).await?;
         validate_workflow_graph_submit_readiness(&graph)?;
         let workflow_id = WorkflowId::try_from(workflow_id.to_string())?;
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
-        let task_graph = workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)?;
+        workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)
+    }
+
+    fn set_scheduler_task_state_for_admitted_run(
+        &self,
+        task_graph: WorkflowSchedulerTaskGraph,
+        records: Vec<pantograph_scheduler::SchedulerTaskStateRecord>,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
         let mut store = self.session_store_guard()?;
-        self.scheduler_task_orchestrator
-            .initialize_active_run_task_state(
-                &mut store,
-                session_id,
-                workflow_run_id.as_str(),
-                task_graph,
-            )
+        store.set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
+    }
+
+    async fn run_non_runtime_only_scheduler_session<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        workflow_run_id: &str,
+        workflow_id: &str,
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        summary: &WorkflowSchedulerTaskRunSummary,
+        started_at: std::time::Instant,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if !summary.is_non_runtime_only() || summary.has_runtime_inference() {
+            return Err(WorkflowServiceError::Internal(
+                "scheduler session runner received a runtime-containing run".to_string(),
+            ));
+        }
+        {
+            let mut store = self.session_store_guard()?;
+            self.scheduler_task_orchestrator
+                .materialize_external_inputs_for_active_run(
+                    &mut store,
+                    session_id,
+                    workflow_run_id,
+                    inputs,
+                )
+                .map_err(|error| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler source-input materialization failed: {error}"
+                    ))
+                })?;
+        }
+
+        let mut progressed = true;
+        while progressed {
+            progressed = false;
+            let (task_graph, records) =
+                self.active_run_scheduler_task_state_required(session_id, workflow_run_id)?;
+            for record in records
+                .iter()
+                .filter(|record| record.state.kind() == SchedulerTaskStateKind::AwaitingInputs)
+            {
+                let Some(task) = task_graph
+                    .tasks
+                    .iter()
+                    .find(|task| task.task_id.as_str() == record.task_id.as_str())
+                else {
+                    return Err(WorkflowServiceError::Internal(format!(
+                        "scheduler task '{}' has state but no task graph entry",
+                        record.task_id.as_str()
+                    )));
+                };
+                if task.execution_class
+                    != super::WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+                {
+                    continue;
+                }
+                let advanced = {
+                    let mut store = self.session_store_guard()?;
+                    self.scheduler_task_orchestrator
+                        .advance_awaiting_non_runtime_task_inputs(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            record.task_id.as_str(),
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler non-runtime input readiness failed: {error}"
+                            ))
+                        })?
+                };
+                progressed |= advanced.is_some();
+            }
+
+            let (_task_graph, records) =
+                self.active_run_scheduler_task_state_required(session_id, workflow_run_id)?;
+            let ready_task_ids = records
+                .iter()
+                .filter(|record| record.state.kind() == SchedulerTaskStateKind::Ready)
+                .map(|record| record.task_id.as_str().to_string())
+                .collect::<Vec<_>>();
+            for task_id in ready_task_ids {
+                let started = {
+                    let mut store = self.session_store_guard()?;
+                    self.scheduler_task_orchestrator
+                        .start_ready_non_runtime_task(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            &task_id,
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler non-runtime task start failed: {error}"
+                            ))
+                        })?
+                };
+                let execution_result = self
+                    .scheduler_task_orchestrator
+                    .execute_started_non_runtime_task(&started)
+                    .await;
+                match execution_result {
+                    Ok(result) => {
+                        let mut store = self.session_store_guard()?;
+                        self.scheduler_task_orchestrator
+                            .complete_started_non_runtime_task(
+                                &mut store,
+                                session_id,
+                                workflow_run_id,
+                                &started,
+                                result,
+                            )
+                            .map_err(|error| {
+                                WorkflowServiceError::InvalidRequest(format!(
+                                    "scheduler non-runtime task completion failed: {error}"
+                                ))
+                            })?;
+                    }
+                    Err(
+                        crate::scheduler::WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                            error,
+                        ),
+                    ) => {
+                        let mut store = self.session_store_guard()?;
+                        let _ = self.scheduler_task_orchestrator.fail_started_non_runtime_task(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            &started,
+                            &error,
+                        );
+                        return Err(WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler non-runtime task execution failed: {error}"
+                        )));
+                    }
+                    Err(error) => {
+                        return Err(WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler non-runtime task execution failed: {error}"
+                        )));
+                    }
+                }
+                progressed = true;
+            }
+        }
+
+        let (task_graph, records) =
+            self.active_run_scheduler_task_state_required(session_id, workflow_run_id)?;
+        if let Some(record) = records
+            .iter()
+            .find(|record| record.state.kind() != SchedulerTaskStateKind::Completed)
+        {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' did not complete; final state was {:?}",
+                record.task_id.as_str(),
+                record.state.kind()
+            )));
+        }
+        let results = {
+            let mut store = self.session_store_guard()?;
+            store.active_run_scheduler_task_results(session_id, workflow_run_id)?
+        };
+        let targets = self
+            .scheduler_output_targets_for_run(host, workflow_id, output_targets)
+            .await?;
+        let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
             .map_err(|error| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task output projection failed: {error}"
+                ))
+            })?;
+        validate_host_output_bindings(&outputs, "outputs")?;
+        validate_requested_outputs_produced(&targets, &outputs)?;
+        Ok(WorkflowRunResponse {
+            workflow_run_id: workflow_run_id.to_string(),
+            outputs,
+            timing_ms: started_at.elapsed().as_millis(),
+        })
+    }
+
+    fn active_run_scheduler_task_state_required(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<
+        (
+            WorkflowSchedulerTaskGraph,
+            Vec<pantograph_scheduler::SchedulerTaskStateRecord>,
+        ),
+        WorkflowServiceError,
+    > {
+        let store = self.session_store_guard()?;
+        store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)?
+            .ok_or_else(|| {
                 WorkflowServiceError::Internal(format!(
-                    "scheduler task-state initialization failed: {error}"
+                    "active workflow run '{}' has no scheduler task state",
+                    workflow_run_id
                 ))
             })
+    }
+
+    async fn scheduler_output_targets_for_run<H: WorkflowHost>(
+        &self,
+        host: &H,
+        workflow_id: &str,
+        output_targets: Option<&[WorkflowOutputTarget]>,
+    ) -> Result<Vec<WorkflowOutputTarget>, WorkflowServiceError> {
+        let io = host.workflow_io(workflow_id).await?;
+        validate_workflow_io(&io)?;
+        if let Some(targets) = output_targets {
+            validate_output_targets_against_io(targets, &io)?;
+            return Ok(targets.to_vec());
+        }
+        Ok(io
+            .outputs
+            .iter()
+            .flat_map(|node| {
+                node.ports.iter().map(|port| WorkflowOutputTarget {
+                    node_id: node.node_id.clone(),
+                    port_id: port.port_id.clone(),
+                })
+            })
+            .collect())
     }
 
     async fn create_queued_run_snapshot_if_configured<H: WorkflowHost>(

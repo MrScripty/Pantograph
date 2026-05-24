@@ -52,9 +52,7 @@ mod task_execution_classification;
 mod task_graph;
 mod task_graph_contracts;
 mod task_result_contracts;
-#[allow(dead_code)]
 mod task_result_output_projection;
-#[allow(dead_code)]
 mod task_run_summary;
 mod task_state_read_model;
 mod validation;
@@ -139,6 +137,10 @@ pub use self::task_result_contracts::{
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultTerminalMetadata,
     WorkflowSchedulerTaskResultValue, WORKFLOW_SCHEDULER_TASK_RESULT_MAX_DIAGNOSTICS,
     WORKFLOW_SCHEDULER_TASK_RESULT_MAX_OUTPUTS, WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+};
+pub(crate) use self::task_result_output_projection::project_scheduler_task_results_to_outputs;
+pub(crate) use self::task_run_summary::{
+    workflow_scheduler_task_run_summary, WorkflowSchedulerTaskRunSummary,
 };
 pub use self::task_state_read_model::{
     workflow_scheduler_task_state_read_models, WorkflowSchedulerTaskStateExecutionKind,

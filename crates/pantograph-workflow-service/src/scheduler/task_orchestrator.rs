@@ -92,6 +92,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         Ok(records)
     }
 
+    #[cfg(test)]
     pub(crate) fn initialize_active_run_task_state(
         &self,
         store: &mut WorkflowExecutionSessionStore,

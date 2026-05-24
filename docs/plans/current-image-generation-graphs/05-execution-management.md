@@ -10780,6 +10780,44 @@ Worker rules:
     orchestrator method, advance dependent readiness, execute ready
     non-runtime tasks, project requested outputs from scheduler task results,
     and remove remaining orchestrator staging `dead_code` allowances.
+- 2026-05-24 Milestone 5c non-runtime-only session runner cutover slice
+  completed:
+  - Smallest useful vertical slice: route non-runtime-only session runs through
+    scheduler task progression after queue admission while bypassing runtime
+    admission/preflight/load and the legacy whole-run host execution path.
+  - Allowed write set: workflow-service session execution, scheduler
+    orchestrator re-export/cfg cleanup, focused session execution tests,
+    scheduler README, Milestone 5c/task-level orchestration plan notes, and
+    this execution log. Existing unrelated Pumas proposal Markdown changes
+    remain ignored.
+  - Implementation notes: session execution now precomputes scheduler task
+    graph and initial task-state records before runtime admission, summarizes
+    the run class, skips runtime admission for non-runtime-only graphs,
+    materializes request source inputs through the orchestrator, advances
+    dependent non-runtime readiness, executes ready non-runtime tasks through
+    the single-task adapter, projects requested outputs from scheduler task
+    results, and finishes the run without `workflow_run_internal`.
+  - No-fallback/no-legacy confirmation: the non-runtime-only branch does not
+    call runtime admission, runtime preflight/load, runtime-host dispatch,
+    output demand, or the legacy whole-run host path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib`; `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo test -p
+    pantograph-workflow-service workflow::task_result_output_projection --lib`;
+    `cargo check -p pantograph-workflow-service`; and `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution --lib` still includes legacy
+    whole-run-host/runtime expectations over non-runtime text graphs. Later
+    cleanup must convert runtime-behavior tests to runtime-task graphs or
+    assert scheduler diagnostics for non-runtime-only runs.
+  - Remaining follow-up: runtime-containing session runs still need the
+    dispatch-selected runtime-host handoff cutover, and remaining orchestrator
+    staging `dead_code` allowances should be removed when that branch consumes
+    the runtime handoff APIs.
 
 ### Traceability Links
 

@@ -95,6 +95,12 @@ The scheduler task orchestrator is the only caller that converts run-request
 inputs into those source-input materialization transitions. Session execution
 must consume that orchestrator method instead of duplicating source-input
 transition construction or writing source values directly into task results.
+Non-runtime-only session runs now advance through the scheduler task loop:
+source inputs materialize into task results, dependent non-runtime tasks become
+ready from those results, the node-engine single-task adapter executes only
+typed non-runtime templates, and requested outputs are projected from
+scheduler task results. This path bypasses runtime admission/load and the
+legacy whole-workflow host run.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.

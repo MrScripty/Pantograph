@@ -1061,3 +1061,35 @@ durable task orchestration path.
   readiness, execute ready non-runtime tasks, project scheduler task results to
   requested outputs, and remove the remaining orchestrator staging `dead_code`
   allowances.
+- 2026-05-24 non-runtime-only session runner cutover slice completed.
+  Smallest useful vertical slice: route non-runtime-only workflow session runs
+  through scheduler task progression after queue admission while bypassing
+  runtime admission/preflight/load and the legacy whole-run host path. Allowed
+  write set: workflow-service session execution, scheduler orchestrator
+  re-export/cfg cleanup, focused session execution tests, scheduler README,
+  Milestone 5c/task-level orchestration plan notes, and this execution log.
+  Existing unrelated Pumas proposal Markdown changes remain ignored.
+  No-fallback/no-legacy confirmation: non-runtime-only runs now materialize
+  source inputs through the orchestrator, advance dependent non-runtime tasks,
+  execute only typed non-runtime templates through the node-engine single-task
+  adapter, project outputs from scheduler task results, and finish without
+  calling `workflow_run_internal`, output demand, runtime admission, runtime
+  load, or runtime-host dispatch. Verification passed: `cargo fmt -p
+  pantograph-workflow-service -- --check`; `cargo test -p
+  pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+  --lib`; `cargo test -p pantograph-workflow-service
+  scheduler::task_orchestrator --lib`; `cargo test -p
+  pantograph-workflow-service workflow::task_result_output_projection --lib`;
+  `cargo check -p pantograph-workflow-service`; and `cargo check -p
+  pantograph-workflow-service --no-default-features`; `cargo check -p
+  pantograph-workflow-service --all-features`; and `git diff --check`.
+  Discovered issue: the broader
+  `workflow::tests::session_execution` suite still contains legacy
+  whole-run-host/runtime expectations against non-runtime text graphs; those
+  tests need a later cleanup to use runtime-task graphs where runtime behavior
+  is the subject, or to assert scheduler diagnostics for non-runtime runs.
+  Remaining follow-up: runtime-containing session runs still need the
+  scheduler-selected runtime-host dispatch cutover, and the remaining
+  orchestrator staging `dead_code` allowances should be removed when that
+  branch consumes the runtime handoff APIs.
