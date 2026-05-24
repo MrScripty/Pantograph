@@ -30,6 +30,7 @@ inputs, and keeps execution dispatch aligned with descriptors published by
 | `planned_inference.rs` | Run-scoped planned inference decision context installed by hosts through executor extensions. |
 | `port_options.rs` | Port metadata helpers used by graph editing and execution, including validated provider query context and typed disabled/unavailable rows for fact-aware option lists. |
 | `registry.rs` | Built-in node registration, descriptor inventory, and callback-executor type boundaries. |
+| `single_task.rs` | One-task core execution API that owns `graph_flow::Context` and empty extension setup for scheduler-owned non-runtime adapters. |
 | `tasks/` | Task metadata and task-oriented helpers. |
 | `types.rs` | Shared workflow graph and runtime DTOs. |
 | `undo.rs` | Undo/redo support for workflow graph editing. |
@@ -65,6 +66,15 @@ translate emitted execution facts instead of inferring graph-change semantics
 locally.
 Graph-authoring, GUI, and binding contract semantics are not owned here; they
 are resolved through `pantograph-node-contracts` projections.
+
+For scheduler-owned workflow execution, `single_task.rs` is the only supported
+one-task core execution plumbing. It requires an explicit node type from the
+immutable task definition, injects that type into the core input shape, creates
+local graph-flow context plus empty executor extensions, and executes one
+host-independent core task. It is not a scheduler allowlist, demand executor,
+runtime inference launcher, Pumas selector, or workflow-session API. Callers
+must reject runtime inference, `puma-lib`, file I/O, and unsupported node kinds
+before constructing a single-task request.
 
 ## Alternatives Rejected
 - Reusing the generic llama.cpp inference node for reranking.
@@ -108,6 +118,11 @@ are resolved through `pantograph-node-contracts` projections.
   remain separate from Python-worker adapters. The retired direct
   `vision-analysis` HTTP path must not bypass canonical `llm-inference`
   image-understanding task contracts.
+- Scheduler-owned non-runtime execution enters node-engine through
+  `single_task.rs`, not `DemandEngine`, workflow sessions, planned-inference
+  host extensions, or caller-constructed graph-flow context. The single-task API
+  must fail closed if explicit node-type authority is missing or contradicted
+  by core resolution.
 - Llama.cpp completion execution stays in `core_executor/llamacpp_nodes.rs` so
   completion streaming and KV-cache capture are isolated from the remaining
   gateway-backed inference adapters.

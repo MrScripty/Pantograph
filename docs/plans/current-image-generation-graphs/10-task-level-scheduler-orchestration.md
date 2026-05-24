@@ -887,6 +887,18 @@ non-runtime task kind. Pre-intent states still show unknown model/runtime/device
 facts without fabricating intent. Timing and attempt counters remain open until
 the retry/defer/ledger lifecycle slice adds typed scheduler facts for them.
 
+2026-05-23 implementation status: node-engine now owns the focused
+`single_task` API planned for the non-runtime adapter boundary. The API exposes
+validated `NodeEngineSingleTaskRequest` / `NodeEngineSingleTaskResponse`
+contracts, creates local `graph_flow::Context` and empty `ExecutorExtensions`,
+injects explicit node-type authority from the request, runs one
+`CoreTaskExecutor` task, and fails closed for malformed `_data` or task-id
+suffix fallback attempts. Focused tests cover `text-input`, `text-output`,
+`boolean-input`, caller-supplied `_data.node_type` override, and blank request
+fields. Workflow-service task classification, generalized materialized-input
+readiness, scheduler-task execution entrypoint, non-runtime adapter conversion,
+and runtime-task rejection remain open.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

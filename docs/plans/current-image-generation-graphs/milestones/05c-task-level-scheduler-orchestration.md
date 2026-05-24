@@ -125,7 +125,13 @@ durable task orchestration path.
   Exclude `puma-lib`, `model-provider`, `expand-settings`, arbitrary-JSON
   nodes, floating-point/vector nodes, file I/O, image/audio blob nodes,
   human/tool nodes, and unknown kinds until each has an explicit typed
-  contract.
+  contract. Partial 2026-05-23 status: node-engine now owns a focused
+  `single_task` API that validates one explicit task id/node type, injects the
+  explicit node type into core inputs, creates local graph-flow context and
+  empty executor extensions, executes one `CoreTaskExecutor` task, and fails
+  closed for malformed `_data` or task-id suffix authority. Workflow-service
+  classification, generalized input readiness, scheduler-task entrypoint, and
+  the non-runtime adapter remain open.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider

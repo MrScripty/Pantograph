@@ -68,6 +68,7 @@ pub mod path_validation;
 pub mod planned_inference;
 pub mod port_options;
 pub mod registry;
+pub mod single_task;
 pub mod tasks;
 pub mod types;
 pub mod undo;
@@ -76,6 +77,10 @@ pub mod validation;
 // Re-export core and composite executors
 pub use composite_executor::CompositeTaskExecutor;
 pub use core_executor::{resolve_node_type, CoreTaskExecutor};
+pub use single_task::{
+    execute_core_task_once, NodeEngineSingleTaskError, NodeEngineSingleTaskRequest,
+    NodeEngineSingleTaskResponse, NodeEngineSingleTaskResult,
+};
 
 // Re-export key types from engine
 pub use engine::{

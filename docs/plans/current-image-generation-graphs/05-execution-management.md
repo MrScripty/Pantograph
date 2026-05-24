@@ -10255,6 +10255,36 @@ Worker rules:
     explicit node type from immutable task-definition facts and fail closed if
     core node resolution would disagree, so task-id suffix inference cannot
     become execution authority.
+- 2026-05-23 Milestone 5c node-engine single-task API slice completed:
+  - Slice scope: `crates/node-engine/src/single_task.rs`,
+    `crates/node-engine/src/lib.rs`, `crates/node-engine/src/README.md`, and
+    this plan. No workflow-service, scheduler, inference, planned-inference,
+    `DemandEngine`, workflow-session, registry, `puma-lib`, manifest, lockfile,
+    generated, sqlite, or workflow fixture files were edited.
+  - Implemented `NodeEngineSingleTaskRequest`, `NodeEngineSingleTaskResponse`,
+    `NodeEngineSingleTaskError`, and `execute_core_task_once`. The API owns
+    local graph-flow context plus empty executor extensions, injects explicit
+    node type into `_data`, preserves caller `_data` fields, rejects malformed
+    `_data`, and prevents task-id suffix inference from becoming execution
+    authority.
+  - No-fallback/no-legacy confirmation: this API is execution mechanics only,
+    not a scheduler allowlist or runtime path. It does not call
+    `workflow_run_internal`, `DemandEngine`, output-node demand, workflow
+    sessions, planned-inference host extensions, runtime-host dispatch, or
+    `execute_puma_lib`. Runtime inference and `puma-lib` remain rejected by the
+    future workflow-service adapter/classifier before node-engine is called.
+  - Verification: `cargo fmt -p node-engine`; `cargo test -p node-engine
+    single_task -- --nocapture`; `cargo check -p node-engine`; `cargo check -p
+    node-engine --no-default-features`; `cargo check -p node-engine
+    --all-features`; `git diff --check -- crates/node-engine/src/single_task.rs
+    crates/node-engine/src/lib.rs crates/node-engine/src/README.md`; targeted
+    search over the new module for `workflow_run_internal`,
+    `DemandEngine::demand`, `DemandEngine`, `PlannedInferenceExecutionHost`,
+    `execute_puma_lib`, and `WorkflowExecutionSession`.
+  - Remaining follow-up: add the workflow-service task-classification boundary,
+    generalized materialized-input readiness, scheduler-task execution
+    entrypoint, non-runtime adapter conversion, and runtime-task fail-closed
+    diagnostics before any scheduler-owned non-runtime workflow task executes.
 
 ### Traceability Links
 
