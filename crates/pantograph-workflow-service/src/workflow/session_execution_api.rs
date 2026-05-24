@@ -354,6 +354,7 @@ impl WorkflowService {
             let session_ready_to_load = {
                 let mut store = self.session_store_guard()?;
                 if scheduler_task_run_summary.is_non_runtime_only()
+                    || scheduler_task_run_summary.has_runtime_inference()
                     || !store.queued_run_is_admission_candidate(&session_id, &workflow_run_id)?
                 {
                     None
@@ -481,6 +482,37 @@ impl WorkflowService {
                 )?;
             }
             debug_assert!(!finish_state.unload_runtime);
+            return run_result;
+        }
+
+        if scheduler_task_run_summary.has_runtime_inference() {
+            self.record_run_started_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &queued_run,
+            )?;
+            let run_result = self.fail_runtime_scheduler_session_not_wired(
+                &session_id,
+                &workflow_run_id,
+                &scheduler_task_run_summary,
+            );
+            self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
+            if let Err(record_error) = self.record_run_terminal_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                Some(&queued_workflow_semantic_version),
+                &run_result,
+            ) {
+                if let Err(error) = run_result {
+                    return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                        workflow_run_id: Some(workflow_run_id),
+                        diagnostic_event_id: None,
+                        diagnostics_unavailable: Some(record_error.message().to_string()),
+                    }));
+                }
+                return Err(record_error);
+            }
             return run_result;
         }
         let mut reservation_context = scheduler_reservation_context(
@@ -1122,6 +1154,38 @@ impl WorkflowService {
             outputs,
             timing_ms: started_at.elapsed().as_millis(),
         })
+    }
+
+    fn fail_runtime_scheduler_session_not_wired(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        summary: &WorkflowSchedulerTaskRunSummary,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if !summary.has_runtime_inference() {
+            return Err(WorkflowServiceError::Internal(
+                "scheduler runtime fail-closed path received a run without runtime inference"
+                    .to_string(),
+            ));
+        }
+        {
+            let mut store = self.session_store_guard()?;
+            self.scheduler_task_orchestrator
+                .fail_runtime_dispatch_not_wired_for_active_run(
+                    &mut store,
+                    session_id,
+                    workflow_run_id,
+                )
+                .map_err(|error| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime dispatch fail-closed transition failed: {error}"
+                    ))
+                })?;
+        }
+        Err(WorkflowServiceError::CapabilityViolation(format!(
+            "runtime scheduler dispatch is not wired for {count} runtime inference task(s); runtime tasks must execute only through dispatch-selected scheduler runtime-host handoff",
+            count = summary.runtime_inference_tasks
+        )))
     }
 
     fn active_run_scheduler_task_state_required(

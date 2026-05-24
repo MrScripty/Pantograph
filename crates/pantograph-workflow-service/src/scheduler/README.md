@@ -153,6 +153,11 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   `pantograph-scheduler` queue contracts before storage. Workflow-service
   must not define a second task-state transition table or bypass scheduler
   transition validation.
+- Runtime scheduler tasks whose dispatch-selected runtime-host handoff is not
+  wired must fail closed by applying a scheduler-validated terminal task-state
+  transition with typed diagnostics. They must not enter runtime admission,
+  runtime preflight/load, node-engine output demand, or the legacy whole-run
+  host execution path as a compatibility route.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable

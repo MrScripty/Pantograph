@@ -10818,6 +10818,37 @@ Worker rules:
     dispatch-selected runtime-host handoff cutover, and remaining orchestrator
     staging `dead_code` allowances should be removed when that branch consumes
     the runtime handoff APIs.
+- 2026-05-24 Milestone 5c runtime-containing fail-closed session slice
+  completed:
+  - Smallest useful vertical slice: remove the successful legacy
+    runtime-containing session branch until actual dispatch-selected
+    runtime-host handoff is wired.
+  - Allowed write set: workflow-service session execution, scheduler
+    orchestrator and focused tests, scheduler README, Milestone 5c/task-level
+    orchestration plan notes, and this execution log. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - Implementation notes: session execution now skips runtime admission,
+    runtime preflight/load, and `workflow_run_internal` for runs with runtime
+    inference scheduler tasks. The orchestrator applies scheduler-validated
+    terminal failed transitions to active runtime tasks with typed
+    `SchedulerPolicyError` diagnostics, and the workflow API returns a
+    capability violation explaining that runtime dispatch must go through a
+    dispatch-selected scheduler runtime-host handoff.
+  - No-fallback/no-legacy confirmation: runtime-containing runs no longer use
+    whole-run host execution, node-engine output demand, runtime load, or
+    reduced-plan launch as a compatibility path while runtime handoff dispatch
+    is incomplete.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    scheduler::task_orchestrator::tests::orchestrator_marks_runtime_tasks_terminal_when_dispatch_is_not_wired
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib`; and `cargo test -p pantograph-workflow-service
+    workflow::task_run_summary --lib`.
+  - Remaining follow-up: wire actual runtime inference tasks through
+    dispatch-selected `SchedulerRuntimeHandoff` values and handle
+    Pumas-materialization-only/unsupported task-class terminal behavior in the
+    scheduler-task session runner.
 
 ### Traceability Links
 

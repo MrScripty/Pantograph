@@ -1,8 +1,9 @@
 use super::*;
 use crate::{
-    WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitHistoryThresholdState,
-    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitSelectionPolicyTrace,
+    GraphEdge, GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary,
+    WorkflowTechnicalFitDecisionCode, WorkflowTechnicalFitDeviceClass,
+    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitPolicyPhase,
+    WorkflowTechnicalFitSelectionPolicyTrace,
 };
 
 #[tokio::test]
@@ -85,6 +86,50 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
         .await
         .expect_err("closed session should not run");
     assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+}
+
+#[tokio::test]
+async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launch() {
+    let host = RuntimeInferenceSessionHost::new();
+    let service = WorkflowService::with_max_sessions(2);
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-runtime-fail-closed".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime-containing scheduler run should fail closed");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(error
+        .message()
+        .contains("runtime scheduler dispatch is not wired"));
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]
@@ -1995,6 +2040,122 @@ async fn workflow_execution_session_runtime_load_failure_uses_phase_hint() {
 
     assert!(error_event.payload_json.contains("managed_binary"));
     assert!(error_event.payload_json.contains("managed_binary_failed"));
+}
+
+struct RuntimeInferenceSessionHost {
+    inner: MockWorkflowHost,
+    runtime_load_attempts: Arc<AtomicUsize>,
+    run_attempts: Arc<AtomicUsize>,
+}
+
+impl RuntimeInferenceSessionHost {
+    fn new() -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
+            runtime_load_attempts: Arc::new(AtomicUsize::new(0)),
+            run_attempts: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl WorkflowHost for RuntimeInferenceSessionHost {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        Ok("runtime-inference-session-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(runtime_inference_session_graph())
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn workflow_io(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        self.inner.workflow_io(workflow_id).await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn load_session_runtime(
+        &self,
+        _session_id: &str,
+        _workflow_id: &str,
+        _usage_profile: Option<&str>,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
+    ) -> Result<(), WorkflowServiceError> {
+        self.runtime_load_attempts.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn run_workflow(
+        &self,
+        _workflow_id: &str,
+        _inputs: &[WorkflowPortBinding],
+        _output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: WorkflowRunOptions,
+        _run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        self.run_attempts.fetch_add(1, Ordering::SeqCst);
+        Ok(Vec::new())
+    }
+}
+
+fn runtime_inference_session_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "infer".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 200.0, y: 0.0 },
+                data: serde_json::json!({
+                    "task_kind": "image_generation",
+                    "runtime": "pytorch",
+                    "device": "cuda:0",
+                    "pumas_model_ref": {
+                        "model_id": "image/example/tiny-diffusion",
+                        "revision": "main",
+                        "selected_artifact_id": "diffusers-bundle"
+                    }
+                }),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "edge-prompt-infer".to_string(),
+            source: "prompt".to_string(),
+            source_handle: "text".to_string(),
+            target: "infer".to_string(),
+            target_handle: "prompt".to_string(),
+        }],
+        derived_graph: None,
+    }
 }
 
 fn retained_io_test_artifact_policy() -> ArtifactPolicy {

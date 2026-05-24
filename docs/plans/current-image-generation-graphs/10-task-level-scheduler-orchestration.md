@@ -1298,9 +1298,13 @@ source inputs through the orchestrator, advances dependent non-runtime task
 readiness, executes ready non-runtime tasks through the node-engine single-task
 adapter, projects requested outputs from completed scheduler task results, and
 finishes the active run without calling `workflow_run_internal`. Runtime
-containing runs still use the existing path until dispatch-selected
-runtime-host handoff is wired. Remaining cutover work: replace the
-runtime-containing branch with scheduler-selected runtime-host dispatch,
+containing runs now also avoid runtime admission/preflight/load and
+`workflow_run_internal` while dispatch-selected runtime-host handoff is not
+wired: workflow-service marks runtime scheduler tasks terminal failed with
+typed `SchedulerPolicyError` diagnostics and returns a capability-violation
+workflow error. Remaining cutover work: replace that fail-closed branch with
+actual scheduler-selected runtime-host dispatch, handle
+Pumas-materialization-only and unsupported task-class terminal behavior,
 update legacy session tests that intentionally expect whole-run host/runtime
 behavior to use runtime-task graphs or new scheduler diagnostics, and remove
 the remaining staged orchestrator `dead_code` allowances when runtime dispatch

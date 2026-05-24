@@ -217,6 +217,13 @@ durable task orchestration path.
   `SchedulerRuntimeHandoff` values and the runtime-host execution port added
   in Milestone 5b. Do not build handoff from reduced execution plans or
   backend projections.
+  Partial 2026-05-24 status: runtime-containing session runs no longer enter
+  runtime admission, runtime preflight/load, or the legacy whole-run
+  node-engine host launch while the runtime handoff cutover is incomplete.
+  Workflow-service now marks active runtime scheduler tasks terminal failed
+  with typed `SchedulerPolicyError` diagnostics and returns a
+  capability-violation workflow error. Actual dispatch-selected
+  `SchedulerRuntimeHandoff` construction/execution remains open.
 - [ ] Replace workflow/session run execution so the dedicated scheduler-task
   execution path, not node-engine output demand, advances workflow progress.
   A workflow must be able to pause between tasks while another workflow's
@@ -243,6 +250,13 @@ durable task orchestration path.
   with existing requested-output validation. Do not keep the old whole-run
   node-engine path, output demand, or `workflow_run_internal` as a compatibility
   branch for tasks handled by the scheduler loop.
+  2026-05-24 implementation status: runtime-containing runs now take the
+  fail-closed scheduler-task branch before any runtime admission/load or
+  `workflow_run_internal` call. Focused tests assert no runtime load and no
+  legacy host execution. Non-runtime-only and runtime-containing runs are no
+  longer successful legacy branches; remaining session-runner gaps are
+  Pumas-materialization-only or unsupported task classes, plus the actual
+  runtime handoff dispatch slice.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

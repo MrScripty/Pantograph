@@ -574,6 +574,54 @@ async fn orchestrator_rejects_runtime_task_before_non_runtime_adapter() {
         .is_empty());
 }
 
+#[test]
+fn orchestrator_marks_runtime_tasks_terminal_when_dispatch_is_not_wired() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+
+    let failed = orchestrator
+        .fail_runtime_dispatch_not_wired_for_active_run(&mut store, &session_id, &workflow_run_id)
+        .expect("runtime dispatch fail closed");
+
+    assert_eq!(failed.len(), 1);
+    assert_eq!(failed[0].task_id.as_str(), task_id);
+    let SchedulerTaskState::TerminalFailed { diagnostics } = &failed[0].state else {
+        panic!("expected terminal failed runtime task");
+    };
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::SchedulerPolicyError
+    );
+    assert!(diagnostics[0]
+        .message
+        .contains("runtime scheduler task dispatch"));
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    assert_eq!(
+        records[0].state.kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::TerminalFailed
+    );
+    assert!(store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results")
+        .is_empty());
+}
+
 #[tokio::test]
 async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result() {
     let orchestrator = orchestrator_without_runtime_host_response();

@@ -37,7 +37,6 @@ pub(crate) struct WorkflowSchedulerTaskOrchestrator {
 
 #[derive(Debug, Clone)]
 #[must_use]
-#[allow(dead_code)]
 pub(crate) struct StartedNonRuntimeTaskExecution {
     task: WorkflowSchedulerTask,
     materialized_results: Vec<WorkflowSchedulerTaskResult>,
@@ -106,7 +105,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn materialize_external_inputs_for_active_run(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -168,7 +166,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         Ok(completed_records)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn start_ready_non_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -241,7 +238,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         })
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn execute_started_non_runtime_task(
         &self,
         started: &StartedNonRuntimeTaskExecution,
@@ -251,7 +247,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn complete_started_non_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -272,7 +267,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .and_then(applied_task_state_record)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn fail_started_non_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -295,7 +289,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .and_then(applied_task_state_record)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn advance_awaiting_non_runtime_task_inputs(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -397,6 +390,68 @@ impl WorkflowSchedulerTaskOrchestrator {
                     .map(Some)
             }
         }
+    }
+
+    pub(crate) fn fail_runtime_dispatch_not_wired_for_active_run(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let mut failed_records = Vec::new();
+        for task in task_graph.tasks.iter().filter(|task| {
+            task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+        }) {
+            let record = records
+                .iter()
+                .find(|record| record.task_id.as_str() == task.task_id.as_str())
+                .ok_or_else(|| {
+                    WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler runtime task '{}' has no active task-state record",
+                            task.task_id.as_str()
+                        )),
+                    )
+                })?;
+            if record.state.kind() == SchedulerTaskStateKind::TerminalFailed {
+                failed_records.push(record.clone());
+                continue;
+            }
+            if record.state.kind() == SchedulerTaskStateKind::Completed {
+                return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime task '{}' is already completed before runtime dispatch",
+                        task.task_id.as_str()
+                    )),
+                ));
+            }
+            let transition = runtime_dispatch_not_wired_transition(record)?;
+            let failed = store
+                .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
+                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                .and_then(applied_task_state_record)?;
+            failed_records.push(failed);
+        }
+        if failed_records.is_empty() {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "active workflow run '{}' has no runtime inference scheduler tasks",
+                    workflow_run_id
+                )),
+            ));
+        }
+        Ok(failed_records)
     }
 }
 
@@ -596,6 +651,29 @@ fn terminal_failure_transition_from_running(
         SchedulerTaskStateKind::Running,
         SchedulerTaskState::TerminalFailed {
             diagnostics: vec![diagnostic],
+        },
+    )
+}
+
+fn runtime_dispatch_not_wired_transition(
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    task_state_transition(
+        record,
+        "runtime-dispatch-not-wired",
+        record.state.kind(),
+        SchedulerTaskState::TerminalFailed {
+            diagnostics: vec![SchedulerTaskStateDiagnostic {
+                severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+                message:
+                    "runtime scheduler task dispatch is not wired through scheduler-selected runtime-host handoff"
+                        .to_string(),
+                hint: Some(
+                    "Wire this task through a dispatch-selected SchedulerRuntimeHandoff before executing runtime inference."
+                        .to_string(),
+                ),
+            }],
         },
     )
 }
