@@ -289,6 +289,16 @@ durable task orchestration path.
   gate must include targeted `rg` searches for every retired symbol, focused
   compile/test commands for touched crates, `git diff --check`, and a clean
   decision recorded here for any surface that cannot be deleted immediately.
+  2026-05-24 cleanup implementation status: the first deletion slice removed
+  the reduced execution-plan admission helper, its workflow-service export,
+  its README entry, and the tests that asserted technical-fit admission could
+  still produce an executable reduced run plan. Source searches now show no
+  `build_workflow_execution_plan_from_admission`,
+  `execution_plan_admission`, or `workflow_execution_plan_admission` source
+  references. Remaining cleanup targets include old queue runtime-admission
+  fields/helpers, retired runtime-load/session-admission diagnostics helpers,
+  `session_runtime_load_lifecycle`, `workflow_run_internal`, and the media
+  artifactization conversion boundary.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

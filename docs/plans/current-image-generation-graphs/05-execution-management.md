@@ -10902,6 +10902,34 @@ Worker rules:
   - Verification for this documentation slice: run `git diff --check` and
     inspect the plan diff. Code verification belongs to the following cleanup
     implementation slice.
+- 2026-05-24 Milestone 5c reduced execution-plan admission cleanup slice
+  completed:
+  - Smallest useful vertical slice: remove the reduced execution-plan
+    admission helper exposed as retired dead code by the scheduler-task
+    session-runner cutover.
+  - Allowed write set: workflow-service facade module list/export,
+    workflow-service `workflow/README.md`, workflow-service contract tests,
+    deletion of `workflow/execution_plan_admission.rs`, Milestone 5c/task-level
+    orchestration plan notes, and this execution log. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: technical-fit admission can no longer
+    synthesize a reduced executable run plan through
+    `build_workflow_execution_plan_from_admission`. Runtime execution remains
+    limited to scheduler task graph/state plus dispatch-selected runtime-host
+    handoff; this slice does not add shims or replacement fallback behavior.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service workflow::tests::contracts
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted source search for
+    `build_workflow_execution_plan_from_admission`,
+    `execution_plan_admission`, and `workflow_execution_plan_admission`; and
+    `git diff --check`.
+  - Remaining follow-up: remove or canonically reattach the old queue
+    runtime-admission fields/helpers, retired runtime-load/session-admission
+    diagnostics helpers, `session_runtime_load_lifecycle`,
+    `workflow_run_internal`, and the old media artifactization conversion
+    boundary.
 
 ### Traceability Links
 

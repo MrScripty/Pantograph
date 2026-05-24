@@ -27,7 +27,6 @@ mod contracts;
 mod diagnostic_errors;
 mod diagnostics_api;
 mod execution_plan;
-mod execution_plan_admission;
 mod execution_plan_model_ref;
 mod execution_plan_selected_facts;
 mod external_input_materialization;
@@ -95,7 +94,6 @@ pub use self::execution_plan::{
     WORKFLOW_EXECUTION_PLAN_MAX_NODE_DECISIONS, WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
     WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION,
 };
-pub(crate) use self::execution_plan_admission::build_workflow_execution_plan_from_admission;
 pub use self::execution_plan_model_ref::{
     WorkflowExecutionPlanModelRef, WorkflowExecutionPlanModelRefError,
 };

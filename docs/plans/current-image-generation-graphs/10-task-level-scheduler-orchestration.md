@@ -1372,6 +1372,19 @@ checks for every touched crate without new dead-code warnings, and
 plan must record the owner, the canonical path it will attach to, and the
 specific follow-up before implementation continues.
 
+2026-05-24 implementation status: the reduced execution-plan admission deletion
+slice is complete. Workflow-service no longer declares
+`execution_plan_admission`, no longer re-exports
+`build_workflow_execution_plan_from_admission`, no longer documents that helper
+as an active workflow module, and no longer keeps contract tests that prove
+technical-fit admission can synthesize a reduced executable run plan. Targeted
+source searches for `build_workflow_execution_plan_from_admission`,
+`execution_plan_admission`, and `workflow_execution_plan_admission` are clean.
+The remaining legacy cleanup work is now narrowed to queue runtime-admission
+storage/helpers, retired runtime-load/session-admission diagnostics helpers,
+`session_runtime_load_lifecycle`, `workflow_run_internal`, and the old media
+artifactization conversion boundary.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:
