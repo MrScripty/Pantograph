@@ -381,18 +381,27 @@ impl WorkflowService {
                 &queued_run,
             )?;
             let run_started_at = std::time::Instant::now();
-            let run_result = self
-                .run_non_runtime_only_scheduler_session(
-                    host,
-                    &session_id,
-                    &workflow_run_id,
-                    &queued_run.workflow_id,
-                    &queued_run.queued.inputs,
-                    queued_run.queued.output_targets.as_deref(),
-                    &scheduler_task_run_summary,
-                    run_started_at,
-                )
-                .await;
+            let run_future = self.run_non_runtime_only_scheduler_session(
+                host,
+                &session_id,
+                &workflow_run_id,
+                &queued_run.workflow_id,
+                &queued_run.queued.inputs,
+                queued_run.queued.output_targets.as_deref(),
+                &scheduler_task_run_summary,
+                run_started_at,
+            );
+            let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
+                match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
+                    Ok(result) => result,
+                    Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
+                        "workflow run exceeded timeout_ms {}",
+                        timeout_ms
+                    ))),
+                }
+            } else {
+                run_future.await
+            };
             let finish_state = {
                 let mut store = self.session_store_guard()?;
                 store.finish_run(&session_id, &workflow_run_id)?

@@ -10954,6 +10954,34 @@ Worker rules:
     diagnostics helpers, `session_runtime_load_lifecycle`,
     `workflow_run_internal`, and the old media artifactization conversion
     boundary.
+- 2026-05-24 Milestone 5c scheduler session timeout reattachment slice
+  completed:
+  - Smallest useful vertical slice: reattach queued-run `timeout_ms` to the
+    canonical scheduler-task session runner for non-runtime scheduler-task
+    execution.
+  - Allowed write set: workflow-service session execution API, focused
+    workflow-service session execution test, Milestone 5c/task-level
+    orchestration plan notes, and this execution log. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: the timeout is enforced around
+    scheduler-task execution and returns typed `RuntimeTimeout`; the slice does
+    not route through `workflow_run_internal`, runtime admission/load, or
+    node-engine output demand.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Remaining follow-up: runtime dispatch timeouts, cancellation, attempt
+    timing, and ledger-backed duration history belong to the later
+    scheduler/runtime-host lifecycle slice. Continue cleanup of stale
+    queued/dequeued/preflight fields, retired runtime-load/session-admission
+    diagnostics helpers, `session_runtime_load_lifecycle`,
+    `workflow_run_internal`, and the old media artifactization conversion
+    boundary.
 
 ### Traceability Links
 

@@ -307,6 +307,16 @@ durable task orchestration path.
   provide a side path for predicted admission or queue-decision mutation.
   Remaining queue cleanup targets are the stale queued/dequeued/preflight
   fields that no active scheduler read model or policy consumes.
+  2026-05-24 cleanup implementation status: `timeout_ms` was classified as a
+  canonical reattachment target, not a deletion target. The scheduler-task
+  session runner now applies the queued run timeout around non-runtime
+  scheduler-task execution and returns a typed `RuntimeTimeout` error when the
+  run exceeds the requested duration. This preserves the user-visible timeout
+  contract without reviving `workflow_run_internal`, runtime admission/load,
+  or node-engine output demand. The current scope covers non-runtime
+  scheduler-task runs after queue admission; runtime dispatch timeout,
+  cancellation, and durable attempt timing remain owned by the later
+  scheduler/runtime-host lifecycle slice.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

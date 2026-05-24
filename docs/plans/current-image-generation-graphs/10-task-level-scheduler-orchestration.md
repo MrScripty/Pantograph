@@ -1393,6 +1393,14 @@ Targeted source search for both helper names is clean. Remaining queue cleanup
 is limited to stale fields and record payloads that are still present but no
 active scheduler policy/read model consumes.
 
+2026-05-24 implementation status: queued-run `timeout_ms` was reattached to the
+canonical scheduler-task session runner. Non-runtime scheduler-task execution
+now runs under the queued timeout and returns a typed `RuntimeTimeout` if the
+duration is exceeded. This removes the `timeout_ms` dead-code surface without
+keeping the old whole-run launch path alive. Runtime-host dispatch timeouts,
+cancellation, attempt timing, and ledger-backed duration history remain later
+scheduler/runtime-host lifecycle work.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

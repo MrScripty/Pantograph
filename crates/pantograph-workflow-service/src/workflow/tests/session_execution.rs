@@ -89,6 +89,57 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_timeout_applies_to_scheduler_task_runner() {
+    let host = SlowWorkflowIoHost::new(std::time::Duration::from_millis(50));
+    let service = WorkflowService::with_max_sessions(2);
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-timeout".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("timeout"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: Some(1),
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("scheduler task runner should honor timeout_ms");
+
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeTimeout);
+    assert!(error.message().contains("timeout_ms 1"));
+    assert!(
+        host.inner
+            .recorded_run_options
+            .lock()
+            .expect("run options lock")
+            .is_empty(),
+        "timeout must not route through the legacy whole-run host path"
+    );
+}
+
+#[tokio::test]
 async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launch() {
     let host = RuntimeInferenceSessionHost::new();
     let service = WorkflowService::with_max_sessions(2);
@@ -130,6 +181,94 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         .contains("runtime scheduler dispatch is not wired"));
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+struct SlowWorkflowIoHost {
+    inner: MockWorkflowHost,
+    workflow_io_delay: std::time::Duration,
+}
+
+impl SlowWorkflowIoHost {
+    fn new(workflow_io_delay: std::time::Duration) -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
+            workflow_io_delay,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl WorkflowHost for SlowWorkflowIoHost {
+    fn max_input_bindings(&self) -> usize {
+        self.inner.max_input_bindings()
+    }
+
+    fn max_output_targets(&self) -> usize {
+        self.inner.max_output_targets()
+    }
+
+    fn max_value_bytes(&self) -> usize {
+        self.inner.max_value_bytes()
+    }
+
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        self.inner.workflow_graph_fingerprint(workflow_id).await
+    }
+
+    async fn workflow_graph(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        self.inner.workflow_graph(workflow_id).await
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn workflow_io(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        tokio::time::sleep(self.workflow_io_delay).await;
+        self.inner.workflow_io(workflow_id).await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn workflow_technical_fit_decision(
+        &self,
+        request: &WorkflowTechnicalFitRequest,
+    ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+        self.inner.workflow_technical_fit_decision(request).await
+    }
+
+    async fn run_workflow(
+        &self,
+        workflow_id: &str,
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        run_options: WorkflowRunOptions,
+        run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        self.inner
+            .run_workflow(workflow_id, inputs, output_targets, run_options, run_handle)
+            .await
+    }
 }
 
 #[tokio::test]
