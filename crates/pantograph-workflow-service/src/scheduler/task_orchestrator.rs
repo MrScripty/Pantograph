@@ -115,6 +115,22 @@ fn initial_task_state(
             }
         }
         WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine => {
+            if task.non_runtime_task_template.is_none() {
+                return Ok(SchedulerTaskState::Invalid {
+                    diagnostics: vec![SchedulerTaskStateDiagnostic {
+                        severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                        code: SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        message: format!(
+                            "workflow task type '{}' is missing a typed non-runtime execution template",
+                            task.node_type
+                        ),
+                        hint: Some(
+                            "Add a concrete typed scheduler template before executing this non-runtime node."
+                                .to_string(),
+                        ),
+                    }],
+                });
+            }
             if task.dependency_task_ids.is_empty() {
                 Ok(SchedulerTaskState::Ready {
                     execution_intent: SchedulerTaskExecutionIntent::NonRuntime {

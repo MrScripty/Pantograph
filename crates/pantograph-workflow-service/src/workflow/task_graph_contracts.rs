@@ -6,7 +6,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 2;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -35,6 +35,8 @@ pub struct WorkflowSchedulerTask {
     pub schedulable_intent: Option<SchedulableTaskIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedulable_intent_template: Option<WorkflowSchedulerTaskIntentTemplate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_runtime_task_template: Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 }
@@ -73,6 +75,15 @@ pub struct WorkflowSchedulerTaskIntentTemplate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "template_type", rename_all = "snake_case", deny_unknown_fields)]
+#[non_exhaustive]
+pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
+    TextInput { value: String },
+    BooleanInput { value: bool },
+    TextOutput,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct WorkflowSchedulerTaskProjectionDiagnostic {
     pub severity: WorkflowSchedulerTaskProjectionDiagnosticSeverity,
@@ -101,6 +112,9 @@ pub enum WorkflowSchedulerTaskProjectionDiagnosticCode {
     InvalidDeviceRequirement,
     InvalidTraitSetting,
     UnsupportedTraitValue,
+    MissingNonRuntimeTemplateValue,
+    InvalidNonRuntimeTemplateValue,
+    UnsupportedNonRuntimeTaskTemplate,
 }
 
 fn default_workflow_scheduler_task_graph_schema_version() -> u16 {

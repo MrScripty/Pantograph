@@ -38,8 +38,8 @@ public exports out of the service crate.
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `task_binding_resolution.rs` | Dependency-to-input binding resolution from materialized scheduler task results into validated scheduler-admissible task intents. |
 | `task_execution_classification.rs` | Single workflow-service boundary that maps immutable node type plus canonical node-contract facts into scheduler execution classes before orchestration or adapters choose a path. |
-| `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, execution class, optional schedulable task intents, and typed projection diagnostics. |
-| `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs, execution-class enum, and projection diagnostic enums re-exported through the workflow facade. |
+| `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, execution class, optional schedulable task intents, concrete typed non-runtime task templates for the current allowlist, and typed projection diagnostics. |
+| `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs, execution-class enum, concrete typed non-runtime task-template enum, and projection diagnostic enums re-exported through the workflow facade. |
 | `task_result_contracts.rs` | Public typed scheduler task-result DTOs used by task orchestration materialization before dependency binding resolution. |
 | `task_state_read_model.rs` | Presentation-neutral scheduler task-state projection from immutable task graph facts plus validated task-state records for graph editor and run inspection consumers. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
@@ -116,6 +116,14 @@ facade test module.
   inference, non-runtime node-engine execution, Pumas materialization, and
   unsupported tasks must enter orchestration through this single boundary
   rather than through scattered node-type checks.
+- Scheduler non-runtime task templates are concrete, typed task-definition
+  facts for the current allowlist only. Projection may read graph node data to
+  build `text-input`, `boolean-input`, and `text-output` templates, but the
+  scheduler-task entrypoint and node-engine adapter must consume only those
+  templates plus materialized task results. User-authored or broader node
+  support needs an explicit typed template variant or the later generic typed
+  port-value contract; do not pass arbitrary JSON or frontend node data as an
+  execution template.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.

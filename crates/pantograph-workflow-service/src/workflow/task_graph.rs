@@ -14,7 +14,8 @@ use serde_json::Value;
 
 use super::task_execution_classification::classify_workflow_scheduler_task;
 use super::task_graph_contracts::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
@@ -28,6 +29,11 @@ const PORT_TASK_KIND: &str = "task_kind";
 const PORT_RUNTIME: &str = "runtime";
 const PORT_DEVICE: &str = "device";
 const PORT_DENOISING_SCHEDULER: &str = "denoising_scheduler";
+const PORT_TEXT: &str = "text";
+const PORT_VALUE: &str = "value";
+const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
+const NODE_TYPE_TEXT_INPUT: &str = "text-input";
+const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
 
 pub fn workflow_scheduler_task_graph(
     workflow_id: &WorkflowId,
@@ -73,6 +79,16 @@ pub fn workflow_scheduler_task_graph(
                 data,
                 &input_bindings,
             );
+        let (non_runtime_task_template, non_runtime_diagnostics) =
+            non_runtime_task_template_for_node(
+                &node_id,
+                &node.node_type,
+                execution_class,
+                data,
+                &input_bindings,
+            );
+        let mut diagnostics = diagnostics;
+        diagnostics.extend(non_runtime_diagnostics);
 
         tasks.push(WorkflowSchedulerTask {
             workflow_id: workflow_id.clone(),
@@ -85,6 +101,7 @@ pub fn workflow_scheduler_task_graph(
             input_bindings,
             schedulable_intent,
             schedulable_intent_template,
+            non_runtime_task_template,
             diagnostics,
         });
     }
@@ -237,6 +254,136 @@ fn schedulable_intent_for_node(
     }
 
     (None, schedulable_intent_template, diagnostics)
+}
+
+fn non_runtime_task_template_for_node(
+    node_id: &SchedulerNodeId,
+    node_type: &str,
+    execution_class: WorkflowSchedulerTaskExecutionClass,
+    data: Option<&Value>,
+    input_bindings: &[WorkflowSchedulerTaskInputBinding],
+) -> (
+    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+) {
+    if execution_class != WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine {
+        return (None, Vec::new());
+    }
+
+    match node_type {
+        NODE_TYPE_TEXT_INPUT => text_input_template(node_id, data),
+        NODE_TYPE_BOOLEAN_INPUT => boolean_input_template(node_id, data),
+        NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
+        _ => (
+            None,
+            vec![diagnostic(
+                node_id,
+                None,
+                WorkflowSchedulerTaskProjectionDiagnosticCode::UnsupportedNonRuntimeTaskTemplate,
+                format!("non-runtime task type '{node_type}' has no typed scheduler template"),
+            )],
+        ),
+    }
+}
+
+fn text_input_template(
+    node_id: &SchedulerNodeId,
+    data: Option<&Value>,
+) -> (
+    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+) {
+    let Some(value) = data.and_then(|data| data.get(PORT_TEXT)) else {
+        return (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some(PORT_TEXT),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
+                "text-input scheduler template requires canonical text value",
+            )],
+        );
+    };
+    let Some(value) = value.as_str() else {
+        return (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some(PORT_TEXT),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                "text-input scheduler template value must be a string",
+            )],
+        );
+    };
+    (
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
+            value: value.to_string(),
+        }),
+        Vec::new(),
+    )
+}
+
+fn boolean_input_template(
+    node_id: &SchedulerNodeId,
+    data: Option<&Value>,
+) -> (
+    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+) {
+    let Some(value) = data.and_then(|data| data.get(PORT_VALUE)) else {
+        return (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some(PORT_VALUE),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
+                "boolean-input scheduler template requires canonical value",
+            )],
+        );
+    };
+    let Some(value) = value.as_bool() else {
+        return (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some(PORT_VALUE),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                "boolean-input scheduler template value must be a boolean",
+            )],
+        );
+    };
+    (
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { value }),
+        Vec::new(),
+    )
+}
+
+fn text_output_template(
+    node_id: &SchedulerNodeId,
+    input_bindings: &[WorkflowSchedulerTaskInputBinding],
+) -> (
+    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+) {
+    if input_bindings
+        .iter()
+        .any(|binding| binding.target_port_id == PORT_TEXT)
+    {
+        (
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
+            Vec::new(),
+        )
+    } else {
+        (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some(PORT_TEXT),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
+                "text-output scheduler template requires a materialized upstream text input",
+            )],
+        )
+    }
 }
 
 fn optional_materializable_model_ref(

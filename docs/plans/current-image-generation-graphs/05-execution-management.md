@@ -10417,6 +10417,42 @@ Worker rules:
     runtime-task rejection tests; default/all-features/no-default workflow
     service checks; README updates; targeted forbidden-path searches; and
     `git diff --check`.
+- 2026-05-24 Milestone 5c typed non-runtime task-template slice completed:
+  - Smallest useful vertical slice: add the immediate option 2 task-template
+    contract to the immutable scheduler task graph before workflow-service can
+    call the node-engine single-task adapter.
+  - Allowed write set: workflow-service task graph contracts/projection/tests,
+    narrow workflow facade exports, orchestrator initial-state invariant/tests,
+    workflow README, Milestone 5c plan notes, and this execution log. Existing
+    unrelated Pumas proposal Markdown changes remain ignored.
+  - Implementation notes: bumped `WorkflowSchedulerTaskGraph` schema version
+    to 3; added `WorkflowSchedulerNonRuntimeTaskTemplate` with concrete
+    `TextInput`, `BooleanInput`, and `TextOutput` variants; projected
+    canonical `text-input.text`, canonical `boolean-input.value`, and
+    `text-output` only when an upstream `text` binding exists; added typed
+    diagnostics for missing, invalid, or unsupported non-runtime templates;
+    and made orchestrator initialization reject non-runtime tasks without a
+    validated template.
+  - No-fallback/no-legacy confirmation: the scheduler-task entrypoint and
+    future adapter still have no raw graph/editor data path. Stale
+    `text-input.value`, string booleans, text-output without upstream text,
+    arbitrary JSON, graph-local paths, Pumas load targets, frontend-owned
+    scheduler facts, output-node demand, and planned-inference host paths do
+    not become successful execution inputs.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service workflow::tests::task_graph
+    --lib`; `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_state_read_model --lib`;
+    `cargo test -p pantograph-workflow-service scheduler::store::tests --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and targeted forbidden-path
+    search over the touched projection/orchestrator modules.
+  - Remaining follow-up: add the scheduler-task execution entrypoint,
+    non-runtime adapter conversion from typed templates/materialized results
+    into node-engine single-task requests, runtime-task fail-closed
+    diagnostics, and then runtime-host dispatch cutover.
 
 ### Traceability Links
 

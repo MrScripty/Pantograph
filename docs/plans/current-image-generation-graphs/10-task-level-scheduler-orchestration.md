@@ -951,6 +951,19 @@ fields. Workflow-service task classification, generalized materialized-input
 readiness, scheduler-task execution entrypoint, non-runtime adapter conversion,
 and runtime-task rejection remain open.
 
+2026-05-24 implementation status: workflow-service task graph projection now
+owns the immediate option 2 typed non-runtime template contract. Task graph
+schema version 3 adds `WorkflowSchedulerNonRuntimeTaskTemplate` with concrete
+`TextInput`, `BooleanInput`, and `TextOutput` variants. Projection is the only
+layer that reads graph node data for these templates; it accepts canonical
+`text-input.text`, canonical `boolean-input.value`, and `text-output` with an
+upstream `text` binding, while malformed/missing/stale values produce typed
+projection diagnostics. Orchestrator initialization rejects non-runtime tasks
+that do not carry a validated template, so source non-runtime tasks cannot
+become ready from raw graph data or incidental adapter behavior. Scheduler-task
+execution entrypoint, non-runtime adapter conversion, and runtime-task
+rejection remain open.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

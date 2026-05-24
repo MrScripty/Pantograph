@@ -14,9 +14,10 @@ use pantograph_scheduler::{
 };
 
 use crate::workflow::{
-    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskIntentTemplate,
-    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskIntentTemplate, WorkflowSchedulerTaskProjectionDiagnostic,
+    WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
@@ -149,6 +150,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
             dependency_override_patches: Vec::new(),
             estimate_hints: Vec::new(),
         }),
+        non_runtime_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -177,6 +179,9 @@ fn orchestrator_initializes_ready_non_runtime_state_for_source_task() {
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
+        non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
+            value: "paint a red cube".to_string(),
+        }),
         diagnostics: Vec::new(),
     }]);
 
@@ -196,6 +201,40 @@ fn orchestrator_initializes_ready_non_runtime_state_for_source_task() {
 }
 
 #[test]
+fn orchestrator_rejects_non_runtime_task_without_typed_template() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("prompt").expect("node id"),
+        task_id: SchedulerTaskId::parse("prompt").expect("task id"),
+        node_type: "text-input".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        non_runtime_task_template: None,
+        diagnostics: Vec::new(),
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    let SchedulerTaskState::Invalid { diagnostics } = &records[0].state else {
+        panic!("expected invalid task state");
+    };
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::InvalidTask
+    );
+    assert!(diagnostics[0]
+        .message
+        .contains("typed non-runtime execution template"));
+}
+
+#[test]
 fn orchestrator_initializes_awaiting_inputs_for_dependent_non_runtime_task() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![WorkflowSchedulerTask {
@@ -209,6 +248,7 @@ fn orchestrator_initializes_awaiting_inputs_for_dependent_non_runtime_task() {
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
+        non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         diagnostics: Vec::new(),
     }]);
 
@@ -236,6 +276,7 @@ fn orchestrator_initializes_invalid_state_for_unsupported_task_class() {
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
+        non_runtime_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -267,6 +308,7 @@ fn orchestrator_initializes_pumas_materialization_as_awaiting_inputs() {
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
+        non_runtime_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -298,6 +340,7 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
+        non_runtime_task_template: None,
         diagnostics: vec![WorkflowSchedulerTaskProjectionDiagnostic {
             severity: WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error,
             code: WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
@@ -351,6 +394,7 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
             dependency_override_patches: Vec::new(),
             estimate_hints: Vec::new(),
         }),
+        non_runtime_task_template: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -437,6 +481,7 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         input_bindings: Vec::new(),
         schedulable_intent: Some(task_intent),
         schedulable_intent_template: None,
+        non_runtime_task_template: None,
         diagnostics: Vec::new(),
     }
 }

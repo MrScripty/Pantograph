@@ -113,7 +113,8 @@ pub use self::task_binding_resolution::{
 };
 pub use self::task_graph::workflow_scheduler_task_graph;
 pub use self::task_graph_contracts::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,

@@ -149,8 +149,14 @@ durable task orchestration path.
   read raw graph/editor node data. User-authored or external nodes remain
   unsupported with typed diagnostics until an explicit concrete template is
   added or the later option 3 generic typed port-value execution contract
-  replaces the interim enum. Scheduler-task entrypoint, non-runtime adapter
-  conversion, and runtime-task fail-closed diagnostics remain open.
+  replaces the interim enum. Completed 2026-05-24 with
+  `WorkflowSchedulerNonRuntimeTaskTemplate` and task-graph schema version 3:
+  `text-input` captures canonical `text`, `boolean-input` captures canonical
+  `value`, and `text-output` requires an upstream `text` binding. Malformed,
+  missing, or stale fields become typed projection diagnostics before the
+  orchestrator can mark a non-runtime task executable. Scheduler-task
+  entrypoint, non-runtime adapter conversion, and runtime-task fail-closed
+  diagnostics remain open.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider
