@@ -880,3 +880,20 @@ durable task orchestration path.
   follow-up: the module has a scoped staging `dead_code` allowance until the
   dedicated scheduler-task session runner consumes it. The next cutover slice
   must call this helper before task progression and remove the allowance.
+- 2026-05-24 scheduler task run-summary slice completed. Smallest useful
+  vertical slice: add the workflow-service helper that summarizes an active
+  run's immutable scheduler task graph plus scheduler task-state records before
+  runtime admission/load. Allowed write set: workflow-service run-summary
+  module/tests, workflow module registration, and this plan. No-fallback
+  confirmation: the helper consumes `WorkflowSchedulerTaskExecutionClass` and
+  scheduler task-state records; it does not inspect raw node-type strings,
+  synthesize runtime handoff, call node-engine, call `workflow_run_internal`,
+  or choose a legacy execution path. Focused tests cover non-runtime-only
+  summaries, mixed runtime summaries, unsupported/invalid state counts,
+  missing task-state records, and unexpected task-state records. Verification
+  passed: `cargo fmt -p pantograph-workflow-service`, `cargo test -p
+  pantograph-workflow-service task_run_summary`, and `git diff --check`.
+  Deviation/remaining follow-up: the module has a scoped staging `dead_code`
+  allowance until the dedicated scheduler-task session runner consumes it. The
+  next cutover slice must use this summary before runtime preflight/load and
+  remove the allowance.

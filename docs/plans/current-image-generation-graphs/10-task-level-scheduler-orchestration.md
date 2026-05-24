@@ -691,6 +691,14 @@ through the scheduler task loop. The module is staged behind a scoped
 `dead_code` allowance until the dedicated scheduler-task session runner
 consumes it; that runner must remove the allowance in the next cutover slice.
 
+2026-05-24 implementation status: workflow-service now also has the staged
+run-class summary helper for the session cutover. It summarizes immutable
+`WorkflowSchedulerTaskExecutionClass` values plus active scheduler task-state
+records so session execution can decide whether runtime admission/load is
+needed before touching runtime preflight. It rejects missing or unexpected
+task-state records and remains staged behind a scoped `dead_code` allowance
+until the scheduler-task session runner consumes it.
+
 ### Task Classification And Input Readiness Replan
 
 2026-05-23 standards/blast-radius update: the non-runtime adapter slice must
