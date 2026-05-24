@@ -101,19 +101,27 @@ durable task orchestration path.
 - [ ] Add a narrow node-engine single-task execution adapter for non-runtime
   graph tasks using materialized scheduler-owned inputs. Runtime inference
   nodes must not launch through this adapter. The next implementation slice
-  must add the dedicated scheduler-task execution entrypoint and prove the
-  adapter executes only explicitly non-runtime task kinds whose values are
+  must first add a narrow node-engine-owned single-task API that hides
+  `graph_flow::Context`, executes one explicit core task without demand
+  execution, planned inference, runtime host dispatch, or scheduler policy,
+  and fails closed if task-id suffix fallback would disagree with the explicit
+  node type. Workflow-service must then add one focused task-classification
+  boundary that maps immutable task graph facts plus canonical node-contract
+  facts into runtime-inference, non-runtime node-engine, Pumas-materialization,
+  or unsupported classes. The dedicated scheduler-task execution entrypoint may
+  execute only tasks classified as explicitly non-runtime and whose values are
   representable in `WorkflowSchedulerTaskResultValue`. Runtime inference tasks
-  remain blocked/deferred/failed with typed scheduler diagnostics until actual
-  scheduler-selected runtime handoff dispatch is wired. The adapter must use a
-  positive first-stage allowlist of output-compatible nodes such as
-  `text-input`, `text-output`, and `boolean-input`; explicit typed
-  input/output conversion between `WorkflowSchedulerTaskResult` and
-  node-engine values; node-type authority from immutable
-  `WorkflowSchedulerTaskGraph`; bounded lock scopes around awaits; and targeted
-  deletion/usage searches proving the new path does not call
-  `workflow_run_internal`, `DemandEngine` output demand,
-  `PlannedInferenceExecutionHost`, or node-engine core `execute_puma_lib`.
+  remain scheduler-owned: they must wait until every required connected input
+  is materialized, then run only through actual scheduler-selected runtime
+  handoff dispatch once that slice is wired. The adapter must use a positive
+  first-stage allowlist of output-compatible nodes such as `text-input`,
+  `text-output`, and `boolean-input`; explicit typed input/output conversion
+  between `WorkflowSchedulerTaskResult` and node-engine values; node-type
+  authority from immutable `WorkflowSchedulerTaskGraph`; bounded lock scopes
+  around awaits; and targeted deletion/usage searches proving the new path does
+  not call `workflow_run_internal`, `DemandEngine` output demand,
+  `PlannedInferenceExecutionHost`, node-engine workflow sessions, or
+  node-engine core `execute_puma_lib`.
   Exclude `puma-lib`, `model-provider`, `expand-settings`, arbitrary-JSON
   nodes, floating-point/vector nodes, file I/O, image/audio blob nodes,
   human/tool nodes, and unknown kinds until each has an explicit typed

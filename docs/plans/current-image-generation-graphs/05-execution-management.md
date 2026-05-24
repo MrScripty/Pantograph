@@ -10202,6 +10202,59 @@ Worker rules:
     retry/defer/ledger lifecycle slice instead of inferring them from state
     version, then add the dedicated scheduler-task execution entrypoint and
     narrow typed non-runtime node-engine adapter.
+- 2026-05-23 Milestone 5c node-engine single-task API replan update:
+  - Scope: docs-only replan for the boundary discovered before implementing
+    the non-runtime adapter. Existing unrelated Pumas proposal Markdown
+    changes remain ignored.
+  - Decision: use option 1. Node-engine will expose a narrow single-task API
+    that owns `graph_flow::Context` creation and empty `ExecutorExtensions`
+    setup. Workflow-service will consume that API only behind its
+    scheduler-task adapter and positive non-runtime allowlist.
+  - Planned node-engine write set: one focused single-task API module and
+    tests, `crates/node-engine/src/lib.rs` exports, and
+    `crates/node-engine/src/README.md` documentation. Node-engine inference,
+    planned-inference, `DemandEngine`, workflow-session, registry, and
+    `puma-lib` implementation files remain out of scope unless a new replan
+    is recorded.
+  - No-fallback/no-legacy confirmation: workflow-service must not gain a
+    direct `graph-flow` dependency, must not re-export or construct
+    graph-flow internals, must not duplicate node behavior, and must reject
+    runtime inference, `puma-lib`, `model-provider`, file I/O, arbitrary JSON,
+    unknown task kinds, and unsupported non-runtime tasks before constructing
+    the node-engine request.
+  - Rejected options: re-exporting `graph_flow::Context`, adding `graph-flow`
+    to workflow-service, duplicating allowed node behavior in workflow-service,
+    wrapping `workflow_run_internal`, dispatching runtime tasks first, or
+    doing the full execution cutover in one slice.
+  - Verification planned: focused node-engine single-task API tests, focused
+    workflow-service non-runtime adapter tests, default/all-features/no-default
+    feature checks for touched crates, `git diff --check`, README updates, and
+    targeted searches proving no calls to `workflow_run_internal`,
+    `DemandEngine::demand`, output-node demand, `PlannedInferenceExecutionHost`,
+    node-engine workflow sessions, or node-engine core `execute_puma_lib`.
+- 2026-05-23 Milestone 5c standards tightening after blast-radius review:
+  - Add a focused workflow-service task-classification boundary before the
+    non-runtime adapter executes tasks. The classifier maps immutable task graph
+    facts and canonical node-contract facts into runtime-inference,
+    non-runtime node-engine, Pumas-materialization, or unsupported classes.
+    This prevents scattered `llm-inference` string checks from becoming the
+    long-term architecture and gives future model families/runtimes one
+    extension point.
+  - Generalize materialized-input readiness beyond `pumas_model_ref`. Runtime
+    inference must not become executable until every required connected
+    upstream input is materialized and validated. If a required port needs a
+    value type not represented by `WorkflowSchedulerTaskResultValue`, the slice
+    must stop and plan the typed value contract instead of passing raw JSON or
+    falling back to node-engine demand.
+  - Make non-runtime readiness explicit. Supported no-dependency non-runtime
+    tasks may become `Ready(NonRuntime)` only from validated typed task
+    templates; dependent non-runtime tasks remain `AwaitingInputs` until the
+    typed resolver validates their upstream values; unsupported or excluded
+    nodes produce typed diagnostics and must not defer indefinitely.
+  - Tighten node-engine single-task authority. The new API must inject the
+    explicit node type from immutable task-definition facts and fail closed if
+    core node resolution would disagree, so task-id suffix inference cannot
+    become execution authority.
 
 ### Traceability Links
 

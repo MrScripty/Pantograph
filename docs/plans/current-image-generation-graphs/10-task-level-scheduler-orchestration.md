@@ -557,6 +557,121 @@ wires real `SchedulerRuntimeHandoff` dispatch, runtime inference tasks must
 stay in typed blocked/deferred/failed scheduler state with diagnostics that
 name the missing runtime-dispatch capability.
 
+### Task Classification And Input Readiness Replan
+
+2026-05-23 standards/blast-radius update: the non-runtime adapter slice must
+not hard-code today's incidental runtime boundary as scattered string checks.
+Before workflow-service executes any scheduler-owned task, it must add a
+focused task-classification and typed-input-readiness boundary.
+
+Planning names may change during implementation, but the boundary must preserve
+these semantics:
+
+- `WorkflowSchedulerTaskExecutionClass` or equivalent workflow-service type:
+  classifies each immutable task-graph task as `RuntimeInference`,
+  `NonRuntimeNodeEngine`, `PumasMaterialization`, or `Unsupported`.
+- The classifier is the only workflow-service place where node type plus
+  canonical node-contract facts become scheduler execution class. Do not spread
+  `node_type == "llm-inference"` or allowlist string checks across task graph,
+  orchestrator, adapter, and read-model modules.
+- `llm-inference` is the only currently supported runtime-inference graph node,
+  but that is a current contract fact, not a design limit. Future model types,
+  model families, or runtime-backed node descriptors must be added through this
+  classifier from canonical node contracts and inference task contracts.
+- If a canonical contract identifies a task as inference/runtime-backed but the
+  scheduler path does not yet support it, the task becomes `Unsupported` or
+  blocked/invalid with typed diagnostics. It must not fall through to the
+  node-engine non-runtime adapter.
+- Pumas model selection/materialization is a dedicated boundary. `puma-lib`
+  must not be executed through generic node-engine single-task execution.
+
+The task graph remains the immutable task-definition owner. It may carry a
+classification result and typed non-runtime task template, but it must not carry
+raw arbitrary node data as executable input. For the first non-runtime slice,
+only validated source/task settings needed by allowlisted nodes may be stored,
+for example text input value and boolean input value. Each stored setting must
+be a typed field or a validated `WorkflowSchedulerTaskResultValue`-compatible
+template, not an unbounded JSON blob, graph-local path, Pumas load target, or
+frontend-owned scheduler fact.
+
+Initial scheduler state creation must use the classification and readiness
+facts instead of treating "no runtime intent" as automatically awaiting inputs:
+
+- Supported runtime-inference task with a complete validated intent and all
+  required connected inputs materialized: `Ready(Runtime)`.
+- Supported runtime-inference task missing required connected inputs:
+  `AwaitingInputs` with typed waiting diagnostics as needed.
+- Supported non-runtime task with no required upstream inputs and a complete
+  typed non-runtime template: `Ready(NonRuntime)`.
+- Supported non-runtime task with required upstream inputs:
+  `AwaitingInputs` until the materialized input resolver validates those
+  inputs.
+- Unsupported, excluded, stale, or ambiguous task class: `Invalid` or another
+  explicit scheduler state with typed diagnostics. Do not silently defer forever
+  and do not call the old whole-run path.
+
+Binding resolution must become a general typed materialized-input resolver
+before runtime dispatch and before node-engine non-runtime execution. The
+existing `pumas_model_ref` resolver is only the first specialization. The next
+resolver shape must validate every required connected input for the selected
+class, including prompt/text/media/options inputs for inference and the
+allowlisted scalar inputs for non-runtime nodes. If a required value cannot be
+represented by the current `WorkflowSchedulerTaskResultValue` variants, stop
+and plan the explicit value contract before adding that node or port to the
+allowlist.
+
+This keeps the graph editor and node engine simple: the graph editor provides
+typed graph inputs and displays backend facts, node-engine executes only
+approved non-runtime tasks from already-materialized values, and the scheduler
+remains the only authority that decides when inference is ready to run and what
+runtime/device handoff is executable.
+
+### Node-Engine Single-Task API Replan
+
+The selected boundary is option 1: add a narrow node-engine-owned
+single-task API before implementing the workflow-service adapter. Node-engine
+must own the execution mechanics required by its public `TaskExecutor`
+contract, including `graph_flow::Context` creation and `ExecutorExtensions`
+setup. Workflow-service must not add a direct `graph-flow` dependency, must
+not re-export or construct graph-flow internals, and must not duplicate
+node-engine node behavior.
+
+Planned node-engine API shape, subject to local naming during implementation:
+
+- `NodeEngineSingleTaskRequest`: task id, explicit node type, and typed
+  `serde_json` inputs already converted by the workflow-service adapter.
+  The request must not carry graph edges, output targets, demand state,
+  runtime handoff, Pumas load targets, local paths, or scheduler policy.
+- `NodeEngineSingleTaskResponse`: raw node-engine output map only. It remains
+  node-engine-owned output data; workflow-service converts it immediately into
+  `WorkflowSchedulerTaskResult` variants at the adapter boundary.
+- `execute_core_task_once(request)`: creates a local `graph_flow::Context`,
+  creates empty `ExecutorExtensions`, injects the explicit node type into the
+  node-engine input shape, executes one task through `CoreTaskExecutor`, and
+  verifies the core executor resolved the same explicit node type before
+  returning the response. It must not rely on task-id suffix node-type
+  inference and must not call `DemandEngine`, output-node demand, workflow
+  sessions, planned-inference host extensions, runtime host dispatch, or
+  `workflow_run_internal`.
+
+The node-engine API is intentionally not the scheduler allowlist. It is an
+execution-mechanics boundary. Workflow-service still owns the scheduler-task
+adapter and must reject runtime inference, `puma-lib`, `model-provider`, file
+I/O, arbitrary JSON, unknown task kinds, and unsupported non-runtime kinds
+before constructing a node-engine single-task request.
+
+Node-engine write set for this replan:
+
+- Add one focused node-engine module for the single-task API and tests.
+- Update `crates/node-engine/src/lib.rs` exports only for that API.
+- Update `crates/node-engine/src/README.md` to document that this API is
+  one-task execution plumbing, not demand execution, runtime inference, or
+  scheduler policy.
+- Do not edit node-engine inference, planned-inference, `DemandEngine`,
+  workflow-session, registry, or `puma-lib` implementation files unless
+  implementation proves the API cannot be added without doing so; if that
+  happens, stop and replan again.
+
 The non-runtime adapter must be narrow and path-free:
 
 - Input: one scheduler task id, validated materialized task inputs, immutable
@@ -612,33 +727,56 @@ Implementation order for the next slice:
 2. Remove or update stale `puma-lib.model_path` test/persistence behavior that
    would conflict with the path-free Pumas model-reference boundary.
    Completed 2026-05-23.
-3. Add the scheduler-task execution entrypoint contract in workflow-service
+3. Add the node-engine-owned single-task API that hides `graph_flow::Context`
+   and executes one explicit core task without demand execution, planned
+   inference, runtime host dispatch, or scheduler policy.
+4. Add the workflow-service task-classification and typed materialized-input
+   readiness boundary. This must classify runtime inference, non-runtime
+   node-engine, Pumas materialization, and unsupported tasks in one focused
+   module, then validate all required connected inputs before any task becomes
+   executable.
+5. Add the scheduler-task execution entrypoint contract in workflow-service
    behind the existing service-owned orchestrator boundary.
-4. Add the non-runtime single-task adapter fake/trait boundary and focused
+6. Add the non-runtime single-task adapter fake/trait boundary and focused
    tests using materialized inputs and typed task results.
-5. Wire the entrypoint to execute a simple allowlisted non-runtime task and
+7. Wire the entrypoint to execute a simple allowlisted non-runtime task and
    persist its `WorkflowSchedulerTaskResult`.
-6. Add a negative test proving runtime inference tasks do not call
+8. Add a negative test proving runtime inference tasks do not call
    node-engine output demand or `PlannedInferenceExecutionHost` and instead
    produce typed scheduler diagnostics.
-7. Update README and plan notes, then run focused workflow-service checks.
+9. Update README and plan notes, then run focused node-engine and
+   workflow-service checks.
 
 Standards gates for this slice:
 
 - Keep the implementation in focused workflow-service modules, such as a
   scheduler-task execution entrypoint module plus a non-runtime adapter module.
   Do not grow `session_execution_api.rs`, `workflow_run_api.rs`, or
-  `task_orchestrator.rs` beyond narrow delegation/import changes. If a
-  node-engine source change is unavoidable, stop and re-plan the node-engine
-  write set and README impact before editing it.
-- Use the existing node-engine `TaskExecutor`/`CoreTaskExecutor` surface only
-  behind a workflow-service adapter that guards task kind first. The adapter
-  must use a positive allowlist of scheduler task kinds/node families that are
-  explicitly non-runtime and whose output values are representable in
-  `WorkflowSchedulerTaskResultValue`. It must reject `llm-inference`,
-  image-generation/inference, llama.cpp, audio-generation, planned-inference,
-  `puma-lib`, `model-provider`, arbitrary-JSON nodes, file I/O nodes, and any
-  unknown task kind before constructing node-engine inputs or extensions.
+  `task_orchestrator.rs` beyond narrow delegation/import changes.
+- Keep the node-engine implementation focused on the single-task API. Do not
+  change manifests or add a workflow-service `graph-flow` dependency. Do not
+  re-export `graph_flow::Context` as the chosen boundary. Do not duplicate
+  allowed node behavior in workflow-service.
+- Use the node-engine single-task API only behind a workflow-service adapter
+  that guards task kind first. The adapter must use a positive allowlist of
+  scheduler task kinds/node families that are explicitly non-runtime and whose
+  output values are representable in `WorkflowSchedulerTaskResultValue`. It
+  must reject `llm-inference`, image-generation/inference, llama.cpp,
+  audio-generation, planned-inference, `puma-lib`, `model-provider`,
+  arbitrary-JSON nodes, file I/O nodes, and any unknown task kind before
+  constructing node-engine inputs or calling the node-engine single-task API.
+- Centralize task classification. Add one workflow-service classifier or
+  equivalent focused module that converts immutable task graph facts plus
+  canonical node-contract facts into runtime-inference, non-runtime
+  node-engine, Pumas-materialization, or unsupported classes. Runtime and
+  non-runtime code must consume that typed class rather than repeating raw
+  node-type string predicates.
+- Make non-runtime readiness explicit. Supported no-dependency non-runtime
+  tasks may become `Ready(NonRuntime)` only after their typed task template is
+  validated. Supported dependent non-runtime tasks remain `AwaitingInputs`
+  until the materialized-input resolver validates every required upstream
+  value. Unsupported or excluded kinds produce typed diagnostics and must not
+  be deferred indefinitely.
 - Convert values explicitly at the adapter boundary. Materialized
   `WorkflowSchedulerTaskResult` values must be mapped into the node-engine
   input shape through typed conversion helpers, and node-engine outputs must
@@ -648,6 +786,13 @@ Standards gates for this slice:
   that does not exist yet, such as finite `f64`, typed option payloads, vector
   values, or bounded JSON settings, stop and plan the explicit value contract
   before adding the node to the allowlist.
+- Generalize input materialization before runtime dispatch. The first
+  `pumas_model_ref` resolver must be extended or replaced by a focused
+  materialized-input resolver that validates all required connected ports for
+  the selected task class, including prompts/text/media/options for inference
+  and allowlisted scalar inputs for non-runtime nodes. Runtime inference must
+  not become executable merely because model identity exists while another
+  connected upstream input is still missing.
 - Keep the async shell narrow. The entrypoint may await the non-runtime
   adapter because node-engine's `TaskExecutor` is async, but pure task
   selection, allowlist validation, state transition choice, and result
@@ -666,6 +811,17 @@ Standards gates for this slice:
   stop and record dependency ownership, transitive cost, feature impact, and
   verification before editing manifests.
 - Verification must run with normal Rust test parallelism and include:
+  focused node-engine single-task API tests proving explicit `text-input`,
+  `text-output`, and `boolean-input` execution works without `DemandEngine`,
+  output-node demand, workflow sessions, `PlannedInferenceExecutionHost`, or
+  graph-flow exposure to workflow-service, and proving task-id suffix fallback
+  cannot override the explicit node type;
+  task-classification tests proving `llm-inference` is runtime-owned,
+  allowlisted scalar nodes are non-runtime-owned, `puma-lib` is a dedicated
+  Pumas materialization boundary, and unknown or future inference-shaped nodes
+  fail closed instead of reaching the non-runtime adapter;
+  materialized-input readiness tests proving runtime inference waits for every
+  required connected input, not only `pumas_model_ref`;
   scheduler state transition coverage proving non-runtime completed tasks do
   not carry `SchedulableTaskIntent`, focused positive allowlisted non-runtime
   task execution, runtime-task rejection before node-engine call,
@@ -673,19 +829,28 @@ Standards gates for this slice:
   unsupported-kind rejection, typed input conversion failure, typed output
   conversion failure, stale `puma-lib.model_path` test cleanup, no
   lock-held-across-await review where testable, `cargo check -p
-  pantograph-workflow-service` and `cargo check -p pantograph-scheduler` in
-  default, all-features, and no-default-features modes, `cargo fmt -p
+  node-engine`, `cargo check -p pantograph-workflow-service`, and `cargo
+  check -p pantograph-scheduler` in default, all-features, and
+  no-default-features modes for touched crates, `cargo fmt -p node-engine -p
   pantograph-workflow-service -p pantograph-scheduler`, `git diff --check`,
   and targeted searches proving the new entrypoint does not call
   `workflow_run_internal`, `DemandEngine::demand`, output-node demand,
   `PlannedInferenceExecutionHost`, or node-engine core `execute_puma_lib`.
 - Update documentation in the touched source directories. At minimum,
+  node-engine README/docs must describe the single-task API boundary, and
   workflow-service README/docs must describe the scheduler-task execution
   entrypoint, non-runtime adapter scope, runtime inference rejection behavior,
   and remaining runtime-host dispatch follow-up.
 
 Rejected options for this boundary:
 
+- Re-export `graph_flow::Context` from node-engine: rejected because it leaks
+  node-engine execution plumbing into workflow-service and makes scheduler
+  orchestration harder to reason about.
+- Add `graph-flow` as a direct workflow-service dependency: rejected because
+  workflow-service should not construct node-engine internals to run a task.
+- Reimplement allowed node behavior in workflow-service: rejected because it
+  duplicates node-engine ownership and will drift as node semantics evolve.
 - Minimal wrapper around `workflow_run_internal`: rejected because it would
   rename the legacy output-demand path and preserve the old successful
   execution behavior.
