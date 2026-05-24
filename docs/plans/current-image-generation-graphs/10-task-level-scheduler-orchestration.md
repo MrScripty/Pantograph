@@ -681,6 +681,16 @@ Required tests for the cutover:
   `PlannedInferenceExecutionHost`, node-engine workflow sessions, or
   node-engine core `execute_puma_lib`.
 
+2026-05-24 implementation status: workflow-service now has the first
+external-input materialization boundary for the session cutover. It converts
+request `WorkflowPortBinding` values into completed
+`WorkflowSchedulerTaskResult` values for explicitly supported text and boolean
+source/input tasks, rejects unknown nodes, duplicates, wrong value types, and
+unsupported source tasks, and does not mutate graph node data or pass paths
+through the scheduler task loop. The module is staged behind a scoped
+`dead_code` allowance until the dedicated scheduler-task session runner
+consumes it; that runner must remove the allowance in the next cutover slice.
+
 ### Task Classification And Input Readiness Replan
 
 2026-05-23 standards/blast-radius update: the non-runtime adapter slice must

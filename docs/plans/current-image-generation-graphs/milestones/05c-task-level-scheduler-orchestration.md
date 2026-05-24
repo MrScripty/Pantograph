@@ -862,3 +862,21 @@ durable task orchestration path.
   node-engine output demand, because that preserves the legacy launch path. No
   source changed in this planning update, and per instruction this update is
   not committed yet.
+- 2026-05-24 external session-input materialization slice completed. Smallest
+  useful vertical slice: add the workflow-service conversion boundary that
+  turns request `WorkflowPortBinding` inputs into completed
+  `WorkflowSchedulerTaskResult` values for explicitly supported source/input
+  tasks. Allowed write set: workflow-service external-input materialization
+  module/tests, workflow module registration, and this plan. No-fallback
+  confirmation: the helper reads only immutable scheduler task graph facts and
+  request bindings; it does not mutate graph node data, accept Pumas paths or
+  executable load targets, call node-engine, call `workflow_run_internal`,
+  launch runtime inference, or pass raw arbitrary graph/editor data into the
+  scheduler task loop. Focused tests cover valid text/boolean inputs, unknown
+  input nodes, duplicate input bindings, wrong value types, and unsupported
+  source task types. Verification passed: `cargo fmt -p
+  pantograph-workflow-service`, `cargo test -p pantograph-workflow-service
+  external_input_materialization`, and `git diff --check`. Deviation/remaining
+  follow-up: the module has a scoped staging `dead_code` allowance until the
+  dedicated scheduler-task session runner consumes it. The next cutover slice
+  must call this helper before task progression and remove the allowance.

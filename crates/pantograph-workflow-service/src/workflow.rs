@@ -30,6 +30,8 @@ mod execution_plan;
 mod execution_plan_admission;
 mod execution_plan_model_ref;
 mod execution_plan_selected_facts;
+#[allow(dead_code)]
+mod external_input_materialization;
 mod graph_api;
 mod host;
 mod identity;
