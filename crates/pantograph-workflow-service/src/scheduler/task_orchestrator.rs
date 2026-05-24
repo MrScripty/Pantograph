@@ -2,7 +2,8 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher, ValidatedRuntimeHostExecutionResponse,
 };
 use pantograph_scheduler::{
-    SchedulerContractError, SchedulerRuntimeHandoff, SchedulerTaskState,
+    SchedulerContractError, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
+    SchedulerRuntimeHandoff, SchedulerTaskExecutionIntent, SchedulerTaskState,
     SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
     SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateRecord, SchedulerTaskStateTransitionId,
     SCHEDULER_TASK_STATE_CONTRACT_VERSION,
@@ -10,8 +11,9 @@ use pantograph_scheduler::{
 use thiserror::Error;
 
 use crate::workflow::{
-    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskProjectionDiagnostic,
-    WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowServiceError,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticSeverity,
+    WorkflowServiceError,
 };
 
 use super::WorkflowExecutionSessionStore;
@@ -52,25 +54,7 @@ impl WorkflowSchedulerTaskOrchestrator {
     ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
         let mut records = Vec::with_capacity(task_graph.tasks.len());
         for task in &task_graph.tasks {
-            let state = if !task.diagnostics.is_empty() {
-                SchedulerTaskState::Invalid {
-                    diagnostics: task
-                        .diagnostics
-                        .iter()
-                        .map(projection_diagnostic_to_task_state_diagnostic)
-                        .collect(),
-                }
-            } else if let Some(task_intent) = task.schedulable_intent.clone() {
-                SchedulerTaskState::Ready {
-                    execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::Runtime {
-                        task_intent,
-                    },
-                }
-            } else {
-                SchedulerTaskState::AwaitingInputs {
-                    diagnostics: Vec::new(),
-                }
-            };
+            let state = initial_task_state(task)?;
             let record = SchedulerTaskStateRecord {
                 contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
                 workflow_id: task_graph.workflow_id.clone(),
@@ -104,6 +88,86 @@ impl WorkflowSchedulerTaskOrchestrator {
         store
             .set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+}
+
+fn initial_task_state(
+    task: &WorkflowSchedulerTask,
+) -> Result<SchedulerTaskState, WorkflowSchedulerTaskOrchestratorError> {
+    if !task.diagnostics.is_empty() {
+        return Ok(SchedulerTaskState::Invalid {
+            diagnostics: task
+                .diagnostics
+                .iter()
+                .map(projection_diagnostic_to_task_state_diagnostic)
+                .collect(),
+        });
+    }
+
+    match task.execution_class {
+        WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
+            if let Some(task_intent) = task.schedulable_intent.clone() {
+                Ok(SchedulerTaskState::Ready {
+                    execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },
+                })
+            } else {
+                Ok(awaiting_inputs_state())
+            }
+        }
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine => {
+            if task.dependency_task_ids.is_empty() {
+                Ok(SchedulerTaskState::Ready {
+                    execution_intent: SchedulerTaskExecutionIntent::NonRuntime {
+                        task_intent: SchedulerNonRuntimeTaskIntent {
+                            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+                            workflow_id: task.workflow_id.clone(),
+                            workflow_run_id: task.workflow_run_id.clone(),
+                            node_id: task.node_id.clone(),
+                            task_id: task.task_id.clone(),
+                            task_kind: SchedulerNonRuntimeTaskKind::parse(&task.node_type)
+                                .map_err(
+                                    WorkflowSchedulerTaskOrchestratorError::SchedulerContract,
+                                )?,
+                        },
+                    },
+                })
+            } else {
+                Ok(awaiting_inputs_state())
+            }
+        }
+        WorkflowSchedulerTaskExecutionClass::PumasMaterialization => {
+            Ok(SchedulerTaskState::AwaitingInputs {
+                diagnostics: vec![SchedulerTaskStateDiagnostic {
+                    severity: SchedulerTaskStateDiagnosticSeverity::Info,
+                    code: SchedulerTaskStateDiagnosticCode::AwaitingInputs,
+                    message: "task is awaiting Pumas model-reference materialization".to_string(),
+                    hint: Some(
+                        "Materialize the Pumas model reference through the dedicated model-selection boundary."
+                            .to_string(),
+                    ),
+                }],
+            })
+        }
+        WorkflowSchedulerTaskExecutionClass::Unsupported => Ok(SchedulerTaskState::Invalid {
+            diagnostics: vec![SchedulerTaskStateDiagnostic {
+                severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                code: SchedulerTaskStateDiagnosticCode::InvalidTask,
+                message: format!(
+                    "workflow task type '{}' is not supported by scheduler task orchestration",
+                    task.node_type
+                ),
+                hint: Some(
+                    "Add an explicit scheduler execution class and typed value contract before scheduling this node."
+                        .to_string(),
+                ),
+            }],
+        }),
+    }
+}
+
+fn awaiting_inputs_state() -> SchedulerTaskState {
+    SchedulerTaskState::AwaitingInputs {
+        diagnostics: Vec::new(),
     }
 }
 

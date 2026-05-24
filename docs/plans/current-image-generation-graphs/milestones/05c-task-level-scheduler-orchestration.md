@@ -137,6 +137,10 @@ durable task orchestration path.
   runtime connected-input readiness now blocks scheduler intent materialization
   until every upstream binding has a completed materialized task result, while
   still specializing `pumas_model_ref` into the scheduler intent model ref.
+  Initial scheduler task-state creation now consumes the execution class:
+  source first-stage non-runtime tasks become `Ready(NonRuntime)`, dependent
+  non-runtime tasks await inputs, Pumas materialization awaits its dedicated
+  boundary, and unsupported classes become invalid with typed diagnostics.
   Scheduler-task entrypoint, non-runtime adapter conversion, and runtime-task
   fail-closed diagnostics remain open.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can

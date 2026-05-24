@@ -330,6 +330,11 @@ implementation can be considered complete:
    immutable node type plus canonical node-contract facts, so later entrypoint
    and adapter code must consume that class instead of rechecking scattered
    node-type strings.
+   Initial scheduler task-state creation began consuming this class on
+   2026-05-23: first-stage no-dependency non-runtime tasks enter
+   `Ready(NonRuntime)`, dependent non-runtime tasks await inputs, Pumas
+   materialization awaits its dedicated boundary, and unsupported tasks become
+   invalid instead of waiting indefinitely.
 10. Add runtime task dispatch from actual dispatch-selected
    `SchedulerRuntimeHandoff` into the shared runtime-host execution port.
 11. Replace session execution so the scheduler task orchestrator, not

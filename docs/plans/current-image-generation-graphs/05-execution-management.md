@@ -10355,6 +10355,38 @@ Worker rules:
     inputs as new task result value variants are added, scheduler-task
     execution entrypoint, non-runtime adapter conversion, and runtime-task
     fail-closed diagnostics.
+- 2026-05-23 Milestone 5c execution-class initial-state slice completed:
+  - Smallest useful vertical slice: make scheduler task-state initialization
+    consume `WorkflowSchedulerTaskExecutionClass` before adding the
+    scheduler-task execution entrypoint. This prevents unsupported classes
+    from silently waiting forever and lets allowlisted source non-runtime
+    nodes become ready without runtime intents.
+  - Allowed write set: workflow-service scheduler task orchestrator/tests and
+    current plan docs. Existing unrelated Pumas proposal Markdown changes
+    remain ignored.
+  - Implementation notes: `initial_task_state_records` now delegates to a
+    focused state classifier. Runtime inference with a validated
+    `SchedulableTaskIntent` becomes `Ready(Runtime)`. First-stage
+    no-dependency `NonRuntimeNodeEngine` tasks become `Ready(NonRuntime)`
+    with `SchedulerNonRuntimeTaskIntent`; dependent non-runtime tasks remain
+    `AwaitingInputs`; `PumasMaterialization` remains `AwaitingInputs` with a
+    dedicated materialization diagnostic; and `Unsupported` becomes
+    `Invalid` with a typed diagnostic.
+  - No-fallback/no-legacy confirmation: the slice does not execute
+    non-runtime tasks, does not call node-engine, does not fabricate runtime
+    `SchedulableTaskIntent` values, does not send Pumas materialization
+    through the generic node-engine adapter, and does not preserve indefinite
+    successful waiting for unsupported task classes.
+  - Verification: `cargo fmt -p pantograph-workflow-service`; `cargo test -p
+    pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+    check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted search over the
+    orchestrator slice found only existing runtime-host dispatch/store/session
+    test symbols and no node-engine demand, Pumas path, or planned-inference
+    execution path; and `git diff --check`.
+  - Remaining follow-up: scheduler-task execution entrypoint, non-runtime
+    adapter conversion, and runtime-task fail-closed diagnostics.
 
 ### Traceability Links
 

@@ -164,6 +164,127 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
 }
 
 #[test]
+fn orchestrator_initializes_ready_non_runtime_state_for_source_task() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("prompt").expect("node id"),
+        task_id: SchedulerTaskId::parse("prompt").expect("task id"),
+        node_type: "text-input".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        diagnostics: Vec::new(),
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    let SchedulerTaskState::Ready { execution_intent } = &records[0].state else {
+        panic!("expected ready non-runtime state");
+    };
+    let task_intent = execution_intent
+        .non_runtime_task_intent()
+        .expect("non-runtime task intent");
+    assert_eq!(task_intent.task_kind.as_str(), "text-input");
+    assert_eq!(task_intent.task_id.as_str(), "prompt");
+    assert!(execution_intent.runtime_task_intent().is_none());
+}
+
+#[test]
+fn orchestrator_initializes_awaiting_inputs_for_dependent_non_runtime_task() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("text-output").expect("node id"),
+        task_id: SchedulerTaskId::parse("text-output").expect("task id"),
+        node_type: "text-output".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        dependency_task_ids: vec![SchedulerTaskId::parse("prompt").expect("task id")],
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        diagnostics: Vec::new(),
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    assert!(matches!(
+        records[0].state,
+        SchedulerTaskState::AwaitingInputs { .. }
+    ));
+}
+
+#[test]
+fn orchestrator_initializes_invalid_state_for_unsupported_task_class() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("settings").expect("node id"),
+        task_id: SchedulerTaskId::parse("settings").expect("task id"),
+        node_type: "expand-settings".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::Unsupported,
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        diagnostics: Vec::new(),
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    let SchedulerTaskState::Invalid { diagnostics } = &records[0].state else {
+        panic!("expected invalid task state");
+    };
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::InvalidTask
+    );
+    assert!(diagnostics[0].message.contains("expand-settings"));
+}
+
+#[test]
+fn orchestrator_initializes_pumas_materialization_as_awaiting_inputs() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("model").expect("node id"),
+        task_id: SchedulerTaskId::parse("model").expect("task id"),
+        node_type: "puma-lib".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::PumasMaterialization,
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        diagnostics: Vec::new(),
+    }]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+
+    let SchedulerTaskState::AwaitingInputs { diagnostics } = &records[0].state else {
+        panic!("expected awaiting inputs task state");
+    };
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::AwaitingInputs
+    );
+    assert!(diagnostics[0].message.contains("Pumas"));
+}
+
+#[test]
 fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![WorkflowSchedulerTask {
