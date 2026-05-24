@@ -597,10 +597,11 @@ Legacy cleanup required before or with this slice:
 
 - Update stale workflow-service graph registry tests that still expect
   `puma-lib.model_path`; the canonical output is `pumas_model_ref`.
+  Completed 2026-05-23.
 - Remove graph-persistence behavior and tests that preserve successful
   `puma-lib` `modelPath`/`model_path` values without canonical Pumas identity,
   or replace those cases with typed stale/invalid diagnostics. Do not keep a
-  successful legacy path branch.
+  successful legacy path branch. Completed 2026-05-23.
 
 Implementation order for the next slice:
 
@@ -610,6 +611,7 @@ Implementation order for the next slice:
    is required.
 2. Remove or update stale `puma-lib.model_path` test/persistence behavior that
    would conflict with the path-free Pumas model-reference boundary.
+   Completed 2026-05-23.
 3. Add the scheduler-task execution entrypoint contract in workflow-service
    behind the existing service-owned orchestrator boundary.
 4. Add the non-runtime single-task adapter fake/trait boundary and focused
@@ -701,9 +703,17 @@ Rejected options for this boundary:
 validated non-runtime task kind. Existing `task_intent()` access now returns
 only runtime intents, so readiness, resource, batching, dispatch, and handoff
 policy cannot accidentally consume non-runtime node-engine work as runtime
-work. The non-runtime node-engine adapter itself remains open, as do stale
-`puma-lib.model_path` cleanup, dedicated task execution entrypoint wiring, and
-runtime-host dispatch cutover.
+work. The non-runtime node-engine adapter itself remains open, as do dedicated
+task execution entrypoint wiring and runtime-host dispatch cutover.
+
+2026-05-23 implementation status: stale successful `puma-lib.model_path`
+persistence has been removed. Graph persistence now strips legacy
+`modelPath`/`model_path` derived facts from `puma-lib` nodes regardless of
+whether a canonical model id is present; focused save/load tests prove
+path-only `puma-lib` state is not preserved as model identity. The graph
+registry options-provider regression now asserts canonical `pumas_model_ref`.
+The dedicated scheduler-task execution entrypoint, non-runtime adapter, and
+runtime-host dispatch cutover remain open.
 
 ## Task Result Materialization Plan
 

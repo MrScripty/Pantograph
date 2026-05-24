@@ -216,25 +216,25 @@ mod tests {
         let definition = registry
             .get_definition("puma-lib")
             .expect("puma-lib definition");
-        let model_path = definition
+        let pumas_model_ref = definition
             .outputs
             .iter()
-            .find(|port| port.id == "model_path")
-            .expect("model path output");
+            .find(|port| port.id == "pumas_model_ref")
+            .expect("pumas model ref output");
 
-        let provider = model_path
+        let provider = pumas_model_ref
             .options_provider
             .as_ref()
             .expect("registered options provider");
         assert_eq!(provider.node_type.as_str(), "puma-lib");
-        assert_eq!(provider.port_id.as_str(), "model_path");
+        assert_eq!(provider.port_id.as_str(), "pumas_model_ref");
 
-        let encoded = serde_json::to_value(model_path).expect("encode model path port");
+        let encoded = serde_json::to_value(pumas_model_ref).expect("encode pumas model ref port");
         assert_eq!(
             encoded["options_provider"],
             serde_json::json!({
                 "node_type": "puma-lib",
-                "port_id": "model_path"
+                "port_id": "pumas_model_ref"
             })
         );
     }

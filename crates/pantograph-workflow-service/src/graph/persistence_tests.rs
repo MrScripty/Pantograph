@@ -382,7 +382,7 @@ fn load_workflow_preserves_retired_inference_nodes_without_migration_records() {
 }
 
 #[test]
-fn save_workflow_preserves_puma_lib_model_path_without_model_identity() {
+fn save_workflow_strips_puma_lib_model_path_without_model_identity() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
     let mut data = sample_puma_lib_data();
@@ -398,10 +398,8 @@ fn save_workflow_preserves_puma_lib_model_path_without_model_identity() {
         .as_object()
         .expect("saved puma-lib data object");
 
-    assert_eq!(
-        data.get("modelPath").and_then(|value| value.as_str()),
-        Some("/old/path/tiny-sd-turbo")
-    );
+    assert!(!data.contains_key("modelPath"));
+    assert!(!data.contains_key("model_path"));
     assert!(!data.contains_key("dependency_requirements"));
 }
 
@@ -502,7 +500,7 @@ fn load_workflow_strips_legacy_puma_lib_derived_data_with_model_identity() {
 }
 
 #[test]
-fn load_workflow_preserves_legacy_puma_lib_model_path_without_model_identity() {
+fn load_workflow_strips_legacy_puma_lib_model_path_without_model_identity() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
     let mut data = sample_puma_lib_data();
@@ -518,9 +516,7 @@ fn load_workflow_preserves_legacy_puma_lib_model_path_without_model_identity() {
         .as_object()
         .expect("loaded puma-lib data object");
 
-    assert_eq!(
-        data.get("modelPath").and_then(|value| value.as_str()),
-        Some("/old/path/tiny-sd-turbo")
-    );
+    assert!(!data.contains_key("modelPath"));
+    assert!(!data.contains_key("model_path"));
     assert!(!data.contains_key("dependency_requirements"));
 }

@@ -10153,6 +10153,32 @@ Worker rules:
   - Remaining follow-up: remove stale `puma-lib.model_path` compatibility
     surfaces, then add the dedicated scheduler-task execution entrypoint and
     narrow typed non-runtime node-engine adapter.
+- 2026-05-23 Milestone 5c stale `puma-lib.model_path` cleanup slice
+  completed:
+  - Smallest useful vertical slice: remove the successful path-only
+    `puma-lib` model identity branch before scheduler-task execution can
+    consume graph-local model paths.
+  - Allowed write set: workflow-service graph persistence sanitizer/tests,
+    graph registry options-provider regression, graph README, and current
+    plan docs. Existing unrelated Pumas proposal Markdown changes remain
+    ignored.
+  - No-fallback/no-legacy confirmation: current `puma-lib` persistence now
+    strips `modelPath` and `model_path` regardless of whether a canonical
+    model id is present. The graph registry test asserts `pumas_model_ref`
+    as the canonical options-provider boundary. Retired non-`puma-lib`
+    stale-diagnostic tests were left intact because they do not provide a
+    successful `puma-lib` execution identity branch.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    focused registry and persistence tests for `pumas_model_ref` and
+    path-stripping behavior; `cargo test -p pantograph-workflow-service
+    graph::persistence_tests --lib`; `cargo test -p
+    pantograph-workflow-service graph::registry::tests --lib`; `cargo check
+    -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; targeted stale
+    `puma-lib.model_path` successful-branch search; and `git diff --check`.
+  - Remaining follow-up: add the dedicated scheduler-task execution
+    entrypoint and narrow typed non-runtime node-engine adapter.
 
 ### Traceability Links
 

@@ -47,16 +47,8 @@ fn sanitize_puma_lib_node_data(data: &mut serde_json::Value) {
     let Some(object) = data.as_object_mut() else {
         return;
     };
-    let has_model_identity = object
-        .get("model_id")
-        .or_else(|| object.get("modelId"))
-        .and_then(|value| value.as_str())
-        .is_some_and(|value| !value.trim().is_empty());
 
     for key in PUMA_LIB_DERIVED_DATA_KEYS {
-        if !has_model_identity && (*key == "modelPath" || *key == "model_path") {
-            continue;
-        }
         object.remove(*key);
     }
 }

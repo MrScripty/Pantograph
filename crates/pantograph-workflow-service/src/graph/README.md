@@ -162,6 +162,11 @@ for existing graph-edit callers.
   compatibility migration records for retired graph shapes; stale graph
   diagnostics classify retired nodes without rewriting them into executable
   current graphs.
+- Current `puma-lib` nodes persist canonical graph-visible model identity and
+  strip derived Pumas facts, including legacy `modelPath`/`model_path` values.
+  Path-only `puma-lib` state is not a successful model-reference branch;
+  schedulable inference must resolve through the canonical Pumas model-ref
+  and scheduler-owned runtime handoff boundaries.
 - Dynamic `node.data.definition` overlays may add or override ports for a
   specific node instance through backend-owned effective contracts, but they
   must not invalidate the registry node type or silently remove unrelated

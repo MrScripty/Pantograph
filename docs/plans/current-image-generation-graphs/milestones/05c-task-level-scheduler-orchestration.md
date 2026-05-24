@@ -111,13 +111,18 @@ durable task orchestration path.
   nodes, floating-point/vector nodes, file I/O, image/audio blob nodes,
   human/tool nodes, and unknown kinds until each has an explicit typed
   contract.
-- [ ] Remove stale `puma-lib.model_path` compatibility surfaces before they can
+- [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider
   boundary, and remove or replace graph-persistence behavior/tests that
   preserve successful `puma-lib` `modelPath`/`model_path` values without
   canonical Pumas identity. Stale path-shaped graphs must become typed
-  diagnostics, not successful execution inputs.
+  diagnostics, not successful execution inputs. Completed 2026-05-23 by
+  stripping `modelPath`/`model_path` for all persisted `puma-lib` nodes,
+  updating graph persistence tests so path-only `puma-lib` state is not
+  preserved as successful identity, updating the registry options-provider
+  test to assert `pumas_model_ref`, and documenting the graph persistence
+  invariant.
 - [ ] Wire runtime inference tasks through actual dispatch-selected
   `SchedulerRuntimeHandoff` values and the runtime-host execution port added
   in Milestone 5b. Do not build handoff from reduced execution plans or
