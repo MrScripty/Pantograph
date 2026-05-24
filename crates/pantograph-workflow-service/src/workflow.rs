@@ -105,6 +105,9 @@ pub use self::host::{
 };
 pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub use self::media_capability_contracts::*;
+pub(crate) use self::non_runtime_task_adapter::{
+    execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
+};
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 pub use self::task_binding_resolution::{

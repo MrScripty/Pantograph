@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 use node_engine::{NodeEngineSingleTaskError, NodeEngineSingleTaskRequest};

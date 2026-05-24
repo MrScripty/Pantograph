@@ -782,7 +782,8 @@ Implementation order for the next slice:
    unsupported, or ambiguous source values. Do not pass raw node data to the
    adapter.
 6. Add the scheduler-task execution entrypoint contract in workflow-service
-   behind the existing service-owned orchestrator boundary.
+   behind the existing service-owned orchestrator boundary. Completed
+   2026-05-24 for ready non-runtime tasks.
 7. Add the non-runtime single-task adapter fake/trait boundary and focused
    tests using materialized inputs and typed task results. Completed
    2026-05-24.
@@ -792,12 +793,14 @@ Implementation order for the next slice:
    successful "persist result" and "complete task" paths. Completed
    2026-05-24.
 9. Wire the entrypoint to execute a simple allowlisted non-runtime task and
-   persist its `WorkflowSchedulerTaskResult`.
+   persist its `WorkflowSchedulerTaskResult`. Completed 2026-05-24.
 10. Add a negative test proving runtime inference tasks do not call
    node-engine output demand or `PlannedInferenceExecutionHost` and instead
-   produce typed scheduler diagnostics.
+   produce typed scheduler diagnostics. Completed 2026-05-24 for the
+   non-runtime entrypoint boundary.
 11. Update README and plan notes, then run focused node-engine and
-   workflow-service checks.
+   workflow-service checks. Completed 2026-05-24 for the ready non-runtime
+   entrypoint slice.
 
 Standards gates for this slice:
 
@@ -1017,6 +1020,19 @@ node correlation rejection, duplicate success rejection, and non-completed
 result rejection without leaving completed-without-result or
 result-without-completed state. The scheduler-task entrypoint wiring remains
 open and must consume this method rather than separate result/state store calls.
+
+2026-05-24 implementation status: workflow-service now has a ready
+non-runtime scheduler-task execution entrypoint on
+`WorkflowSchedulerTaskOrchestrator`. It reads the active-run task graph and
+task state, rejects non-non-runtime tasks before the node-engine adapter,
+transitions ready non-runtime tasks to running, reads materialized active-run
+results, awaits `execute_non_runtime_scheduler_task` outside store mutation
+calls, commits success through `complete_active_run_scheduler_task`, and moves
+adapter failures to terminal failed without recording a successful result. The
+temporary module-level dead-code allowance on the non-runtime adapter was
+removed. Full session-execution cutover, dependent-task readiness advancement,
+runtime-host dispatch wiring, cancellation/retry/defer idempotency, and legacy
+output-demand launch removal remain open Milestone 5c work.
 
 ## Task Result Materialization Plan
 

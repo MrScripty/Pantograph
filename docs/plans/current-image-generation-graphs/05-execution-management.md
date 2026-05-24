@@ -10541,6 +10541,43 @@ Worker rules:
     store locks, commit successful completion through
     `complete_active_run_scheduler_task`, remove the adapter `dead_code`
     allowance, and emit runtime-task fail-closed diagnostics.
+- 2026-05-24 Milestone 5c ready non-runtime scheduler-task entrypoint slice
+  completed:
+  - Smallest useful vertical slice: execute one active-run scheduler task that
+    is already ready and classified as non-runtime node-engine work, then
+    persist its success through the atomic completion store method.
+  - Allowed write set: `scheduler/task_orchestrator.rs`,
+    `scheduler/task_orchestrator_tests.rs`, workflow non-runtime adapter
+    visibility, workflow-service README, Milestone 5c plan notes, and this
+    execution log. Existing unrelated Pumas proposal Markdown changes remain
+    ignored.
+  - Implementation notes: added
+    `WorkflowSchedulerTaskOrchestrator::execute_ready_non_runtime_task`. The
+    entrypoint reads cloned active-run task graph/state, validates ready
+    non-runtime intent, transitions ready to running, reads materialized task
+    results, awaits the non-runtime adapter outside store mutation calls,
+    commits success through `complete_active_run_scheduler_task`, and moves
+    adapter failures to terminal failed.
+  - No-fallback/no-legacy confirmation: runtime inference tasks are rejected
+    before node-engine execution; the entrypoint does not call output-node
+    demand, `workflow_run_internal`, `PlannedInferenceExecutionHost`, or
+    `execute_puma_lib`; and the non-runtime adapter module-level `dead_code`
+    allowance was removed.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    orchestrator_executes_ready_non_runtime_task --lib`; `cargo test -p
+    pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+    test -p pantograph-workflow-service workflow::non_runtime_task_adapter
+    --lib`; `cargo test -p pantograph-workflow-service scheduler::store
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and targeted forbidden-path
+    search over the entrypoint and adapter.
+  - Remaining follow-up: connect session execution to the scheduler-task
+    entrypoint loop, advance dependent tasks when materialized inputs become
+    ready, wire runtime inference dispatch through the runtime-host handoff
+    port, and remove the old output-demand launch path rather than preserving
+    it as a compatibility branch.
 
 ### Traceability Links
 

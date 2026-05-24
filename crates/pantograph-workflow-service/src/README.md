@@ -184,6 +184,13 @@ now initializes active-run scheduler task state from the immutable task graph
 after queue admission and before the current whole-run execution path
 continues. Full task progression, runtime-host dispatch lifecycle, and old
 node-engine output-demand launch removal remain staged Milestone 5c work.
+The first scheduler-task execution entrypoint is intentionally narrow: it
+executes only active-run tasks already in ready non-runtime node-engine state,
+transitions them through running, awaits the non-runtime adapter outside store
+mutation calls, and commits success through the active-run atomic completion
+operation. Runtime inference tasks are rejected before node-engine execution,
+and adapter failures move the task to terminal failed without storing a
+successful result.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

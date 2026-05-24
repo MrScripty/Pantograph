@@ -5,15 +5,17 @@ use pantograph_scheduler::{
     SchedulerContractError, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
     SchedulerRuntimeHandoff, SchedulerTaskExecutionIntent, SchedulerTaskState,
     SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
-    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateRecord, SchedulerTaskStateTransitionId,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
     SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 use thiserror::Error;
 
 use crate::workflow::{
+    execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
     WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticSeverity,
-    WorkflowServiceError,
+    WorkflowSchedulerTaskResult, WorkflowServiceError,
 };
 
 use super::WorkflowExecutionSessionStore;
@@ -88,6 +90,102 @@ impl WorkflowSchedulerTaskOrchestrator {
         store
             .set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn execute_ready_non_runtime_task(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    )),
+                )
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a non-runtime node-engine task",
+                    task_id
+                )),
+            ));
+        }
+
+        let ready_record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no active task-state record",
+                        task_id
+                    )),
+                )
+            })?;
+        let ready_execution_intent = ready_non_runtime_execution_intent(ready_record)?;
+        let running_transition =
+            running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
+        let running_record = store
+            .apply_active_run_scheduler_task_transition(
+                session_id,
+                workflow_run_id,
+                running_transition,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)?;
+
+        let materialized_results = store
+            .active_run_scheduler_task_results(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        let result = match execute_non_runtime_scheduler_task(task, &materialized_results).await {
+            Ok(result) => result,
+            Err(error) => {
+                let failure_transition = terminal_failure_transition_from_running(
+                    &running_record,
+                    non_runtime_adapter_failure_diagnostic(&error),
+                )?;
+                let _ = store
+                    .apply_active_run_scheduler_task_transition(
+                        session_id,
+                        workflow_run_id,
+                        failure_transition,
+                    )
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+                return Err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(error));
+            }
+        };
+
+        let completion_transition = completion_transition_from_running(&running_record)?;
+        let _ = store
+            .complete_active_run_scheduler_task(
+                session_id,
+                workflow_run_id,
+                completion_transition,
+                result.clone(),
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        Ok(result)
     }
 }
 
@@ -197,6 +295,132 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     SchedulerContract(SchedulerContractError),
     #[error("workflow service operation failed")]
     WorkflowService(WorkflowServiceError),
+    #[error("non-runtime scheduler task execution failed")]
+    NonRuntimeTaskAdapter(WorkflowSchedulerNonRuntimeTaskAdapterError),
+}
+
+fn ready_non_runtime_execution_intent(
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
+    let SchedulerTaskState::Ready { execution_intent } = &record.state else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be ready before non-runtime execution",
+                record.task_id.as_str()
+            )),
+        ));
+    };
+    if execution_intent.non_runtime_task_intent().is_none() {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' ready state is not non-runtime",
+                record.task_id.as_str()
+            )),
+        ));
+    }
+    Ok(execution_intent.clone())
+}
+
+fn running_transition_from_ready(
+    record: &SchedulerTaskStateRecord,
+    execution_intent: SchedulerTaskExecutionIntent,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    task_state_transition(
+        record,
+        "running",
+        SchedulerTaskStateKind::Ready,
+        SchedulerTaskState::Running { execution_intent },
+    )
+}
+
+fn completion_transition_from_running(
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    let SchedulerTaskState::Running { execution_intent } = &record.state else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be running before completion",
+                record.task_id.as_str()
+            )),
+        ));
+    };
+    task_state_transition(
+        record,
+        "completed",
+        SchedulerTaskStateKind::Running,
+        SchedulerTaskState::Completed {
+            execution_intent: execution_intent.clone(),
+        },
+    )
+}
+
+fn terminal_failure_transition_from_running(
+    record: &SchedulerTaskStateRecord,
+    diagnostic: SchedulerTaskStateDiagnostic,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    task_state_transition(
+        record,
+        "terminal-failed",
+        SchedulerTaskStateKind::Running,
+        SchedulerTaskState::TerminalFailed {
+            diagnostics: vec![diagnostic],
+        },
+    )
+}
+
+fn task_state_transition(
+    record: &SchedulerTaskStateRecord,
+    label: &str,
+    expected_previous_state: SchedulerTaskStateKind,
+    next_state: SchedulerTaskState,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    let transition_id = SchedulerTaskStateTransitionId::parse(format!(
+        "scheduler-task:{label}:{}",
+        record.state_version + 1
+    ))
+    .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?;
+    Ok(SchedulerTaskStateTransition {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        transition_id,
+        workflow_id: record.workflow_id.clone(),
+        workflow_run_id: record.workflow_run_id.clone(),
+        node_id: record.node_id.clone(),
+        task_id: record.task_id.clone(),
+        expected_previous_state: Some(expected_previous_state),
+        next_state,
+    })
+}
+
+fn applied_task_state_record(
+    result: pantograph_scheduler::SchedulerTaskStateTransitionApplyResult,
+) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+    match result {
+        pantograph_scheduler::SchedulerTaskStateTransitionApplyResult::Applied(record) => {
+            Ok(record)
+        }
+        pantograph_scheduler::SchedulerTaskStateTransitionApplyResult::AlreadyApplied(record) => {
+            Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' transition was already applied",
+                    record.task_id.as_str()
+                )),
+            ))
+        }
+    }
+}
+
+fn non_runtime_adapter_failure_diagnostic(
+    error: &WorkflowSchedulerNonRuntimeTaskAdapterError,
+) -> SchedulerTaskStateDiagnostic {
+    SchedulerTaskStateDiagnostic {
+        severity: SchedulerTaskStateDiagnosticSeverity::Error,
+        code: SchedulerTaskStateDiagnosticCode::TerminalFailure,
+        message: format!("non-runtime scheduler task execution failed: {error}"),
+        hint: Some(
+            "Fix the typed non-runtime task template or materialized upstream inputs before retrying."
+                .to_string(),
+        ),
+    }
 }
 
 fn projection_diagnostic_to_task_state_diagnostic(
