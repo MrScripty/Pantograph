@@ -325,6 +325,14 @@ durable task orchestration path.
   session/runtime readiness path. Preflight cache tests now call the preflight
   boundary directly instead of depending on a successful whole-run session
   launch, preserving the no-legacy cutover.
+  2026-05-24 cleanup implementation status: stale dequeued/finish-state
+  payload cleanup removed `required_backends` and `required_models` from
+  `WorkflowExecutionSessionDequeuedRun` and removed the redundant `workflow_id`
+  from `WorkflowExecutionSessionRunFinishState`. Session affinity remains on
+  session/preflight state and admission/placement projections; the dequeued
+  run handoff carries only queue timing, decision reason, workflow id, and the
+  queued request, while finish state carries only the active runner's
+  `unload_runtime` decision.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

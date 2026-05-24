@@ -1409,6 +1409,14 @@ boundary; the session cache is now limited to readiness invalidation and
 blocking issue reuse. Tests were updated to verify that cache behavior directly
 instead of using whole-run session execution as a proxy.
 
+2026-05-24 implementation status: stale dequeued/finish-state payload cleanup
+is complete. `WorkflowExecutionSessionDequeuedRun` no longer copies
+`required_backends` or `required_models` from session state, and
+`WorkflowExecutionSessionRunFinishState` no longer returns the redundant
+`workflow_id`. The canonical session affinity facts remain on
+session/preflight state and admission/placement projections; the runner handoff
+now carries only fields consumed by active scheduler-task execution.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

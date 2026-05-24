@@ -211,8 +211,6 @@ impl WorkflowExecutionSessionStore {
             enqueued_at_ms: queued.enqueued_at_ms,
             dequeued_at_ms,
             scheduler_decision_reason,
-            required_backends: state.required_backends.clone(),
-            required_models: state.required_models.clone(),
             queued,
         }))
     }
@@ -373,10 +371,7 @@ impl WorkflowExecutionSessionStore {
         if unload_runtime {
             state.runtime_loaded = false;
         }
-        Ok(WorkflowExecutionSessionRunFinishState {
-            workflow_id: state.workflow_id.clone(),
-            unload_runtime,
-        })
+        Ok(WorkflowExecutionSessionRunFinishState { unload_runtime })
     }
 
     pub(crate) fn cancel_queue_item(

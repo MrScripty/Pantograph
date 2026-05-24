@@ -108,8 +108,6 @@ pub(crate) struct WorkflowExecutionSessionDequeuedRun {
     pub(crate) enqueued_at_ms: u64,
     pub(crate) dequeued_at_ms: u64,
     pub(crate) scheduler_decision_reason: WorkflowSchedulerDecisionReason,
-    pub(crate) required_backends: Vec<String>,
-    pub(crate) required_models: Vec<String>,
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {
@@ -137,7 +135,6 @@ pub(crate) struct WorkflowExecutionSessionCloseState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowExecutionSessionRunFinishState {
-    pub(crate) workflow_id: String,
     pub(crate) unload_runtime: bool,
 }
 

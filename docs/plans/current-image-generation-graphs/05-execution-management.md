@@ -11005,6 +11005,32 @@ Worker rules:
     runtime-load/session-admission diagnostics helpers,
     `session_runtime_load_lifecycle`, `workflow_run_internal`, and the old
     media artifactization conversion boundary.
+- 2026-05-24 Milestone 5c stale queue payload cleanup slice completed:
+  - Smallest useful vertical slice: remove stale dequeued-run and finish-state
+    payload fields that no active scheduler policy or read model consumes.
+  - Allowed write set: workflow-service scheduler store/queue files,
+    existing focused scheduler/session tests, Milestone 5c/task-level
+    orchestration plan notes, and this execution log. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: `WorkflowExecutionSessionDequeuedRun`
+    no longer copies `required_backends` or `required_models`, and
+    `WorkflowExecutionSessionRunFinishState` no longer returns a redundant
+    `workflow_id`. Session affinity and preflight requirements remain on
+    canonical session/preflight state and admission/placement projections;
+    finish state now reports only the active runner's `unload_runtime`
+    decision.
+  - Verification passed: targeted source inspection of the dequeued and finish
+    constructors; `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service scheduler::store --lib`;
+    `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Remaining follow-up: reduced execution-plan active-run storage, retired
+    runtime-load/session-admission diagnostics helpers,
+    `session_runtime_load_lifecycle`, `workflow_run_internal`, and the old
+    media artifactization conversion boundary.
 
 ### Traceability Links
 
