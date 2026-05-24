@@ -163,6 +163,17 @@ durable task orchestration path.
   before node-engine execution. The adapter has a temporary module-scoped
   dead-code allowance because the scheduler-task entrypoint wiring is the next
   slice; remove that allowance when the entrypoint calls the adapter.
+  2026-05-24 entrypoint consistency replan decision: before wiring the
+  entrypoint, add a focused active-run store completion operation that records
+  a successful `WorkflowSchedulerTaskResult` and applies the terminal
+  completed-state transition together under one active-run store lock. The
+  entrypoint may transition ready tasks to running and await the adapter
+  outside store locks, but it must not use separate successful result-store
+  and complete-task calls. Stale state, wrong run/task/node correlation,
+  duplicate success, or mismatched terminal status must fail closed with typed
+  diagnostics. The broader option 3 execution lease/transaction command with
+  attempt tokens remains the later target for retries, duplicate dispatch,
+  cancellation, and worker-pool ownership.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider
@@ -210,6 +221,11 @@ durable task orchestration path.
   persists a typed `WorkflowSchedulerTaskResult`, and rejects runtime
   inference task kinds before node-engine planned-inference or output-demand
   paths can run.
+- Active-run store tests proving scheduler task completion persists the
+  `WorkflowSchedulerTaskResult` and completed-state transition atomically,
+  rejects stale running state, rejects wrong active-run/workflow/task/node
+  correlation, rejects duplicate successful completion, and cannot leave
+  completed-without-result or result-without-completed active-run state.
 - Focused task-template projection tests proving first-stage `text-input`,
   `boolean-input`, and `text-output` produce schema-versioned typed
   non-runtime templates; malformed, missing, unsupported, arbitrary-JSON, or

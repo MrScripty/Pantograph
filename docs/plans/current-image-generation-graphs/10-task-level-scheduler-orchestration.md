@@ -784,13 +784,18 @@ Implementation order for the next slice:
 6. Add the scheduler-task execution entrypoint contract in workflow-service
    behind the existing service-owned orchestrator boundary.
 7. Add the non-runtime single-task adapter fake/trait boundary and focused
-   tests using materialized inputs and typed task results.
-8. Wire the entrypoint to execute a simple allowlisted non-runtime task and
+   tests using materialized inputs and typed task results. Completed
+   2026-05-24.
+8. Add an active-run store completion operation that records a terminal
+   `WorkflowSchedulerTaskResult` and advances the corresponding scheduler task
+   state to completed under one active-run store lock. Do not add separate
+   successful "persist result" and "complete task" paths.
+9. Wire the entrypoint to execute a simple allowlisted non-runtime task and
    persist its `WorkflowSchedulerTaskResult`.
-9. Add a negative test proving runtime inference tasks do not call
+10. Add a negative test proving runtime inference tasks do not call
    node-engine output demand or `PlannedInferenceExecutionHost` and instead
    produce typed scheduler diagnostics.
-10. Update README and plan notes, then run focused node-engine and
+11. Update README and plan notes, then run focused node-engine and
    workflow-service checks.
 
 Standards gates for this slice:
@@ -851,6 +856,16 @@ Standards gates for this slice:
   conversion must stay synchronous. Do not spawn background tasks, create
   Tokio runtimes, or hold session-store/task-state/ledger locks across the
   adapter `.await`.
+- Keep task completion atomic inside the active-run store. The entrypoint may
+  transition a ready task to running before awaiting the non-runtime adapter,
+  but successful terminal completion must call one store-owned operation that
+  validates the active run id, workflow id, task id, node id, expected running
+  state, terminal transition, and result correlation before it stores the
+  `WorkflowSchedulerTaskResult` and marks the task completed. The operation
+  must fail closed for stale state, wrong task/run correlation, duplicate
+  successful results, or mismatched terminal status. Adapter failure before a
+  valid result must transition to typed retryable or terminal failure without
+  recording a successful result.
 - Use typed production errors and diagnostics. Runtime-task rejection,
   unsupported non-runtime kind, missing materialized input, wrong input type,
   adapter execution failure, output conversion failure, stale task state, and
@@ -874,6 +889,10 @@ Standards gates for this slice:
   fail closed instead of reaching the non-runtime adapter;
   materialized-input readiness tests proving runtime inference waits for every
   required connected input, not only `pumas_model_ref`;
+  active-run store tests proving result persistence and completed-state
+  transition happen through one operation, reject stale running state, reject
+  wrong run/task/node correlation, and do not leave completed-without-result or
+  result-without-completed state;
   scheduler state transition coverage proving non-runtime completed tasks do
   not carry `SchedulableTaskIntent`, focused positive allowlisted non-runtime
   task execution, runtime-task rejection before node-engine call,
@@ -974,6 +993,17 @@ node-engine. This slice intentionally does not update scheduler task state,
 persist results, or advance active runs. The adapter has a temporary
 module-scoped dead-code allowance until the next scheduler-task entrypoint
 slice calls it; that allowance is a removal target for the entrypoint commit.
+
+2026-05-24 replan decision: the scheduler-task entrypoint must not persist a
+successful task result and mark the task completed through two independent
+store calls. The immediate implementation uses option 2: add a focused
+active-run store completion operation that commits result storage and the
+terminal completed-state transition together under one store lock, after the
+entrypoint has awaited the non-runtime adapter outside that lock. This keeps
+the current staged active-run store coherent without introducing the larger
+option 3 execution lease/transaction command yet. Option 3 remains the later
+target for retries, duplicate dispatch prevention, cancellation, worker pools,
+and attempt-token ownership.
 
 ## Task Result Materialization Plan
 

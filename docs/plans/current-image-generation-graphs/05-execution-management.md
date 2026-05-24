@@ -10489,6 +10489,32 @@ Worker rules:
     transitions ready non-runtime tasks through running/completed states,
     persists the returned task result, removes the temporary adapter
     `dead_code` allowance, and emits runtime-task fail-closed diagnostics.
+- 2026-05-24 Milestone 5c scheduler-task completion consistency plan update:
+  - Smallest useful vertical slice: documentation-only replan for the
+    scheduler-task entrypoint boundary before implementation begins.
+  - Allowed write set: Milestone 5c orchestration plan, Milestone 5c checklist
+    file, and this execution log. Existing unrelated Pumas proposal Markdown
+    changes remain ignored.
+  - Decision: use the immediate option 2 active-run store completion operation
+    before wiring the entrypoint. The store operation must record a successful
+    `WorkflowSchedulerTaskResult` and the corresponding completed task-state
+    transition together under one active-run store lock, after the entrypoint
+    awaits the non-runtime adapter outside that lock.
+  - No-fallback/no-legacy confirmation: the next implementation must not add a
+    split successful "persist result" then "complete task" path, a split
+    "complete task" then "persist result" path, a compatibility shim around
+    old workflow output demand, or an untyped metadata flag to infer result
+    ownership. Stale state, mismatched run/task/node correlation, duplicate
+    successful completion, and adapter failure before a valid result must emit
+    typed diagnostics and fail closed.
+  - Later objective: option 3 execution lease/transaction commands with
+    attempt tokens remain planned for retries, duplicate dispatch prevention,
+    cancellation, worker pools, and durable replay ownership; they are not
+    required for the immediate non-runtime entrypoint slice.
+  - Planned verification: `git diff --check` for this documentation slice; in
+    the implementation slice, active-run store tests proving atomic
+    result-plus-completed transition and focused entrypoint tests proving no
+    completed-without-result or result-without-completed state.
 
 ### Traceability Links
 
