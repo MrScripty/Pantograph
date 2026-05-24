@@ -42,6 +42,10 @@ milestone status in its file and summarize progress in
    - Integrate option 4 durable per-task workflow orchestration so scheduler
      task state, not node-engine output demand or reduced execution plans,
      advances workflow progress.
+   - Before continuing runtime dispatch, classify newly exposed retired
+     whole-run/session/runtime-load/artifactization surfaces as delete,
+     canonical scheduler/runtime-host reattach, or scheduler task-result
+     conversion work. Do not preserve them as compatibility branches.
 
 5b. [Runtime Host Handoff And Legacy Execution Removal](milestones/05b-runtime-host-handoff-legacy-removal.md)
    - Replace successful `model_path`/`ModelRefV2` runtime execution with

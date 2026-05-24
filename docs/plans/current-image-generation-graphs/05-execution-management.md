@@ -10884,6 +10884,24 @@ Worker rules:
     `workflow_run_internal`, and media artifactization helpers as compiler
     dead-code warnings. Next slice must remove or reconnect these through the
     canonical scheduler/runtime-host paths rather than adding allow attributes.
+- 2026-05-24 Milestone 5c legacy-surface cleanup replan recorded:
+  - Decision: use option 2 before continuing runtime-dispatch implementation.
+    The next slice must classify newly exposed dead/legacy surfaces by owner
+    and action, then delete, reattach through dispatch-selected
+    scheduler/runtime-host ownership, or convert to scheduler task-result/output
+    ownership.
+  - No-fallback/no-legacy confirmation: `workflow_run_internal`, output-node
+    demand, reduced execution-plan launch/admission, old runtime
+    admission/preflight/load, graph-local model-path identity, and old
+    whole-run artifactization are not compatibility branches. Dead-code
+    warnings from those surfaces are cleanup blockers, not warnings to
+    suppress.
+  - Initial classification recorded in Milestone 5c and the task-level
+    orchestration plan. Existing unrelated Pumas proposal Markdown changes
+    remain ignored.
+  - Verification for this documentation slice: run `git diff --check` and
+    inspect the plan diff. Code verification belongs to the following cleanup
+    implementation slice.
 
 ### Traceability Links
 

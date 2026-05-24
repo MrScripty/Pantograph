@@ -1320,6 +1320,58 @@ helpers, queue runtime-admission fields, and unused media artifactization
 helpers now show as dead code and must be deleted or reconnected only through
 canonical scheduler/runtime-host paths.
 
+## Legacy Surface Cleanup Replan
+
+2026-05-24 decision: use option 2 as a cleanup gate before continuing the
+runtime-dispatch implementation. The next slice must classify each exposed
+legacy surface, then either delete it, reattach it through the canonical
+scheduler/runtime-host path, or convert it to scheduler task-result/output
+ownership. The classification is part of the implementation checklist, not a
+compatibility period.
+
+Classification rules:
+
+- **Delete:** code whose only remaining purpose is whole-run execution,
+  output-node demand, reduced execution-plan launch/admission, graph-local
+  model-path identity, old queue runtime-admission waits, or old runtime
+  preflight/load ownership.
+- **Reattach:** code that still represents a valid concept but is currently
+  owned by the retired path. Reattachment is allowed only through the
+  dispatch-selected scheduler/runtime-host path, with names and ownership
+  updated so it cannot be called from session admission or node-engine output
+  demand.
+- **Convert:** code that still represents user-visible task output behavior
+  but belongs under scheduler task-result/output projection. Conversion must
+  consume `WorkflowSchedulerTaskResult` values and must not preserve the old
+  whole-run artifactization path.
+
+Initial classification targets:
+
+- `workflow_run_internal`, `DemandEngine` output-demand launch helpers,
+  node-engine workflow-session runtime launch, and
+  `PlannedInferenceExecutionHost` successful branches are deletion targets
+  for scheduler-managed runs.
+- Runtime-load/session-admission helpers,
+  `session_runtime_load_lifecycle`, and runtime-reservation event helpers are
+  deletion targets unless the runtime handoff slice reattaches a narrow part
+  as scheduler-selected runtime-host lifecycle diagnostics.
+- `execution_plan_admission` helpers and exports are deletion targets if they
+  only support reduced execution-plan admission or launch. Runtime execution
+  must use task graph/state plus `SchedulerRuntimeHandoff`.
+- Queue runtime-admission/preflight fields and helper methods are deletion
+  targets unless an active scheduler read model or policy still consumes them
+  without reintroducing runtime admission/load.
+- `artifact_output_conversion` and `media_conversion_executor` are conversion
+  targets for a later scheduler task-result artifactization/output boundary.
+  They must not keep the old whole-run artifact path alive.
+
+Verification for this gate must include targeted usage searches for each
+retired symbol, focused tests for any reattached or converted surface, crate
+checks for every touched crate without new dead-code warnings, and
+`git diff --check`. If a surface cannot be deleted in the current slice, the
+plan must record the owner, the canonical path it will attach to, and the
+specific follow-up before implementation continues.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

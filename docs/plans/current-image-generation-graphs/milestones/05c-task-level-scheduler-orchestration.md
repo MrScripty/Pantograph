@@ -267,6 +267,28 @@ durable task orchestration path.
   dead-code warnings. The next cleanup slice must delete or reconnect those
   systems through canonical scheduler/runtime-host paths; do not silence the
   warnings with compatibility allowances.
+  2026-05-24 cleanup replan decision: use option 2 before the next runtime
+  dispatch implementation slice. First classify every newly exposed
+  dead/legacy surface by owner and action, then implement deletion or
+  canonical reattachment in small vertical commits. Valid actions are:
+  delete, reattach only through dispatch-selected scheduler/runtime-host
+  ownership, or convert to scheduler task-result/output ownership. No
+  compatibility shim, feature flag, alias, `allow(dead_code)`, or retained
+  alternate successful execution branch is allowed. Initial classification:
+  `workflow_run_internal` and whole-run output-demand helpers are deletion
+  targets; retired runtime-load/session-admission helpers and
+  `session_runtime_load_lifecycle` may be reattached only if the runtime
+  handoff slice consumes them as scheduler-selected runtime-host lifecycle
+  diagnostics; execution-plan admission helpers and re-exports are deletion
+  targets if they only feed reduced-plan launch/admission; queue
+  runtime-admission/preflight fields and helper methods are deletion targets
+  unless an active scheduler read model still consumes them; media
+  artifactization helpers and `media_conversion_executor` are conversion
+  targets for a later scheduler task-result artifactization boundary, not a
+  reason to keep the old whole-run artifact path alive. Verification for this
+  gate must include targeted `rg` searches for every retired symbol, focused
+  compile/test commands for touched crates, `git diff --check`, and a clean
+  decision recorded here for any surface that cannot be deleted immediately.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
@@ -337,6 +359,14 @@ durable task orchestration path.
 - Focused crate checks for every touched Rust crate, including default,
   all-features, and no-default-features checks when public feature contracts
   change.
+- Legacy cleanup classification verification proving every newly exposed
+  dead-code surface from the session-runner cutover is deleted, canonically
+  reattached, or converted to scheduler task-result/output ownership. The
+  verification must include targeted usage searches for `workflow_run_internal`,
+  old runtime-load/session-admission helpers, `session_runtime_load_lifecycle`,
+  execution-plan admission helpers, queue runtime-admission/preflight fields,
+  `artifact_output_conversion`, and `media_conversion_executor`, plus compile
+  checks without new dead-code warnings for the touched crates.
 
 **No-Fallback Requirements:**
 
@@ -358,6 +388,11 @@ durable task orchestration path.
   runtime adapters, or inference workers own scheduler policy.
 - Do not expose executable Pumas load targets outside runtime host execution.
 - Do not add compatibility shims for retired runtime execution contracts.
+- Do not silence newly exposed retired-code warnings. A warning from a
+  superseded launch, admission, runtime-load, reservation, execution-plan, or
+  whole-run artifactization surface is a cleanup blocker until the surface is
+  deleted, reattached through canonical scheduler/runtime-host dispatch, or
+  converted to scheduler task-result/output ownership.
 
 **Standards Guardrails:**
 
