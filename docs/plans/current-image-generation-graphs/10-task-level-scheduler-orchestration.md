@@ -607,6 +607,33 @@ be a typed field or a validated `WorkflowSchedulerTaskResultValue`-compatible
 template, not an unbounded JSON blob, graph-local path, Pumas load target, or
 frontend-owned scheduler fact.
 
+2026-05-24 decision: use the immediate option 2 template contract for the next
+implementation slice because it gets scheduler-owned non-runtime execution
+running without designing the full generic plugin/user-node execution contract
+yet. This means:
+
+- Add a schema-versioned `WorkflowSchedulerNonRuntimeTaskTemplate` or
+  equivalent task-definition field with concrete variants for the current
+  allowlist only: `TextInput { value: String }`,
+  `BooleanInput { value: bool }`, and a no-static-data `TextOutput` template
+  whose required upstream text value must come from materialized task results.
+- The task-graph projection is the only place allowed to read graph node data
+  for these concrete templates. The scheduler-task entrypoint and
+  non-runtime adapter consume only immutable typed task-definition templates
+  plus materialized `WorkflowSchedulerTaskResult` values; they must not read
+  raw graph/editor node data, arbitrary `serde_json`, `_data`, graph-local
+  model paths, Pumas paths, or frontend-owned scheduler facts.
+- Each newly supported non-runtime node during option 2 requires an explicit
+  template variant, converter, focused tests, and README/plan update. This is
+  deliberate: user-authored or external nodes remain `Unsupported` with typed
+  diagnostics until they either receive an explicit concrete template variant
+  or the later generic typed execution contract replaces this interim shape.
+- Record option 3 as the later target: a generic typed port-value execution
+  template derived from canonical node contracts, suitable for user-authored
+  nodes and new model/runtime families without adding a concrete enum variant
+  per node. Option 3 must still use typed values and converters; it must not
+  reintroduce raw JSON passthrough or a parallel successful execution path.
+
 Initial scheduler state creation must use the classification and readiness
 facts instead of treating "no runtime intent" as automatically awaiting inputs:
 
@@ -748,16 +775,22 @@ Implementation order for the next slice:
    node-engine, Pumas materialization, and unsupported tasks in one focused
    module, then validate all required connected inputs before any task becomes
    executable.
-5. Add the scheduler-task execution entrypoint contract in workflow-service
+5. Add the immediate option 2 typed non-runtime task-template contract to the
+   immutable scheduler task graph. Populate concrete first-stage templates
+   only during graph projection, cover `text-input`, `boolean-input`, and
+   `text-output`, and fail closed with typed diagnostics for missing, malformed,
+   unsupported, or ambiguous source values. Do not pass raw node data to the
+   adapter.
+6. Add the scheduler-task execution entrypoint contract in workflow-service
    behind the existing service-owned orchestrator boundary.
-6. Add the non-runtime single-task adapter fake/trait boundary and focused
+7. Add the non-runtime single-task adapter fake/trait boundary and focused
    tests using materialized inputs and typed task results.
-7. Wire the entrypoint to execute a simple allowlisted non-runtime task and
+8. Wire the entrypoint to execute a simple allowlisted non-runtime task and
    persist its `WorkflowSchedulerTaskResult`.
-8. Add a negative test proving runtime inference tasks do not call
+9. Add a negative test proving runtime inference tasks do not call
    node-engine output demand or `PlannedInferenceExecutionHost` and instead
    produce typed scheduler diagnostics.
-9. Update README and plan notes, then run focused node-engine and
+10. Update README and plan notes, then run focused node-engine and
    workflow-service checks.
 
 Standards gates for this slice:
@@ -790,6 +823,12 @@ Standards gates for this slice:
   until the materialized-input resolver validates every required upstream
   value. Unsupported or excluded kinds produce typed diagnostics and must not
   be deferred indefinitely.
+- Keep option 2 concrete and replaceable. The immediate task-template enum is
+  a narrow contract for the current allowlist, not a generic user-node system.
+  New supported nodes require explicit variants and tests until option 3
+  replaces this with a canonical typed port-value execution template. Do not
+  add catch-all `Json`, `Map`, `Any`, or metadata variants to avoid planning
+  the option 3 contract.
 - Convert values explicitly at the adapter boundary. Materialized
   `WorkflowSchedulerTaskResult` values must be mapped into the node-engine
   input shape through typed conversion helpers, and node-engine outputs must

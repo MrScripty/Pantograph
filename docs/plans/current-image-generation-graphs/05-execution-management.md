@@ -10387,6 +10387,36 @@ Worker rules:
     execution path; and `git diff --check`.
   - Remaining follow-up: scheduler-task execution entrypoint, non-runtime
     adapter conversion, and runtime-task fail-closed diagnostics.
+- 2026-05-24 Milestone 5c non-runtime task-template replan update:
+  - Scope: docs-only replan for the boundary discovered before workflow-service
+    can call the node-engine single-task adapter. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - Decision: use immediate option 2 now. Add a schema-versioned typed
+    non-runtime task-template field to `WorkflowSchedulerTaskGraph` with
+    concrete variants only for the first-stage allowlist:
+    `TextInput { value: String }`, `BooleanInput { value: bool }`, and a
+    no-static-data `TextOutput` template that consumes upstream materialized
+    text. The task-graph projection is the only layer allowed to read graph
+    node data for these templates.
+  - Option 3 remains the later target. The long-term replacement is a generic
+    typed port-value execution template derived from canonical node contracts
+    for user-authored nodes and future runtime/model families. It must replace
+    the concrete interim shape rather than creating a second successful
+    execution path, and it must not pass raw JSON or incidental metadata.
+  - No-fallback/no-legacy confirmation: the scheduler-task entrypoint and
+    non-runtime adapter must consume only immutable typed templates plus
+    materialized `WorkflowSchedulerTaskResult` values. They must not read raw
+    graph/editor node data, `_data`, arbitrary `serde_json`, graph-local model
+    paths, Pumas paths/load targets, frontend-owned scheduler facts,
+    `workflow_run_internal`, output-node demand, or
+    `PlannedInferenceExecutionHost`.
+  - Verification planned for the next implementation slice: typed template
+    projection tests for `text-input`, `boolean-input`, and `text-output`;
+    negative tests for missing, malformed, unsupported, arbitrary-JSON, and
+    user-authored node data; focused non-runtime adapter conversion tests;
+    runtime-task rejection tests; default/all-features/no-default workflow
+    service checks; README updates; targeted forbidden-path searches; and
+    `git diff --check`.
 
 ### Traceability Links
 

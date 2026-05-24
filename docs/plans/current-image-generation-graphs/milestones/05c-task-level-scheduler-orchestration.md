@@ -141,8 +141,16 @@ durable task orchestration path.
   source first-stage non-runtime tasks become `Ready(NonRuntime)`, dependent
   non-runtime tasks await inputs, Pumas materialization awaits its dedicated
   boundary, and unsupported classes become invalid with typed diagnostics.
-  Scheduler-task entrypoint, non-runtime adapter conversion, and runtime-task
-  fail-closed diagnostics remain open.
+  2026-05-24 replan decision: before the adapter conversion slice, add the
+  immediate option 2 typed non-runtime task-template contract to the immutable
+  task graph. The projection may create concrete templates only for
+  `text-input`, `boolean-input`, and `text-output`; the entrypoint and adapter
+  must consume those templates plus materialized task results and must not
+  read raw graph/editor node data. User-authored or external nodes remain
+  unsupported with typed diagnostics until an explicit concrete template is
+  added or the later option 3 generic typed port-value execution contract
+  replaces the interim enum. Scheduler-task entrypoint, non-runtime adapter
+  conversion, and runtime-task fail-closed diagnostics remain open.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider
@@ -190,6 +198,11 @@ durable task orchestration path.
   persists a typed `WorkflowSchedulerTaskResult`, and rejects runtime
   inference task kinds before node-engine planned-inference or output-demand
   paths can run.
+- Focused task-template projection tests proving first-stage `text-input`,
+  `boolean-input`, and `text-output` produce schema-versioned typed
+  non-runtime templates; malformed, missing, unsupported, arbitrary-JSON, or
+  user-authored node data fails closed with typed diagnostics instead of
+  reaching the adapter.
 - Scheduler state transition tests proving non-runtime ready/running/completed
   tasks do not carry `SchedulableTaskIntent`, while runtime readiness,
   resource, batching, dispatch, and handoff policy still reject non-runtime
