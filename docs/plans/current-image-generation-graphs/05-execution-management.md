@@ -10515,6 +10515,32 @@ Worker rules:
     the implementation slice, active-run store tests proving atomic
     result-plus-completed transition and focused entrypoint tests proving no
     completed-without-result or result-without-completed state.
+- 2026-05-24 Milestone 5c active-run atomic task completion slice completed:
+  - Smallest useful vertical slice: add the store-owned atomic success
+    boundary required before scheduler-task entrypoint wiring.
+  - Allowed write set: `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+    Milestone 5c plan notes, and this execution log. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - Implementation notes: added `complete_active_run_scheduler_task`, which
+    validates the active run id, completed result status, completed transition,
+    expected running state, current running task-state record, duplicate result
+    absence, and workflow/run/node/task correlation before storing the task
+    result and completed task-state record together.
+  - No-fallback/no-legacy confirmation: the slice does not add a split
+    successful result-store path for entrypoint use, does not revive output
+    demand or planned-inference host behavior, and fails closed for stale state,
+    wrong node correlation, duplicate success, and non-completed result status.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service active_run_complete_scheduler_task
+    --lib`; `cargo test -p pantograph-workflow-service scheduler::store
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo check -p
+    pantograph-workflow-service --all-features`.
+  - Remaining follow-up: wire the scheduler-task execution entrypoint to
+    transition ready tasks to running, await the non-runtime adapter outside
+    store locks, commit successful completion through
+    `complete_active_run_scheduler_task`, remove the adapter `dead_code`
+    allowance, and emit runtime-task fail-closed diagnostics.
 
 ### Traceability Links
 

@@ -1,5 +1,10 @@
 use std::collections::BTreeMap;
 
+use pantograph_scheduler::{
+    apply_scheduler_task_state_transition, SchedulerTaskStateKind, SchedulerTaskStateTransition,
+    SchedulerTaskStateTransitionApplyResult,
+};
+
 use crate::workflow::{WorkflowSchedulerTaskResult, WorkflowServiceError};
 
 use super::WorkflowExecutionSessionStore;
@@ -75,6 +80,82 @@ impl WorkflowExecutionSessionStore {
         Ok(())
     }
 
+    /// Atomically record a successful task result and complete the matching
+    /// scheduler task on the active run.
+    #[allow(dead_code)]
+    pub(crate) fn complete_active_run_scheduler_task(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        transition: SchedulerTaskStateTransition,
+        result: WorkflowSchedulerTaskResult,
+    ) -> Result<SchedulerTaskStateTransitionApplyResult, WorkflowServiceError> {
+        let tick = self.next_tick();
+        validate_task_result_for_active_run(&result, workflow_run_id)?;
+        validate_completion_transition_for_result(&transition, &result)?;
+
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_mut().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+
+        let task_id = result.task_id.clone();
+        if active_run.scheduler_task_results.contains_key(&task_id) {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task result '{}' is already recorded",
+                task_id
+            )));
+        }
+
+        let current = active_run
+            .scheduler_task_records
+            .get(&task_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no active task-state record",
+                    task_id
+                ))
+            })?;
+        if current.state.kind() != SchedulerTaskStateKind::Running {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be running before completion, found {:?}",
+                task_id,
+                current.state.kind()
+            )));
+        }
+
+        let apply_result = apply_scheduler_task_state_transition(Some(current), transition)
+            .map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "invalid scheduler task completion transition: {error}"
+                ))
+            })?;
+        let SchedulerTaskStateTransitionApplyResult::Applied(record) = &apply_result else {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' completion transition was already applied",
+                task_id
+            )));
+        };
+
+        active_run
+            .scheduler_task_records
+            .insert(task_id.clone(), record.clone());
+        active_run.scheduler_task_results.insert(task_id, result);
+        Self::mark_session_access(state, tick);
+        Ok(apply_result)
+    }
+
     /// Read staged scheduler task results for the active run.
     #[allow(dead_code)]
     pub(crate) fn active_run_scheduler_task_results(
@@ -124,14 +205,80 @@ fn validate_task_result_for_active_run(
     Ok(())
 }
 
+fn validate_completion_transition_for_result(
+    transition: &SchedulerTaskStateTransition,
+    result: &WorkflowSchedulerTaskResult,
+) -> Result<(), WorkflowServiceError> {
+    if result.status != crate::workflow::WorkflowSchedulerTaskResultStatus::Completed {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task result '{}' must be completed for task completion",
+            result.task_id
+        )));
+    }
+    if transition.expected_previous_state != Some(SchedulerTaskStateKind::Running) {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task '{}' completion must expect running state",
+            result.task_id
+        )));
+    }
+    if transition.next_state.kind() != SchedulerTaskStateKind::Completed {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task '{}' completion transition must end completed",
+            result.task_id
+        )));
+    }
+    if transition.workflow_id.as_str() != result.workflow_id {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task result '{}' workflow id '{}' does not match completion transition '{}'",
+            result.task_id,
+            result.workflow_id,
+            transition.workflow_id.as_str()
+        )));
+    }
+    if transition.workflow_run_id.as_str() != result.workflow_run_id {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task result '{}' workflow run id '{}' does not match completion transition '{}'",
+            result.task_id,
+            result.workflow_run_id,
+            transition.workflow_run_id.as_str()
+        )));
+    }
+    if transition.node_id.as_str() != result.node_id {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task result '{}' node id '{}' does not match completion transition '{}'",
+            result.task_id,
+            result.node_id,
+            transition.node_id.as_str()
+        )));
+    }
+    if transition.task_id.as_str() != result.task_id {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task result '{}' does not match completion transition task '{}'",
+            result.task_id,
+            transition.task_id.as_str()
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use pantograph_dependency_planning::PumasModelRef;
+    use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
+    use pantograph_scheduler::{
+        SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
+        SchedulerTaskExecutionIntent, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind,
+        SchedulerTaskStateRecord, SchedulerTaskStateTransition,
+        SchedulerTaskStateTransitionApplyResult, SchedulerTaskStateTransitionId,
+        SchedulerWorkflowId, SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+    };
 
     use crate::workflow::{
-        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowSchedulerTaskResult,
-        WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
-        WorkflowSchedulerTaskResultValue,
+        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowSchedulerTask,
+        WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+        WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultOutput,
+        WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue,
+        WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
     };
 
     use super::*;
@@ -190,6 +337,125 @@ mod tests {
         (store, session_id, workflow_run_id)
     }
 
+    fn task_graph(workflow_run_id: &str, task_id: &str) -> WorkflowSchedulerTaskGraph {
+        let workflow_id = SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id");
+        let workflow_run_id = SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id");
+        WorkflowSchedulerTaskGraph {
+            schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+            workflow_id: workflow_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
+            tasks: vec![WorkflowSchedulerTask {
+                workflow_id,
+                workflow_run_id,
+                node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+                task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+                node_type: "llm-inference".to_string(),
+                execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+                dependency_task_ids: Vec::new(),
+                input_bindings: Vec::new(),
+                schedulable_intent: None,
+                schedulable_intent_template: None,
+                non_runtime_task_template: None,
+                diagnostics: Vec::new(),
+            }],
+        }
+    }
+
+    fn task_intent(workflow_run_id: &str, task_id: &str) -> SchedulableTaskIntent {
+        SchedulableTaskIntent {
+            contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+            fairness_key: None,
+            task_type: DependencyTaskId::parse("image_generation").expect("task type"),
+            model_ref: PumasModelRef {
+                model_id: "image/example/tiny-diffusion".to_string(),
+                revision: Some("main".to_string()),
+                selected_artifact_id: Some("diffusers-bundle".to_string()),
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            },
+            constraints: SchedulerRuntimeDeviceConstraints::default(),
+            trait_settings: Vec::new(),
+            dependency_override_patches: Vec::new(),
+            estimate_hints: Vec::new(),
+        }
+    }
+
+    fn task_state(
+        state: SchedulerTaskStateKind,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> SchedulerTaskState {
+        let execution_intent = SchedulerTaskExecutionIntent::Runtime {
+            task_intent: task_intent(workflow_run_id, task_id),
+        };
+        match state {
+            SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready { execution_intent },
+            SchedulerTaskStateKind::Running => SchedulerTaskState::Running { execution_intent },
+            SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed { execution_intent },
+            other => panic!("unsupported test state {other:?}"),
+        }
+    }
+
+    fn task_record(
+        workflow_run_id: &str,
+        task_id: &str,
+        state: SchedulerTaskStateKind,
+    ) -> SchedulerTaskStateRecord {
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+            state: task_state(state, workflow_run_id, task_id),
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse("transition.running")
+                .expect("transition id"),
+        }
+    }
+
+    fn completion_transition(
+        workflow_run_id: &str,
+        task_id: &str,
+        transition_id: &str,
+    ) -> SchedulerTaskStateTransition {
+        SchedulerTaskStateTransition {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            transition_id: SchedulerTaskStateTransitionId::parse(transition_id)
+                .expect("transition id"),
+            workflow_id: SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+            expected_previous_state: Some(SchedulerTaskStateKind::Running),
+            next_state: task_state(SchedulerTaskStateKind::Completed, workflow_run_id, task_id),
+        }
+    }
+
+    fn store_running_task(
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) {
+        store
+            .set_active_run_scheduler_task_state(
+                session_id,
+                workflow_run_id,
+                task_graph(workflow_run_id, task_id),
+                vec![task_record(
+                    workflow_run_id,
+                    task_id,
+                    SchedulerTaskStateKind::Running,
+                )],
+            )
+            .expect("set running task");
+    }
+
     #[test]
     fn active_run_scheduler_task_results_round_trip_validated_results() {
         let (mut store, session_id, workflow_run_id) = active_store();
@@ -222,5 +488,159 @@ mod tests {
             .expect_err("wrong run result should be rejected");
 
         assert!(error.message().contains("expected"));
+    }
+
+    #[test]
+    fn active_run_complete_scheduler_task_records_result_and_completed_state() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+
+        let applied = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed"),
+                task_result("model-task", &workflow_run_id),
+            )
+            .expect("complete task");
+
+        assert!(matches!(
+            applied,
+            SchedulerTaskStateTransitionApplyResult::Applied(_)
+        ));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Completed);
+        assert_eq!(records[0].state_version, 2);
+        let results = store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].task_id, "model-task");
+    }
+
+    #[test]
+    fn active_run_complete_scheduler_task_rejects_non_running_state_without_result() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store
+            .set_active_run_scheduler_task_state(
+                &session_id,
+                &workflow_run_id,
+                task_graph(&workflow_run_id, "model-task"),
+                vec![task_record(
+                    &workflow_run_id,
+                    "model-task",
+                    SchedulerTaskStateKind::Ready,
+                )],
+            )
+            .expect("set ready task");
+
+        let error = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed"),
+                task_result("model-task", &workflow_run_id),
+            )
+            .expect_err("ready task completion should be rejected");
+
+        assert!(error.message().contains("must be running"));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Ready);
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results")
+            .is_empty());
+    }
+
+    #[test]
+    fn active_run_complete_scheduler_task_rejects_wrong_node_without_result() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let mut result = task_result("model-task", &workflow_run_id);
+        result.node_id = "other-node".to_string();
+
+        let error = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed"),
+                result,
+            )
+            .expect_err("wrong node result should be rejected");
+
+        assert!(error.message().contains("node id"));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Running);
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results")
+            .is_empty());
+    }
+
+    #[test]
+    fn active_run_complete_scheduler_task_rejects_duplicate_success() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let _ = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed"),
+                task_result("model-task", &workflow_run_id),
+            )
+            .expect("complete task");
+
+        let error = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed-again"),
+                task_result("model-task", &workflow_run_id),
+            )
+            .expect_err("duplicate success should be rejected");
+
+        assert!(error.message().contains("already recorded"));
+        let results = store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results");
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn active_run_complete_scheduler_task_rejects_non_completed_result_without_state_change() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let mut result = task_result("model-task", &workflow_run_id);
+        result.status = WorkflowSchedulerTaskResultStatus::Unavailable;
+        result.outputs.clear();
+
+        let error = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed"),
+                result,
+            )
+            .expect_err("non-completed result should be rejected");
+
+        assert!(error.message().contains("must be completed"));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Running);
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+            .expect("read results")
+            .is_empty());
     }
 }

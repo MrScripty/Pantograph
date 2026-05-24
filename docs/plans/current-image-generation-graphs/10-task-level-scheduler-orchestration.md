@@ -789,7 +789,8 @@ Implementation order for the next slice:
 8. Add an active-run store completion operation that records a terminal
    `WorkflowSchedulerTaskResult` and advances the corresponding scheduler task
    state to completed under one active-run store lock. Do not add separate
-   successful "persist result" and "complete task" paths.
+   successful "persist result" and "complete task" paths. Completed
+   2026-05-24.
 9. Wire the entrypoint to execute a simple allowlisted non-runtime task and
    persist its `WorkflowSchedulerTaskResult`.
 10. Add a negative test proving runtime inference tasks do not call
@@ -1004,6 +1005,18 @@ the current staged active-run store coherent without introducing the larger
 option 3 execution lease/transaction command yet. Option 3 remains the later
 target for retries, duplicate dispatch prevention, cancellation, worker pools,
 and attempt-token ownership.
+
+2026-05-24 implementation status: workflow-service active-run storage now has
+`complete_active_run_scheduler_task` as the atomic success boundary for
+scheduler-task completion. The method validates the active run, task result,
+completed transition, running current state, duplicate result absence, and
+workflow/run/node/task correlation before storing the
+`WorkflowSchedulerTaskResult` and completed task-state record together. Focused
+tests prove successful completion, stale non-running state rejection, wrong
+node correlation rejection, duplicate success rejection, and non-completed
+result rejection without leaving completed-without-result or
+result-without-completed state. The scheduler-task entrypoint wiring remains
+open and must consume this method rather than separate result/state store calls.
 
 ## Task Result Materialization Plan
 

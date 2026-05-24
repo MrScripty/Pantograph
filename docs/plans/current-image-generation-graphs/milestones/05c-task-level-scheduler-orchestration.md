@@ -173,7 +173,11 @@ durable task orchestration path.
   duplicate success, or mismatched terminal status must fail closed with typed
   diagnostics. The broader option 3 execution lease/transaction command with
   attempt tokens remains the later target for retries, duplicate dispatch,
-  cancellation, and worker-pool ownership.
+  cancellation, and worker-pool ownership. Completed 2026-05-24 with
+  `complete_active_run_scheduler_task`; focused tests cover successful
+  result-plus-completed state commit, stale non-running state rejection, wrong
+  run/task/node correlation rejection, duplicate successful completion
+  rejection, and non-completed result rejection without half-state persistence.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider
