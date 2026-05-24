@@ -15,7 +15,6 @@ use super::task_result_contracts::{
 };
 
 const PORT_TEXT: &str = "text";
-const PORT_VALUE: &str = "value";
 
 pub(crate) async fn execute_non_runtime_scheduler_task(
     task: &WorkflowSchedulerTask,
@@ -69,12 +68,6 @@ fn node_engine_inputs(
 ) -> Result<HashMap<String, Value>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     let mut inputs = HashMap::new();
     match template {
-        WorkflowSchedulerNonRuntimeTaskTemplate::TextInput { value } => {
-            inputs.insert(PORT_TEXT.to_string(), Value::String(value.clone()));
-        }
-        WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { value } => {
-            inputs.insert(PORT_VALUE.to_string(), Value::Bool(*value));
-        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             inputs.insert(
                 PORT_TEXT.to_string(),
@@ -94,27 +87,11 @@ fn scheduler_outputs(
     outputs: &HashMap<String, Value>,
 ) -> Result<Vec<WorkflowSchedulerTaskResultOutput>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     match template {
-        WorkflowSchedulerNonRuntimeTaskTemplate::TextInput { .. }
-        | WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
+        WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             let value = output_string(outputs, PORT_TEXT)?;
             Ok(vec![WorkflowSchedulerTaskResultOutput {
                 port_id: PORT_TEXT.to_string(),
                 value: WorkflowSchedulerTaskResultValue::String(value),
-            }])
-        }
-        WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { .. } => {
-            let value = outputs
-                .get(PORT_VALUE)
-                .and_then(Value::as_bool)
-                .ok_or_else(|| {
-                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
-                        port_id: PORT_VALUE.to_string(),
-                        expected: "boolean",
-                    }
-                })?;
-            Ok(vec![WorkflowSchedulerTaskResultOutput {
-                port_id: PORT_VALUE.to_string(),
-                value: WorkflowSchedulerTaskResultValue::Bool(value),
             }])
         }
     }
@@ -272,6 +249,7 @@ mod tests {
         SchedulerNodeId, SchedulerTaskId, SchedulerWorkflowId, SchedulerWorkflowRunId,
     };
 
+    use super::super::WorkflowSchedulerSourceInputTemplate;
     use super::*;
 
     fn workflow_id() -> SchedulerWorkflowId {
@@ -303,6 +281,7 @@ mod tests {
             schedulable_intent: None,
             schedulable_intent_template: None,
             non_runtime_task_template: template,
+            source_input_task_template: None,
             diagnostics: Vec::new(),
         }
     }
@@ -338,45 +317,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn adapter_executes_text_input_from_typed_template() {
-        let task = task(
-            "prompt",
-            "text-input",
-            Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
-                value: "paint a red cube".to_string(),
-            }),
-            Vec::new(),
-        );
+    async fn adapter_rejects_source_input_task_before_node_engine() {
+        let mut task = task("prompt", "text-input", None, Vec::new());
+        task.execution_class = WorkflowSchedulerTaskExecutionClass::SourceInput;
+        task.source_input_task_template = Some(WorkflowSchedulerSourceInputTemplate::Text {
+            port_id: PORT_TEXT.to_string(),
+        });
 
-        let result = execute_non_runtime_scheduler_task(&task, &[])
+        let error = execute_non_runtime_scheduler_task(&task, &[])
             .await
-            .expect("non-runtime result");
+            .expect_err("source input task should be rejected");
 
-        assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
-        assert_eq!(
-            result.outputs[0].value,
-            WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn adapter_executes_boolean_input_from_typed_template() {
-        let task = task(
-            "flag",
-            "boolean-input",
-            Some(WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { value: true }),
-            Vec::new(),
-        );
-
-        let result = execute_non_runtime_scheduler_task(&task, &[])
-            .await
-            .expect("non-runtime result");
-
-        assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
-        assert_eq!(
-            result.outputs[0].value,
-            WorkflowSchedulerTaskResultValue::Bool(true)
-        );
+        assert!(matches!(
+            error,
+            WorkflowSchedulerNonRuntimeTaskAdapterError::UnsupportedExecutionClass { .. }
+        ));
     }
 
     #[tokio::test]

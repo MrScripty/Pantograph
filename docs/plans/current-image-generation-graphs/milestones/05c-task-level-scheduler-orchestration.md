@@ -138,9 +138,10 @@ durable task orchestration path.
   until every upstream binding has a completed materialized task result, while
   still specializing `pumas_model_ref` into the scheduler intent model ref.
   Initial scheduler task-state creation now consumes the execution class:
-  source first-stage non-runtime tasks become `Ready(NonRuntime)`, dependent
-  non-runtime tasks await inputs, Pumas materialization awaits its dedicated
-  boundary, and unsupported classes become invalid with typed diagnostics.
+  source-input tasks become `AwaitingInputs` until request values are
+  materialized, dependent non-runtime tasks await inputs, Pumas materialization
+  awaits its dedicated boundary, and unsupported classes become invalid with
+  typed diagnostics.
   2026-05-24 replan decision: before the adapter conversion slice, add the
   immediate option 2 typed non-runtime task-template contract to the immutable
   task graph. The projection may create concrete templates only for
@@ -148,15 +149,17 @@ durable task orchestration path.
   must consume those templates plus materialized task results and must not
   read raw graph/editor node data. User-authored or external nodes remain
   unsupported with typed diagnostics until an explicit concrete template is
-  added or the later option 3 generic typed port-value execution contract
-  replaces the interim enum. Completed 2026-05-24 with
-  `WorkflowSchedulerNonRuntimeTaskTemplate` and task-graph schema version 3:
-  `text-input` captures canonical `text`, `boolean-input` captures canonical
-  `value`, and `text-output` requires an upstream `text` binding. Malformed,
-  missing, or stale fields become typed projection diagnostics before the
-  orchestrator can mark a non-runtime task executable. Scheduler-task
-  entrypoint, store/result persistence wiring, and runtime-task fail-closed
-  diagnostics remain open. Non-runtime adapter conversion completed
+  added or the later generic typed port-value execution/source contract replaces
+  the interim enum. Completed 2026-05-24 with a superseded staging schema v3
+  contract, then replaced 2026-05-24 by schema version 4: `text-input.text`
+  and `boolean-input.value` are now `WorkflowSchedulerSourceInputTemplate`
+  source-input tasks, while `WorkflowSchedulerNonRuntimeTaskTemplate` keeps
+  only node-engine-executable non-runtime tasks such as `text-output`. Source
+  input projection does not read graph-local values; source inputs stay
+  `AwaitingInputs` until request materialization produces typed task results.
+  Scheduler-task session-runner wiring and the store-owned source-input
+  materialization operation remain open. Non-runtime adapter conversion
+  completed
   2026-05-24 with a workflow-service adapter that consumes typed templates
   plus materialized task results, calls node-engine `single_task`, converts
   outputs back into `WorkflowSchedulerTaskResult`, and rejects runtime tasks
@@ -275,11 +278,11 @@ durable task orchestration path.
   rejects stale running state, rejects wrong active-run/workflow/task/node
   correlation, rejects duplicate successful completion, and cannot leave
   completed-without-result or result-without-completed active-run state.
-- Focused task-template projection tests proving first-stage `text-input`,
-  `boolean-input`, and `text-output` produce schema-versioned typed
-  non-runtime templates; malformed, missing, unsupported, arbitrary-JSON, or
-  user-authored node data fails closed with typed diagnostics instead of
-  reaching the adapter.
+- Focused task-template projection tests proving first-stage `text-input` and
+  `boolean-input` produce schema-versioned typed source-input templates while
+  `text-output` produces a typed non-runtime template; unsupported,
+  arbitrary-JSON, or user-authored node data fails closed with typed
+  diagnostics instead of reaching the adapter.
 - Scheduler state transition tests proving non-runtime ready/running/completed
   tasks do not carry `SchedulableTaskIntent`, while runtime readiness,
   resource, batching, dispatch, and handoff policy still reject non-runtime
@@ -930,3 +933,77 @@ durable task orchestration path.
   completed, and how missing request inputs become typed scheduler diagnostics.
   Do not make graph node data, `workflow_run_internal`, or output-node demand a
   successful compatibility path for this gap.
+- 2026-05-24 source-input lifecycle replan decision selected option 3. The
+  next implementation slice must replace graph-data-backed source input
+  execution with an explicit source-input scheduler task contract for the
+  current typed allowlist. Add a separate typed contract field, such as
+  `WorkflowSchedulerSourceInputTemplate`, instead of adding request-bound
+  variants to `WorkflowSchedulerNonRuntimeTaskTemplate`; the non-runtime
+  template enum remains only for tasks that the node-engine adapter may execute.
+  Source-input tasks should use a distinct path-free execution class, such as
+  `SourceInput`, so read models and run summaries do not describe request
+  materialization as `NonRuntimeNodeEngine` work.
+- `text-input.text` and `boolean-input.value` may project as source-input tasks
+  when the canonical node contract exposes those typed ports. Projection must
+  not read request payloads, mutate graph node data, or mark missing
+  graph-stored values projection-invalid for source-input tasks. Existing
+  graph-data-backed `TextInput` and `BooleanInput` non-runtime execution must
+  be retired for scheduler-managed session runs or converted into the same
+  source-input materialization contract before the runner cutover; it must not
+  remain as a parallel successful path.
+- The dedicated session runner or initialization helper must materialize
+  matching request `WorkflowPortBinding` values into completed
+  `WorkflowSchedulerTaskResult` records and complete those source tasks through
+  a store-owned atomic materialization operation before dependent tasks advance.
+  That operation must not fake a `Running` node-engine execution state to reuse
+  `complete_active_run_scheduler_task`; it needs an explicit expected-state
+  transition for source-input materialization. Missing request inputs, wrong
+  value types, duplicate bindings, unsupported source nodes, and correlation
+  mismatches must produce typed diagnostics and blocked or terminal task states;
+  they must not mutate graph node data, call `workflow_run_internal`, execute
+  through the non-runtime adapter, or use output-node demand.
+- The staged `external_input_materialization` helper may remain only as the
+  converter-owned source-input materialization boundary after it consumes typed
+  source-input templates instead of raw `node_type`/`port_id` checks. Later
+  option 4 remains the target: a generic typed port-value source contract
+  derived from canonical node contracts for user-authored and future source
+  nodes without one enum variant per node.
+- 2026-05-24 source-input scheduler contract slice completed. Smallest useful
+  vertical slice: replace graph-data-backed `text-input`/`boolean-input`
+  non-runtime execution with schema-versioned source-input task projection,
+  orchestration state, read-model, summary, and external-input materialization
+  contracts. Allowed write set: workflow-service task graph contracts,
+  classification/projection, external-input materialization,
+  non-runtime adapter, task orchestrator/read-model/summary code and focused
+  tests, workflow-service README, plan files, and the execution log.
+  No-fallback/no-legacy confirmation: `WorkflowSchedulerNonRuntimeTaskTemplate`
+  no longer contains `TextInput` or `BooleanInput`; source input nodes project
+  as `WorkflowSchedulerTaskExecutionClass::SourceInput` with
+  `WorkflowSchedulerSourceInputTemplate`; the non-runtime adapter rejects
+  source-input tasks before node-engine; projection does not read graph-local
+  source values; and no branch calls `workflow_run_internal`, output-node
+  demand, runtime dispatch, or Pumas path resolution to materialize source
+  inputs. Verification passed: `cargo fmt -p
+  pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+  workflow::tests::task_graph --lib`; `cargo test -p
+  pantograph-workflow-service workflow::external_input_materialization --lib`;
+  `cargo test -p pantograph-workflow-service
+  workflow::non_runtime_task_adapter --lib`; `cargo test -p
+  pantograph-workflow-service workflow::task_run_summary --lib`; `cargo test
+  -p pantograph-workflow-service workflow::tests::task_state_read_model --lib`;
+  `cargo test -p pantograph-workflow-service scheduler::task_orchestrator
+  --lib`; `cargo test -p pantograph-workflow-service scheduler::store --lib`;
+  `cargo test -p pantograph-workflow-service
+  workflow::task_result_output_projection --lib`; `cargo check -p
+  pantograph-workflow-service`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; and `cargo check -p
+  pantograph-workflow-service --all-features`.
+- Deviation/discovered issue resolved in-slice: focused test compilation
+  exposed stale `create_session` call sites that lacked the canonical
+  attribution argument; the touched test fixtures were updated to the current
+  six-argument session-store API instead of preserving an old helper shape.
+  Remaining follow-up: the session runner still needs the store-owned atomic
+  source-input materialization operation that records completed source-input
+  task results and advances dependents without faking a node-engine `Running`
+  state. The staged `external_input_materialization` helper remains
+  `dead_code` until that runner integration consumes it.

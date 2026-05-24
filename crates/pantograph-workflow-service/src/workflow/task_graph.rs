@@ -14,8 +14,8 @@ use serde_json::Value;
 
 use super::task_execution_classification::classify_workflow_scheduler_task;
 use super::task_graph_contracts::{
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
@@ -84,11 +84,13 @@ pub fn workflow_scheduler_task_graph(
                 &node_id,
                 &node.node_type,
                 execution_class,
-                data,
                 &input_bindings,
             );
+        let (source_input_task_template, source_input_diagnostics) =
+            source_input_task_template_for_node(&node_id, &node.node_type, execution_class);
         let mut diagnostics = diagnostics;
         diagnostics.extend(non_runtime_diagnostics);
+        diagnostics.extend(source_input_diagnostics);
 
         tasks.push(WorkflowSchedulerTask {
             workflow_id: workflow_id.clone(),
@@ -102,6 +104,7 @@ pub fn workflow_scheduler_task_graph(
             schedulable_intent,
             schedulable_intent_template,
             non_runtime_task_template,
+            source_input_task_template,
             diagnostics,
         });
     }
@@ -260,7 +263,6 @@ fn non_runtime_task_template_for_node(
     node_id: &SchedulerNodeId,
     node_type: &str,
     execution_class: WorkflowSchedulerTaskExecutionClass,
-    data: Option<&Value>,
     input_bindings: &[WorkflowSchedulerTaskInputBinding],
 ) -> (
     Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
@@ -271,8 +273,6 @@ fn non_runtime_task_template_for_node(
     }
 
     match node_type {
-        NODE_TYPE_TEXT_INPUT => text_input_template(node_id, data),
-        NODE_TYPE_BOOLEAN_INPUT => boolean_input_template(node_id, data),
         NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
         _ => (
             None,
@@ -286,76 +286,41 @@ fn non_runtime_task_template_for_node(
     }
 }
 
-fn text_input_template(
+fn source_input_task_template_for_node(
     node_id: &SchedulerNodeId,
-    data: Option<&Value>,
+    node_type: &str,
+    execution_class: WorkflowSchedulerTaskExecutionClass,
 ) -> (
-    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Option<WorkflowSchedulerSourceInputTemplate>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 ) {
-    let Some(value) = data.and_then(|data| data.get(PORT_TEXT)) else {
-        return (
-            None,
-            vec![diagnostic(
-                node_id,
-                Some(PORT_TEXT),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
-                "text-input scheduler template requires canonical text value",
-            )],
-        );
-    };
-    let Some(value) = value.as_str() else {
-        return (
-            None,
-            vec![diagnostic(
-                node_id,
-                Some(PORT_TEXT),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
-                "text-input scheduler template value must be a string",
-            )],
-        );
-    };
-    (
-        Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
-            value: value.to_string(),
-        }),
-        Vec::new(),
-    )
-}
+    if execution_class != WorkflowSchedulerTaskExecutionClass::SourceInput {
+        return (None, Vec::new());
+    }
 
-fn boolean_input_template(
-    node_id: &SchedulerNodeId,
-    data: Option<&Value>,
-) -> (
-    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
-    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) {
-    let Some(value) = data.and_then(|data| data.get(PORT_VALUE)) else {
-        return (
+    match node_type {
+        NODE_TYPE_TEXT_INPUT => (
+            Some(WorkflowSchedulerSourceInputTemplate::Text {
+                port_id: PORT_TEXT.to_string(),
+            }),
+            Vec::new(),
+        ),
+        NODE_TYPE_BOOLEAN_INPUT => (
+            Some(WorkflowSchedulerSourceInputTemplate::Boolean {
+                port_id: PORT_VALUE.to_string(),
+            }),
+            Vec::new(),
+        ),
+        _ => (
             None,
             vec![diagnostic(
                 node_id,
-                Some(PORT_VALUE),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
-                "boolean-input scheduler template requires canonical value",
+                None,
+                WorkflowSchedulerTaskProjectionDiagnosticCode::UnsupportedNonRuntimeTaskTemplate,
+                format!("source-input task type '{node_type}' has no typed scheduler template"),
             )],
-        );
-    };
-    let Some(value) = value.as_bool() else {
-        return (
-            None,
-            vec![diagnostic(
-                node_id,
-                Some(PORT_VALUE),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
-                "boolean-input scheduler template value must be a boolean",
-            )],
-        );
-    };
-    (
-        Some(WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { value }),
-        Vec::new(),
-    )
+        ),
+    }
 }
 
 fn text_output_template(

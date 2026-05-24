@@ -32,6 +32,10 @@ pub(super) fn classify_workflow_scheduler_task(
         return WorkflowSchedulerTaskExecutionClass::Unsupported;
     }
 
+    if is_source_input_task(node_type) {
+        return WorkflowSchedulerTaskExecutionClass::SourceInput;
+    }
+
     if is_first_stage_node_engine_task(node_type) {
         return WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine;
     }
@@ -39,11 +43,12 @@ pub(super) fn classify_workflow_scheduler_task(
     WorkflowSchedulerTaskExecutionClass::Unsupported
 }
 
+fn is_source_input_task(node_type: &str) -> bool {
+    matches!(node_type, NODE_TYPE_BOOLEAN_INPUT | NODE_TYPE_TEXT_INPUT)
+}
+
 fn is_first_stage_node_engine_task(node_type: &str) -> bool {
-    matches!(
-        node_type,
-        NODE_TYPE_BOOLEAN_INPUT | NODE_TYPE_TEXT_INPUT | NODE_TYPE_TEXT_OUTPUT
-    )
+    matches!(node_type, NODE_TYPE_TEXT_OUTPUT)
 }
 
 #[cfg(test)]
@@ -69,16 +74,26 @@ mod tests {
     }
 
     #[test]
-    fn classifier_marks_first_stage_scalar_nodes_as_non_runtime_node_engine() {
-        for node_type in ["boolean-input", "text-input", "text-output"] {
+    fn classifier_marks_source_inputs_as_source_input() {
+        for node_type in ["boolean-input", "text-input"] {
             let contract = contract(node_type);
 
             assert_eq!(
                 classify_workflow_scheduler_task(node_type, Some(&contract)),
-                WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
-                "{node_type} should be first-stage non-runtime node-engine"
+                WorkflowSchedulerTaskExecutionClass::SourceInput,
+                "{node_type} should be source-input materialization"
             );
         }
+    }
+
+    #[test]
+    fn classifier_marks_first_stage_output_as_non_runtime_node_engine() {
+        let contract = contract("text-output");
+
+        assert_eq!(
+            classify_workflow_scheduler_task("text-output", Some(&contract)),
+            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+        );
     }
 
     #[test]

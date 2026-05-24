@@ -358,6 +358,7 @@ fn initial_task_state(
                 Ok(awaiting_inputs_state())
             }
         }
+        WorkflowSchedulerTaskExecutionClass::SourceInput => Ok(awaiting_inputs_state()),
         WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine => {
             if task.non_runtime_task_template.is_none() {
                 return Ok(SchedulerTaskState::Invalid {
@@ -634,10 +635,6 @@ fn non_runtime_input_readiness(
     };
 
     match template {
-        WorkflowSchedulerNonRuntimeTaskTemplate::TextInput { .. }
-        | WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { .. } => {
-            NonRuntimeInputReadiness::Ready
-        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             match materialized_binding_value(task, results, "text") {
                 MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(_)) => {

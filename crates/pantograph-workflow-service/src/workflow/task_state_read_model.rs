@@ -8,9 +8,9 @@ use pantograph_scheduler::{
 use serde::{Deserialize, Serialize};
 
 use super::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskInputBinding,
-    WorkflowSchedulerTaskProjectionDiagnostic, WorkflowService, WorkflowServiceError,
-    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic, WorkflowService,
+    WorkflowServiceError, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 
 /// Current schema version for workflow-visible scheduler task state.
@@ -76,6 +76,7 @@ pub struct WorkflowSchedulerTaskStateTraitSettingReadModel {
 #[non_exhaustive]
 pub enum WorkflowSchedulerTaskStateExecutionKind {
     Runtime,
+    SourceInput,
     NonRuntime,
 }
 
@@ -227,7 +228,7 @@ fn read_model_from_record(
             .collect(),
         projection_diagnostics: task.diagnostics.clone(),
         state_diagnostics: scheduler_state_diagnostics(&record.state),
-        execution_kind: execution_kind_read_model(record.state.execution_intent()),
+        execution_kind: execution_kind_read_model(task, record.state.execution_intent()),
         task_type: record
             .state
             .task_intent()
@@ -292,8 +293,13 @@ fn scheduler_state_diagnostics(state: &SchedulerTaskState) -> Vec<SchedulerTaskS
 }
 
 fn execution_kind_read_model(
+    task: &WorkflowSchedulerTask,
     execution_intent: Option<&SchedulerTaskExecutionIntent>,
 ) -> Option<WorkflowSchedulerTaskStateExecutionKind> {
+    if task.execution_class == WorkflowSchedulerTaskExecutionClass::SourceInput {
+        return Some(WorkflowSchedulerTaskStateExecutionKind::SourceInput);
+    }
+
     match execution_intent {
         Some(SchedulerTaskExecutionIntent::Runtime { .. }) => {
             Some(WorkflowSchedulerTaskStateExecutionKind::Runtime)

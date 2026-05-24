@@ -10671,6 +10671,47 @@ Worker rules:
   - No-fallback/no-legacy confirmation: the plan now forbids keeping
     `workflow_run_internal` output demand as a compatibility branch for tasks
     already handled by the scheduler loop.
+- 2026-05-24 Milestone 5c source-input scheduler contract slice completed:
+  - Smallest useful vertical slice: replace graph-data-backed source
+    `text-input`/`boolean-input` non-runtime execution with explicit
+    source-input scheduler task projection and materialization contracts.
+  - Allowed write set: workflow-service task graph contracts, classification,
+    projection, external-input materialization, non-runtime adapter,
+    task-orchestrator, task-run summary, task-state read model, focused tests,
+    workflow-service README, Milestone 5c/task-level orchestration plan notes,
+    and this execution log. Existing unrelated Pumas proposal Markdown changes
+    remain ignored.
+  - Implementation notes: task graph schema version 4 adds
+    `WorkflowSchedulerTaskExecutionClass::SourceInput` and
+    `WorkflowSchedulerSourceInputTemplate`; `WorkflowSchedulerNonRuntimeTaskTemplate`
+    no longer contains `TextInput` or `BooleanInput`; source-input tasks
+    initialize as `AwaitingInputs`; external input materialization now consumes
+    typed source-input templates and emits typed scheduler task results; run
+    summaries and read models distinguish source inputs from node-engine work.
+  - No-fallback/no-legacy confirmation: projection does not read request
+    values from graph node data; source inputs do not execute through the
+    non-runtime adapter; and the slice does not call output-node demand,
+    `workflow_run_internal`, runtime dispatch, or Pumas path resolution.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service workflow::tests::task_graph --lib`;
+    `cargo test -p pantograph-workflow-service
+    workflow::external_input_materialization --lib`; `cargo test -p
+    pantograph-workflow-service workflow::non_runtime_task_adapter --lib`;
+    `cargo test -p pantograph-workflow-service workflow::task_run_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow::tests::task_state_read_model --lib`; `cargo test -p
+    pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+    test -p pantograph-workflow-service scheduler::store --lib`; `cargo test
+    -p pantograph-workflow-service workflow::task_result_output_projection
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo check -p
+    pantograph-workflow-service --all-features`.
+  - Discovered issue resolved in-slice: focused test compilation found stale
+    `create_session` call sites missing the canonical attribution argument in
+    touched test fixtures; those call sites were updated to the current
+    six-argument API. Remaining follow-up: wire the session runner to a
+    store-owned atomic source-input materialization operation and remove the
+    staged `external_input_materialization` dead-code allowance when consumed.
 
 ### Traceability Links
 

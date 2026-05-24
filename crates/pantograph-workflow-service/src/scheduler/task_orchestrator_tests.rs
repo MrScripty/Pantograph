@@ -15,7 +15,8 @@ use pantograph_scheduler::{
 
 use crate::workflow::{
     WorkflowExecutionSessionRunRequest, WorkflowSchedulerNonRuntimeTaskTemplate,
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
@@ -153,6 +154,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
             estimate_hints: Vec::new(),
         }),
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -168,7 +170,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
 }
 
 #[test]
-fn orchestrator_initializes_ready_non_runtime_state_for_source_task() {
+fn orchestrator_initializes_source_input_state_as_awaiting_inputs() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![WorkflowSchedulerTask {
         workflow_id: scheduler_workflow_id(),
@@ -176,13 +178,14 @@ fn orchestrator_initializes_ready_non_runtime_state_for_source_task() {
         node_id: SchedulerNodeId::parse("prompt").expect("node id"),
         task_id: SchedulerTaskId::parse("prompt").expect("task id"),
         node_type: "text-input".to_string(),
-        execution_class: WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
         dependency_task_ids: Vec::new(),
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
-        non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
-            value: "paint a red cube".to_string(),
+        non_runtime_task_template: None,
+        source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
+            port_id: "text".to_string(),
         }),
         diagnostics: Vec::new(),
     }]);
@@ -191,15 +194,10 @@ fn orchestrator_initializes_ready_non_runtime_state_for_source_task() {
         .initial_task_state_records(&task_graph)
         .expect("initial task state records");
 
-    let SchedulerTaskState::Ready { execution_intent } = &records[0].state else {
-        panic!("expected ready non-runtime state");
-    };
-    let task_intent = execution_intent
-        .non_runtime_task_intent()
-        .expect("non-runtime task intent");
-    assert_eq!(task_intent.task_kind.as_str(), "text-input");
-    assert_eq!(task_intent.task_id.as_str(), "prompt");
-    assert!(execution_intent.runtime_task_intent().is_none());
+    assert!(matches!(
+        records[0].state,
+        SchedulerTaskState::AwaitingInputs { .. }
+    ));
 }
 
 #[test]
@@ -217,6 +215,7 @@ fn orchestrator_rejects_non_runtime_task_without_typed_template() {
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -251,6 +250,7 @@ fn orchestrator_initializes_awaiting_inputs_for_dependent_non_runtime_task() {
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -279,6 +279,7 @@ fn orchestrator_initializes_invalid_state_for_unsupported_task_class() {
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -311,6 +312,7 @@ fn orchestrator_initializes_pumas_materialization_as_awaiting_inputs() {
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -343,6 +345,7 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: vec![WorkflowSchedulerTaskProjectionDiagnostic {
             severity: WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error,
             code: WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
@@ -397,6 +400,7 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
             estimate_hints: Vec::new(),
         }),
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -437,7 +441,10 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
 #[tokio::test]
 async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() {
     let orchestrator = orchestrator_without_runtime_host_response();
-    let task_graph = task_graph(vec![text_input_task("prompt", "paint a red cube")]);
+    let task_graph = task_graph(vec![
+        text_input_task("prompt", "paint a red cube"),
+        text_output_task(),
+    ]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
     let mut store = WorkflowExecutionSessionStore::new(1, 1);
     let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
@@ -450,18 +457,36 @@ async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() 
             task_graph.clone(),
         )
         .expect("initialize active run task state");
+    store
+        .record_active_run_scheduler_task_result(
+            &session_id,
+            &workflow_run_id,
+            text_result("prompt", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .expect("record source input result");
+    orchestrator
+        .advance_awaiting_non_runtime_task_inputs(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            "text-output",
+        )
+        .expect("advance text output")
+        .expect("text output should become ready");
 
     let started = orchestrator
-        .start_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "prompt")
+        .start_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "text-output")
         .expect("start ready non-runtime task");
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    let text_output_record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == "text-output")
+        .expect("text output record");
     assert_eq!(
-        store
-            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
-            .expect("active run task state")
-            .expect("stored task state")
-            .1[0]
-            .state
-            .kind(),
+        text_output_record.state.kind(),
         pantograph_scheduler::SchedulerTaskStateKind::Running
     );
 
@@ -483,7 +508,7 @@ async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() 
         pantograph_scheduler::SchedulerTaskStateKind::Completed
     );
 
-    assert_eq!(result.task_id, "prompt");
+    assert_eq!(result.task_id, "text-output");
     assert_eq!(
         result.outputs[0].value,
         WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string())
@@ -492,15 +517,20 @@ async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() 
         .active_run_scheduler_task_state(&session_id, &workflow_run_id)
         .expect("active run task state")
         .expect("stored task state");
+    let text_output_record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == "text-output")
+        .expect("text output record");
     assert_eq!(
-        records[0].state.kind(),
+        text_output_record.state.kind(),
         pantograph_scheduler::SchedulerTaskStateKind::Completed
     );
     let results = store
         .active_run_scheduler_task_results(&session_id, &workflow_run_id)
         .expect("stored task results");
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].task_id, "prompt");
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().any(|result| result.task_id == "prompt"));
+    assert!(results.iter().any(|result| result.task_id == "text-output"));
 }
 
 #[tokio::test]
@@ -558,6 +588,7 @@ async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result(
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -793,24 +824,26 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         schedulable_intent: Some(task_intent),
         schedulable_intent_template: None,
         non_runtime_task_template: None,
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }
 }
 
-fn text_input_task(task_id: &str, value: &str) -> WorkflowSchedulerTask {
+fn text_input_task(task_id: &str, _value: &str) -> WorkflowSchedulerTask {
     WorkflowSchedulerTask {
         workflow_id: scheduler_workflow_id(),
         workflow_run_id: scheduler_workflow_run_id(),
         node_id: SchedulerNodeId::parse(task_id).expect("node id"),
         task_id: SchedulerTaskId::parse(task_id).expect("task id"),
         node_type: "text-input".to_string(),
-        execution_class: WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
         dependency_task_ids: Vec::new(),
         input_bindings: Vec::new(),
         schedulable_intent: None,
         schedulable_intent_template: None,
-        non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
-            value: value.to_string(),
+        non_runtime_task_template: None,
+        source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
+            port_id: "text".to_string(),
         }),
         diagnostics: Vec::new(),
     }
@@ -829,6 +862,7 @@ fn text_output_task() -> WorkflowSchedulerTask {
         schedulable_intent: None,
         schedulable_intent_template: None,
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
+        source_input_task_template: None,
         diagnostics: Vec::new(),
     }
 }

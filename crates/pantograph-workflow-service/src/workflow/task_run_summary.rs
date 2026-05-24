@@ -10,6 +10,7 @@ use super::{WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph};
 #[must_use]
 pub(crate) struct WorkflowSchedulerTaskRunSummary {
     pub runtime_inference_tasks: usize,
+    pub source_input_tasks: usize,
     pub non_runtime_node_engine_tasks: usize,
     pub pumas_materialization_tasks: usize,
     pub unsupported_tasks: usize,
@@ -22,7 +23,7 @@ impl WorkflowSchedulerTaskRunSummary {
     }
 
     pub(crate) fn is_non_runtime_only(&self) -> bool {
-        self.non_runtime_node_engine_tasks > 0
+        (self.source_input_tasks > 0 || self.non_runtime_node_engine_tasks > 0)
             && self.runtime_inference_tasks == 0
             && self.pumas_materialization_tasks == 0
             && self.unsupported_tasks == 0
@@ -40,6 +41,7 @@ pub(crate) fn workflow_scheduler_task_run_summary(
         .collect::<BTreeSet<_>>();
     let mut summary = WorkflowSchedulerTaskRunSummary {
         runtime_inference_tasks: 0,
+        source_input_tasks: 0,
         non_runtime_node_engine_tasks: 0,
         pumas_materialization_tasks: 0,
         unsupported_tasks: 0,
@@ -69,6 +71,9 @@ pub(crate) fn workflow_scheduler_task_run_summary(
         match task.execution_class {
             WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
                 summary.runtime_inference_tasks += 1;
+            }
+            WorkflowSchedulerTaskExecutionClass::SourceInput => {
+                summary.source_input_tasks += 1;
             }
             WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine => {
                 summary.non_runtime_node_engine_tasks += 1;
@@ -147,6 +152,7 @@ mod tests {
                     schedulable_intent: None,
                     schedulable_intent_template: None,
                     non_runtime_task_template: None,
+                    source_input_task_template: None,
                     diagnostics: Vec::new(),
                 })
                 .collect(),
@@ -187,10 +193,7 @@ mod tests {
     #[test]
     fn summarizes_non_runtime_only_run() {
         let graph = task_graph(&[
-            (
-                "prompt",
-                WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
-            ),
+            ("prompt", WorkflowSchedulerTaskExecutionClass::SourceInput),
             (
                 "out",
                 WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
@@ -206,7 +209,8 @@ mod tests {
         )
         .expect("summary");
 
-        assert_eq!(summary.non_runtime_node_engine_tasks, 2);
+        assert_eq!(summary.source_input_tasks, 1);
+        assert_eq!(summary.non_runtime_node_engine_tasks, 1);
         assert!(summary.is_non_runtime_only());
         assert!(!summary.has_runtime_inference());
     }
@@ -214,10 +218,7 @@ mod tests {
     #[test]
     fn summarizes_mixed_runtime_run() {
         let graph = task_graph(&[
-            (
-                "prompt",
-                WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
-            ),
+            ("prompt", WorkflowSchedulerTaskExecutionClass::SourceInput),
             (
                 "infer",
                 WorkflowSchedulerTaskExecutionClass::RuntimeInference,
@@ -239,6 +240,7 @@ mod tests {
         .expect("summary");
 
         assert_eq!(summary.runtime_inference_tasks, 1);
+        assert_eq!(summary.source_input_tasks, 1);
         assert_eq!(summary.pumas_materialization_tasks, 1);
         assert!(summary.has_runtime_inference());
         assert!(!summary.is_non_runtime_only());

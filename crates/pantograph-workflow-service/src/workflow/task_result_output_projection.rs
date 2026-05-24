@@ -177,6 +177,7 @@ mod tests {
                 schedulable_intent: None,
                 schedulable_intent_template: None,
                 non_runtime_task_template: None,
+                source_input_task_template: None,
                 diagnostics: Vec::new(),
             }],
         }

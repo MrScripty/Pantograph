@@ -129,6 +129,7 @@ fn scheduler_task_graph(workflow_run_id: &str, task_ids: &[&str]) -> WorkflowSch
                 schedulable_intent: None,
                 schedulable_intent_template: None,
                 non_runtime_task_template: None,
+                source_input_task_template: None,
                 diagnostics: Vec::new(),
             }
         })

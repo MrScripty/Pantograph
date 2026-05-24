@@ -114,6 +114,7 @@ fn scheduler_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {
             schedulable_intent: None,
             schedulable_intent_template: None,
             non_runtime_task_template: None,
+            source_input_task_template: None,
             diagnostics: Vec::new(),
         }],
     }
@@ -299,6 +300,42 @@ fn scheduler_task_state_read_model_projects_non_runtime_execution_kind() {
         read_model.non_runtime_task_kind.as_deref(),
         Some("text_output")
     );
+}
+
+#[test]
+fn scheduler_task_state_read_model_projects_source_input_execution_kind() {
+    let mut task_graph = scheduler_task_graph("run-image-plan");
+    let task = task_graph.tasks.first_mut().expect("task");
+    task.node_type = "text-input".to_string();
+    task.execution_class = WorkflowSchedulerTaskExecutionClass::SourceInput;
+    task.schedulable_intent = None;
+    task.schedulable_intent_template = None;
+
+    let read_models = workflow_scheduler_task_state_read_models(
+        &task_graph,
+        &[SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse("run-image-plan").expect("run id"),
+            node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+            task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+            state: SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            },
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse("transition-source-input")
+                .expect("transition id"),
+        }],
+    )
+    .expect("task state read model");
+
+    assert_eq!(
+        read_models[0].execution_kind,
+        Some(WorkflowSchedulerTaskStateExecutionKind::SourceInput)
+    );
+    assert_eq!(read_models[0].task_type, None);
+    assert_eq!(read_models[0].model_id, None);
+    assert_eq!(read_models[0].non_runtime_task_kind, None);
 }
 
 #[test]

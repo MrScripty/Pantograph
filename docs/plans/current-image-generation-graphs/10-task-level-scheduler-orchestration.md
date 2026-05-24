@@ -707,15 +707,59 @@ unsupported output values, and avoids output-node demand or legacy workflow
 execution. It remains staged behind a scoped `dead_code` allowance until the
 scheduler-task session runner consumes it before requested-output validation.
 
-2026-05-24 replan boundary before session-runner wiring: source input tasks
-currently become projection-invalid when their value is not embedded in graph
-node data, but the session cutover requires request `WorkflowPortBinding`
-inputs to materialize those tasks without graph mutation. The next design step
-must choose the canonical source-input lifecycle before implementing the
-runner: represent request-bound source tasks as awaiting external input,
-initialize matching source tasks as completed from pre-materialized external
-results, and define typed diagnostics for missing or wrong request inputs. The
-old whole-run output-demand path must not be used to bridge this gap.
+2026-05-24 source-input lifecycle replan decision: implement option 3 now and
+record option 4 as the later target. Source/input nodes whose values are
+provided by a run request must be represented as explicit source-input
+scheduler tasks, not graph-data-backed node-engine execution templates. Task
+graph projection must add a separate typed source-input contract field, such as
+`WorkflowSchedulerSourceInputTemplate`, instead of adding request-bound variants
+to `WorkflowSchedulerNonRuntimeTaskTemplate`. The non-runtime template enum
+remains reserved for tasks that the non-runtime node-engine adapter is allowed
+to execute.
+
+Task classification must make the execution boundary explicit. Source-input
+tasks should use a distinct path-free scheduler execution class, such as
+`SourceInput`, so run summaries, read models, and orchestration do not describe
+request materialization as `NonRuntimeNodeEngine` work. If implementation finds
+a lower-blast equivalent, it must still preserve that separation in the typed
+contract and adapter guardrails; request-bound source-input tasks must never be
+accepted by `execute_non_runtime_scheduler_task`.
+
+For the immediate allowlist, projection may create typed source-input templates
+for `text-input.text` and `boolean-input.value` when the canonical node contract
+exposes those typed input ports. Projection must not read request payloads,
+mutate graph node data, or treat missing graph-stored values as
+projection-invalid for source-input tasks. Existing graph-data-backed
+`TextInput` and `BooleanInput` non-runtime execution must be retired for
+scheduler-managed session runs or converted into the same source-input
+materialization contract before the runner cutover; it must not remain as a
+parallel successful path.
+
+Session initialization must materialize matching request `WorkflowPortBinding`
+values into completed `WorkflowSchedulerTaskResult` records and advance the
+matching source-input task state through a store-owned atomic materialization
+operation before dependent tasks are advanced. The operation must not fake a
+`Running` node-engine execution state to reuse `complete_active_run_scheduler_task`;
+it needs an explicit expected-state transition for source-input materialization.
+Missing request inputs, wrong types, duplicate inputs, unsupported source nodes,
+and source/task correlation mismatches become typed scheduler/workflow
+diagnostics and terminal or blocked task state according to scheduler policy.
+They must not fall back to `workflow_run_internal`, output-node demand, or
+graph-node data mutation.
+
+The existing `external_input_materialization` helper may remain only as the
+converter-owned materialization boundary after it consumes the typed
+source-input template instead of raw `node_type`/`port_id` checks. The helper
+must reject tasks without a source-input template even if their node type looks
+like a source node, preventing scattered allowlists and keeping task graph
+projection as the single classifier.
+
+Option 4 remains the target for future extensibility: replace the interim
+allowlist source-input templates with a generic typed port-value source contract
+derived from canonical node contracts so user-authored nodes and future typed
+source nodes do not require one enum variant per node. Option 4 must still be
+typed and converter-owned; it must not introduce arbitrary JSON passthrough or
+parallel successful execution paths.
 
 ### Task Classification And Input Readiness Replan
 
@@ -775,11 +819,21 @@ yet. This means:
   deliberate: user-authored or external nodes remain `Unsupported` with typed
   diagnostics until they either receive an explicit concrete template variant
   or the later generic typed execution contract replaces this interim shape.
-- Record option 3 as the later target: a generic typed port-value execution
-  template derived from canonical node contracts, suitable for user-authored
-  nodes and new model/runtime families without adding a concrete enum variant
-  per node. Option 3 must still use typed values and converters; it must not
-  reintroduce raw JSON passthrough or a parallel successful execution path.
+
+2026-05-24 source-input follow-up: the option 2 `TextInput` and `BooleanInput`
+non-runtime templates were useful staging work, but source input values now have
+a stricter owner. Before scheduler-managed session runs consume the staged
+runner, source input nodes must move to the separate source-input task contract
+described above. Keeping graph-data-backed `TextInput`/`BooleanInput` execution
+beside request materialization would violate the no-legacy/no-fallback rule and
+make it unclear whether source values came from the scheduler request, graph
+node data, or node-engine execution.
+- Keep the later generic typed port-value execution/source contract as the
+  extensibility target: it must be derived from canonical node contracts,
+  suitable for user-authored nodes and new model/runtime families without adding
+  a concrete enum variant per node. That later contract must still use typed
+  values and converters; it must not reintroduce raw JSON passthrough or a
+  parallel successful execution path.
 
 Initial scheduler state creation must use the classification and readiness
 facts instead of treating "no runtime intent" as automatically awaiting inputs:
@@ -1188,6 +1242,24 @@ temporary module-level dead-code allowance on the non-runtime adapter was
 removed. Full session-execution cutover, dependent-task readiness advancement,
 runtime-host dispatch wiring, cancellation/retry/defer idempotency, and legacy
 output-demand launch removal remain open Milestone 5c work.
+
+2026-05-24 implementation status: workflow-service task graph schema version 4
+now separates request-provided source inputs from node-engine non-runtime
+execution. `WorkflowSchedulerTaskExecutionClass::SourceInput` and
+`WorkflowSchedulerSourceInputTemplate` represent canonical source ports such as
+`text-input.text` and `boolean-input.value`; projection no longer reads
+graph-local source values or marks missing graph data projection-invalid for
+source tasks. `WorkflowSchedulerNonRuntimeTaskTemplate` now contains only
+node-engine-executable non-runtime work for this slice, currently
+`TextOutput`; the non-runtime adapter rejects source-input tasks before
+node-engine. External input materialization consumes the typed source-input
+template rather than raw node type checks and produces typed
+`WorkflowSchedulerTaskResult` values. Run summaries and task-state read models
+now report source inputs separately from non-runtime node-engine work. The
+remaining session cutover work is a store-owned source-input materialization
+operation and runner integration that records completed source-input results
+and advances dependents without graph mutation, output demand, or a fake
+node-engine `Running` state.
 
 ## Task Result Materialization Plan
 

@@ -5,8 +5,8 @@ use serde_json::json;
 use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
 use crate::workflow::{
     workflow_scheduler_task_graph, WorkflowSchedulerNonRuntimeTaskTemplate,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskProjectionDiagnosticCode,
-    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskProjectionDiagnosticCode, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 
 fn workflow_id() -> WorkflowId {
@@ -92,12 +92,13 @@ fn scheduler_task_graph_projects_path_free_inference_intent() {
         .expect("prompt task");
     assert_eq!(
         prompt_task.execution_class,
-        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+        WorkflowSchedulerTaskExecutionClass::SourceInput
     );
+    assert!(prompt_task.non_runtime_task_template.is_none());
     assert_eq!(
-        prompt_task.non_runtime_task_template,
-        Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
-            value: "paint a red cube".to_string()
+        prompt_task.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Text {
+            port_id: "text".to_string()
         })
     );
 
@@ -235,7 +236,7 @@ fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
 }
 
 #[test]
-fn scheduler_task_graph_projects_first_stage_non_runtime_templates() {
+fn scheduler_task_graph_projects_source_input_and_non_runtime_templates() {
     let graph = WorkflowGraph {
         nodes: vec![
             GraphNode {
@@ -276,9 +277,14 @@ fn scheduler_task_graph_projects_first_stage_non_runtime_templates() {
         .find(|task| task.node_id.as_str() == "prompt")
         .expect("prompt task");
     assert_eq!(
-        prompt_task.non_runtime_task_template,
-        Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextInput {
-            value: "describe the image".to_string()
+        prompt_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::SourceInput
+    );
+    assert!(prompt_task.non_runtime_task_template.is_none());
+    assert_eq!(
+        prompt_task.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Text {
+            port_id: "text".to_string()
         })
     );
 
@@ -288,8 +294,15 @@ fn scheduler_task_graph_projects_first_stage_non_runtime_templates() {
         .find(|task| task.node_id.as_str() == "flag")
         .expect("flag task");
     assert_eq!(
-        flag_task.non_runtime_task_template,
-        Some(WorkflowSchedulerNonRuntimeTaskTemplate::BooleanInput { value: true })
+        flag_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::SourceInput
+    );
+    assert!(flag_task.non_runtime_task_template.is_none());
+    assert_eq!(
+        flag_task.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Boolean {
+            port_id: "value".to_string()
+        })
     );
 
     let output_task = task_graph
@@ -303,10 +316,11 @@ fn scheduler_task_graph_projects_first_stage_non_runtime_templates() {
     );
     let encoded = serde_json::to_string(&task_graph).expect("encode task graph");
     assert!(!encoded.contains("frontend display data"));
+    assert!(!encoded.contains("describe the image"));
 }
 
 #[test]
-fn scheduler_task_graph_rejects_malformed_non_runtime_template_data() {
+fn scheduler_task_graph_ignores_source_input_graph_data() {
     let graph = WorkflowGraph {
         nodes: vec![
             GraphNode {
@@ -340,24 +354,36 @@ fn scheduler_task_graph_rejects_malformed_non_runtime_template_data() {
         .iter()
         .find(|task| task.node_id.as_str() == "prompt")
         .expect("prompt task");
+    assert_eq!(
+        prompt_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::SourceInput
+    );
     assert!(prompt_task.non_runtime_task_template.is_none());
-    assert!(prompt_task.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code
-            == WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue
-            && diagnostic.port_id.as_deref() == Some("text")
-    }));
+    assert_eq!(
+        prompt_task.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Text {
+            port_id: "text".to_string()
+        })
+    );
+    assert!(prompt_task.diagnostics.is_empty());
 
     let flag_task = task_graph
         .tasks
         .iter()
         .find(|task| task.node_id.as_str() == "flag")
         .expect("flag task");
+    assert_eq!(
+        flag_task.execution_class,
+        WorkflowSchedulerTaskExecutionClass::SourceInput
+    );
     assert!(flag_task.non_runtime_task_template.is_none());
-    assert!(flag_task.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code
-            == WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue
-            && diagnostic.port_id.as_deref() == Some("value")
-    }));
+    assert_eq!(
+        flag_task.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Boolean {
+            port_id: "value".to_string()
+        })
+    );
+    assert!(flag_task.diagnostics.is_empty());
 
     let output_task = task_graph
         .tasks

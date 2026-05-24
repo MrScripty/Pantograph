@@ -3,14 +3,12 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 use super::{
-    WorkflowPortBinding, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
-    WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultOutput,
+    WorkflowPortBinding, WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultOutput,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue,
     WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
 };
 
-const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
-const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
 
@@ -45,7 +43,7 @@ pub(crate) fn materialize_external_workflow_inputs(
                 },
             )?;
 
-        if task.execution_class != WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine {
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::SourceInput {
             return Err(
                 WorkflowExternalInputMaterializationError::UnsupportedInputTask {
                     node_id: input.node_id.clone(),
@@ -55,29 +53,47 @@ pub(crate) fn materialize_external_workflow_inputs(
             );
         }
 
-        let value = match (task.node_type.as_str(), input.port_id.as_str()) {
-            (NODE_TYPE_TEXT_INPUT, PORT_TEXT) => input
-                .value
-                .as_str()
-                .map(|value| WorkflowSchedulerTaskResultValue::String(value.to_string()))
-                .ok_or_else(
-                    || WorkflowExternalInputMaterializationError::WrongInputValueType {
-                        node_id: input.node_id.clone(),
-                        port_id: input.port_id.clone(),
-                        expected: "string",
-                    },
-                )?,
-            (NODE_TYPE_BOOLEAN_INPUT, PORT_VALUE) => input
-                .value
-                .as_bool()
-                .map(WorkflowSchedulerTaskResultValue::Bool)
-                .ok_or_else(
-                    || WorkflowExternalInputMaterializationError::WrongInputValueType {
-                        node_id: input.node_id.clone(),
-                        port_id: input.port_id.clone(),
-                        expected: "boolean",
-                    },
-                )?,
+        let Some(template) = task.source_input_task_template.as_ref() else {
+            return Err(
+                WorkflowExternalInputMaterializationError::UnsupportedInputTask {
+                    node_id: input.node_id.clone(),
+                    port_id: input.port_id.clone(),
+                    node_type: task.node_type.clone(),
+                },
+            );
+        };
+
+        let value = match (template, input.port_id.as_str()) {
+            (WorkflowSchedulerSourceInputTemplate::Text { port_id }, PORT_TEXT)
+                if port_id == PORT_TEXT =>
+            {
+                input
+                    .value
+                    .as_str()
+                    .map(|value| WorkflowSchedulerTaskResultValue::String(value.to_string()))
+                    .ok_or_else(|| {
+                        WorkflowExternalInputMaterializationError::WrongInputValueType {
+                            node_id: input.node_id.clone(),
+                            port_id: input.port_id.clone(),
+                            expected: "string",
+                        }
+                    })?
+            }
+            (WorkflowSchedulerSourceInputTemplate::Boolean { port_id }, PORT_VALUE)
+                if port_id == PORT_VALUE =>
+            {
+                input
+                    .value
+                    .as_bool()
+                    .map(WorkflowSchedulerTaskResultValue::Bool)
+                    .ok_or_else(|| {
+                        WorkflowExternalInputMaterializationError::WrongInputValueType {
+                            node_id: input.node_id.clone(),
+                            port_id: input.port_id.clone(),
+                            expected: "boolean",
+                        }
+                    })?
+            }
             _ => {
                 return Err(
                     WorkflowExternalInputMaterializationError::UnsupportedInputTask {

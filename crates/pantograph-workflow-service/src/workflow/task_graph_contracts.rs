@@ -6,7 +6,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 3;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -37,6 +37,8 @@ pub struct WorkflowSchedulerTask {
     pub schedulable_intent_template: Option<WorkflowSchedulerTaskIntentTemplate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub non_runtime_task_template: Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_input_task_template: Option<WorkflowSchedulerSourceInputTemplate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 }
@@ -46,6 +48,7 @@ pub struct WorkflowSchedulerTask {
 #[non_exhaustive]
 pub enum WorkflowSchedulerTaskExecutionClass {
     RuntimeInference,
+    SourceInput,
     NonRuntimeNodeEngine,
     PumasMaterialization,
     Unsupported,
@@ -78,9 +81,15 @@ pub struct WorkflowSchedulerTaskIntentTemplate {
 #[serde(tag = "template_type", rename_all = "snake_case", deny_unknown_fields)]
 #[non_exhaustive]
 pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
-    TextInput { value: String },
-    BooleanInput { value: bool },
     TextOutput,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "template_type", rename_all = "snake_case", deny_unknown_fields)]
+#[non_exhaustive]
+pub enum WorkflowSchedulerSourceInputTemplate {
+    Text { port_id: String },
+    Boolean { port_id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
