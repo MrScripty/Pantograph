@@ -299,6 +299,14 @@ durable task orchestration path.
   fields/helpers, retired runtime-load/session-admission diagnostics helpers,
   `session_runtime_load_lifecycle`, `workflow_run_internal`, and the media
   artifactization conversion boundary.
+  2026-05-24 cleanup implementation status: the second deletion slice removed
+  the unused queue prediction/update helpers
+  `queued_run_is_admission_candidate` and
+  `set_queue_decision_reason_if_present`. Actual admission remains owned by
+  `begin_queued_run` and scheduler policy; the removed helpers no longer
+  provide a side path for predicted admission or queue-decision mutation.
+  Remaining queue cleanup targets are the stale queued/dequeued/preflight
+  fields that no active scheduler read model or policy consumes.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

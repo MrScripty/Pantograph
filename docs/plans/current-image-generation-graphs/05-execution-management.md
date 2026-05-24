@@ -10930,6 +10930,30 @@ Worker rules:
     diagnostics helpers, `session_runtime_load_lifecycle`,
     `workflow_run_internal`, and the old media artifactization conversion
     boundary.
+- 2026-05-24 Milestone 5c unused queue helper cleanup slice completed:
+  - Smallest useful vertical slice: delete unused queue prediction/update
+    helpers that were exposed as dead code by the scheduler-task session
+    runner cutover.
+  - Allowed write set: workflow-service scheduler store queue module,
+    Milestone 5c/task-level orchestration plan notes, and this execution log.
+    Existing unrelated Pumas proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: actual run admission remains owned by
+    `begin_queued_run` and scheduler policy. The removed helpers no longer
+    offer a side path for predicted-admission polling or queue decision
+    mutation.
+  - Verification passed: targeted source search for
+    `queued_run_is_admission_candidate` and
+    `set_queue_decision_reason_if_present`; `cargo fmt -p
+    pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service scheduler::store --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `git diff --check`.
+  - Remaining follow-up: continue the cleanup gate with stale
+    queued/dequeued/preflight fields, retired runtime-load/session-admission
+    diagnostics helpers, `session_runtime_load_lifecycle`,
+    `workflow_run_internal`, and the old media artifactization conversion
+    boundary.
 
 ### Traceability Links
 

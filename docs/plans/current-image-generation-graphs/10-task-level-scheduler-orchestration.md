@@ -1385,6 +1385,14 @@ storage/helpers, retired runtime-load/session-admission diagnostics helpers,
 `session_runtime_load_lifecycle`, `workflow_run_internal`, and the old media
 artifactization conversion boundary.
 
+2026-05-24 implementation status: unused queue prediction/update helper
+deletion is complete. `queued_run_is_admission_candidate` and
+`set_queue_decision_reason_if_present` were removed from the scheduler store,
+leaving actual queue admission under `begin_queued_run` and scheduler policy.
+Targeted source search for both helper names is clean. Remaining queue cleanup
+is limited to stale fields and record payloads that are still present but no
+active scheduler policy/read model consumes.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:
