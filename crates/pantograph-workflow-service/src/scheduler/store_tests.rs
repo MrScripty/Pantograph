@@ -7,11 +7,11 @@ use crate::workflow::{
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTaskState,
-    SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTaskStateTransition,
-    SchedulerTaskStateTransitionApplyResult, SchedulerTaskStateTransitionId, SchedulerWorkflowId,
-    SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-    SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+    SchedulableTaskIntent, SchedulerRuntimeDeviceConstraints, SchedulerTaskExecutionIntent,
+    SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
+    SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+    SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 
 use super::super::policy::{
@@ -153,29 +153,43 @@ fn scheduler_state(
         SchedulerTaskStateKind::Invalid => SchedulerTaskState::Invalid {
             diagnostics: scheduler_state_diagnostics(),
         },
-        SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready { task_intent },
+        SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
         SchedulerTaskStateKind::WaitingDependencyReadiness => {
-            SchedulerTaskState::WaitingDependencyReadiness { task_intent }
+            SchedulerTaskState::WaitingDependencyReadiness {
+                execution_intent: runtime_execution_intent(task_intent),
+            }
         }
-        SchedulerTaskStateKind::WaitingResources => {
-            SchedulerTaskState::WaitingResources { task_intent }
-        }
-        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch { task_intent },
-        SchedulerTaskStateKind::Running => SchedulerTaskState::Running { task_intent },
+        SchedulerTaskStateKind::WaitingResources => SchedulerTaskState::WaitingResources {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
+        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
+        SchedulerTaskStateKind::Running => SchedulerTaskState::Running {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
         SchedulerTaskStateKind::PausedDeferred => SchedulerTaskState::PausedDeferred {
-            task_intent,
+            execution_intent: runtime_execution_intent(task_intent),
             diagnostics: scheduler_state_diagnostics(),
         },
         SchedulerTaskStateKind::RetryableFailed => SchedulerTaskState::RetryableFailed {
-            task_intent,
+            execution_intent: runtime_execution_intent(task_intent),
             diagnostics: scheduler_state_diagnostics(),
         },
         SchedulerTaskStateKind::TerminalFailed => SchedulerTaskState::TerminalFailed {
             diagnostics: scheduler_state_diagnostics(),
         },
-        SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed { task_intent },
+        SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
         _ => panic!("test helper does not support unknown scheduler task state kind"),
     }
+}
+
+fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
+    SchedulerTaskExecutionIntent::Runtime { task_intent }
 }
 
 fn scheduler_state_diagnostics() -> Vec<pantograph_scheduler::SchedulerTaskStateDiagnostic> {

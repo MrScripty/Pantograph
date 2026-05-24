@@ -10112,6 +10112,47 @@ Worker rules:
     docs/plans/current-image-generation-graphs/05-execution-management.md
     docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md
     docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+- 2026-05-23 Milestone 5c non-runtime executable-state contract slice
+  completed:
+  - Smallest useful vertical slice: replace executable scheduler task-state
+    payloads with a typed execution-intent enum so non-runtime scheduler tasks
+    can become ready, run, and complete without fabricating a
+    `SchedulableTaskIntent`.
+  - Allowed write set: `crates/pantograph-scheduler/src/queue.rs`,
+    scheduler public exports and source README, scheduler task-state fixture
+    and tests, narrow workflow-service scheduler/read-model test helpers, the
+    orchestrator initial-ready-state construction site, and current plan docs.
+    Existing unrelated Pumas proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: runtime execution state still carries
+    `SchedulableTaskIntent` only through the runtime variant, while
+    non-runtime execution state carries `SchedulerNonRuntimeTaskIntent`. No
+    dummy model refs, synthetic runtime task types, path fields, Pumas load
+    targets, or compatibility aliases were added. Existing scheduler policy
+    consumers that call `task_intent()` receive only runtime intents.
+  - Implementation notes: added `SchedulerTaskExecutionIntent`,
+    `SchedulerNonRuntimeTaskIntent`, and `SchedulerNonRuntimeTaskKind`; moved
+    ready/waiting/running/deferred/retryable/completed task-state payloads to
+    `execution_intent`; updated validation to check runtime and non-runtime
+    correlation separately; updated the runtime ready-state fixture; and
+    updated workflow-service constructors/tests to wrap runtime intents
+    explicitly.
+  - Verification passed: `cargo fmt -p pantograph-scheduler -p
+    pantograph-workflow-service`; `cargo test -p pantograph-scheduler --test
+    queue_state`; `cargo test -p pantograph-workflow-service
+    scheduler::store::tests --lib`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_state_read_model --lib`;
+    `cargo test -p pantograph-workflow-service scheduler::task_orchestrator
+    --lib`; `cargo check -p pantograph-scheduler`; `cargo check -p
+    pantograph-scheduler --all-features`; `cargo check -p
+    pantograph-scheduler --no-default-features`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --all-features`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; targeted search proving no
+    `SchedulerTaskState::{Ready,...,Completed} { task_intent }` construction
+    remains in scheduler/workflow-service Rust sources; and `git diff --check`.
+  - Remaining follow-up: remove stale `puma-lib.model_path` compatibility
+    surfaces, then add the dedicated scheduler-task execution entrypoint and
+    narrow typed non-runtime node-engine adapter.
 
 ### Traceability Links
 

@@ -17,7 +17,7 @@ graph editing, node execution, frontend adapters, or runtime hosts.
 | `dispatch.rs` | Scheduler-selected runtime/device/model/reservation/batch execution decision contract. |
 | `handoff.rs` | Runtime-host handoff envelope that carries readiness proof and optional dispatch decision. |
 | `resource.rs` | Platform-neutral resource observation, residency, reservation, and fit contracts. |
-| `queue.rs` | Durable phase-aware task state and idempotent transition replay contract. |
+| `queue.rs` | Durable phase-aware task state, typed runtime/non-runtime execution intent, and idempotent transition replay contract. |
 | `lifecycle.rs` and `supervision.rs` | User-facing lifecycle diagnostics and scheduler service ownership contracts. |
 
 ## Problem
@@ -56,8 +56,13 @@ change behind stable typed contracts.
   deletion of `ModelRefV2` and path-shaped success paths.
 
 ## Invariants
-- `SchedulableTaskIntent` is the only task request shape accepted by scheduler
-  policy and it must not contain local paths or executable Pumas load targets.
+- `SchedulableTaskIntent` is the only runtime task request shape accepted by
+  scheduler readiness, resource, batching, dispatch, and handoff policy; it
+  must not contain local paths or executable Pumas load targets.
+- `SchedulerTaskExecutionIntent` separates runtime executable state from
+  non-runtime executable state. Non-runtime task intent may drive node-engine
+  adapter execution, but it must not be accepted by runtime readiness,
+  resource, batching, dispatch, or handoff policy.
 - `SchedulerRuntimeHandoff` may carry dispatch facts only through
   `SchedulerDispatchDecision`.
 - Readiness proof, task state, resource snapshots, batching decisions, and

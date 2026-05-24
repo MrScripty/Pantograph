@@ -694,6 +694,17 @@ Rejected options for this boundary:
 - Full cutover in one slice: rejected as too large for validated vertical
   implementation and too likely to obscure legacy removal mistakes.
 
+2026-05-23 implementation status: the scheduler task-state contract now uses
+`SchedulerTaskExecutionIntent` for executable states. The runtime variant wraps
+`SchedulableTaskIntent`; the non-runtime variant wraps
+`SchedulerNonRuntimeTaskIntent` with workflow/run/node/task correlation and a
+validated non-runtime task kind. Existing `task_intent()` access now returns
+only runtime intents, so readiness, resource, batching, dispatch, and handoff
+policy cannot accidentally consume non-runtime node-engine work as runtime
+work. The non-runtime node-engine adapter itself remains open, as do stale
+`puma-lib.model_path` cleanup, dedicated task execution entrypoint wiring, and
+runtime-host dispatch cutover.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

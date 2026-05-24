@@ -1,8 +1,9 @@
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_scheduler::{
     apply_scheduler_task_state_transition, SchedulableTaskIntent, SchedulerContractError,
-    SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTaskState,
-    SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
+    SchedulerNodeId, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
+    SchedulerRuntimeDeviceConstraints, SchedulerTaskExecutionIntent, SchedulerTaskId,
+    SchedulerTaskState, SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
     SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
     SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
     SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
@@ -47,6 +48,87 @@ fn pre_intent_task_state_does_not_require_task_intent() {
     };
     assert_eq!(record.state.kind(), SchedulerTaskStateKind::AwaitingInputs);
     assert!(record.state.task_intent().is_none());
+}
+
+#[test]
+fn non_runtime_executable_task_state_does_not_require_schedulable_task_intent() {
+    let transition = task_transition_to(None, ready_non_runtime_state("text-input"));
+    let result = apply_scheduler_task_state_transition(None, transition)
+        .expect("non-runtime ready state should not need a runtime task intent");
+
+    let SchedulerTaskStateTransitionApplyResult::Applied(record) = result else {
+        panic!("initial non-runtime ready transition should apply");
+    };
+
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::Ready);
+    assert!(record.state.task_intent().is_none());
+    let execution_intent = record
+        .state
+        .execution_intent()
+        .expect("ready state must carry execution intent");
+    assert_eq!(
+        execution_intent
+            .non_runtime_task_intent()
+            .expect("ready state should carry non-runtime intent")
+            .task_kind
+            .as_str(),
+        "text-input"
+    );
+}
+
+#[test]
+fn non_runtime_ready_running_and_completed_states_do_not_expose_runtime_intent() {
+    let ready_record = match apply_scheduler_task_state_transition(
+        None,
+        task_transition_to(None, ready_non_runtime_state("text-input")),
+    )
+    .expect("non-runtime ready transition should apply")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("initial transition cannot be already applied")
+        }
+    };
+
+    let running_record = match apply_scheduler_task_state_transition(
+        Some(&ready_record),
+        task_transition_with_id(
+            "transition.running",
+            Some(SchedulerTaskStateKind::Ready),
+            running_non_runtime_state("text-input"),
+        ),
+    )
+    .expect("non-runtime running transition should apply")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("new transition cannot be already applied")
+        }
+    };
+
+    let completed_record = match apply_scheduler_task_state_transition(
+        Some(&running_record),
+        task_transition_with_id(
+            "transition.completed",
+            Some(SchedulerTaskStateKind::Running),
+            completed_non_runtime_state("text-input"),
+        ),
+    )
+    .expect("non-runtime completed transition should apply")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("new transition cannot be already applied")
+        }
+    };
+
+    for record in [&ready_record, &running_record, &completed_record] {
+        assert!(record.state.task_intent().is_none());
+        assert!(record
+            .state
+            .execution_intent()
+            .is_some_and(|intent| intent.non_runtime_task_intent().is_some()));
+    }
 }
 
 #[test]
@@ -253,9 +335,17 @@ fn task_transition_to(
     expected_previous_state: Option<SchedulerTaskStateKind>,
     next_state: SchedulerTaskState,
 ) -> SchedulerTaskStateTransition {
+    task_transition_with_id("transition.next", expected_previous_state, next_state)
+}
+
+fn task_transition_with_id(
+    transition_id: &str,
+    expected_previous_state: Option<SchedulerTaskStateKind>,
+    next_state: SchedulerTaskState,
+) -> SchedulerTaskStateTransition {
     SchedulerTaskStateTransition {
         contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
-        transition_id: SchedulerTaskStateTransitionId::parse("transition.next")
+        transition_id: SchedulerTaskStateTransitionId::parse(transition_id)
             .expect("test transition id must parse"),
         workflow_id: SchedulerWorkflowId::parse("workflow.image_generation").expect("workflow id"),
         workflow_run_id: SchedulerWorkflowRunId::parse("run.001").expect("run id"),
@@ -357,22 +447,22 @@ fn state_for_kind(kind: SchedulerTaskStateKind) -> SchedulerTaskState {
         SchedulerTaskStateKind::Ready => ready_state(intent),
         SchedulerTaskStateKind::WaitingDependencyReadiness => {
             SchedulerTaskState::WaitingDependencyReadiness {
-                task_intent: intent,
+                execution_intent: runtime_execution_intent(intent),
             }
         }
         SchedulerTaskStateKind::WaitingResources => SchedulerTaskState::WaitingResources {
-            task_intent: intent,
+            execution_intent: runtime_execution_intent(intent),
         },
         SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch {
-            task_intent: intent,
+            execution_intent: runtime_execution_intent(intent),
         },
         SchedulerTaskStateKind::Running => running_state(intent),
         SchedulerTaskStateKind::PausedDeferred => SchedulerTaskState::PausedDeferred {
-            task_intent: intent,
+            execution_intent: runtime_execution_intent(intent),
             diagnostics: diagnostics(),
         },
         SchedulerTaskStateKind::RetryableFailed => SchedulerTaskState::RetryableFailed {
-            task_intent: intent,
+            execution_intent: runtime_execution_intent(intent),
             diagnostics: diagnostics(),
         },
         SchedulerTaskStateKind::TerminalFailed => terminal_failed_state(),
@@ -388,15 +478,58 @@ fn awaiting_inputs_state() -> SchedulerTaskState {
 }
 
 fn ready_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
-    SchedulerTaskState::Ready { task_intent }
+    SchedulerTaskState::Ready {
+        execution_intent: runtime_execution_intent(task_intent),
+    }
+}
+
+fn ready_non_runtime_state(task_kind: &str) -> SchedulerTaskState {
+    SchedulerTaskState::Ready {
+        execution_intent: non_runtime_execution_intent(task_kind),
+    }
 }
 
 fn running_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
-    SchedulerTaskState::Running { task_intent }
+    SchedulerTaskState::Running {
+        execution_intent: runtime_execution_intent(task_intent),
+    }
+}
+
+fn running_non_runtime_state(task_kind: &str) -> SchedulerTaskState {
+    SchedulerTaskState::Running {
+        execution_intent: non_runtime_execution_intent(task_kind),
+    }
 }
 
 fn completed_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
-    SchedulerTaskState::Completed { task_intent }
+    SchedulerTaskState::Completed {
+        execution_intent: runtime_execution_intent(task_intent),
+    }
+}
+
+fn completed_non_runtime_state(task_kind: &str) -> SchedulerTaskState {
+    SchedulerTaskState::Completed {
+        execution_intent: non_runtime_execution_intent(task_kind),
+    }
+}
+
+fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
+    SchedulerTaskExecutionIntent::Runtime { task_intent }
+}
+
+fn non_runtime_execution_intent(task_kind: &str) -> SchedulerTaskExecutionIntent {
+    SchedulerTaskExecutionIntent::NonRuntime {
+        task_intent: SchedulerNonRuntimeTaskIntent {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                .expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse("run.001").expect("run id"),
+            node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+            task_id: SchedulerTaskId::parse("task.001").expect("task id"),
+            task_kind: SchedulerNonRuntimeTaskKind::parse(task_kind)
+                .expect("non-runtime task kind"),
+        },
+    }
 }
 
 fn terminal_failed_state() -> SchedulerTaskState {

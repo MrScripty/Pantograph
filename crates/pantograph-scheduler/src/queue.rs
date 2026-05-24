@@ -88,6 +88,7 @@ macro_rules! scheduler_task_state_id {
 }
 
 scheduler_task_state_id!(SchedulerTaskStateTransitionId, "transition_id");
+scheduler_task_state_id!(SchedulerNonRuntimeTaskKind, "non_runtime_task_kind");
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -214,6 +215,90 @@ impl SchedulerTaskStateDiagnostic {
     }
 }
 
+/// Path-free execution intent for one non-runtime workflow DAG task.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SchedulerNonRuntimeTaskIntent {
+    #[serde(default = "default_scheduler_task_state_contract_version")]
+    pub contract_version: u16,
+    pub workflow_id: SchedulerWorkflowId,
+    pub workflow_run_id: SchedulerWorkflowRunId,
+    pub node_id: SchedulerNodeId,
+    pub task_id: SchedulerTaskId,
+    pub task_kind: SchedulerNonRuntimeTaskKind,
+}
+
+impl SchedulerNonRuntimeTaskIntent {
+    /// Validates this raw non-runtime execution intent before task-state policy
+    /// consumes it.
+    pub fn validate(&self) -> Result<(), SchedulerContractError> {
+        validate_contract_version(self.contract_version)?;
+        Ok(())
+    }
+}
+
+/// Typed executable payload for scheduler task states.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "execution_kind", rename_all = "snake_case", deny_unknown_fields)]
+#[non_exhaustive]
+pub enum SchedulerTaskExecutionIntent {
+    Runtime {
+        task_intent: SchedulableTaskIntent,
+    },
+    NonRuntime {
+        task_intent: SchedulerNonRuntimeTaskIntent,
+    },
+}
+
+impl SchedulerTaskExecutionIntent {
+    #[must_use]
+    pub fn runtime_task_intent(&self) -> Option<&SchedulableTaskIntent> {
+        match self {
+            Self::Runtime { task_intent } => Some(task_intent),
+            Self::NonRuntime { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub fn non_runtime_task_intent(&self) -> Option<&SchedulerNonRuntimeTaskIntent> {
+        match self {
+            Self::Runtime { .. } => None,
+            Self::NonRuntime { task_intent } => Some(task_intent),
+        }
+    }
+
+    fn validate_for_task(
+        &self,
+        workflow_id: &SchedulerWorkflowId,
+        workflow_run_id: &SchedulerWorkflowRunId,
+        node_id: &SchedulerNodeId,
+        task_id: &SchedulerTaskId,
+    ) -> Result<(), SchedulerContractError> {
+        match self {
+            Self::Runtime { task_intent } => {
+                task_intent.validate()?;
+                validate_runtime_correlation(
+                    workflow_id,
+                    workflow_run_id,
+                    node_id,
+                    task_id,
+                    task_intent,
+                )
+            }
+            Self::NonRuntime { task_intent } => {
+                task_intent.validate()?;
+                validate_non_runtime_correlation(
+                    workflow_id,
+                    workflow_run_id,
+                    node_id,
+                    task_id,
+                    task_intent,
+                )
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 #[non_exhaustive]
@@ -229,33 +314,33 @@ pub enum SchedulerTaskState {
         diagnostics: Vec<SchedulerTaskStateDiagnostic>,
     },
     Ready {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
     },
     WaitingDependencyReadiness {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
     },
     WaitingResources {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
     },
     WaitingBatch {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
     },
     Running {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
     },
     PausedDeferred {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
         diagnostics: Vec<SchedulerTaskStateDiagnostic>,
     },
     RetryableFailed {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
         diagnostics: Vec<SchedulerTaskStateDiagnostic>,
     },
     TerminalFailed {
         diagnostics: Vec<SchedulerTaskStateDiagnostic>,
     },
     Completed {
-        task_intent: SchedulableTaskIntent,
+        execution_intent: SchedulerTaskExecutionIntent,
     },
 }
 
@@ -281,21 +366,31 @@ impl SchedulerTaskState {
     }
 
     #[must_use]
-    pub fn task_intent(&self) -> Option<&SchedulableTaskIntent> {
+    pub fn execution_intent(&self) -> Option<&SchedulerTaskExecutionIntent> {
         match self {
-            SchedulerTaskState::Ready { task_intent }
-            | SchedulerTaskState::WaitingDependencyReadiness { task_intent }
-            | SchedulerTaskState::WaitingResources { task_intent }
-            | SchedulerTaskState::WaitingBatch { task_intent }
-            | SchedulerTaskState::Running { task_intent }
-            | SchedulerTaskState::PausedDeferred { task_intent, .. }
-            | SchedulerTaskState::RetryableFailed { task_intent, .. }
-            | SchedulerTaskState::Completed { task_intent } => Some(task_intent),
+            SchedulerTaskState::Ready { execution_intent }
+            | SchedulerTaskState::WaitingDependencyReadiness { execution_intent }
+            | SchedulerTaskState::WaitingResources { execution_intent }
+            | SchedulerTaskState::WaitingBatch { execution_intent }
+            | SchedulerTaskState::Running { execution_intent }
+            | SchedulerTaskState::PausedDeferred {
+                execution_intent, ..
+            }
+            | SchedulerTaskState::RetryableFailed {
+                execution_intent, ..
+            }
+            | SchedulerTaskState::Completed { execution_intent } => Some(execution_intent),
             SchedulerTaskState::AwaitingInputs { .. }
             | SchedulerTaskState::InputUnavailable { .. }
             | SchedulerTaskState::Invalid { .. }
             | SchedulerTaskState::TerminalFailed { .. } => None,
         }
+    }
+
+    #[must_use]
+    pub fn task_intent(&self) -> Option<&SchedulableTaskIntent> {
+        self.execution_intent()
+            .and_then(SchedulerTaskExecutionIntent::runtime_task_intent)
     }
 
     fn validate_for_task(
@@ -305,9 +400,8 @@ impl SchedulerTaskState {
         node_id: &SchedulerNodeId,
         task_id: &SchedulerTaskId,
     ) -> Result<(), SchedulerContractError> {
-        if let Some(task_intent) = self.task_intent() {
-            task_intent.validate()?;
-            validate_correlation(workflow_id, workflow_run_id, node_id, task_id, task_intent)?;
+        if let Some(execution_intent) = self.execution_intent() {
+            execution_intent.validate_for_task(workflow_id, workflow_run_id, node_id, task_id)?;
         }
         validate_diagnostics(self)
     }
@@ -551,7 +645,7 @@ fn validate_same_task(
     Ok(())
 }
 
-fn validate_correlation(
+fn validate_runtime_correlation(
     workflow_id: &SchedulerWorkflowId,
     workflow_run_id: &SchedulerWorkflowRunId,
     node_id: &SchedulerNodeId,
@@ -580,6 +674,40 @@ fn validate_correlation(
         return Err(SchedulerContractError::InvalidField {
             field: "task_id",
             reason: "task state task id must match task intent",
+        });
+    }
+    Ok(())
+}
+
+fn validate_non_runtime_correlation(
+    workflow_id: &SchedulerWorkflowId,
+    workflow_run_id: &SchedulerWorkflowRunId,
+    node_id: &SchedulerNodeId,
+    task_id: &SchedulerTaskId,
+    task_intent: &SchedulerNonRuntimeTaskIntent,
+) -> Result<(), SchedulerContractError> {
+    if workflow_id.as_ref() != task_intent.workflow_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "workflow_id",
+            reason: "task state workflow id must match non-runtime task intent",
+        });
+    }
+    if workflow_run_id.as_ref() != task_intent.workflow_run_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "workflow_run_id",
+            reason: "task state workflow run id must match non-runtime task intent",
+        });
+    }
+    if node_id.as_ref() != task_intent.node_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "node_id",
+            reason: "task state node id must match non-runtime task intent",
+        });
+    }
+    if task_id.as_ref() != task_intent.task_id.as_ref() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "task_id",
+            reason: "task state task id must match non-runtime task intent",
         });
     }
     Ok(())

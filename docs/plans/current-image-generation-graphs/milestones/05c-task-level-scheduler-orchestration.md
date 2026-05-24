@@ -27,7 +27,7 @@ durable task orchestration path.
   for dependency readiness, waiting for resources, waiting for batch, running,
   paused/deferred, retryable failed, and completed. Old queue record types are
   replacement/removal targets, not compatibility surfaces.
-- [ ] Close the non-runtime executable-state gap before running node-engine
+- [x] Close the non-runtime executable-state gap before running node-engine
   tasks from the scheduler path. The current phase-aware state contract still
   requires `SchedulableTaskIntent` on ready/running/completed executable
   states, which is correct for runtime tasks but wrong for pure non-runtime
@@ -35,7 +35,10 @@ durable task orchestration path.
   equivalent state-specific enum where runtime states carry
   `SchedulableTaskIntent` and non-runtime states carry only a validated
   non-runtime task intent. Do not fabricate model refs, synthetic runtime task
-  types, or dummy schedulable intents for non-runtime completion.
+  types, or dummy schedulable intents for non-runtime completion. Completed
+  2026-05-23 with scheduler-owned `SchedulerTaskExecutionIntent` plus
+  `SchedulerNonRuntimeTaskIntent`; runtime policy consumers still see
+  `SchedulableTaskIntent` only through the runtime variant.
 - [ ] Add scheduler task-state read models for graph editor, run inspection,
   and diagnostics views. Read models must join immutable
   `WorkflowSchedulerTaskGraph` definition facts with scheduler-owned lifecycle

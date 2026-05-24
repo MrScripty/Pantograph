@@ -1,10 +1,10 @@
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTaskId,
-    SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
-    SchedulerTaskStateTransitionId, SchedulerTraitId, SchedulerTraitSetting, SchedulerTraitValue,
-    SchedulerWorkflowId, SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-    SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+    SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
+    SchedulerTaskExecutionIntent, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind,
+    SchedulerTaskStateRecord, SchedulerTaskStateTransitionId, SchedulerTraitId,
+    SchedulerTraitSetting, SchedulerTraitValue, SchedulerWorkflowId, SchedulerWorkflowRunId,
+    SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 
 use super::*;
@@ -58,18 +58,32 @@ fn state_with_intent(
     task_intent: SchedulableTaskIntent,
 ) -> SchedulerTaskState {
     match state {
-        SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready { task_intent },
+        SchedulerTaskStateKind::Ready => SchedulerTaskState::Ready {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
         SchedulerTaskStateKind::WaitingDependencyReadiness => {
-            SchedulerTaskState::WaitingDependencyReadiness { task_intent }
+            SchedulerTaskState::WaitingDependencyReadiness {
+                execution_intent: runtime_execution_intent(task_intent),
+            }
         }
-        SchedulerTaskStateKind::WaitingResources => {
-            SchedulerTaskState::WaitingResources { task_intent }
-        }
-        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch { task_intent },
-        SchedulerTaskStateKind::Running => SchedulerTaskState::Running { task_intent },
-        SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed { task_intent },
+        SchedulerTaskStateKind::WaitingResources => SchedulerTaskState::WaitingResources {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
+        SchedulerTaskStateKind::WaitingBatch => SchedulerTaskState::WaitingBatch {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
+        SchedulerTaskStateKind::Running => SchedulerTaskState::Running {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
+        SchedulerTaskStateKind::Completed => SchedulerTaskState::Completed {
+            execution_intent: runtime_execution_intent(task_intent),
+        },
         other => panic!("test helper expected schedulable state, got {other:?}"),
     }
+}
+
+fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
+    SchedulerTaskExecutionIntent::Runtime { task_intent }
 }
 
 fn scheduler_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {

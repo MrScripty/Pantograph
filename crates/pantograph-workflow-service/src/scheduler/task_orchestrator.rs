@@ -61,7 +61,11 @@ impl WorkflowSchedulerTaskOrchestrator {
                         .collect(),
                 }
             } else if let Some(task_intent) = task.schedulable_intent.clone() {
-                SchedulerTaskState::Ready { task_intent }
+                SchedulerTaskState::Ready {
+                    execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::Runtime {
+                        task_intent,
+                    },
+                }
             } else {
                 SchedulerTaskState::AwaitingInputs {
                     diagnostics: Vec::new(),

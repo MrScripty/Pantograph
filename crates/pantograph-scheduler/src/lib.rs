@@ -59,12 +59,13 @@ pub use ownership::{
     SchedulerOwnedCapability, SCHEDULER_CONTRACT_VERSION,
 };
 pub use queue::{
-    apply_scheduler_task_state_transition, SchedulerTaskState, SchedulerTaskStateDiagnostic,
-    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
-    SchedulerTaskStateRecord, SchedulerTaskStateTransition,
-    SchedulerTaskStateTransitionApplyResult, SchedulerTaskStateTransitionId,
-    ValidatedSchedulerTaskStateRecord, ValidatedSchedulerTaskStateTransition,
-    SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+    apply_scheduler_task_state_transition, SchedulerNonRuntimeTaskIntent,
+    SchedulerNonRuntimeTaskKind, SchedulerTaskExecutionIntent, SchedulerTaskState,
+    SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
+    SchedulerTaskStateTransitionId, ValidatedSchedulerTaskStateRecord,
+    ValidatedSchedulerTaskStateTransition, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 pub use readiness::{
     plan_scheduler_readiness_admission, SchedulerDependencyReadinessProof,
