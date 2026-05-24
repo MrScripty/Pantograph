@@ -26,6 +26,7 @@ public exports out of the service crate.
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `diagnostics_api.rs` | Diagnostics, scheduler timeline, scheduler estimate, run projection, I/O artifact, Library usage, trusted diagnostic event append, retention, and projection rebuild facade methods. |
 | `media_capability_contracts.rs` | Backend-owned media format capability and managed redistributable category/status DTOs. |
+| `non_runtime_task_adapter.rs` | Scheduler-task adapter conversion for executing one allowlisted non-runtime node-engine task from typed task templates and materialized scheduler task results. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `execution_plan_model_ref.rs` | Parse-once selected Pumas model-ref value object for run execution plans, including raw model-id normalization and local-path/unsupported-URI rejection. |
 | `execution_plan_selected_facts.rs` | Workflow-owned selected backend/runtime/device fact value objects for run execution plans. |
@@ -124,6 +125,11 @@ facade test module.
   support needs an explicit typed template variant or the later generic typed
   port-value contract; do not pass arbitrary JSON or frontend node data as an
   execution template.
+- The non-runtime task adapter converts typed workflow-service templates and
+  materialized task results into node-engine `single_task` requests, then
+  converts node-engine outputs back into `WorkflowSchedulerTaskResult` values.
+  It must reject runtime inference before calling node-engine and must not
+  read graph data, call output demand, or execute Pumas/model-provider nodes.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.

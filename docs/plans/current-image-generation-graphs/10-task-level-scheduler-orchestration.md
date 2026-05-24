@@ -964,6 +964,17 @@ become ready from raw graph data or incidental adapter behavior. Scheduler-task
 execution entrypoint, non-runtime adapter conversion, and runtime-task
 rejection remain open.
 
+2026-05-24 implementation status: workflow-service now has the narrow
+non-runtime adapter conversion module. It executes only tasks classified as
+`NonRuntimeNodeEngine` with a typed template, converts `TextInput`,
+`BooleanInput`, and `TextOutput` inputs into node-engine `single_task`
+requests, converts node-engine outputs back into path-free
+`WorkflowSchedulerTaskResult` values, and rejects runtime tasks before calling
+node-engine. This slice intentionally does not update scheduler task state,
+persist results, or advance active runs. The adapter has a temporary
+module-scoped dead-code allowance until the next scheduler-task entrypoint
+slice calls it; that allowance is a removal target for the entrypoint commit.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

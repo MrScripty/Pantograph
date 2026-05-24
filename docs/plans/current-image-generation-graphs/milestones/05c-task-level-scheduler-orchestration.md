@@ -155,8 +155,14 @@ durable task orchestration path.
   `value`, and `text-output` requires an upstream `text` binding. Malformed,
   missing, or stale fields become typed projection diagnostics before the
   orchestrator can mark a non-runtime task executable. Scheduler-task
-  entrypoint, non-runtime adapter conversion, and runtime-task fail-closed
-  diagnostics remain open.
+  entrypoint, store/result persistence wiring, and runtime-task fail-closed
+  diagnostics remain open. Non-runtime adapter conversion completed
+  2026-05-24 with a workflow-service adapter that consumes typed templates
+  plus materialized task results, calls node-engine `single_task`, converts
+  outputs back into `WorkflowSchedulerTaskResult`, and rejects runtime tasks
+  before node-engine execution. The adapter has a temporary module-scoped
+  dead-code allowance because the scheduler-task entrypoint wiring is the next
+  slice; remove that allowance when the entrypoint calls the adapter.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider

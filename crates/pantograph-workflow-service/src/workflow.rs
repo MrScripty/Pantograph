@@ -36,6 +36,7 @@ mod identity;
 mod io_contract;
 mod local_network_api;
 mod media_capability_contracts;
+mod non_runtime_task_adapter;
 mod preflight_api;
 mod runtime_preflight;
 mod service_config;

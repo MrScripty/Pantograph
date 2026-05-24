@@ -10453,6 +10453,42 @@ Worker rules:
     non-runtime adapter conversion from typed templates/materialized results
     into node-engine single-task requests, runtime-task fail-closed
     diagnostics, and then runtime-host dispatch cutover.
+- 2026-05-24 Milestone 5c non-runtime adapter conversion slice completed:
+  - Smallest useful vertical slice: add workflow-service conversion/execution
+    for one allowlisted non-runtime scheduler task without yet wiring active-run
+    state transitions or persistence.
+  - Allowed write set: one focused workflow-service adapter module and tests,
+    workflow module registration, workflow README, Milestone 5c plan notes,
+    and this execution log. Existing unrelated Pumas proposal Markdown changes
+    remain ignored.
+  - Implementation notes: added `non_runtime_task_adapter.rs` with
+    `execute_non_runtime_scheduler_task`, typed adapter errors, conversion from
+    `WorkflowSchedulerNonRuntimeTaskTemplate` plus materialized task results
+    into node-engine `NodeEngineSingleTaskRequest`, and conversion from raw
+    node-engine outputs back into validated `WorkflowSchedulerTaskResult`
+    values.
+  - No-fallback/no-legacy confirmation: runtime inference tasks are rejected
+    before node-engine execution; the adapter does not read graph/editor node
+    data, does not pass Pumas paths/load targets, does not call output-node
+    demand, does not use `PlannedInferenceExecutionHost`, and does not execute
+    `puma-lib` or `model-provider`.
+  - Deviation/follow-up: the adapter module carries a temporary module-scoped
+    `dead_code` allowance because the scheduler-task execution entrypoint is
+    the next slice and has not yet called the adapter. Remove this allowance in
+    the entrypoint slice; do not let it persist beyond wiring.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service
+    workflow::non_runtime_task_adapter --lib`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_graph --lib`; `cargo
+    test -p pantograph-workflow-service scheduler::task_orchestrator --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and targeted forbidden-path
+    search over the adapter.
+  - Remaining follow-up: add the scheduler-task execution entrypoint that
+    transitions ready non-runtime tasks through running/completed states,
+    persists the returned task result, removes the temporary adapter
+    `dead_code` allowance, and emits runtime-task fail-closed diagnostics.
 
 ### Traceability Links
 
