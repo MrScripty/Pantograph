@@ -915,3 +915,18 @@ durable task orchestration path.
   dedicated scheduler-task session runner consumes it. The session runner must
   call this converter before existing requested-output validation and remove
   the allowance.
+- 2026-05-24 session-runner implementation replan boundary reached. Codebase
+  review before wiring the dedicated runner found that current task graph
+  projection treats source `text-input` and `boolean-input` nodes without
+  graph-stored values as projection-invalid, while the revised cutover requires
+  request `WorkflowPortBinding` inputs to materialize those source tasks
+  without mutating graph node data. If the session runner is wired before this
+  is resolved, non-runtime-only session runs with request-provided inputs would
+  either keep invalid scheduler task-state records or require a legacy
+  whole-run fallback. The next plan decision must define the canonical source
+  input lifecycle: whether projection represents request-bound source inputs
+  as awaiting external input, whether active-run initialization accepts
+  pre-materialized external results and starts matching source tasks as
+  completed, and how missing request inputs become typed scheduler diagnostics.
+  Do not make graph node data, `workflow_run_internal`, or output-node demand a
+  successful compatibility path for this gap.

@@ -707,6 +707,16 @@ unsupported output values, and avoids output-node demand or legacy workflow
 execution. It remains staged behind a scoped `dead_code` allowance until the
 scheduler-task session runner consumes it before requested-output validation.
 
+2026-05-24 replan boundary before session-runner wiring: source input tasks
+currently become projection-invalid when their value is not embedded in graph
+node data, but the session cutover requires request `WorkflowPortBinding`
+inputs to materialize those tasks without graph mutation. The next design step
+must choose the canonical source-input lifecycle before implementing the
+runner: represent request-bound source tasks as awaiting external input,
+initialize matching source tasks as completed from pre-materialized external
+results, and define typed diagnostics for missing or wrong request inputs. The
+old whole-run output-demand path must not be used to bridge this gap.
+
 ### Task Classification And Input Readiness Replan
 
 2026-05-23 standards/blast-radius update: the non-runtime adapter slice must
