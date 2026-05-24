@@ -52,6 +52,27 @@ fn graph_with_bound_model_ref() -> WorkflowGraph {
     }
 }
 
+fn graph_with_bound_model_ref_and_prompt() -> WorkflowGraph {
+    let mut graph = graph_with_bound_model_ref();
+    graph.nodes.insert(
+        0,
+        GraphNode {
+            id: "prompt".to_string(),
+            node_type: "text-input".to_string(),
+            position: Position { x: -200.0, y: 0.0 },
+            data: json!({"value": "paint a red cube"}),
+        },
+    );
+    graph.edges.push(GraphEdge {
+        id: "edge-prompt-infer".to_string(),
+        source: "prompt".to_string(),
+        source_handle: "text".to_string(),
+        target: "infer".to_string(),
+        target_handle: "prompt".to_string(),
+    });
+    graph
+}
+
 fn materialized_model_ref_result(
     workflow_run_id: &str,
     value: WorkflowSchedulerTaskResultValue,
@@ -66,6 +87,26 @@ fn materialized_model_ref_result(
         outputs: vec![WorkflowSchedulerTaskResultOutput {
             port_id: "pumas_model_ref".to_string(),
             value,
+        }],
+        diagnostics: Vec::new(),
+        terminal_metadata: None,
+    }
+}
+
+fn materialized_prompt_result(
+    workflow_run_id: &str,
+    status: WorkflowSchedulerTaskResultStatus,
+) -> WorkflowSchedulerTaskResult {
+    WorkflowSchedulerTaskResult {
+        schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+        workflow_id: "workflow-task-binding".to_string(),
+        workflow_run_id: workflow_run_id.to_string(),
+        node_id: "prompt".to_string(),
+        task_id: "prompt".to_string(),
+        status,
+        outputs: vec![WorkflowSchedulerTaskResultOutput {
+            port_id: "text".to_string(),
+            value: WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string()),
         }],
         diagnostics: Vec::new(),
         terminal_metadata: None,
@@ -184,6 +225,110 @@ fn binding_resolution_rejects_wrong_materialized_value_type() {
     assert_eq!(
         resolution.diagnostics[0].code,
         WorkflowSchedulerTaskBindingDiagnosticCode::WrongMaterializedValueType
+    );
+    assert!(resolution.schedulable_intent.is_none());
+}
+
+#[test]
+fn binding_resolution_blocks_until_every_connected_input_is_materialized() {
+    let graph = workflow_scheduler_task_graph(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph_with_bound_model_ref_and_prompt(),
+    )
+    .expect("scheduler task graph");
+    let inference_task = graph
+        .tasks
+        .iter()
+        .find(|task| task.task_id.as_str() == "infer")
+        .expect("inference task");
+
+    let resolution = workflow_scheduler_resolve_task_intent(
+        inference_task,
+        &[materialized_model_ref_result(
+            graph.workflow_run_id.as_str(),
+            pumas_model_ref_value(),
+        )],
+    );
+
+    assert_eq!(
+        resolution.status,
+        WorkflowSchedulerTaskBindingResolutionStatus::Blocked
+    );
+    assert_eq!(resolution.diagnostics[0].port_id.as_deref(), Some("prompt"));
+    assert_eq!(
+        resolution.diagnostics[0].code,
+        WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput
+    );
+    assert!(resolution.schedulable_intent.is_none());
+}
+
+#[test]
+fn binding_resolution_readies_after_every_connected_input_materializes() {
+    let graph = workflow_scheduler_task_graph(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph_with_bound_model_ref_and_prompt(),
+    )
+    .expect("scheduler task graph");
+    let inference_task = graph
+        .tasks
+        .iter()
+        .find(|task| task.task_id.as_str() == "infer")
+        .expect("inference task");
+
+    let resolution = workflow_scheduler_resolve_task_intent(
+        inference_task,
+        &[
+            materialized_model_ref_result(graph.workflow_run_id.as_str(), pumas_model_ref_value()),
+            materialized_prompt_result(
+                graph.workflow_run_id.as_str(),
+                WorkflowSchedulerTaskResultStatus::Completed,
+            ),
+        ],
+    );
+
+    assert_eq!(
+        resolution.status,
+        WorkflowSchedulerTaskBindingResolutionStatus::Ready
+    );
+    assert!(resolution.schedulable_intent.is_some());
+    assert!(resolution.diagnostics.is_empty());
+}
+
+#[test]
+fn binding_resolution_propagates_unavailable_connected_input() {
+    let graph = workflow_scheduler_task_graph(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph_with_bound_model_ref_and_prompt(),
+    )
+    .expect("scheduler task graph");
+    let inference_task = graph
+        .tasks
+        .iter()
+        .find(|task| task.task_id.as_str() == "infer")
+        .expect("inference task");
+
+    let resolution = workflow_scheduler_resolve_task_intent(
+        inference_task,
+        &[
+            materialized_model_ref_result(graph.workflow_run_id.as_str(), pumas_model_ref_value()),
+            materialized_prompt_result(
+                graph.workflow_run_id.as_str(),
+                WorkflowSchedulerTaskResultStatus::Unavailable,
+            ),
+        ],
+    );
+
+    assert_eq!(
+        resolution.status,
+        WorkflowSchedulerTaskBindingResolutionStatus::Unavailable
+    );
+    assert_eq!(resolution.diagnostics[0].port_id.as_deref(), Some("prompt"));
+    assert_eq!(
+        resolution.diagnostics[0].code,
+        WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskUnavailable
     );
     assert!(resolution.schedulable_intent.is_none());
 }

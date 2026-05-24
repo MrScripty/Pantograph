@@ -10324,6 +10324,37 @@ Worker rules:
     scheduler-task execution entrypoint, non-runtime adapter conversion, and
     runtime-task fail-closed diagnostics before any scheduler-owned
     non-runtime workflow task executes.
+- 2026-05-23 Milestone 5c generalized runtime input-readiness slice
+  completed:
+  - Smallest useful vertical slice: extend workflow-service binding
+    resolution so runtime inference intent materialization waits for every
+    connected upstream task result, not only the `pumas_model_ref` binding.
+  - Allowed write set: workflow-service task binding-resolution module/tests
+    and current plan docs. Existing unrelated Pumas proposal Markdown changes
+    remain ignored.
+  - Implementation notes: added a reusable materialized-output lookup for
+    task input bindings, validates upstream task-result contracts and terminal
+    status before intent materialization, maps missing results to blocked
+    readiness, unavailable upstreams to unavailable readiness, and invalid
+    upstream results to invalid readiness. The existing `pumas_model_ref`
+    specialization now consumes that shared readiness check before inserting
+    the model ref into `SchedulableTaskIntent`.
+  - No-fallback/no-legacy confirmation: the slice does not pass raw graph
+    data, does not infer values from node-engine demand state, does not read
+    graph-local paths or Pumas load targets, and does not make runtime
+    inference executable until connected upstream outputs are materialized.
+  - Verification: `cargo fmt -p pantograph-workflow-service`; `cargo test -p
+    pantograph-workflow-service workflow::tests::task_binding_resolution
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted search over the
+    resolver for forbidden execution paths and graph-local model path usage
+    returned only the existing negative test fixture/assertion; and `git diff
+    --check`.
+  - Remaining follow-up: explicit per-port value contracts for non-Pumas
+    inputs as new task result value variants are added, scheduler-task
+    execution entrypoint, non-runtime adapter conversion, and runtime-task
+    fail-closed diagnostics.
 
 ### Traceability Links
 

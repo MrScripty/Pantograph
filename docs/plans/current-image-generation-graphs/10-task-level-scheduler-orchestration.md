@@ -292,7 +292,10 @@ implementation can be considered complete:
    `PumasModelRef` task outputs into validated schedulable intents and returns
    ready, blocked, unavailable, or invalid typed outcomes without consulting
    graph paths, reduced execution plans, runtime handoff, or node-engine
-   output demand.
+   output demand. A 2026-05-23 follow-up generalized the resolver so every
+   connected input binding must have a completed materialized upstream task
+   result before the runtime intent is returned; `pumas_model_ref` remains the
+   specialized value that is inserted into `SchedulableTaskIntent`.
 7. Move runtime-host execution contracts and dispatcher out of
    `pantograph-embedded-runtime` into a lower-level shared contract crate
    before orchestrator implementation. `pantograph-workflow-service` must

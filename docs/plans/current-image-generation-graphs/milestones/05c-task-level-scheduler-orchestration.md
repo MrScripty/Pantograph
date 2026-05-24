@@ -134,8 +134,11 @@ durable task orchestration path.
   task-graph execution class that maps canonical node contracts into
   runtime-inference, first-stage non-runtime node-engine, Pumas-materialization,
   or unsupported classes before any adapter can choose a path. Generalized
-  input readiness, scheduler-task entrypoint, non-runtime adapter conversion,
-  and runtime-task fail-closed diagnostics remain open.
+  runtime connected-input readiness now blocks scheduler intent materialization
+  until every upstream binding has a completed materialized task result, while
+  still specializing `pumas_model_ref` into the scheduler intent model ref.
+  Scheduler-task entrypoint, non-runtime adapter conversion, and runtime-task
+  fail-closed diagnostics remain open.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider

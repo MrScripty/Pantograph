@@ -3,7 +3,8 @@ use pantograph_scheduler::SchedulableTaskIntent;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultStatus,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
     WorkflowSchedulerTaskResultValue,
 };
 
@@ -112,6 +113,14 @@ pub fn workflow_scheduler_resolve_task_intent(
         );
     };
 
+    if let Some(diagnostic) = first_unready_materialized_input(task, task_results) {
+        return resolution(
+            status_for_materialized_input_diagnostic(diagnostic.code),
+            None,
+            diagnostic,
+        );
+    }
+
     let model_ref = match materialized_model_ref(task, task_results, model_ref_binding) {
         MaterializedModelRefResolution::Ready(model_ref) => model_ref,
         MaterializedModelRefResolution::Blocked(diagnostic) => {
@@ -163,71 +172,57 @@ enum MaterializedModelRefResolution {
     Unavailable(WorkflowSchedulerTaskBindingDiagnostic),
 }
 
+fn first_unready_materialized_input(
+    task: &WorkflowSchedulerTask,
+    task_results: &[WorkflowSchedulerTaskResult],
+) -> Option<WorkflowSchedulerTaskBindingDiagnostic> {
+    task.input_bindings
+        .iter()
+        .find_map(|binding| materialized_output(task, task_results, binding).err())
+}
+
+fn status_for_materialized_input_diagnostic(
+    code: WorkflowSchedulerTaskBindingDiagnosticCode,
+) -> WorkflowSchedulerTaskBindingResolutionStatus {
+    match code {
+        WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput => {
+            WorkflowSchedulerTaskBindingResolutionStatus::Blocked
+        }
+        WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskUnavailable => {
+            WorkflowSchedulerTaskBindingResolutionStatus::Unavailable
+        }
+        WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskInvalid
+        | WorkflowSchedulerTaskBindingDiagnosticCode::WrongMaterializedValueType
+        | WorkflowSchedulerTaskBindingDiagnosticCode::TaskProjectionInvalid
+        | WorkflowSchedulerTaskBindingDiagnosticCode::MissingIntentTemplate
+        | WorkflowSchedulerTaskBindingDiagnosticCode::InvalidMaterializedIntent => {
+            WorkflowSchedulerTaskBindingResolutionStatus::Invalid
+        }
+    }
+}
+
 fn materialized_model_ref(
     task: &WorkflowSchedulerTask,
     task_results: &[WorkflowSchedulerTaskResult],
-    binding: &super::WorkflowSchedulerTaskInputBinding,
+    binding: &WorkflowSchedulerTaskInputBinding,
 ) -> MaterializedModelRefResolution {
-    let Some(result) = task_results.iter().find(|result| {
-        result.task_id == binding.source_task_id.as_str()
-            && result.workflow_run_id == task.workflow_run_id.as_str()
-    }) else {
-        return MaterializedModelRefResolution::Blocked(diagnostic(
-            task,
-            Some(PORT_PUMAS_MODEL_REF),
-            WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput,
-            "required materialized task result is not available",
-        ));
-    };
-
-    if let Err(error) = result.validate() {
-        return MaterializedModelRefResolution::Invalid(diagnostic(
-            task,
-            Some(PORT_PUMAS_MODEL_REF),
-            WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskInvalid,
-            format!("materialized task result is invalid: {error}"),
-        ));
-    }
-
-    match result.status {
-        WorkflowSchedulerTaskResultStatus::Completed => {}
-        WorkflowSchedulerTaskResultStatus::Unavailable => {
-            return MaterializedModelRefResolution::Unavailable(diagnostic(
-                task,
-                Some(PORT_PUMAS_MODEL_REF),
-                WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskUnavailable,
-                format!("upstream task '{}' is unavailable", result.task_id),
-            ));
+    let output = match materialized_output(task, task_results, binding) {
+        Ok(output) => output,
+        Err(diagnostic) => {
+            return match status_for_materialized_input_diagnostic(diagnostic.code) {
+                WorkflowSchedulerTaskBindingResolutionStatus::Blocked => {
+                    MaterializedModelRefResolution::Blocked(diagnostic)
+                }
+                WorkflowSchedulerTaskBindingResolutionStatus::Unavailable => {
+                    MaterializedModelRefResolution::Unavailable(diagnostic)
+                }
+                WorkflowSchedulerTaskBindingResolutionStatus::Invalid
+                | WorkflowSchedulerTaskBindingResolutionStatus::Ready => {
+                    MaterializedModelRefResolution::Invalid(diagnostic)
+                }
+            };
         }
-        WorkflowSchedulerTaskResultStatus::Failed | WorkflowSchedulerTaskResultStatus::Invalid => {
-            return MaterializedModelRefResolution::Invalid(diagnostic(
-                task,
-                Some(PORT_PUMAS_MODEL_REF),
-                WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskInvalid,
-                format!(
-                    "upstream task '{}' did not complete successfully",
-                    result.task_id
-                ),
-            ));
-        }
-    }
-
-    let Some(output) = result
-        .outputs
-        .iter()
-        .find(|output| output.port_id == binding.source_port_id)
-    else {
-        return MaterializedModelRefResolution::Blocked(diagnostic(
-            task,
-            Some(PORT_PUMAS_MODEL_REF),
-            WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput,
-            format!(
-                "upstream task '{}' has not materialized output '{}'",
-                result.task_id, binding.source_port_id
-            ),
-        ));
     };
-
     match &output.value {
         WorkflowSchedulerTaskResultValue::PumasModelRef(model_ref) => {
             MaterializedModelRefResolution::Ready(model_ref.clone())
@@ -242,6 +237,72 @@ fn materialized_model_ref(
             ),
         )),
     }
+}
+
+fn materialized_output<'a>(
+    task: &WorkflowSchedulerTask,
+    task_results: &'a [WorkflowSchedulerTaskResult],
+    binding: &WorkflowSchedulerTaskInputBinding,
+) -> Result<&'a WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskBindingDiagnostic> {
+    let Some(result) = task_results.iter().find(|result| {
+        result.task_id == binding.source_task_id.as_str()
+            && result.workflow_run_id == task.workflow_run_id.as_str()
+    }) else {
+        return Err(diagnostic(
+            task,
+            Some(binding.target_port_id.as_str()),
+            WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput,
+            "required materialized task result is not available",
+        ));
+    };
+
+    if let Err(error) = result.validate() {
+        return Err(diagnostic(
+            task,
+            Some(binding.target_port_id.as_str()),
+            WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskInvalid,
+            format!("materialized task result is invalid: {error}"),
+        ));
+    }
+
+    match result.status {
+        WorkflowSchedulerTaskResultStatus::Completed => {}
+        WorkflowSchedulerTaskResultStatus::Unavailable => {
+            return Err(diagnostic(
+                task,
+                Some(binding.target_port_id.as_str()),
+                WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskUnavailable,
+                format!("upstream task '{}' is unavailable", result.task_id),
+            ));
+        }
+        WorkflowSchedulerTaskResultStatus::Failed | WorkflowSchedulerTaskResultStatus::Invalid => {
+            return Err(diagnostic(
+                task,
+                Some(binding.target_port_id.as_str()),
+                WorkflowSchedulerTaskBindingDiagnosticCode::UpstreamTaskInvalid,
+                format!(
+                    "upstream task '{}' did not complete successfully",
+                    result.task_id
+                ),
+            ));
+        }
+    }
+
+    result
+        .outputs
+        .iter()
+        .find(|output| output.port_id == binding.source_port_id)
+        .ok_or_else(|| {
+            diagnostic(
+                task,
+                Some(binding.target_port_id.as_str()),
+                WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput,
+                format!(
+                    "upstream task '{}' has not materialized output '{}'",
+                    result.task_id, binding.source_port_id
+                ),
+            )
+        })
 }
 
 fn validated_intent_resolution(
