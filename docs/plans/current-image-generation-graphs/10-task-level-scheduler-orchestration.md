@@ -342,7 +342,11 @@ implementation can be considered complete:
    must delegate from `run_workflow_execution_session` into a focused
    scheduler-task execution entrypoint after admission and task graph
    extraction, then remove or make unreachable the old scheduler-managed
-   inference launch path.
+   inference launch path. Replan boundary identified 2026-05-24: session
+   execution still performs runtime preflight/load before the legacy whole-run
+   call, so the next slice must first choose the cutover sequence for
+   non-runtime-only runs and runtime-containing runs rather than silently using
+   legacy output demand as fallback.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.

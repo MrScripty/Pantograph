@@ -10652,6 +10652,25 @@ Worker rules:
     handoff port, add cancellation/retry/defer idempotency, and remove the old
     output-demand launch path rather than preserving it as a compatibility
     branch.
+- 2026-05-24 Milestone 5c session cutover replan boundary recorded:
+  - Discovery: after the store-lock-safe non-runtime split, the next production
+    implementation point is `run_workflow_execution_session`. That path still
+    performs runtime preflight, execution-plan production, reservation events,
+    and runtime load before calling the legacy whole-run node-engine execution
+    path.
+  - Boundary: inserting the scheduler-task loop without an explicit sequence
+    would either preserve legacy output-demand fallback for runtime-containing
+    workflows or implicitly bypass runtime admission/load for non-runtime-only
+    workflows. Both choices are scheduler policy, not incidental wiring.
+  - Required planning before code: decide how to read the active-run task
+    graph class summary before runtime load; decide whether non-runtime-only
+    runs complete through scheduler task results without runtime admission/load;
+    and decide whether runtime-containing runs should fail closed with typed
+    "runtime dispatch not wired" diagnostics until runtime-host dispatch lands
+    or whether runtime dispatch must be implemented before session cutover.
+  - No-fallback/no-legacy confirmation: the plan now forbids keeping
+    `workflow_run_internal` output demand as a compatibility branch for tasks
+    already handled by the scheduler loop.
 
 ### Traceability Links
 

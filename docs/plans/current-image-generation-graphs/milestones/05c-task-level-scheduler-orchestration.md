@@ -221,6 +221,18 @@ durable task orchestration path.
   initialization after task graph extraction and then remove or make
   unreachable the old scheduler-managed inference launch path rather than
   preserving it as a compatibility branch.
+  2026-05-24 replan boundary: production session execution currently performs
+  runtime preflight, execution-plan production, reservation events, and runtime
+  load before the legacy whole-run `workflow_run_internal` call. The
+  scheduler-task loop cannot be inserted safely until the cutover sequencing is
+  explicit. The next plan decision must define: how the active-run task graph
+  class summary is read before runtime load; whether non-runtime-only runs
+  bypass runtime admission/load and finish through scheduler task results; and
+  whether runtime-containing runs fail closed with typed "runtime dispatch not
+  wired" diagnostics until the runtime-host dispatch slice lands, or whether
+  runtime dispatch is implemented first. Do not keep the old whole-run
+  node-engine path as a compatibility branch for tasks already handled by the
+  scheduler loop.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
