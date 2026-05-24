@@ -5,20 +5,14 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     IoArtifactObservedPayload, IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation,
     RunResourceObservationRollupQuery, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
-    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerCandidateSetSummary,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload,
-    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
-    SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
-    SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
-    SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
-    SchedulerSelectionPolicyPhase, SchedulerSelectionPolicyTrace,
+    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
     WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
 };
 use pantograph_scheduler::SchedulerTaskStateKind;
-use pantograph_timing_contracts::{checked_timing_duration_ms, WorkflowTimingAttemptId};
 
 use crate::graph::{
     workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
@@ -26,15 +20,13 @@ use crate::graph::{
 };
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::{
-    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDecisionCode,
-    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitOverride,
-    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitResourceEstimateKind,
+    WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
     WorkflowTechnicalFitResourceEstimateState,
 };
 
 use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
-    WorkflowDiagnosticRuntimeModelScope, WorkflowDiagnosticSchedulerScope,
+    WorkflowDiagnosticSchedulerScope,
 };
 use super::io_contract::validate_workflow_io;
 use super::session_io_artifacts::workflow_io_artifact_metadata;
@@ -47,50 +39,18 @@ use super::validation::{
 use super::{
     project_scheduler_task_results_to_outputs, workflow_scheduler_task_graph,
     workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowErrorDiagnosticsLink, WorkflowExecutionPlan,
-    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
-    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowSchedulerTaskGraph,
-    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
-    WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
+    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeRequirements, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary,
+    WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
 const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
 const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
-
-struct SchedulerReservationContext {
-    selected_runtime_id: Option<String>,
-    selected_runtime_variant_id: Option<String>,
-    selected_device_class: Option<String>,
-    selected_device_id: Option<String>,
-    reserved_model_ids: Vec<String>,
-}
-
-fn workflow_execution_plan_diagnostic_summary(
-    execution_plan: &WorkflowExecutionPlan,
-) -> SchedulerExecutionPlanSummary {
-    let mut policy_trace_ids = Vec::new();
-    for decision in execution_plan.node_decisions().values() {
-        for trace_id in decision.policy_trace_ids() {
-            if !policy_trace_ids.contains(trace_id)
-                && policy_trace_ids.len() < WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS
-            {
-                policy_trace_ids.push(trace_id.clone());
-            }
-        }
-    }
-
-    SchedulerExecutionPlanSummary {
-        schema_version: execution_plan.schema_version(),
-        node_decision_count: u32::try_from(execution_plan.node_decisions().len())
-            .expect("workflow execution plan node decisions are bounded below u32::MAX"),
-        policy_trace_ids,
-    }
-}
 
 impl WorkflowService {
     pub fn workflow_execution_session_active_execution_plan(
@@ -1186,69 +1146,6 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn record_scheduler_delay_event_if_configured(
-        &self,
-        session: &WorkflowExecutionSessionSummary,
-        snapshot: Option<&WorkflowRunSnapshotRecord>,
-        workflow_run_id: &str,
-        workflow_semantic_version: &str,
-        reason: WorkflowSchedulerDecisionReason,
-        delayed_until_ms: Option<u64>,
-        fairness_context: Option<&str>,
-    ) -> Result<(), WorkflowServiceError> {
-        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
-            return Ok(());
-        };
-        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
-        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
-        let occurred_at_ms = unix_timestamp_ms() as i64;
-        let delayed_until_ms =
-            delayed_until_ms.map(|value| i64::try_from(value).unwrap_or(i64::MAX));
-
-        let mut ledger = ledger.lock().map_err(|_| {
-            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
-        })?;
-        self.append_diagnostic_event_and_request_projection_refresh(
-            &mut *ledger,
-            DiagnosticEventAppendRequest {
-                source_component: DiagnosticEventSourceComponent::Scheduler,
-                source_instance_id: Some("workflow-session-scheduler".to_string()),
-                occurred_at_ms,
-                workflow_run_id: Some(workflow_run_id),
-                workflow_id: Some(workflow_id),
-                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
-                workflow_semantic_version: Some(
-                    snapshot
-                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                        .unwrap_or_else(|| workflow_semantic_version.to_string()),
-                ),
-                node_id: None,
-                node_type: None,
-                node_version: None,
-                runtime_id: None,
-                runtime_version: None,
-                model_id: None,
-                model_version: None,
-                client_id: event_client_id(session, snapshot)?,
-                client_session_id: event_client_session_id(session, snapshot)?,
-                bucket_id: event_bucket_id(session, snapshot)?,
-                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
-                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
-                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
-                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-                payload_ref: None,
-                payload: DiagnosticEventPayload::SchedulerRunDelayed(SchedulerRunDelayedPayload {
-                    reason: reason.as_str().to_string(),
-                    delayed_until_ms,
-                    fairness_context: fairness_context.map(str::to_string),
-                }),
-            },
-        )
-        .map(|_| ())
-        .map_err(WorkflowServiceError::from)
-    }
-
     fn record_run_started_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
@@ -1303,153 +1200,6 @@ impl WorkflowService {
                         queued_run.scheduler_decision_reason.as_str().to_string(),
                     ),
                 }),
-            },
-        )
-        .map(|_| ())
-        .map_err(WorkflowServiceError::from)
-    }
-
-    fn record_scheduler_run_admitted_event_if_configured(
-        &self,
-        session: &WorkflowExecutionSessionSummary,
-        snapshot: Option<&WorkflowRunSnapshotRecord>,
-        queued_run: &crate::scheduler::WorkflowExecutionSessionDequeuedRun,
-        reservation_context: &SchedulerReservationContext,
-        technical_fit_decision: Option<&WorkflowTechnicalFitDecision>,
-        execution_plan_summary: Option<&SchedulerExecutionPlanSummary>,
-    ) -> Result<(), WorkflowServiceError> {
-        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
-            return Ok(());
-        };
-        let workflow_run_id = WorkflowRunId::try_from(queued_run.queued.workflow_run_id.clone())?;
-        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
-        let occurred_at_ms = i64::try_from(queued_run.dequeued_at_ms).unwrap_or(i64::MAX);
-        let queue_wait_ms = queued_run
-            .dequeued_at_ms
-            .checked_sub(queued_run.enqueued_at_ms);
-
-        let mut ledger = ledger.lock().map_err(|_| {
-            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
-        })?;
-        self.append_diagnostic_event_and_request_projection_refresh(
-            &mut *ledger,
-            DiagnosticEventAppendRequest {
-                source_component: DiagnosticEventSourceComponent::Scheduler,
-                source_instance_id: Some("workflow-session-scheduler".to_string()),
-                occurred_at_ms,
-                workflow_run_id: Some(workflow_run_id),
-                workflow_id: Some(workflow_id),
-                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
-                workflow_semantic_version: Some(
-                    snapshot
-                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                        .unwrap_or_else(|| queued_run.queued.workflow_semantic_version.clone()),
-                ),
-                node_id: None,
-                node_type: None,
-                node_version: None,
-                runtime_id: reservation_context.selected_runtime_id.clone(),
-                runtime_version: None,
-                model_id: None,
-                model_version: None,
-                client_id: event_client_id(session, snapshot)?,
-                client_session_id: event_client_session_id(session, snapshot)?,
-                bucket_id: event_bucket_id(session, snapshot)?,
-                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
-                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
-                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
-                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-                payload_ref: None,
-                payload: DiagnosticEventPayload::SchedulerRunAdmitted(
-                    SchedulerRunAdmittedPayload {
-                        queue_wait_ms,
-                        decision_reason: queued_run.scheduler_decision_reason.as_str().to_string(),
-                        execution_plan_summary: execution_plan_summary.cloned(),
-                        selected_runtime_id: reservation_context.selected_runtime_id.clone(),
-                        selected_runtime_variant_id: reservation_context
-                            .selected_runtime_variant_id
-                            .clone(),
-                        selected_backend_key: technical_fit_decision
-                            .and_then(|decision| decision.selected_backend_key.clone()),
-                        selected_device_class: reservation_context.selected_device_class.clone(),
-                        selected_device_id: reservation_context.selected_device_id.clone(),
-                        selected_network_node_id: None,
-                        reserved_model_ids: reservation_context.reserved_model_ids.clone(),
-                        technical_fit_selection_policy_trace: technical_fit_decision
-                            .and_then(scheduler_selection_policy_trace),
-                    },
-                ),
-            },
-        )
-        .map(|_| ())
-        .map_err(WorkflowServiceError::from)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn record_scheduler_reservation_event_if_configured(
-        &self,
-        session: &WorkflowExecutionSessionSummary,
-        snapshot: Option<&WorkflowRunSnapshotRecord>,
-        workflow_run_id: &str,
-        workflow_semantic_version: &str,
-        reservation_context: &SchedulerReservationContext,
-        transition: SchedulerReservationTransition,
-        reason: Option<&str>,
-    ) -> Result<(), WorkflowServiceError> {
-        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
-            return Ok(());
-        };
-        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
-        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
-
-        let mut ledger = ledger.lock().map_err(|_| {
-            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
-        })?;
-        self.append_diagnostic_event_and_request_projection_refresh(
-            &mut *ledger,
-            DiagnosticEventAppendRequest {
-                source_component: DiagnosticEventSourceComponent::Scheduler,
-                source_instance_id: Some("workflow-session-scheduler".to_string()),
-                occurred_at_ms: unix_timestamp_ms() as i64,
-                workflow_run_id: Some(workflow_run_id.clone()),
-                workflow_id: Some(workflow_id),
-                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
-                workflow_semantic_version: Some(
-                    snapshot
-                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                        .unwrap_or_else(|| workflow_semantic_version.to_string()),
-                ),
-                node_id: None,
-                node_type: None,
-                node_version: None,
-                runtime_id: reservation_context.selected_runtime_id.clone(),
-                runtime_version: None,
-                model_id: None,
-                model_version: None,
-                client_id: event_client_id(session, snapshot)?,
-                client_session_id: event_client_session_id(session, snapshot)?,
-                bucket_id: event_bucket_id(session, snapshot)?,
-                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
-                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
-                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
-                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-                payload_ref: None,
-                payload: DiagnosticEventPayload::SchedulerReservationChanged(
-                    SchedulerReservationChangedPayload {
-                        transition,
-                        reservation_id: scheduler_runtime_slot_reservation_id(&workflow_run_id),
-                        resource_kind: SchedulerReservationResourceKind::RuntimeSlot,
-                        selected_runtime_id: reservation_context.selected_runtime_id.clone(),
-                        selected_runtime_variant_id: reservation_context
-                            .selected_runtime_variant_id
-                            .clone(),
-                        selected_device_class: reservation_context.selected_device_class.clone(),
-                        selected_device_id: reservation_context.selected_device_id.clone(),
-                        selected_network_node_id: None,
-                        reserved_model_ids: reservation_context.reserved_model_ids.clone(),
-                        reason: reason.map(str::to_string),
-                    },
-                ),
             },
         )
         .map(|_| ())
@@ -1661,25 +1411,6 @@ impl WorkflowService {
     }
 }
 
-fn scheduler_delay_until_ms(now_ms: u64) -> Result<u64, WorkflowServiceError> {
-    now_ms
-        .checked_add(WORKFLOW_SESSION_QUEUE_POLL_MS)
-        .ok_or_else(|| {
-            WorkflowServiceError::Internal(format!(
-                "scheduler admission retry timestamp overflowed: now_ms={now_ms}, poll_ms={WORKFLOW_SESSION_QUEUE_POLL_MS}"
-            ))
-        })
-}
-
-fn workflow_timing_duration_ms(
-    attempt_id: &WorkflowTimingAttemptId,
-    started_at_ms: u64,
-    completed_at_ms: u64,
-) -> Result<u64, WorkflowServiceError> {
-    checked_timing_duration_ms(attempt_id, started_at_ms, completed_at_ms)
-        .map_err(|error| WorkflowServiceError::Internal(error.to_string()))
-}
-
 fn queue_position_u32(
     queued_item: &WorkflowExecutionSessionQueueItem,
 ) -> Result<u32, WorkflowServiceError> {
@@ -1751,71 +1482,6 @@ fn workflow_diagnostic_run_context(
         scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
         retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
     })
-}
-
-fn workflow_runtime_model_error_scope(
-    session: &WorkflowExecutionSessionSummary,
-    snapshot: Option<&WorkflowRunSnapshotRecord>,
-    workflow_run_id: &str,
-    workflow_semantic_version: &str,
-    required_backends: &[String],
-    required_models: &[String],
-) -> Result<WorkflowDiagnosticRuntimeModelScope, WorkflowServiceError> {
-    Ok(WorkflowDiagnosticRuntimeModelScope {
-        run: workflow_diagnostic_run_context(
-            session,
-            snapshot,
-            workflow_run_id,
-            Some(workflow_semantic_version),
-        )?,
-        runtime_id: required_backends
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "unknown_runtime".to_string()),
-        runtime_version: None,
-        model_id: required_models.first().cloned(),
-        model_version: None,
-    })
-}
-
-fn workflow_runtime_load_error_record_request(
-    session: &WorkflowExecutionSessionSummary,
-    snapshot: Option<&WorkflowRunSnapshotRecord>,
-    workflow_run_id: &str,
-    workflow_semantic_version: &str,
-    required_backends: &[String],
-    required_models: &[String],
-    error: &WorkflowServiceError,
-) -> Result<WorkflowDiagnosticErrorRecordRequest, WorkflowServiceError> {
-    let scope = workflow_runtime_model_error_scope(
-        session,
-        snapshot,
-        workflow_run_id,
-        workflow_semantic_version,
-        required_backends,
-        required_models,
-    )?;
-    let request = match error
-        .runtime_diagnostic_phase_hint()
-        .unwrap_or(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad)
-    {
-        WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad => {
-            WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(scope, error)
-        }
-        WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch => {
-            WorkflowDiagnosticErrorRecordRequest::runtime_launch_failed(scope, error)
-        }
-        WorkflowRuntimeDiagnosticPhaseHint::ModelDependency => {
-            WorkflowDiagnosticErrorRecordRequest::model_dependency_failed(scope, error)
-        }
-        WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary => {
-            WorkflowDiagnosticErrorRecordRequest::managed_binary_failed(scope, error)
-        }
-    };
-
-    Ok(request
-        .with_source_instance_id("workflow-session-scheduler")
-        .with_cause("runtime admission failed to load required models"))
 }
 
 fn session_attribution_client_id(
@@ -2010,145 +1676,6 @@ fn workflow_run_snapshot_runtime_requirements(
     })
 }
 
-fn scheduler_reservation_context(
-    snapshot: Option<&WorkflowRunSnapshotRecord>,
-    required_backends: &[String],
-    required_models: &[String],
-) -> Result<SchedulerReservationContext, WorkflowServiceError> {
-    let snapshot_runtime_requirements = snapshot
-        .map(workflow_run_snapshot_runtime_requirements)
-        .transpose()?;
-    let selected_runtime_id = snapshot_runtime_requirements
-        .as_ref()
-        .and_then(|requirements| requirements.required_backends.first().cloned())
-        .or_else(|| required_backends.first().cloned());
-    let reserved_model_ids = snapshot_runtime_requirements
-        .as_ref()
-        .map(|requirements| requirements.required_models.clone())
-        .filter(|models| !models.is_empty())
-        .unwrap_or_else(|| required_models.to_vec());
-
-    Ok(SchedulerReservationContext {
-        selected_runtime_id,
-        selected_runtime_variant_id: None,
-        selected_device_class: None,
-        selected_device_id: None,
-        reserved_model_ids,
-    })
-}
-
-fn apply_technical_fit_to_reservation_context(
-    context: &mut SchedulerReservationContext,
-    technical_fit_decision: Option<&WorkflowTechnicalFitDecision>,
-) {
-    if let Some(selected_runtime_id) = technical_fit_decision
-        .and_then(|decision| decision.selected_runtime_id.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        context.selected_runtime_id = Some(selected_runtime_id.to_string());
-    }
-
-    if let Some(selected_runtime_variant_id) = technical_fit_decision
-        .and_then(|decision| decision.selected_runtime_variant_id.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        context.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
-    }
-
-    if let Some(selected_device_class) =
-        technical_fit_decision.and_then(|decision| decision.selected_device_class)
-    {
-        context.selected_device_class =
-            Some(workflow_technical_fit_device_class_key(selected_device_class).to_string());
-    }
-
-    if let Some(selected_device_id) = technical_fit_decision
-        .and_then(|decision| decision.selected_device_id.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        context.selected_device_id = Some(selected_device_id.to_string());
-    }
-}
-
-fn workflow_technical_fit_device_class_key(
-    device_class: crate::technical_fit::WorkflowTechnicalFitDeviceClass,
-) -> &'static str {
-    match device_class {
-        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Cpu => "cpu",
-        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Cuda => "cuda",
-        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Metal => "metal",
-        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Mps => "mps",
-    }
-}
-
-fn scheduler_selection_policy_trace(
-    decision: &WorkflowTechnicalFitDecision,
-) -> Option<SchedulerSelectionPolicyTrace> {
-    let trace = decision.selection_policy_trace.as_ref()?;
-    Some(SchedulerSelectionPolicyTrace {
-        policy_version: trace.policy_version,
-        policy_phase: trace.policy_phase.map(scheduler_selection_policy_phase),
-        decision_code: trace.decision_code.map(scheduler_selection_decision_code),
-        history_threshold_state: trace
-            .history_threshold_state
-            .map(scheduler_selection_history_threshold_state),
-        candidate_set_summary: trace.candidate_set_summary.as_ref().map(|summary| {
-            SchedulerCandidateSetSummary {
-                total_candidate_count: summary.total_candidate_count,
-                eligible_candidate_count: summary.eligible_candidate_count,
-                rejected_candidate_count: summary.rejected_candidate_count,
-                eligible_candidate_ids: summary.eligible_candidate_ids.clone(),
-            }
-        }),
-        ranking_reason: trace.ranking_reason.clone(),
-        exploration_reason: trace.exploration_reason.clone(),
-        seed_basis: trace.seed_basis.clone(),
-    })
-}
-
-fn scheduler_selection_policy_phase(
-    phase: WorkflowTechnicalFitPolicyPhase,
-) -> SchedulerSelectionPolicyPhase {
-    match phase {
-        WorkflowTechnicalFitPolicyPhase::CandidateRanking => {
-            SchedulerSelectionPolicyPhase::CandidateRanking
-        }
-    }
-}
-
-fn scheduler_selection_decision_code(
-    code: WorkflowTechnicalFitDecisionCode,
-) -> SchedulerSelectionDecisionCode {
-    match code {
-        WorkflowTechnicalFitDecisionCode::SelectedCandidate => {
-            SchedulerSelectionDecisionCode::SelectedCandidate
-        }
-    }
-}
-
-fn scheduler_selection_history_threshold_state(
-    state: WorkflowTechnicalFitHistoryThresholdState,
-) -> SchedulerSelectionHistoryThresholdState {
-    match state {
-        WorkflowTechnicalFitHistoryThresholdState::NotEvaluated => {
-            SchedulerSelectionHistoryThresholdState::NotEvaluated
-        }
-        WorkflowTechnicalFitHistoryThresholdState::InsufficientSamples => {
-            SchedulerSelectionHistoryThresholdState::InsufficientSamples
-        }
-        WorkflowTechnicalFitHistoryThresholdState::Evaluated => {
-            SchedulerSelectionHistoryThresholdState::Evaluated
-        }
-    }
-}
-
-fn scheduler_runtime_slot_reservation_id(workflow_run_id: &WorkflowRunId) -> String {
-    format!("reservation_{}", workflow_run_id.as_str())
-}
-
 fn append_scheduler_estimate_runtime_reasons(
     reasons: &mut Vec<String>,
     runtime_requirements: &WorkflowRuntimeRequirements,
@@ -2267,20 +1794,6 @@ fn scheduler_candidate_runtime_ids(
     candidate_runtime_ids
 }
 
-fn decode_queued_graph_run_settings(
-    snapshot: Option<&WorkflowRunSnapshotRecord>,
-) -> Result<Option<WorkflowGraphRunSettings>, WorkflowServiceError> {
-    snapshot
-        .map(|snapshot| {
-            serde_json::from_str(&snapshot.graph_settings_json).map_err(|error| {
-                WorkflowServiceError::CapabilityViolation(format!(
-                    "failed to decode workflow run snapshot graph settings: {error}"
-                ))
-            })
-        })
-        .transpose()
-}
-
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {
     match kind {
         WorkflowExecutionSessionKind::Edit => "edit",
@@ -2335,18 +1848,6 @@ mod tests {
 
         assert!(truncated.len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN);
         assert!(truncated.ends_with(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX));
-    }
-
-    #[test]
-    fn scheduler_delay_until_rejects_timestamp_overflow() {
-        let error = scheduler_delay_until_ms(u64::MAX)
-            .expect_err("scheduler retry timestamp overflow should fail");
-
-        assert!(matches!(
-            error,
-            WorkflowServiceError::Internal(message)
-                if message.contains("scheduler admission retry timestamp overflowed")
-        ));
     }
 
     #[test]

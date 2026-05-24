@@ -11062,6 +11062,31 @@ Worker rules:
     retired runtime-load/session-admission diagnostics helpers,
     `workflow_run_internal`, and the old media artifactization conversion
     boundary.
+- 2026-05-24 Milestone 5c retired session-admission diagnostics cleanup slice
+  completed:
+  - Smallest useful vertical slice: delete unused scheduler delay, admitted,
+    reservation, runtime-load error, technical-fit trace mapping, retry
+    timestamp, and queued graph-settings helper surfaces from
+    `session_execution_api.rs`.
+  - Allowed write set: `session_execution_api.rs`, Milestone 5c/task-level
+    orchestration plan notes, and this execution log. Existing unrelated Pumas
+    proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: old session-admission diagnostics are
+    not kept as inert helper code. Scheduler delay, admission, reservation,
+    runtime-load failure, and retry timing diagnostics must be reintroduced
+    through the scheduler-task lifecycle owner with task ids, attempt ids, and
+    runtime handoff correlation.
+  - Verification passed: targeted source search for deleted helper symbols;
+    `cargo fmt -p pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service workflow::session_execution_api::tests --lib`;
+    `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Remaining follow-up: reduced execution-plan active-run storage,
+    `workflow_run_internal`, and the old media artifactization conversion
+    boundary.
 
 ### Traceability Links
 

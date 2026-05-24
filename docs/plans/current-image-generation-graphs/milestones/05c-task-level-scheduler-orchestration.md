@@ -345,6 +345,14 @@ durable task orchestration path.
   block source-input runs or fail closed; convert or delete those tests when
   the scheduler/runtime-host lifecycle and source-input materialization slices
   replace that behavior.
+  2026-05-24 cleanup implementation status: retired session-admission
+  diagnostics helpers were deleted from `session_execution_api.rs`, including
+  unused scheduler delay/admitted/reservation event writers, runtime-load
+  error record builders, retry timestamp arithmetic, queued graph-settings
+  decoding, and technical-fit trace mapping used only by those retired
+  writers. Future diagnostics for these phases must be introduced through the
+  scheduler-task lifecycle owner with task ids, attempt ids, and runtime
+  handoff correlation rather than old whole-session admission facts.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

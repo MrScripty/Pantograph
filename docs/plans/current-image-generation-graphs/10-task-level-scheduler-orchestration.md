@@ -1428,6 +1428,15 @@ current cutover state because it expects legacy runtime/session capacity
 behavior; those tests must be converted or deleted with the remaining lifecycle
 and source-input materialization work.
 
+2026-05-24 implementation status: retired session-admission diagnostics helper
+cleanup is complete. `session_execution_api.rs` no longer carries unused
+scheduler delay/admitted/reservation writers, runtime-load error record
+builders, retry timestamp helpers, queued graph-settings decoding, or
+technical-fit trace mapping reachable only from those retired writers. The
+remaining warning surfaces are narrowed to active execution-plan storage, the
+old whole-run `workflow_run_internal` path, and the old media artifactization
+conversion boundary.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:
