@@ -6,12 +6,11 @@ use pantograph_diagnostics_ledger::SchedulerModelCacheState;
 use pantograph_scheduler::SchedulerTaskStateRecord;
 
 use crate::graph::WorkflowExecutionSessionKind;
-use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
+use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
-    WorkflowCapabilityModel, WorkflowExecutionPlan, WorkflowLocalRunPlacementRecord,
-    WorkflowLocalRunPlacementState, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowRuntimeIssue, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
-    WorkflowServiceError,
+    WorkflowExecutionPlan, WorkflowLocalRunPlacementRecord, WorkflowLocalRunPlacementState,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskResult, WorkflowServiceError,
 };
 
 use super::{
@@ -70,8 +69,6 @@ pub(crate) struct WorkflowExecutionSessionPreflightCache {
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,
     pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
-    pub(crate) capability_models: Vec<WorkflowCapabilityModel>,
-    pub(crate) technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     pub(crate) blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
 }
 

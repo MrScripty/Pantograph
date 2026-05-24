@@ -317,6 +317,14 @@ durable task orchestration path.
   scheduler-task runs after queue admission; runtime dispatch timeout,
   cancellation, and durable attempt timing remain owned by the later
   scheduler/runtime-host lifecycle slice.
+  2026-05-24 cleanup implementation status: stale preflight-cache payloads
+  `capability_models` and `technical_fit_decision` were deleted from
+  `WorkflowExecutionSessionPreflightCache`. The cache now carries only the
+  invalidation fingerprints, normalized override selection, runtime affinity
+  requirements, and blocking runtime issues still consumed by the active
+  session/runtime readiness path. Preflight cache tests now call the preflight
+  boundary directly instead of depending on a successful whole-run session
+  launch, preserving the no-legacy cutover.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

@@ -27,37 +27,15 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
         .expect("create session");
 
     service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+        .ensure_session_runtime_preflight(&host, &created.session_id, "wf-1", None)
         .await
-        .expect("first run");
+        .expect("first preflight");
     assert_eq!(workflow_capabilities_calls.load(Ordering::SeqCst), 1);
 
     service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+        .ensure_session_runtime_preflight(&host, &created.session_id, "wf-1", None)
         .await
-        .expect("second run");
+        .expect("second preflight");
     assert_eq!(
         workflow_capabilities_calls.load(Ordering::SeqCst),
         1,
@@ -70,20 +48,9 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
         .expect("graph fingerprint lock poisoned") = "graph-b".to_string();
 
     service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+        .ensure_session_runtime_preflight(&host, &created.session_id, "wf-1", None)
         .await
-        .expect("third run after graph change");
+        .expect("third preflight after graph change");
     assert_eq!(
         workflow_capabilities_calls.load(Ordering::SeqCst),
         2,
@@ -118,46 +85,34 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
         .expect("create session");
 
     service
-        .run_workflow_execution_session(
+        .ensure_session_runtime_preflight(
             &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: Some(WorkflowTechnicalFitOverride {
-                    runtime_id: None,
-                    runtime_variant_id: None,
-                    model_id: None,
-                    backend_key: Some("llama.cpp".to_string()),
-                }),
-                timeout_ms: None,
-                priority: None,
-            },
+            &created.session_id,
+            "wf-1",
+            Some(WorkflowTechnicalFitOverride {
+                runtime_id: None,
+                runtime_variant_id: None,
+                model_id: None,
+                backend_key: Some("llama_cpp".to_string()),
+            }),
         )
         .await
-        .expect("first run");
+        .expect("first preflight");
 
     service
-        .run_workflow_execution_session(
+        .ensure_session_runtime_preflight(
             &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: Some(WorkflowTechnicalFitOverride {
-                    runtime_id: None,
-                    runtime_variant_id: None,
-                    model_id: Some("model-a".to_string()),
-                    backend_key: Some("llama.cpp".to_string()),
-                }),
-                timeout_ms: None,
-                priority: None,
-            },
+            &created.session_id,
+            "wf-1",
+            Some(WorkflowTechnicalFitOverride {
+                runtime_id: None,
+                runtime_variant_id: None,
+                model_id: Some("model-a".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+            }),
         )
         .await
-        .expect("second run");
+        .expect("second preflight");
 
     let requests = technical_fit_requests
         .lock()

@@ -10982,6 +10982,29 @@ Worker rules:
     diagnostics helpers, `session_runtime_load_lifecycle`,
     `workflow_run_internal`, and the old media artifactization conversion
     boundary.
+- 2026-05-24 Milestone 5c preflight cache cleanup slice completed:
+  - Smallest useful vertical slice: remove stale capability-model and
+    technical-fit-decision payloads from the session preflight cache.
+  - Allowed write set: workflow-service scheduler store, workflow-service
+    session runtime preflight cache builder, focused preflight cache tests,
+    Milestone 5c/task-level orchestration plan notes, and this execution log.
+    Existing unrelated Pumas proposal Markdown changes remain ignored.
+  - No-fallback/no-legacy confirmation: preflight cache tests now call the
+    preflight boundary directly instead of relying on successful whole-run
+    session execution. The cache remains a readiness/invalidation cache and
+    does not preserve old runtime admission or launch data.
+  - Verification passed: targeted source search for stale preflight cache
+    fields; `cargo fmt -p pantograph-workflow-service -- --check`; `cargo test
+    -p pantograph-workflow-service workflow::tests::session_runtime_preflight
+    --lib`; `cargo test -p pantograph-workflow-service scheduler::store
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Remaining follow-up: continue cleanup of stale dequeued/finish-state
+    fields, reduced execution-plan active-run storage, retired
+    runtime-load/session-admission diagnostics helpers,
+    `session_runtime_load_lifecycle`, `workflow_run_internal`, and the old
+    media artifactization conversion boundary.
 
 ### Traceability Links
 

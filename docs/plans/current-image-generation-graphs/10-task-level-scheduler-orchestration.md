@@ -1401,6 +1401,14 @@ keeping the old whole-run launch path alive. Runtime-host dispatch timeouts,
 cancellation, attempt timing, and ledger-backed duration history remain later
 scheduler/runtime-host lifecycle work.
 
+2026-05-24 implementation status: session preflight cache cleanup is complete.
+`WorkflowExecutionSessionPreflightCache` no longer stores capability models or
+technical-fit decisions that no active scheduler path reads. Runtime-facing
+preflight responses still compute technical-fit facts at the preflight API
+boundary; the session cache is now limited to readiness invalidation and
+blocking issue reuse. Tests were updated to verify that cache behavior directly
+instead of using whole-run session execution as a proxy.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:
