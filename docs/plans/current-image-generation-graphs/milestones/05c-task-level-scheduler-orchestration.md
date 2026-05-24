@@ -184,9 +184,13 @@ durable task orchestration path.
   commits success through `complete_active_run_scheduler_task`, rejects runtime
   tasks before node-engine execution, and moves adapter failures to terminal
   failed without storing a successful result. Full session-execution cutover,
-  dependent-task readiness advancement, runtime-host dispatch wiring,
-  cancellation/retry/defer idempotency, and legacy output-demand removal remain
-  open.
+  runtime-host dispatch wiring, cancellation/retry/defer idempotency, and
+  legacy output-demand removal remain open. Dependent non-runtime readiness
+  advancement completed 2026-05-24: the orchestrator now validates
+  materialized active-run task results for dependent non-runtime tasks, leaves
+  missing inputs blocked in `AwaitingInputs`, advances valid text input
+  bindings to `Ready(NonRuntime)`, and maps unavailable or invalid materialized
+  inputs to typed scheduler task-state diagnostics without graph output demand.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider

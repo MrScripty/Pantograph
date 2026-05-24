@@ -18,8 +18,10 @@ use crate::workflow::{
     WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
-    WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResultValue,
-    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
+    WorkflowSchedulerTaskResultValue, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
 };
 
 use super::super::WorkflowExecutionSessionStore;
@@ -570,6 +572,140 @@ async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result(
         .is_empty());
 }
 
+#[test]
+fn orchestrator_advances_dependent_non_runtime_task_when_inputs_materialize() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![
+        text_input_task("prompt", "paint a red cube"),
+        text_output_task(),
+    ]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    store
+        .record_active_run_scheduler_task_result(
+            &session_id,
+            &workflow_run_id,
+            text_result("prompt", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .expect("record prompt result");
+
+    let advanced = orchestrator
+        .advance_awaiting_non_runtime_task_inputs(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            "text-output",
+        )
+        .expect("advance dependent task")
+        .expect("task advanced");
+
+    assert_eq!(
+        advanced.state.kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::Ready
+    );
+    let SchedulerTaskState::Ready { execution_intent } = advanced.state else {
+        panic!("expected ready task state");
+    };
+    assert!(execution_intent.non_runtime_task_intent().is_some());
+}
+
+#[test]
+fn orchestrator_leaves_dependent_non_runtime_task_blocked_without_materialized_input() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![
+        text_input_task("prompt", "paint a red cube"),
+        text_output_task(),
+    ]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+
+    let advanced = orchestrator
+        .advance_awaiting_non_runtime_task_inputs(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            "text-output",
+        )
+        .expect("advance dependent task");
+
+    assert!(advanced.is_none());
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    let record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == "text-output")
+        .expect("text output record");
+    assert_eq!(
+        record.state.kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs
+    );
+}
+
+#[test]
+fn orchestrator_marks_dependent_non_runtime_task_invalid_for_wrong_input_type() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![
+        text_input_task("prompt", "paint a red cube"),
+        text_output_task(),
+    ]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    store
+        .record_active_run_scheduler_task_result(
+            &session_id,
+            &workflow_run_id,
+            bool_result("prompt", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .expect("record prompt result");
+
+    let advanced = orchestrator
+        .advance_awaiting_non_runtime_task_inputs(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            "text-output",
+        )
+        .expect("advance dependent task")
+        .expect("task advanced");
+
+    let SchedulerTaskState::Invalid { diagnostics } = advanced.state else {
+        panic!("expected invalid task state");
+    };
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::InvalidTask
+    );
+}
+
 fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     serde_json::from_str(include_str!(
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -643,6 +779,23 @@ fn text_input_task(task_id: &str, value: &str) -> WorkflowSchedulerTask {
     }
 }
 
+fn text_output_task() -> WorkflowSchedulerTask {
+    WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("text-output").expect("node id"),
+        task_id: SchedulerTaskId::parse("text-output").expect("task id"),
+        node_type: "text-output".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        dependency_task_ids: vec![SchedulerTaskId::parse("prompt").expect("task id")],
+        input_bindings: vec![text_binding("prompt", "text-output")],
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
+        diagnostics: Vec::new(),
+    }
+}
+
 fn text_binding(source_task_id: &str, _target_task_id: &str) -> WorkflowSchedulerTaskInputBinding {
     WorkflowSchedulerTaskInputBinding {
         source_node_id: SchedulerNodeId::parse(source_task_id).expect("source node id"),
@@ -675,6 +828,49 @@ fn begin_active_run_for_task_graph(
         .expect("begin run")
         .expect("dequeued run");
     session_id
+}
+
+fn text_result(
+    task_id: &str,
+    status: WorkflowSchedulerTaskResultStatus,
+) -> WorkflowSchedulerTaskResult {
+    task_result(
+        task_id,
+        status,
+        WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string()),
+    )
+}
+
+fn bool_result(
+    task_id: &str,
+    status: WorkflowSchedulerTaskResultStatus,
+) -> WorkflowSchedulerTaskResult {
+    task_result(
+        task_id,
+        status,
+        WorkflowSchedulerTaskResultValue::Bool(true),
+    )
+}
+
+fn task_result(
+    task_id: &str,
+    status: WorkflowSchedulerTaskResultStatus,
+    value: WorkflowSchedulerTaskResultValue,
+) -> WorkflowSchedulerTaskResult {
+    WorkflowSchedulerTaskResult {
+        schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+        workflow_id: scheduler_workflow_id().as_str().to_string(),
+        workflow_run_id: scheduler_workflow_run_id().as_str().to_string(),
+        node_id: task_id.to_string(),
+        task_id: task_id.to_string(),
+        status,
+        outputs: vec![WorkflowSchedulerTaskResultOutput {
+            port_id: "text".to_string(),
+            value,
+        }],
+        diagnostics: Vec::new(),
+        terminal_metadata: None,
+    }
 }
 
 fn scheduler_workflow_id() -> SchedulerWorkflowId {

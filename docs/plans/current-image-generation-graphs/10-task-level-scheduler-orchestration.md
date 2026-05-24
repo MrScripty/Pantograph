@@ -798,7 +798,12 @@ Implementation order for the next slice:
    node-engine output demand or `PlannedInferenceExecutionHost` and instead
    produce typed scheduler diagnostics. Completed 2026-05-24 for the
    non-runtime entrypoint boundary.
-11. Update README and plan notes, then run focused node-engine and
+11. Add dependent non-runtime readiness advancement from `AwaitingInputs`.
+   Completed 2026-05-24 for materialized active-run task results: missing
+   upstream input remains blocked, valid text input advances to
+   `Ready(NonRuntime)`, and wrong-type or unavailable upstream values become
+   typed scheduler diagnostics without calling graph output demand.
+12. Update README and plan notes, then run focused node-engine and
    workflow-service checks. Completed 2026-05-24 for the ready non-runtime
    entrypoint slice.
 

@@ -191,6 +191,11 @@ mutation calls, and commits success through the active-run atomic completion
 operation. Runtime inference tasks are rejected before node-engine execution,
 and adapter failures move the task to terminal failed without storing a
 successful result.
+Dependent non-runtime readiness advancement is also scheduler-owned. The
+orchestrator validates active-run task bindings against materialized scheduler
+task results and moves `AwaitingInputs` tasks only to ready, input-unavailable,
+or invalid scheduler states; missing upstream results stay blocked without
+calling graph output demand or passing raw graph data to node-engine.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

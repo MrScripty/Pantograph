@@ -10578,6 +10578,42 @@ Worker rules:
     ready, wire runtime inference dispatch through the runtime-host handoff
     port, and remove the old output-demand launch path rather than preserving
     it as a compatibility branch.
+- 2026-05-24 Milestone 5c dependent non-runtime readiness advancement slice
+  completed:
+  - Smallest useful vertical slice: advance one active-run dependent
+    non-runtime scheduler task from `AwaitingInputs` after its scheduler-owned
+    materialized inputs validate.
+  - Allowed write set: `scheduler/task_orchestrator.rs`,
+    `scheduler/task_orchestrator_tests.rs`, workflow-service README,
+    Milestone 5c plan notes, task-level orchestration plan notes, and this
+    execution log. Existing unrelated Pumas proposal Markdown changes remain
+    ignored.
+  - Implementation notes: added
+    `WorkflowSchedulerTaskOrchestrator::advance_awaiting_non_runtime_task_inputs`.
+    The method reads active-run task graph/state, rejects non-non-runtime
+    tasks, requires current `AwaitingInputs`, validates typed materialized
+    scheduler task results, leaves missing upstream input blocked, advances
+    valid text bindings to `Ready(NonRuntime)`, and maps unavailable or invalid
+    upstream values to typed scheduler task-state diagnostics.
+  - No-fallback/no-legacy confirmation: the slice does not call node-engine
+    output demand, `workflow_run_internal`, `PlannedInferenceExecutionHost`, or
+    `execute_puma_lib`; it consumes active-run task graph bindings and stored
+    `WorkflowSchedulerTaskResult` values only.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    orchestrator_advances_dependent_non_runtime_task --lib`; `cargo test -p
+    pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+    test -p pantograph-workflow-service workflow::non_runtime_task_adapter
+    --lib`; `cargo test -p pantograph-workflow-service scheduler::store
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and targeted forbidden-path
+    search over the orchestrator and adapter.
+  - Remaining follow-up: connect session execution to the scheduler-task
+    entrypoint/readiness loop, wire runtime inference dispatch through the
+    runtime-host handoff port, add cancellation/retry/defer idempotency, and
+    remove the old output-demand launch path rather than preserving it as a
+    compatibility branch.
 
 ### Traceability Links
 
