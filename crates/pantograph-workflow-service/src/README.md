@@ -186,11 +186,11 @@ continues. Full task progression, runtime-host dispatch lifecycle, and old
 node-engine output-demand launch removal remain staged Milestone 5c work.
 The first scheduler-task execution entrypoint is intentionally narrow: it
 executes only active-run tasks already in ready non-runtime node-engine state,
-transitions them through running, awaits the non-runtime adapter outside store
-mutation calls, and commits success through the active-run atomic completion
-operation. Runtime inference tasks are rejected before node-engine execution,
-and adapter failures move the task to terminal failed without storing a
-successful result.
+transitions them through running under the active-run store lock, returns a
+started task payload that can be executed after the lock is dropped, and then
+commits success or failure through a fresh store mutation. Runtime inference
+tasks are rejected before node-engine execution, and adapter failures move the
+task to terminal failed without storing a successful result.
 Dependent non-runtime readiness advancement is also scheduler-owned. The
 orchestrator validates active-run task bindings against materialized scheduler
 task results and moves `AwaitingInputs` tasks only to ready, input-unavailable,

@@ -793,7 +793,10 @@ Implementation order for the next slice:
    successful "persist result" and "complete task" paths. Completed
    2026-05-24.
 9. Wire the entrypoint to execute a simple allowlisted non-runtime task and
-   persist its `WorkflowSchedulerTaskResult`. Completed 2026-05-24.
+   persist its `WorkflowSchedulerTaskResult`. Completed 2026-05-24, then
+   refined into start/execute/complete/fail calls so production session
+   execution can drop the active-run store lock before awaiting node-engine
+   work.
 10. Add a negative test proving runtime inference tasks do not call
    node-engine output demand or `PlannedInferenceExecutionHost` and instead
    produce typed scheduler diagnostics. Completed 2026-05-24 for the

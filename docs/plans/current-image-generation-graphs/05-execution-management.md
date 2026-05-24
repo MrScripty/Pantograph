@@ -10614,6 +10614,44 @@ Worker rules:
     runtime-host handoff port, add cancellation/retry/defer idempotency, and
     remove the old output-demand launch path rather than preserving it as a
     compatibility branch.
+- 2026-05-24 Milestone 5c store-lock-safe non-runtime entrypoint split
+  completed:
+  - Smallest useful vertical slice: replace the single async non-runtime
+    execution helper that required `&mut WorkflowExecutionSessionStore` across
+    an await with production-safe start/execute/complete/fail operations.
+  - Allowed write set: `scheduler/task_orchestrator.rs`,
+    `scheduler/task_orchestrator_tests.rs`, workflow-service README,
+    Milestone 5c plan notes, task-level orchestration plan notes, and this
+    execution log. Existing unrelated Pumas proposal Markdown changes remain
+    ignored.
+  - Implementation notes: added `StartedNonRuntimeTaskExecution` and split
+    ready non-runtime task progression into `start_ready_non_runtime_task`,
+    `execute_started_non_runtime_task`,
+    `complete_started_non_runtime_task`, and
+    `fail_started_non_runtime_task`. Start/complete/fail are synchronous store
+    mutation boundaries; execute awaits only the non-runtime adapter and holds
+    no store reference.
+  - No-fallback/no-legacy confirmation: the previous async helper was removed
+    rather than preserved as a compatibility path; runtime inference still
+    fails closed before node-engine; and the split continues to avoid
+    output-node demand, `workflow_run_internal`, `PlannedInferenceExecutionHost`,
+    and `execute_puma_lib`.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    orchestrator_executes_ready_non_runtime_task --lib`; `cargo test -p
+    pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+    test -p pantograph-workflow-service workflow::non_runtime_task_adapter
+    --lib`; `cargo test -p pantograph-workflow-service scheduler::store
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and targeted forbidden-path
+    search over the orchestrator and adapter.
+  - Remaining follow-up: wire `run_workflow_execution_session` to consume the
+    split scheduler-task loop, remove the scoped staging `dead_code`
+    allowances, wire runtime inference dispatch through the runtime-host
+    handoff port, add cancellation/retry/defer idempotency, and remove the old
+    output-demand launch path rather than preserving it as a compatibility
+    branch.
 
 ### Traceability Links
 

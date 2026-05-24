@@ -451,10 +451,37 @@ async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() 
         )
         .expect("initialize active run task state");
 
+    let started = orchestrator
+        .start_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "prompt")
+        .expect("start ready non-runtime task");
+    assert_eq!(
+        store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("active run task state")
+            .expect("stored task state")
+            .1[0]
+            .state
+            .kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::Running
+    );
+
     let result = orchestrator
-        .execute_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "prompt")
+        .execute_started_non_runtime_task(&started)
         .await
-        .expect("execute ready non-runtime task");
+        .expect("execute started non-runtime task");
+    let completed = orchestrator
+        .complete_started_non_runtime_task(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &started,
+            result.clone(),
+        )
+        .expect("complete started non-runtime task");
+    assert_eq!(
+        completed.state.kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::Completed
+    );
 
     assert_eq!(result.task_id, "prompt");
     assert_eq!(
@@ -495,8 +522,7 @@ async fn orchestrator_rejects_runtime_task_before_non_runtime_adapter() {
         .expect("initialize active run task state");
 
     let error = orchestrator
-        .execute_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
-        .await
+        .start_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
         .expect_err("runtime task should be rejected");
 
     let WorkflowSchedulerTaskOrchestratorError::WorkflowService(error) = error else {
@@ -546,15 +572,26 @@ async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result(
         )
         .expect("initialize active run task state");
 
+    let started = orchestrator
+        .start_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "text-output")
+        .expect("start ready non-runtime task");
     let error = orchestrator
-        .execute_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "text-output")
+        .execute_started_non_runtime_task(&started)
         .await
         .expect_err("missing materialized input should fail");
 
-    assert!(matches!(
-        error,
-        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(_)
-    ));
+    let WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(adapter_error) = error else {
+        panic!("expected non-runtime adapter error");
+    };
+    orchestrator
+        .fail_started_non_runtime_task(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &started,
+            &adapter_error,
+        )
+        .expect("fail started non-runtime task");
     let (_stored_graph, records) = store
         .active_run_scheduler_task_state(&session_id, &workflow_run_id)
         .expect("active run task state")

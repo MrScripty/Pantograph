@@ -191,6 +191,13 @@ durable task orchestration path.
   missing inputs blocked in `AwaitingInputs`, advances valid text input
   bindings to `Ready(NonRuntime)`, and maps unavailable or invalid materialized
   inputs to typed scheduler task-state diagnostics without graph output demand.
+  Store-lock-safe non-runtime entrypoint split completed 2026-05-24: the
+  previous single async helper was replaced by start/execute/complete/fail
+  methods so production can transition to running and read materialized inputs
+  under a store lock, drop the lock before awaiting node-engine work, then
+  complete or fail the running task under a new store lock. The scoped
+  `dead_code` allowances on this staging API must be removed when
+  `run_workflow_execution_session` consumes the split calls.
 - [x] Remove stale `puma-lib.model_path` compatibility surfaces before they can
   conflict with scheduler-task execution. Update workflow-service graph
   registry tests to assert the canonical `pumas_model_ref` options-provider

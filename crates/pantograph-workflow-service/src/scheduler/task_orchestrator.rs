@@ -33,6 +33,15 @@ pub(crate) struct WorkflowSchedulerTaskOrchestrator {
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
 }
 
+#[derive(Debug, Clone)]
+#[must_use]
+#[allow(dead_code)]
+pub(crate) struct StartedNonRuntimeTaskExecution {
+    task: WorkflowSchedulerTask,
+    materialized_results: Vec<WorkflowSchedulerTaskResult>,
+    running_record: SchedulerTaskStateRecord,
+}
+
 impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) fn new(runtime_host_dispatcher: SchedulerRuntimeHostDispatcher) -> Self {
         Self {
@@ -95,13 +104,13 @@ impl WorkflowSchedulerTaskOrchestrator {
     }
 
     #[allow(dead_code)]
-    pub(crate) async fn execute_ready_non_runtime_task(
+    pub(crate) fn start_ready_non_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
         session_id: &str,
         workflow_run_id: &str,
         task_id: &str,
-    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<StartedNonRuntimeTaskExecution, WorkflowSchedulerTaskOrchestratorError> {
         let (task_graph, records) = store
             .active_run_scheduler_task_state(session_id, workflow_run_id)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
@@ -160,34 +169,65 @@ impl WorkflowSchedulerTaskOrchestrator {
         let materialized_results = store
             .active_run_scheduler_task_results(session_id, workflow_run_id)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
-        let result = match execute_non_runtime_scheduler_task(task, &materialized_results).await {
-            Ok(result) => result,
-            Err(error) => {
-                let failure_transition = terminal_failure_transition_from_running(
-                    &running_record,
-                    non_runtime_adapter_failure_diagnostic(&error),
-                )?;
-                let _ = store
-                    .apply_active_run_scheduler_task_transition(
-                        session_id,
-                        workflow_run_id,
-                        failure_transition,
-                    )
-                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
-                return Err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(error));
-            }
-        };
+        Ok(StartedNonRuntimeTaskExecution {
+            task: task.clone(),
+            materialized_results,
+            running_record,
+        })
+    }
 
-        let completion_transition = completion_transition_from_running(&running_record)?;
-        let _ = store
+    #[allow(dead_code)]
+    pub(crate) async fn execute_started_non_runtime_task(
+        &self,
+        started: &StartedNonRuntimeTaskExecution,
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        execute_non_runtime_scheduler_task(&started.task, &started.materialized_results)
+            .await
+            .map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn complete_started_non_runtime_task(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedNonRuntimeTaskExecution,
+        result: WorkflowSchedulerTaskResult,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let completion_transition = completion_transition_from_running(&started.running_record)?;
+        store
             .complete_active_run_scheduler_task(
                 session_id,
                 workflow_run_id,
                 completion_transition,
-                result.clone(),
+                result,
             )
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
-        Ok(result)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn fail_started_non_runtime_task(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedNonRuntimeTaskExecution,
+        error: &WorkflowSchedulerNonRuntimeTaskAdapterError,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let failure_transition = terminal_failure_transition_from_running(
+            &started.running_record,
+            non_runtime_adapter_failure_diagnostic(error),
+        )?;
+        store
+            .apply_active_run_scheduler_task_transition(
+                session_id,
+                workflow_run_id,
+                failure_transition,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
     }
 
     #[allow(dead_code)]
