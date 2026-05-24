@@ -3,17 +3,19 @@ use pantograph_runtime_host_contracts::{
 };
 use pantograph_scheduler::{
     SchedulerContractError, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
-    SchedulerRuntimeHandoff, SchedulerTaskExecutionIntent, SchedulerTaskState,
-    SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
-    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
-    SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
+    SchedulerRuntimeHandoff, SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind,
+    SchedulerTaskExecutionIntent, SchedulerTaskState, SchedulerTaskStateDiagnostic,
+    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
+    SchedulerTaskStateRecord, SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
     SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 use thiserror::Error;
 
 use crate::workflow::{
-    execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerTask,
+    execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
+    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
+    WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
@@ -101,6 +103,68 @@ impl WorkflowSchedulerTaskOrchestrator {
         store
             .set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn materialize_external_inputs_for_active_run(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        inputs: &[WorkflowPortBinding],
+    ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let results = materialize_external_workflow_inputs(&task_graph, inputs)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::ExternalInputMaterialization)?;
+
+        let mut completed_records = Vec::with_capacity(results.len());
+        for result in results {
+            let task = task_graph
+                .tasks
+                .iter()
+                .find(|task| task.task_id.as_str() == result.task_id)
+                .ok_or_else(|| {
+                    WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler source-input task '{}' is not in active workflow run '{}'",
+                            result.task_id, workflow_run_id
+                        )),
+                    )
+                })?;
+            let record = records
+                .iter()
+                .find(|record| record.task_id.as_str() == result.task_id)
+                .ok_or_else(|| {
+                    WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler source-input task '{}' has no active task-state record",
+                            result.task_id
+                        )),
+                    )
+                })?;
+            let transition = source_input_materialization_transition(record, task)?;
+            let completed = store
+                .materialize_active_run_source_input_task(
+                    session_id,
+                    workflow_run_id,
+                    transition,
+                    result,
+                )
+                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                .and_then(applied_task_state_record)?;
+            completed_records.push(completed);
+        }
+        Ok(completed_records)
     }
 
     #[allow(dead_code)]
@@ -446,6 +510,8 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     SchedulerContract(SchedulerContractError),
     #[error("workflow service operation failed")]
     WorkflowService(WorkflowServiceError),
+    #[error("external workflow input materialization failed")]
+    ExternalInputMaterialization(WorkflowExternalInputMaterializationError),
     #[error("non-runtime scheduler task execution failed")]
     NonRuntimeTaskAdapter(WorkflowSchedulerNonRuntimeTaskAdapterError),
 }
@@ -481,6 +547,20 @@ fn running_transition_from_ready(
         "running",
         SchedulerTaskStateKind::Ready,
         SchedulerTaskState::Running { execution_intent },
+    )
+}
+
+fn source_input_materialization_transition(
+    record: &SchedulerTaskStateRecord,
+    task: &WorkflowSchedulerTask,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    task_state_transition(
+        record,
+        "source-input-materialized",
+        SchedulerTaskStateKind::AwaitingInputs,
+        SchedulerTaskState::Completed {
+            execution_intent: source_input_execution_intent(task)?,
+        },
     )
 }
 
@@ -600,6 +680,40 @@ fn applied_task_state_record(
             ))
         }
     }
+}
+
+fn source_input_execution_intent(
+    task: &WorkflowSchedulerTask,
+) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
+    Ok(SchedulerTaskExecutionIntent::SourceInput {
+        task_intent: SchedulerSourceInputTaskIntent {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: task.workflow_id.clone(),
+            workflow_run_id: task.workflow_run_id.clone(),
+            node_id: task.node_id.clone(),
+            task_id: task.task_id.clone(),
+            task_kind: source_input_task_kind(task)?,
+        },
+    })
+}
+
+fn source_input_task_kind(
+    task: &WorkflowSchedulerTask,
+) -> Result<SchedulerSourceInputTaskKind, WorkflowSchedulerTaskOrchestratorError> {
+    let Some(template) = task.source_input_task_template.as_ref() else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler source-input task '{}' has no typed source-input template",
+                task.task_id.as_str()
+            )),
+        ));
+    };
+    let task_kind = match template {
+        WorkflowSchedulerSourceInputTemplate::Text { .. } => "text-input",
+        WorkflowSchedulerSourceInputTemplate::Boolean { .. } => "boolean-input",
+    };
+    SchedulerSourceInputTaskKind::parse(task_kind)
+        .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)
 }
 
 fn non_runtime_adapter_failure_diagnostic(

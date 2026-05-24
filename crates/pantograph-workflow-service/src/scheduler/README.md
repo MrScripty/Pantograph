@@ -91,6 +91,10 @@ with an atomic result-plus-task-state operation from `AwaitingInputs` to
 source-input template, source-input transition intent, and task-result
 correlation; it does not fake a node-engine running state or execute source
 inputs through runtime/non-runtime adapters.
+The scheduler task orchestrator is the only caller that converts run-request
+inputs into those source-input materialization transitions. Session execution
+must consume that orchestrator method instead of duplicating source-input
+transition construction or writing source values directly into task results.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.

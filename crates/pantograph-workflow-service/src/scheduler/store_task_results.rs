@@ -160,7 +160,6 @@ impl WorkflowExecutionSessionStore {
 
     /// Atomically materialize a request-provided source input as a completed
     /// scheduler task result and completed source-input task state.
-    #[allow(dead_code)]
     pub(crate) fn materialize_active_run_source_input_task(
         &mut self,
         session_id: &str,

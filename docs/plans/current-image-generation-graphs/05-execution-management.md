@@ -10748,6 +10748,38 @@ Worker rules:
     `materialize_external_workflow_inputs`, call the new store materialization
     operation for each source-input result, advance dependent task readiness,
     and remove staged dead-code allowances once the helpers are wired.
+- 2026-05-24 Milestone 5c orchestrator source-input materialization slice
+  completed:
+  - Smallest useful vertical slice: add the orchestrator-owned source-input
+    materialization call that consumes the external-input converter and atomic
+    active-run source-input store boundary.
+  - Allowed write set: workflow-service scheduler orchestrator/tests/README,
+    workflow-service facade exports, Milestone 5c/task-level orchestration
+    plan notes, and this execution log. Existing unrelated Pumas proposal
+    Markdown changes remain ignored.
+  - Implementation notes: added
+    `WorkflowSchedulerTaskOrchestrator::materialize_external_inputs_for_active_run`
+    to read active-run scheduler task graph/state, convert request
+    `WorkflowPortBinding` inputs to typed source-input task results, build
+    source-input task-state materialization transitions, and commit through
+    `materialize_active_run_source_input_task`.
+  - No-fallback/no-legacy confirmation: source inputs still bypass
+    node-engine, runtime dispatch, output demand, and `workflow_run_internal`;
+    graph node data is not mutated and source values are not stored outside
+    the atomic source-input result/state operation.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo test -p
+    pantograph-workflow-service workflow::external_input_materialization --lib`;
+    `cargo test -p pantograph-workflow-service
+    scheduler::store::store_task_results --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `git diff --check`.
+  - Remaining follow-up: wire the dedicated session runner to call the new
+    orchestrator method, advance dependent readiness, execute ready
+    non-runtime tasks, project requested outputs from scheduler task results,
+    and remove remaining orchestrator staging `dead_code` allowances.
 
 ### Traceability Links
 

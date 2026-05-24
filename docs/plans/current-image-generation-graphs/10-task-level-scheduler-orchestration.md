@@ -1269,9 +1269,25 @@ source-input template, validates completed task-result correlation, applies the
 source-input transition, and stores the completed task result and completed
 task-state record in one mutation. This removes the need to fake a node-engine
 `Running` state for request inputs. Remaining session cutover work is runner
-integration: materialize request inputs through this store operation, advance
-dependent tasks, project completed task results to requested outputs, and
-remove the staged dead-code allowances when the runner consumes the helpers.
+integration: call the orchestrator source-input materialization method,
+advance dependent tasks, project completed task results to requested outputs,
+and remove the remaining staged dead-code allowances when the runner consumes
+the task-loop helpers.
+
+2026-05-24 implementation status: the scheduler task orchestrator now consumes
+the external-input converter and the atomic source-input store operation
+through `materialize_external_inputs_for_active_run`. The method reads the
+active immutable task graph and task-state records, converts request
+`WorkflowPortBinding` values into typed task results, builds source-input
+`AwaitingInputs -> Completed` transitions with `SchedulerSourceInputTaskIntent`,
+and records each result/state pair through the store-owned atomic boundary.
+This removes source-input transition construction from the future session
+runner and removes the `external_input_materialization` module and
+source-input store operation from the staged dead-code set. Remaining session
+cutover work is to call this orchestrator method from the dedicated runner,
+advance dependent task readiness, execute ready non-runtime tasks, project
+completed scheduler results to requested outputs, and remove the orchestrator
+staging allowances after production consumption.
 
 ## Task Result Materialization Plan
 

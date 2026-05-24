@@ -30,7 +30,6 @@ mod execution_plan;
 mod execution_plan_admission;
 mod execution_plan_model_ref;
 mod execution_plan_selected_facts;
-#[allow(dead_code)]
 mod external_input_materialization;
 mod graph_api;
 mod host;
@@ -105,6 +104,9 @@ pub use self::execution_plan_model_ref::{
 pub use self::execution_plan_selected_facts::{
     WorkflowExecutionPlanBackendKey, WorkflowExecutionPlanDeviceId, WorkflowExecutionPlanRuntimeId,
     WorkflowExecutionPlanRuntimeVariantId, WorkflowExecutionPlanSelectedFactError,
+};
+pub(crate) use self::external_input_materialization::{
+    materialize_external_workflow_inputs, WorkflowExternalInputMaterializationError,
 };
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,

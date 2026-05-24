@@ -1037,3 +1037,27 @@ durable task orchestration path.
   `materialize_external_workflow_inputs`, complete each source-input task via
   this store operation, advance dependents, and remove the staged dead-code
   allowances after consumption.
+- 2026-05-24 orchestrator source-input materialization slice completed.
+  Smallest useful vertical slice: make `WorkflowSchedulerTaskOrchestrator`
+  consume the typed external-input materialization helper and atomic
+  source-input active-run store operation through one orchestrator method.
+  Allowed write set: workflow-service scheduler orchestrator/tests/README,
+  workflow-service module exports, Milestone 5c/task-level orchestration plan
+  notes, and this execution log. Existing unrelated Pumas proposal Markdown
+  changes remain ignored. No-fallback/no-legacy confirmation: the slice does
+  not execute source inputs through node-engine, runtime dispatch, output
+  demand, or `workflow_run_internal`; it does not mutate graph node data or
+  write source values directly into store maps outside the atomic source-input
+  boundary. Verification passed: `cargo fmt -p pantograph-workflow-service
+  -- --check`; `cargo test -p pantograph-workflow-service
+  scheduler::task_orchestrator --lib`; `cargo test -p
+  pantograph-workflow-service workflow::external_input_materialization --lib`;
+  `cargo test -p pantograph-workflow-service
+  scheduler::store::store_task_results --lib`; `cargo check -p
+  pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+  --no-default-features`; `cargo check -p pantograph-workflow-service
+  --all-features`; and `git diff --check`. Remaining follow-up: the dedicated
+  session runner must call the new orchestrator method, advance dependent task
+  readiness, execute ready non-runtime tasks, project scheduler task results to
+  requested outputs, and remove the remaining orchestrator staging `dead_code`
+  allowances.

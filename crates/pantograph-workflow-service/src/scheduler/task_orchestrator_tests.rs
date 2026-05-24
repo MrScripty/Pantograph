@@ -12,11 +12,12 @@ use pantograph_scheduler::{
     SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerWorkflowId,
     SchedulerWorkflowRunId,
 };
+use serde_json::json;
 
 use crate::workflow::{
-    WorkflowExecutionSessionRunRequest, WorkflowSchedulerNonRuntimeTaskTemplate,
-    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowExecutionSessionRunRequest, WorkflowPortBinding,
+    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
@@ -684,6 +685,109 @@ fn orchestrator_advances_dependent_non_runtime_task_when_inputs_materialize() {
         panic!("expected ready task state");
     };
     assert!(execution_intent.non_runtime_task_intent().is_some());
+}
+
+#[test]
+fn orchestrator_materializes_external_source_input_through_task_state() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![
+        text_input_task("prompt", "paint a red cube"),
+        text_output_task(),
+    ]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+
+    let completed = orchestrator
+        .materialize_external_inputs_for_active_run(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &[WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: json!("paint a red cube"),
+            }],
+        )
+        .expect("materialize source input");
+
+    assert_eq!(completed.len(), 1);
+    assert_eq!(
+        completed[0].state.kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::Completed
+    );
+    let SchedulerTaskState::Completed { execution_intent } = &completed[0].state else {
+        panic!("expected completed source-input state");
+    };
+    assert!(execution_intent.source_input_task_intent().is_some());
+    assert!(execution_intent.runtime_task_intent().is_none());
+    assert!(execution_intent.non_runtime_task_intent().is_none());
+    let stored_results = store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results");
+    assert_eq!(stored_results.len(), 1);
+    assert_eq!(stored_results[0].task_id, "prompt");
+    assert_eq!(
+        stored_results[0].outputs[0].value,
+        WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string())
+    );
+}
+
+#[test]
+fn orchestrator_rejects_invalid_external_source_input_without_partial_store() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![
+        text_input_task("prompt", "paint a red cube"),
+        text_output_task(),
+    ]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+
+    let error = orchestrator
+        .materialize_external_inputs_for_active_run(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &[WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: json!(true),
+            }],
+        )
+        .expect_err("wrong source input type should fail");
+
+    assert!(matches!(
+        error,
+        WorkflowSchedulerTaskOrchestratorError::ExternalInputMaterialization(_)
+    ));
+    assert!(store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results")
+        .is_empty());
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    let prompt_record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == "prompt")
+        .expect("prompt record");
+    assert_eq!(
+        prompt_record.state.kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs
+    );
 }
 
 #[test]
