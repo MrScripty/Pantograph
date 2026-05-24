@@ -10849,6 +10849,41 @@ Worker rules:
     dispatch-selected `SchedulerRuntimeHandoff` values and handle
     Pumas-materialization-only/unsupported task-class terminal behavior in the
     scheduler-task session runner.
+- 2026-05-24 Milestone 5c unhandled scheduler task-class fail-closed slice
+  completed:
+  - Smallest useful vertical slice: remove the remaining successful
+    session-runner fallback for Pumas-materialization-only or unsupported task
+    classes.
+  - Allowed write set: workflow-service session execution, scheduler
+    orchestrator and focused tests, Milestone 5c/task-level orchestration plan
+    notes, and this execution log. Existing unrelated Pumas proposal Markdown
+    changes remain ignored.
+  - Implementation notes: session execution now starts the scheduler-task run
+    and terminal-fails unhandled non-completed task classes through the
+    orchestrator instead of entering runtime admission/preflight/load or
+    `workflow_run_internal`. The orchestrator uses scheduler-validated
+    terminal transitions with `SchedulerPolicyError` diagnostics for task
+    classes without a typed execution path.
+  - No-fallback/no-legacy confirmation: the old whole-run session branch is no
+    longer a successful path for scheduler-task runs. This slice does not add
+    compatibility shims or suppress the dead-code warnings exposed by making
+    the old branch unreachable.
+  - Verification passed with expected dead-code warnings from newly retired
+    legacy surfaces: `cargo fmt -p pantograph-workflow-service`; `cargo test
+    -p pantograph-workflow-service
+    scheduler::task_orchestrator::tests::orchestrator_marks_unhandled_task_classes_terminal_failed
+    --lib`; `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo test -p
+    pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib`; `cargo check -p pantograph-workflow-service`; and `git diff
+    --check`.
+  - Discovered issue: making the old session runner unreachable exposes
+    retired runtime-load/session-admission helpers, execution-plan admission,
+    runtime-reservation diagnostic helpers, queue runtime-admission fields,
+    `workflow_run_internal`, and media artifactization helpers as compiler
+    dead-code warnings. Next slice must remove or reconnect these through the
+    canonical scheduler/runtime-host paths rather than adding allow attributes.
 
 ### Traceability Links
 

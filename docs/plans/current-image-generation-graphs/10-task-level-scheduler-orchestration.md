@@ -1310,6 +1310,16 @@ behavior to use runtime-task graphs or new scheduler diagnostics, and remove
 the remaining staged orchestrator `dead_code` allowances when runtime dispatch
 is consumed.
 
+2026-05-24 implementation status: the session runner no longer has a
+successful legacy whole-run branch for Pumas-materialization-only or
+unsupported scheduler task classes. Those classes now terminal-fail through
+scheduler-validated task-state transitions with typed scheduler diagnostics.
+This exposes the next no-legacy cleanup boundary: retired runtime-load
+admission helpers, execution-plan admission helpers, runtime-reservation event
+helpers, queue runtime-admission fields, and unused media artifactization
+helpers now show as dead code and must be deleted or reconnected only through
+canonical scheduler/runtime-host paths.
+
 ## Task Result Materialization Plan
 
 The next implementation target is the option 2 materialization boundary:

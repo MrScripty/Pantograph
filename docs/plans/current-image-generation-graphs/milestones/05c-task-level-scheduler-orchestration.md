@@ -257,6 +257,16 @@ durable task orchestration path.
   longer successful legacy branches; remaining session-runner gaps are
   Pumas-materialization-only or unsupported task classes, plus the actual
   runtime handoff dispatch slice.
+  2026-05-24 implementation status: Pumas-materialization-only and unsupported
+  scheduler task classes now also fail closed through terminal scheduler task
+  diagnostics instead of entering runtime admission/load or
+  `workflow_run_internal`. This removes the remaining successful session-runner
+  fallback. Discovered issue: removing that branch exposes retired private
+  runtime-load/session-admission helpers, execution-plan admission helpers,
+  queue runtime-admission fields, and media artifactization code as compiler
+  dead-code warnings. The next cleanup slice must delete or reconnect those
+  systems through canonical scheduler/runtime-host paths; do not silence the
+  warnings with compatibility allowances.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.

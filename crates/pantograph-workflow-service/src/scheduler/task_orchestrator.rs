@@ -453,6 +453,60 @@ impl WorkflowSchedulerTaskOrchestrator {
         }
         Ok(failed_records)
     }
+
+    pub(crate) fn fail_unhandled_task_classes_for_active_run(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let mut failed_records = Vec::new();
+        for task in &task_graph.tasks {
+            let record = records
+                .iter()
+                .find(|record| record.task_id.as_str() == task.task_id.as_str())
+                .ok_or_else(|| {
+                    WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler task '{}' has no active task-state record",
+                            task.task_id.as_str()
+                        )),
+                    )
+                })?;
+            if matches!(
+                record.state.kind(),
+                SchedulerTaskStateKind::Completed | SchedulerTaskStateKind::TerminalFailed
+            ) {
+                continue;
+            }
+            let transition = unhandled_task_class_transition(record, task.execution_class)?;
+            let failed = store
+                .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
+                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                .and_then(applied_task_state_record)?;
+            failed_records.push(failed);
+        }
+        if failed_records.is_empty() {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "active workflow run '{}' has no unhandled scheduler tasks to fail",
+                    workflow_run_id
+                )),
+            ));
+        }
+        Ok(failed_records)
+    }
 }
 
 fn initial_task_state(
@@ -671,6 +725,30 @@ fn runtime_dispatch_not_wired_transition(
                         .to_string(),
                 hint: Some(
                     "Wire this task through a dispatch-selected SchedulerRuntimeHandoff before executing runtime inference."
+                        .to_string(),
+                ),
+            }],
+        },
+    )
+}
+
+fn unhandled_task_class_transition(
+    record: &SchedulerTaskStateRecord,
+    execution_class: WorkflowSchedulerTaskExecutionClass,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    task_state_transition(
+        record,
+        "unhandled-task-class",
+        record.state.kind(),
+        SchedulerTaskState::TerminalFailed {
+            diagnostics: vec![SchedulerTaskStateDiagnostic {
+                severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+                message: format!(
+                    "scheduler task class '{execution_class:?}' has no execution path in the scheduler-task session runner"
+                ),
+                hint: Some(
+                    "Add a typed scheduler execution path for this task class before running the workflow."
                         .to_string(),
                 ),
             }],

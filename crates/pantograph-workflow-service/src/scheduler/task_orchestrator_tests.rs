@@ -332,6 +332,45 @@ fn orchestrator_initializes_pumas_materialization_as_awaiting_inputs() {
 }
 
 #[test]
+fn orchestrator_marks_unhandled_task_classes_terminal_failed() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_graph = task_graph(vec![WorkflowSchedulerTask {
+        workflow_id: scheduler_workflow_id(),
+        workflow_run_id: scheduler_workflow_run_id(),
+        node_id: SchedulerNodeId::parse("model").expect("node id"),
+        task_id: SchedulerTaskId::parse("model").expect("task id"),
+        node_type: "puma-lib".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::PumasMaterialization,
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: None,
+        schedulable_intent_template: None,
+        non_runtime_task_template: None,
+        source_input_task_template: None,
+        diagnostics: Vec::new(),
+    }]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+
+    let failed = orchestrator
+        .fail_unhandled_task_classes_for_active_run(&mut store, &session_id, &workflow_run_id)
+        .expect("fail unhandled class");
+
+    let SchedulerTaskState::TerminalFailed { diagnostics } = &failed[0].state else {
+        panic!("expected terminal failed task");
+    };
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::SchedulerPolicyError
+    );
+    assert!(diagnostics[0].message.contains("PumasMaterialization"));
+}
+
+#[test]
 fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![WorkflowSchedulerTask {

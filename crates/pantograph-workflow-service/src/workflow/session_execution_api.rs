@@ -39,10 +39,6 @@ use super::diagnostic_errors::{
 };
 use super::io_contract::validate_workflow_io;
 use super::session_io_artifacts::workflow_io_artifact_metadata;
-use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
-use super::session_runtime_load_lifecycle::{
-    WorkflowRuntimeLoadLifecycleContext, WorkflowRuntimeLoadLifecycleEvent,
-};
 use super::validation::{
     validate_bindings, validate_host_output_bindings, validate_output_targets,
     validate_output_targets_against_io, validate_requested_outputs_produced, validate_timeout_ms,
@@ -50,18 +46,17 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    build_workflow_execution_plan_from_admission, project_scheduler_task_results_to_outputs,
-    workflow_scheduler_task_graph, workflow_scheduler_task_run_summary, AttributionRepository,
-    WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink, WorkflowExecutionPlan,
+    project_scheduler_task_results_to_outputs, workflow_scheduler_task_graph,
+    workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
+    WorkflowErrorDiagnosticsLink, WorkflowExecutionPlan,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
-    WorkflowSchedulerDecisionReason, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary,
-    WorkflowService, WorkflowServiceError, WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
+    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
+    WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -349,59 +344,7 @@ impl WorkflowService {
             ))
         })?;
 
-        let mut runtime_admission_delay_recorded = false;
         let queued_run = loop {
-            let session_ready_to_load = {
-                let mut store = self.session_store_guard()?;
-                if scheduler_task_run_summary.is_non_runtime_only()
-                    || scheduler_task_run_summary.has_runtime_inference()
-                    || !store.queued_run_is_admission_candidate(&session_id, &workflow_run_id)?
-                {
-                    None
-                } else {
-                    Some(store.session_summary(&session_id)?)
-                }
-            };
-            if let Some(session) = session_ready_to_load {
-                let retention_hint = if session.keep_alive {
-                    WorkflowExecutionSessionRetentionHint::KeepAlive
-                } else {
-                    WorkflowExecutionSessionRetentionHint::Ephemeral
-                };
-                if !host
-                    .can_load_session_runtime(
-                        &session.session_id,
-                        &session.workflow_id,
-                        session.usage_profile.as_deref(),
-                        retention_hint,
-                    )
-                    .await?
-                {
-                    if let Ok(mut store) = self.session_store.lock() {
-                        let _ = store.set_queue_decision_reason_if_present(
-                            &session_id,
-                            &workflow_run_id,
-                            WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
-                        );
-                    }
-                    if !runtime_admission_delay_recorded {
-                        let delayed_until_ms = scheduler_delay_until_ms(unix_timestamp_ms())?;
-                        self.record_scheduler_delay_event_if_configured(
-                            &session,
-                            run_snapshot.as_ref(),
-                            &workflow_run_id,
-                            &request.workflow_semantic_version,
-                            WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
-                            Some(delayed_until_ms),
-                            Some("runtime admission retry scheduled"),
-                        )?;
-                        runtime_admission_delay_recorded = true;
-                    }
-                    tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
-                    continue;
-                }
-            }
-
             let maybe_queued = {
                 let mut store = self.session_store_guard()?;
                 store.begin_queued_run(&session_id, &workflow_run_id)?
@@ -413,7 +356,6 @@ impl WorkflowService {
         };
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
-        let queued_graph_run_settings = decode_queued_graph_run_settings(run_snapshot.as_ref())?;
         if let Err(error) = self.set_scheduler_task_state_for_admitted_run(
             scheduler_task_graph.clone(),
             initial_scheduler_task_records,
@@ -515,286 +457,14 @@ impl WorkflowService {
             }
             return run_result;
         }
-        let mut reservation_context = scheduler_reservation_context(
-            run_snapshot.as_ref(),
-            &queued_run.required_backends,
-            &queued_run.required_models,
-        )?;
 
-        let preflight_cache = match self
-            .ensure_session_runtime_preflight(
-                host,
-                &session_id,
-                &queued_run.workflow_id,
-                queued_run.queued.override_selection.clone(),
-            )
-            .await
-        {
-            Ok(cache) => cache,
-            Err(error) => {
-                let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
-                    WorkflowDiagnosticErrorRecordRequest::runtime_preflight_failed(
-                        workflow_runtime_model_error_scope(
-                            &session,
-                            run_snapshot.as_ref(),
-                            &workflow_run_id,
-                            &queued_workflow_semantic_version,
-                            &[],
-                            &[],
-                        )?,
-                        &error,
-                    )
-                    .with_source_instance_id("workflow-session-scheduler")
-                    .with_cause("runtime admission preflight failed before model load"),
-                )?;
-                self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
-                let terminal_error = error
-                    .with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
-                let terminal_result = Err(terminal_error);
-                self.record_run_terminal_event_if_configured(
-                    &session,
-                    run_snapshot.as_ref(),
-                    &workflow_run_id,
-                    Some(&queued_workflow_semantic_version),
-                    &terminal_result,
-                )?;
-                return terminal_result;
-            }
-        };
-        let execution_plan = match build_workflow_execution_plan_from_admission(
-            &workflow_run_id,
-            &queued_run.workflow_id,
-            &preflight_cache.capability_models,
-            preflight_cache.technical_fit_decision.as_ref(),
-        ) {
-            Ok(execution_plan) => execution_plan,
-            Err(error) => {
-                let error = WorkflowServiceError::CapabilityViolation(format!(
-                    "workflow execution-plan production failed: {error}"
-                ));
-                let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
-                    WorkflowDiagnosticErrorRecordRequest::runtime_preflight_failed(
-                        workflow_runtime_model_error_scope(
-                            &session,
-                            run_snapshot.as_ref(),
-                            &workflow_run_id,
-                            &queued_workflow_semantic_version,
-                            &preflight_cache.required_backends,
-                            &preflight_cache.required_models,
-                        )?,
-                        &error,
-                    )
-                    .with_source_instance_id("workflow-session-scheduler")
-                    .with_cause("execution-plan production failed after runtime admission"),
-                )?;
-                self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
-                let terminal_error = error
-                    .with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
-                let terminal_result = Err(terminal_error);
-                self.record_run_terminal_event_if_configured(
-                    &session,
-                    run_snapshot.as_ref(),
-                    &workflow_run_id,
-                    Some(&queued_workflow_semantic_version),
-                    &terminal_result,
-                )?;
-                return terminal_result;
-            }
-        };
-        let execution_plan_summary = execution_plan
-            .as_ref()
-            .map(workflow_execution_plan_diagnostic_summary);
-        if let Some(execution_plan) = execution_plan {
-            let mut store = self.session_store_guard()?;
-            store.set_active_run_execution_plan(&session_id, &workflow_run_id, execution_plan)?;
-        }
-        apply_technical_fit_to_reservation_context(
-            &mut reservation_context,
-            preflight_cache.technical_fit_decision.as_ref(),
-        );
-        self.record_scheduler_run_admitted_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &queued_run,
-            &reservation_context,
-            preflight_cache.technical_fit_decision.as_ref(),
-            execution_plan_summary.as_ref(),
-        )?;
-        self.record_scheduler_reservation_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &workflow_run_id,
-            &queued_workflow_semantic_version,
-            &reservation_context,
-            SchedulerReservationTransition::Created,
-            Some("local runtime slot admitted"),
-        )?;
         self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
-        let required_backends = preflight_cache.required_backends.clone();
-        let required_models = preflight_cache.required_models.clone();
-        let runtime_load_timing_attempt_id = WorkflowTimingAttemptId::generate();
-        let runtime_load_lifecycle_context = WorkflowRuntimeLoadLifecycleContext {
-            session: &session,
-            snapshot: run_snapshot.as_ref(),
-            workflow_run_id: &workflow_run_id,
-            workflow_semantic_version: &queued_workflow_semantic_version,
-            timing_attempt_id: runtime_load_timing_attempt_id.as_str(),
-            selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-            selected_runtime_variant_id: reservation_context.selected_runtime_variant_id.as_deref(),
-            execution_plan_summary: execution_plan_summary.as_ref(),
-            required_backends: &required_backends,
-            required_models: &required_models,
-        };
-
-        let runtime_load_started_at_ms = unix_timestamp_ms();
-        self.record_runtime_load_lifecycle_event_if_configured(
-            runtime_load_lifecycle_context,
-            WorkflowRuntimeLoadLifecycleEvent::Requested,
-        )?;
-        let runtime_load_result = self
-            .ensure_session_runtime_loaded(
-                host,
-                &session_id,
-                Some(WorkflowSessionRuntimeAdmissionDiagnosticContext {
-                    session: &session,
-                    snapshot: run_snapshot.as_ref(),
-                    workflow_run_id: &workflow_run_id,
-                    workflow_semantic_version: &queued_workflow_semantic_version,
-                }),
-            )
-            .await;
-        let runtime_load_duration_ms = workflow_timing_duration_ms(
-            &runtime_load_timing_attempt_id,
-            runtime_load_started_at_ms,
-            unix_timestamp_ms(),
-        )?;
-        let runtime_load_result = match runtime_load_result {
-            Ok(()) => {
-                host.session_runtime_load_proof(&session_id, &session.workflow_id)
-                    .await
-            }
-            Err(error) => Err(error),
-        };
-        match &runtime_load_result {
-            Ok(proof) => {
-                self.record_runtime_load_lifecycle_event_if_configured(
-                    runtime_load_lifecycle_context,
-                    WorkflowRuntimeLoadLifecycleEvent::DependencyResolved {
-                        duration_ms: runtime_load_duration_ms,
-                    },
-                )?;
-                if proof
-                    .as_ref()
-                    .map(|proof| proof.requested_model_active)
-                    .unwrap_or(false)
-                {
-                    self.record_runtime_load_lifecycle_event_if_configured(
-                        runtime_load_lifecycle_context,
-                        WorkflowRuntimeLoadLifecycleEvent::Completed {
-                            duration_ms: runtime_load_duration_ms,
-                        },
-                    )?;
-                }
-            }
-            Err(_) => {}
-        }
-        if let Err(error) = runtime_load_result {
-            let diagnostic_request = workflow_runtime_load_error_record_request(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                &queued_workflow_semantic_version,
-                &required_backends,
-                &required_models,
-                &error,
-            )?;
-            let diagnostic_outcome = match self
-                .record_workflow_diagnostic_error_if_configured(diagnostic_request)
-            {
-                Ok(outcome) => outcome,
-                Err(record_error) => {
-                    self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
-                    let terminal_result =
-                        Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                            workflow_run_id: Some(workflow_run_id.clone()),
-                            diagnostic_event_id: None,
-                            diagnostics_unavailable: Some(record_error.message().to_string()),
-                        }));
-                    let _terminal_record_result = self.record_run_terminal_event_if_configured(
-                        &session,
-                        run_snapshot.as_ref(),
-                        &workflow_run_id,
-                        Some(&queued_workflow_semantic_version),
-                        &terminal_result,
-                    );
-                    let _reservation_record_result = self
-                        .record_scheduler_reservation_event_if_configured(
-                            &session,
-                            run_snapshot.as_ref(),
-                            &workflow_run_id,
-                            &queued_workflow_semantic_version,
-                            &reservation_context,
-                            SchedulerReservationTransition::Released,
-                            Some("runtime load failed after admission"),
-                        );
-                    return terminal_result;
-                }
-            };
-            let canonical_error_event_id = diagnostic_outcome.event_id.as_deref();
-            let error_text = sanitize_diagnostic_error_text(&error.to_string());
-            self.record_runtime_load_lifecycle_event_if_configured(
-                runtime_load_lifecycle_context,
-                WorkflowRuntimeLoadLifecycleEvent::Failed {
-                    duration_ms: runtime_load_duration_ms,
-                    error: error_text.as_str(),
-                    canonical_error_event_id,
-                },
-            )?;
-            self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
-            let terminal_error =
-                error.with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
-            let terminal_result = Err(terminal_error);
-            self.record_run_terminal_event_if_configured(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                Some(&queued_workflow_semantic_version),
-                &terminal_result,
-            )?;
-            self.record_scheduler_reservation_event_if_configured(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                &queued_workflow_semantic_version,
-                &reservation_context,
-                SchedulerReservationTransition::Released,
-                Some("runtime load failed after admission"),
-            )?;
-            return terminal_result;
-        }
-
-        let run_result = self
-            .workflow_run_internal(
-                host,
-                WorkflowRunRequest {
-                    workflow_id: queued_run.workflow_id,
-                    workflow_semantic_version: queued_run.queued.workflow_semantic_version,
-                    inputs: queued_run.queued.inputs,
-                    output_targets: queued_run.queued.output_targets,
-                    override_selection: queued_run.queued.override_selection,
-                    timeout_ms: queued_run.queued.timeout_ms,
-                },
-                Some(preflight_cache),
-                Some(session_id.clone()),
-                Some(queued_run.queued.workflow_run_id.clone()),
-                queued_graph_run_settings,
-            )
-            .await;
-
-        let finish_state = {
-            let mut store = self.session_store_guard()?;
-            store.finish_run(&session_id, &workflow_run_id)?
-        };
+        let run_result = self.fail_unhandled_scheduler_session_classes(
+            &session_id,
+            &workflow_run_id,
+            &scheduler_task_run_summary,
+        );
+        self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
         if let Err(record_error) = self.record_run_terminal_event_if_configured(
             &session,
             run_snapshot.as_ref(),
@@ -811,135 +481,6 @@ impl WorkflowService {
             }
             return Err(record_error);
         }
-        self.record_scheduler_reservation_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &workflow_run_id,
-            &queued_workflow_semantic_version,
-            &reservation_context,
-            SchedulerReservationTransition::Released,
-            Some("workflow run finished"),
-        )?;
-        if let Ok(response) = run_result.as_ref() {
-            self.record_workflow_io_artifact_events_if_configured(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                &queued_workflow_semantic_version,
-                &queued_workflow_inputs,
-                &response.outputs,
-            )?;
-        }
-        if finish_state.unload_runtime {
-            let runtime_unload_timing_attempt_id = WorkflowTimingAttemptId::generate();
-            self.record_scheduler_model_lifecycle_events_if_configured(
-                SchedulerModelLifecycleEventRequest {
-                    session: &session,
-                    snapshot: run_snapshot.as_ref(),
-                    workflow_run_id: &workflow_run_id,
-                    workflow_semantic_version: &queued_workflow_semantic_version,
-                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                    selected_runtime_variant_id: reservation_context
-                        .selected_runtime_variant_id
-                        .as_deref(),
-                    execution_plan_summary: execution_plan_summary.as_ref(),
-                    required_backends: &required_backends,
-                    required_models: &required_models,
-                    transition: SchedulerModelLifecycleTransition::UnloadScheduled,
-                    timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
-                    reason: Some("keep-alive disabled after run completion"),
-                    duration_ms: None,
-                    error: None,
-                    canonical_error_event_id: None,
-                },
-            )?;
-            let runtime_unload_started_at_ms = unix_timestamp_ms();
-            self.record_scheduler_model_lifecycle_events_if_configured(
-                SchedulerModelLifecycleEventRequest {
-                    session: &session,
-                    snapshot: run_snapshot.as_ref(),
-                    workflow_run_id: &workflow_run_id,
-                    workflow_semantic_version: &queued_workflow_semantic_version,
-                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                    selected_runtime_variant_id: reservation_context
-                        .selected_runtime_variant_id
-                        .as_deref(),
-                    execution_plan_summary: execution_plan_summary.as_ref(),
-                    required_backends: &required_backends,
-                    required_models: &required_models,
-                    transition: SchedulerModelLifecycleTransition::UnloadStarted,
-                    timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
-                    reason: Some("keep-alive disabled after run completion"),
-                    duration_ms: None,
-                    error: None,
-                    canonical_error_event_id: None,
-                },
-            )?;
-            let runtime_unload_result = host
-                .unload_session_runtime(
-                    &session_id,
-                    &finish_state.workflow_id,
-                    WorkflowExecutionSessionUnloadReason::KeepAliveDisabled,
-                )
-                .await;
-            let runtime_unload_duration_ms = workflow_timing_duration_ms(
-                &runtime_unload_timing_attempt_id,
-                runtime_unload_started_at_ms,
-                unix_timestamp_ms(),
-            )?;
-            match &runtime_unload_result {
-                Ok(()) => self.record_scheduler_model_lifecycle_events_if_configured(
-                    SchedulerModelLifecycleEventRequest {
-                        session: &session,
-                        snapshot: run_snapshot.as_ref(),
-                        workflow_run_id: &workflow_run_id,
-                        workflow_semantic_version: &queued_workflow_semantic_version,
-                        selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                        selected_runtime_variant_id: reservation_context
-                            .selected_runtime_variant_id
-                            .as_deref(),
-                        execution_plan_summary: execution_plan_summary.as_ref(),
-                        required_backends: &required_backends,
-                        required_models: &required_models,
-                        transition: SchedulerModelLifecycleTransition::UnloadCompleted,
-                        timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
-                        reason: Some("keep-alive disabled after run completion"),
-                        duration_ms: Some(runtime_unload_duration_ms),
-                        error: None,
-                        canonical_error_event_id: None,
-                    },
-                )?,
-                Err(error) => {
-                    let error_text = sanitize_diagnostic_error_text(&error.to_string());
-                    let _diagnostic_result = self
-                        .record_scheduler_model_lifecycle_events_if_configured(
-                            SchedulerModelLifecycleEventRequest {
-                                session: &session,
-                                snapshot: run_snapshot.as_ref(),
-                                workflow_run_id: &workflow_run_id,
-                                workflow_semantic_version: &queued_workflow_semantic_version,
-                                selected_runtime_id: reservation_context
-                                    .selected_runtime_id
-                                    .as_deref(),
-                                selected_runtime_variant_id: reservation_context
-                                    .selected_runtime_variant_id
-                                    .as_deref(),
-                                execution_plan_summary: execution_plan_summary.as_ref(),
-                                required_backends: &required_backends,
-                                required_models: &required_models,
-                                transition: SchedulerModelLifecycleTransition::UnloadFailed,
-                                timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
-                                reason: Some("keep-alive disabled after run completion"),
-                                duration_ms: Some(runtime_unload_duration_ms),
-                                error: Some(error_text.as_str()),
-                                canonical_error_event_id: None,
-                            },
-                        );
-                }
-            }
-            runtime_unload_result?;
-        }
-
         run_result
     }
 
@@ -1185,6 +726,30 @@ impl WorkflowService {
         Err(WorkflowServiceError::CapabilityViolation(format!(
             "runtime scheduler dispatch is not wired for {count} runtime inference task(s); runtime tasks must execute only through dispatch-selected scheduler runtime-host handoff",
             count = summary.runtime_inference_tasks
+        )))
+    }
+
+    fn fail_unhandled_scheduler_session_classes(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        summary: &WorkflowSchedulerTaskRunSummary,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        {
+            let mut store = self.session_store_guard()?;
+            self.scheduler_task_orchestrator
+                .fail_unhandled_task_classes_for_active_run(&mut store, session_id, workflow_run_id)
+                .map_err(|error| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler unhandled task-class fail-closed transition failed: {error}"
+                    ))
+                })?;
+        }
+        Err(WorkflowServiceError::CapabilityViolation(format!(
+            "scheduler task session runner has no execution path for pumas_materialization={pumas}, unsupported={unsupported}, invalid_task_states={invalid}; add a typed scheduler execution path before running this graph",
+            pumas = summary.pumas_materialization_tasks,
+            unsupported = summary.unsupported_tasks,
+            invalid = summary.invalid_task_states
         )))
     }
 
