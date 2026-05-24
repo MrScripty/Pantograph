@@ -35,3 +35,4 @@ pub(crate) use store::{
     unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionPreflightCache,
     WorkflowExecutionSessionStore, WORKFLOW_SESSION_QUEUE_POLL_MS,
 };
+pub(crate) use task_orchestrator::WorkflowSchedulerTaskOrchestrator;

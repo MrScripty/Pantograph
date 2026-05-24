@@ -175,6 +175,15 @@ contracts. It preserves graph dependency bindings and canonical scheduler
 identifier parsing, emits typed projection diagnostics for missing canonical
 inference facts, and never treats legacy `model_path` or `model_ref` fields as
 runtime identity.
+Workflow scheduler task orchestration is a service-owned composition boundary.
+`WorkflowService` owns a `WorkflowSchedulerTaskOrchestrator`, exposes an
+explicit runtime-host execution port configuration hook, and installs a
+typed-unavailable runtime-host port by default so production wiring fails
+closed until the embedded runtime supplies the shared port. Session execution
+now initializes active-run scheduler task state from the immutable task graph
+after queue admission and before the current whole-run execution path
+continues. Full task progression, runtime-host dispatch lifecycle, and old
+node-engine output-demand launch removal remain staged Milestone 5c work.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

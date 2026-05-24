@@ -27,6 +27,7 @@ pub(in crate::workflow::tests) struct BlockingRunHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
     pub(in crate::workflow::tests) started_runs: Arc<AtomicUsize>,
     pub(in crate::workflow::tests) first_run_started: Arc<Notify>,
+    pub(in crate::workflow::tests) first_run_released: Arc<AtomicBool>,
     pub(in crate::workflow::tests) release_first_run: Arc<Notify>,
 }
 
@@ -36,18 +37,19 @@ impl BlockingRunHost {
             capabilities: MockWorkflowHost::new(8, 1024).capabilities,
             started_runs: Arc::new(AtomicUsize::new(0)),
             first_run_started: Arc::new(Notify::new()),
+            first_run_released: Arc::new(AtomicBool::new(false)),
             release_first_run: Arc::new(Notify::new()),
         }
     }
 
     pub(in crate::workflow::tests) async fn wait_for_first_run_started(&self) {
-        if self.started_runs.load(Ordering::SeqCst) > 0 {
-            return;
+        while self.started_runs.load(Ordering::SeqCst) == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        self.first_run_started.notified().await;
     }
 
     pub(in crate::workflow::tests) fn release_first_run(&self) {
+        self.first_run_released.store(true, Ordering::SeqCst);
         self.release_first_run.notify_waiters();
     }
 }
@@ -202,11 +204,33 @@ impl WorkflowHost for TimeoutAwareHost {
         Ok("timeout-graph".to_string())
     }
 
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
+    }
+
     async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
         Ok(self.capabilities.clone())
+    }
+
+    async fn workflow_io(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        MockWorkflowHost::new(8, 1024)
+            .workflow_io(_workflow_id)
+            .await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        Ok(self.capabilities.runtime_capabilities.clone())
     }
 
     async fn run_workflow(
@@ -242,11 +266,33 @@ impl WorkflowHost for BlockingRunHost {
         Ok("blocking-run-graph".to_string())
     }
 
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
+    }
+
     async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
         Ok(self.capabilities.clone())
+    }
+
+    async fn workflow_io(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        MockWorkflowHost::new(8, 1024)
+            .workflow_io(_workflow_id)
+            .await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        Ok(self.capabilities.runtime_capabilities.clone())
     }
 
     async fn run_workflow(
@@ -259,7 +305,9 @@ impl WorkflowHost for BlockingRunHost {
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         if self.started_runs.fetch_add(1, Ordering::SeqCst) == 0 {
             self.first_run_started.notify_waiters();
-            self.release_first_run.notified().await;
+            while !self.first_run_released.load(Ordering::SeqCst) {
+                self.release_first_run.notified().await;
+            }
         }
 
         Ok(vec![WorkflowPortBinding {
@@ -281,6 +329,13 @@ impl WorkflowHost for AdmissionGatedHost {
         _workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         Ok("admission-gated-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
     }
 
     async fn workflow_capabilities(
@@ -327,6 +382,13 @@ impl WorkflowHost for RecordingRuntimeHost {
         _workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         Ok("recording-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
     }
 
     async fn workflow_capabilities(
@@ -383,6 +445,13 @@ impl WorkflowHost for FailingRuntimeLoadHost {
         _workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         Ok("failing-runtime-load-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
     }
 
     async fn workflow_capabilities(

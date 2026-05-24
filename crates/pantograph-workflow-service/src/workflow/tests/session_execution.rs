@@ -81,6 +81,96 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_initializes_scheduler_task_state_before_run_execution() {
+    let host = BlockingRunHost::new();
+    let service = WorkflowService::with_max_sessions(2);
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-task-state-init".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let service_for_run = service.clone();
+    let host_for_run = host.clone();
+    let session_id = created.session_id.clone();
+    let run = tokio::spawn(async move {
+        service_for_run
+            .run_workflow_execution_session(
+                &host_for_run,
+                WorkflowExecutionSessionRunRequest {
+                    session_id,
+                    workflow_semantic_version: "1.2.3".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("task state initialization"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+            )
+            .await
+    });
+
+    if tokio::time::timeout(Duration::from_secs(5), host.wait_for_first_run_started())
+        .await
+        .is_err()
+    {
+        let run_result = tokio::time::timeout(Duration::from_secs(1), run)
+            .await
+            .expect("workflow run should return after host execution timeout")
+            .expect("workflow run task should join");
+        panic!("workflow run did not reach host execution: {run_result:?}");
+    }
+    let workflow_run_id = {
+        let store = service.session_store_guard().expect("session store");
+        store
+            .active_workflow_run_ids()
+            .into_iter()
+            .next()
+            .expect("active workflow run id")
+    };
+
+    let read_models = service
+        .workflow_get_scheduler_task_state_read_models(
+            WorkflowSchedulerTaskStateReadModelQueryRequest {
+                session_id: created.session_id,
+                workflow_run_id,
+            },
+        )
+        .await
+        .expect("scheduler task-state read models");
+    assert_eq!(read_models.tasks.len(), 2);
+    assert!(read_models
+        .tasks
+        .iter()
+        .any(|task| task.node_id == "text-input-1"));
+    assert!(read_models
+        .tasks
+        .iter()
+        .any(|task| task.node_id == "text-output-1"));
+    assert!(read_models.tasks.iter().all(|task| task.model_id.is_none()));
+
+    host.release_first_run();
+    let response = run
+        .await
+        .expect("run task should join")
+        .expect("workflow run should finish");
+    assert_eq!(response.outputs.len(), 1);
+}
+
+#[tokio::test]
 async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
     let host = MockWorkflowHost::new(8, 1024);
     let temp = tempfile::tempdir().expect("temp artifact store");
@@ -654,7 +744,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .contains("requires extension(s): inference_gateway"));
     assert!(estimate_event
         .payload_json
-        .contains("estimated peak memory: 1024 MB VRAM, 2048 MB RAM"));
+        .contains("estimated peak memory: 1073741824 bytes peak VRAM, 2147483648 bytes peak RAM"));
     assert!(estimate_event
         .payload_json
         .contains("candidate runtime(s): llama_cpp"));

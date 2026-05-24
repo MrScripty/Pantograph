@@ -91,6 +91,13 @@ impl WorkflowHost for SelectingRuntimeHost {
         Ok("selection-graph".to_string())
     }
 
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
+    }
+
     async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
@@ -165,6 +172,13 @@ impl WorkflowHost for AffinityRuntimeHost {
         _workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         Ok("affinity-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
     }
 
     async fn workflow_capabilities(

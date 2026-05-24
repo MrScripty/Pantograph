@@ -127,6 +127,13 @@ impl WorkflowHost for CountingPreflightHost {
             .clone())
     }
 
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
+    }
+
     async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
@@ -215,6 +222,13 @@ impl WorkflowHost for PreflightHost {
         _workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         Ok("preflight-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(mock_workflow_graph())
     }
 
     async fn workflow_capabilities(

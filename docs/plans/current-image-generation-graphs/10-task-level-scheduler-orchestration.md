@@ -280,10 +280,12 @@ implementation can be considered complete:
    dependency readiness, dispatch lifecycle, ledger writes, bounded queues,
    cancellation, retry/defer, and panic handling remain open. The orchestrator
    active-run persistence method was added 2026-05-23; production session
-   execution still needs to call it after task graph extraction. The
-   production cutover must use a workflow-service-owned orchestrator dependency
-   and a dedicated scheduler-task execution path, not ad hoc construction in
-   `run_workflow_execution_session`.
+   execution now calls it after queue admission and task graph extraction in
+   a 2026-05-23 vertical slice. The remaining production cutover must move
+   task progression into a dedicated scheduler-task execution path instead of
+   continuing whole-run node-engine output demand, then consume or delete the
+   staged dead-code allowances and old scheduler-managed inference launch
+   path.
 9. Add non-runtime single-task execution through node-engine using
    materialized scheduler-owned inputs and task results. Do not use output-node
    demand to drive runtime inference.
@@ -387,6 +389,16 @@ Standards guardrails for the shared crate:
   This is the first orchestrator boundary slice only; production task
   progression, dependency readiness, runtime selection, ledger writes,
   cancellation, retries, and queue lifecycle remain staged follow-ups.
+- 2026-05-23 implementation status: `WorkflowService` now owns a configured
+  `WorkflowSchedulerTaskOrchestrator`, exposes
+  `with_runtime_host_execution_port` for production runtime-host wiring, and
+  initializes active-run scheduler task state from the path-free task graph
+  after queue admission in `run_workflow_execution_session`. The default
+  runtime-host port is typed-unavailable so missing production wiring fails
+  closed. This is not the full execution cutover: dependency readiness,
+  runtime-host dispatch lifecycle, task result progression, ledger writes,
+  bounded workers, cancellation, retry/defer, and removal of the whole-run
+  node-engine output-demand path remain open.
 
 Rejected alternatives:
 

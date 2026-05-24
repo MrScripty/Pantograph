@@ -10,7 +10,7 @@ use crate::capabilities;
 use crate::graph::GraphSessionStore;
 #[cfg(test)]
 use crate::graph::WorkflowGraphSessionStateView;
-use crate::scheduler::WorkflowExecutionSessionStore;
+use crate::scheduler::{WorkflowExecutionSessionStore, WorkflowSchedulerTaskOrchestrator};
 #[cfg(test)]
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 #[cfg(test)]
@@ -200,6 +200,7 @@ pub struct WorkflowService {
         Arc<Mutex<Option<Arc<dyn pantograph_media_conversion::MediaConversionExecutor>>>>,
     scheduler_diagnostics_provider:
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
+    scheduler_task_orchestrator: WorkflowSchedulerTaskOrchestrator,
 }
 
 #[cfg(test)]

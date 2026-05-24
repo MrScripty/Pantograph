@@ -47,16 +47,17 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    build_workflow_execution_plan_from_admission, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowErrorDiagnosticsLink, WorkflowExecutionPlan,
-    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
-    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
-    WorkflowServiceError, WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
+    build_workflow_execution_plan_from_admission, workflow_scheduler_task_graph,
+    AttributionRepository, WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink,
+    WorkflowExecutionPlan, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
+    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -355,14 +356,34 @@ impl WorkflowService {
             }
             tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
         };
+        let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
+        let queued_workflow_inputs = queued_run.queued.inputs.clone();
+        let queued_graph_run_settings = decode_queued_graph_run_settings(run_snapshot.as_ref())?;
+        if let Err(error) = self
+            .initialize_scheduler_task_state_for_admitted_run(
+                host,
+                &queued_run.workflow_id,
+                &session_id,
+                &workflow_run_id,
+            )
+            .await
+        {
+            self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
+            let terminal_result = Err(error);
+            self.record_run_terminal_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                Some(&queued_workflow_semantic_version),
+                &terminal_result,
+            )?;
+            return terminal_result;
+        }
         let mut reservation_context = scheduler_reservation_context(
             run_snapshot.as_ref(),
             &queued_run.required_backends,
             &queued_run.required_models,
         )?;
-        let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
-        let queued_workflow_inputs = queued_run.queued.inputs.clone();
-        let queued_graph_run_settings = decode_queued_graph_run_settings(run_snapshot.as_ref())?;
 
         let preflight_cache = match self
             .ensure_session_runtime_preflight(
@@ -794,6 +815,33 @@ impl WorkflowService {
         let mut store = self.session_store_guard()?;
         store.finish_run(session_id, workflow_run_id)?;
         Ok(())
+    }
+
+    async fn initialize_scheduler_task_state_for_admitted_run<H: WorkflowHost>(
+        &self,
+        host: &H,
+        workflow_id: &str,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let graph = host.workflow_graph(workflow_id).await?;
+        validate_workflow_graph_submit_readiness(&graph)?;
+        let workflow_id = WorkflowId::try_from(workflow_id.to_string())?;
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let task_graph = workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)?;
+        let mut store = self.session_store_guard()?;
+        self.scheduler_task_orchestrator
+            .initialize_active_run_task_state(
+                &mut store,
+                session_id,
+                workflow_run_id.as_str(),
+                task_graph,
+            )
+            .map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "scheduler task-state initialization failed: {error}"
+                ))
+            })
     }
 
     async fn create_queued_run_snapshot_if_configured<H: WorkflowHost>(

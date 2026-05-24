@@ -73,7 +73,12 @@ durable task orchestration path.
   execution path instead of constructing ad hoc dispatch plumbing locally. The
   orchestrator owns dependency readiness calls, runtime-host dispatch calls,
   ledger writes, cancellation, retries, shutdown, bounded queues, and task
-  panic handling.
+  panic handling. Partial 2026-05-23 status: `WorkflowService` now owns the
+  orchestrator, provides a runtime-host execution-port configuration hook,
+  and initializes active-run scheduler task state after queue admission. The
+  dedicated task progression path, dispatch lifecycle, ledger writes,
+  cancellation, retry/defer, bounded workers, panic handling, and legacy
+  output-demand removal remain open.
 - [ ] Add a narrow node-engine single-task execution adapter for non-runtime
   graph tasks using materialized scheduler-owned inputs. Runtime inference
   nodes must not launch through this adapter.

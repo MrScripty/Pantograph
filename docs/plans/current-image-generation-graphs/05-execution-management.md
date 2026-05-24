@@ -9975,6 +9975,50 @@ Worker rules:
     paths.
   - Verification planned for this docs-only slice: `git diff --check`. Per
     user instruction, this plan update is not committed yet.
+- 2026-05-23 Milestone 5c production task-state initialization slice
+  completed:
+  - Smallest useful vertical slice: wire production
+    `run_workflow_execution_session` to initialize scheduler-owned active-run
+    task state from the immutable `WorkflowSchedulerTaskGraph` after queue
+    admission and before the current whole-run execution path continues.
+  - Allowed write set: workflow-service scheduler orchestrator export,
+    workflow facade/configuration/session execution modules, focused session
+    execution fixtures/tests, workflow-service README, and current Milestone
+    5c plan notes. Existing unrelated Pumas proposal Markdown changes remain
+    ignored.
+  - No-fallback confirmation: the slice installs a service-owned orchestrator
+    and a typed-unavailable default runtime-host execution port. It does not
+    synthesize runtime handoff from reduced execution plans, expose Pumas
+    paths, fabricate task intents for pre-intent states, dispatch runtime
+    inference through node-engine, or add a compatibility branch. The old
+    whole-run output-demand path remains only as the next explicit removal
+    target, not as a new fallback.
+  - Implementation notes: `WorkflowService` now owns
+    `WorkflowSchedulerTaskOrchestrator`, can be configured with the shared
+    `RuntimeHostExecutionPort`, fetches/validates the workflow graph outside
+    the session-store lock, initializes active-run task graph/state through
+    the orchestrator, and fails admitted runs closed if initialization fails.
+    Test fixtures now provide workflow graph/runtime facts for session hosts
+    that the production path exercises.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_initializes_scheduler_task_state_before_run_execution
+    --lib`; `cargo test -p pantograph-workflow-service
+    scheduler::task_orchestrator --lib`; `cargo test -p
+    pantograph-workflow-service workflow::tests::session_execution --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo fmt -p
+    pantograph-workflow-service`.
+  - Deviation/discovered issue: broader session verification exposed a stale
+    scheduler-estimate assertion expecting MB-formatted memory text while the
+    current production formatter emits exact byte text. The assertion was
+    updated to match current behavior; no production estimate formatter was
+    changed in this slice.
+  - Remaining follow-up: replace whole-run node-engine output demand with the
+    dedicated scheduler-task execution path, wire dependency readiness,
+    runtime-host dispatch lifecycle, task result progression, ledger writes,
+    bounded workers, cancellation, retry/defer, panic handling, and then
+    delete superseded launch paths and remaining staged dead-code allowances.
 
 ### Traceability Links
 

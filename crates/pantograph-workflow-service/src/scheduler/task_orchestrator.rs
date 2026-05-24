@@ -23,12 +23,10 @@ use super::WorkflowExecutionSessionStore;
 /// runtime execution remains behind the shared runtime-host port.
 #[derive(Clone)]
 #[must_use]
-#[allow(dead_code)]
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
 }
 
-#[allow(dead_code)]
 impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) fn new(runtime_host_dispatcher: SchedulerRuntimeHostDispatcher) -> Self {
         Self {
@@ -36,6 +34,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn dispatch_runtime_handoff(
         &self,
         execution_request_id: impl Into<String>,
@@ -106,8 +105,8 @@ impl WorkflowSchedulerTaskOrchestrator {
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
-#[allow(dead_code)]
 pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
+    #[allow(dead_code)]
     #[error("runtime-host dispatch failed")]
     RuntimeHostDispatch(RuntimeHostDispatchError),
     #[error("scheduler contract validation failed")]

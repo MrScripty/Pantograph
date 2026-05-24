@@ -1,8 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
+use pantograph_runtime_host_contracts::{
+    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
+    RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
+};
+
 use crate::graph::GraphSessionStore;
-use crate::scheduler::WorkflowExecutionSessionStore;
+use crate::scheduler::{WorkflowExecutionSessionStore, WorkflowSchedulerTaskOrchestrator};
 
 use super::{
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
@@ -45,7 +51,17 @@ impl WorkflowService {
             diagnostics_projection_refresh_sink: Arc::new(Mutex::new(None)),
             media_conversion_executor: Arc::new(Mutex::new(None)),
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
+            scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
         }
+    }
+
+    pub fn with_runtime_host_execution_port(
+        mut self,
+        port: Arc<dyn RuntimeHostExecutionPort>,
+    ) -> Self {
+        self.scheduler_task_orchestrator =
+            WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port));
+        self
     }
 
     pub fn with_artifact_store(mut self, store: ArtifactStore) -> Self {
@@ -264,6 +280,28 @@ impl WorkflowService {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })
     }
+}
+
+#[derive(Debug)]
+struct RuntimeHostExecutionUnavailablePort;
+
+#[async_trait]
+impl RuntimeHostExecutionPort for RuntimeHostExecutionUnavailablePort {
+    async fn execute_runtime_host_request(
+        &self,
+        _request: RuntimeHostExecutionRequest,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        Err(RuntimeHostExecutionPortError::ExecutionFailed {
+            message: "runtime-host execution port is not configured for workflow-service"
+                .to_string(),
+        })
+    }
+}
+
+fn default_scheduler_task_orchestrator() -> WorkflowSchedulerTaskOrchestrator {
+    WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(Arc::new(
+        RuntimeHostExecutionUnavailablePort,
+    )))
 }
 
 fn load_artifact_format_settings(

@@ -95,6 +95,33 @@ impl MockWorkflowHost {
     }
 }
 
+pub(in crate::workflow::tests) fn mock_workflow_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "text-input-1".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "text-output-1".to_string(),
+                node_type: "text-output".to_string(),
+                position: Position { x: 100.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "edge".to_string(),
+            source: "text-input-1".to_string(),
+            source_handle: "text".to_string(),
+            target: "text-output-1".to_string(),
+            target_handle: "text".to_string(),
+        }],
+        derived_graph: None,
+    }
+}
+
 pub(in crate::workflow::tests) struct InspectionHost {
     pub(in crate::workflow::tests) calls: Arc<Mutex<Vec<(String, String)>>>,
     pub(in crate::workflow::tests) state: Option<WorkflowGraphSessionStateView>,
@@ -202,30 +229,7 @@ impl WorkflowHost for MockWorkflowHost {
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        Ok(WorkflowGraph {
-            nodes: vec![
-                GraphNode {
-                    id: "text-input-1".to_string(),
-                    node_type: "text-input".to_string(),
-                    position: Position { x: 0.0, y: 0.0 },
-                    data: serde_json::json!({}),
-                },
-                GraphNode {
-                    id: "text-output-1".to_string(),
-                    node_type: "text-output".to_string(),
-                    position: Position { x: 100.0, y: 0.0 },
-                    data: serde_json::json!({}),
-                },
-            ],
-            edges: vec![GraphEdge {
-                id: "edge".to_string(),
-                source: "text-input-1".to_string(),
-                source_handle: "text".to_string(),
-                target: "text-output-1".to_string(),
-                target_handle: "text".to_string(),
-            }],
-            derived_graph: None,
-        })
+        Ok(mock_workflow_graph())
     }
 
     async fn workflow_capabilities(
