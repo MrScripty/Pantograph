@@ -897,3 +897,21 @@ durable task orchestration path.
   allowance until the dedicated scheduler-task session runner consumes it. The
   next cutover slice must use this summary before runtime preflight/load and
   remove the allowance.
+- 2026-05-24 scheduler task output-projection slice completed. Smallest useful
+  vertical slice: add the workflow-service converter that projects completed
+  `WorkflowSchedulerTaskResult` values into requested `WorkflowPortBinding`
+  outputs. Allowed write set: workflow-service task-result output projection
+  module/tests, workflow module registration, and this plan. No-fallback
+  confirmation: the converter reads only immutable scheduler task graph facts,
+  requested output targets, and completed scheduler task results; it does not
+  call output-node demand, node-engine workflow sessions, `workflow_run_internal`,
+  runtime dispatch, Pumas path resolution, or graph/editor metadata. Focused
+  tests cover completed scalar output projection, missing requested output,
+  non-completed result rejection, unsupported Pumas model-ref output values,
+  and ambiguous producer results. Verification passed: `cargo fmt -p
+  pantograph-workflow-service`, `cargo test -p pantograph-workflow-service
+  task_result_output_projection`, and `git diff --check`. Deviation/remaining
+  follow-up: the module has a scoped staging `dead_code` allowance until the
+  dedicated scheduler-task session runner consumes it. The session runner must
+  call this converter before existing requested-output validation and remove
+  the allowance.

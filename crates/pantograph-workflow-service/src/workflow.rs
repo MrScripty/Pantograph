@@ -54,6 +54,8 @@ mod task_graph;
 mod task_graph_contracts;
 mod task_result_contracts;
 #[allow(dead_code)]
+mod task_result_output_projection;
+#[allow(dead_code)]
 mod task_run_summary;
 mod task_state_read_model;
 mod validation;

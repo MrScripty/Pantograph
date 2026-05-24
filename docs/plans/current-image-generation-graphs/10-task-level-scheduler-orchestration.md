@@ -699,6 +699,14 @@ needed before touching runtime preflight. It rejects missing or unexpected
 task-state records and remains staged behind a scoped `dead_code` allowance
 until the scheduler-task session runner consumes it.
 
+2026-05-24 implementation status: workflow-service now has the staged
+task-result output projection boundary for the session cutover. It projects
+completed `WorkflowSchedulerTaskResult` values into requested
+`WorkflowPortBinding` outputs, rejects missing, ambiguous, non-completed, and
+unsupported output values, and avoids output-node demand or legacy workflow
+execution. It remains staged behind a scoped `dead_code` allowance until the
+scheduler-task session runner consumes it before requested-output validation.
+
 ### Task Classification And Input Readiness Replan
 
 2026-05-23 standards/blast-radius update: the non-runtime adapter slice must
