@@ -221,18 +221,25 @@ durable task orchestration path.
   initialization after task graph extraction and then remove or make
   unreachable the old scheduler-managed inference launch path rather than
   preserving it as a compatibility branch.
-  2026-05-24 replan boundary: production session execution currently performs
-  runtime preflight, execution-plan production, reservation events, and runtime
-  load before the legacy whole-run `workflow_run_internal` call. The
-  scheduler-task loop cannot be inserted safely until the cutover sequencing is
-  explicit. The next plan decision must define: how the active-run task graph
-  class summary is read before runtime load; whether non-runtime-only runs
-  bypass runtime admission/load and finish through scheduler task results; and
-  whether runtime-containing runs fail closed with typed "runtime dispatch not
-  wired" diagnostics until the runtime-host dispatch slice lands, or whether
-  runtime dispatch is implemented first. Do not keep the old whole-run
-  node-engine path as a compatibility branch for tasks already handled by the
-  scheduler loop.
+  2026-05-24 revised replan decision: replace the legacy whole-run launch with
+  a dedicated workflow-service scheduler-task session runner instead of
+  inserting task progression directly into `run_workflow_execution_session`.
+  `run_workflow_execution_session` remains the admission/terminal wrapper; the
+  runner owns active-run task progression, external-input materialization,
+  non-runtime adapter calls, runtime handoff/fail-closed decisions, task-result
+  projection, and output validation. Before any runtime preflight/load, the
+  cutover must read a run-class summary from the immutable scheduler task graph
+  and scheduler task-state records. Non-runtime-only runs bypass runtime
+  admission/load and finish from scheduler task results. Runtime-containing
+  runs dispatch only through actual scheduler-selected runtime-host handoff; if
+  that slice is not wired, they fail closed with typed "runtime dispatch not
+  wired" scheduler/workflow diagnostics. Request `WorkflowPortBinding` inputs
+  must be converted into scheduler-owned materialized task results for matching
+  source/input tasks without mutating graph node data. Completed scheduler task
+  results must be projected through one typed output converter and then checked
+  with existing requested-output validation. Do not keep the old whole-run
+  node-engine path, output demand, or `workflow_run_internal` as a compatibility
+  branch for tasks handled by the scheduler loop.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
@@ -257,6 +264,12 @@ durable task orchestration path.
   persists a typed `WorkflowSchedulerTaskResult`, and rejects runtime
   inference task kinds before node-engine planned-inference or output-demand
   paths can run.
+- Session cutover tests proving request inputs become typed scheduler task
+  results without mutating graph node data, non-runtime-only runs bypass
+  runtime admission/load and legacy whole-run output demand, runtime-containing
+  runs dispatch only through scheduler-selected runtime-host handoff or typed
+  fail-closed diagnostics, and completed scheduler task results project through
+  one output converter before requested-output validation.
 - Active-run store tests proving scheduler task completion persists the
   `WorkflowSchedulerTaskResult` and completed-state transition atomically,
   rejects stale running state, rejects wrong active-run/workflow/task/node

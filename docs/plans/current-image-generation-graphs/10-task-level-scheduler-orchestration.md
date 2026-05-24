@@ -342,11 +342,15 @@ implementation can be considered complete:
    must delegate from `run_workflow_execution_session` into a focused
    scheduler-task execution entrypoint after admission and task graph
    extraction, then remove or make unreachable the old scheduler-managed
-   inference launch path. Replan boundary identified 2026-05-24: session
-   execution still performs runtime preflight/load before the legacy whole-run
-   call, so the next slice must first choose the cutover sequence for
-   non-runtime-only runs and runtime-containing runs rather than silently using
-   legacy output demand as fallback.
+   inference launch path. Revised replan decision accepted 2026-05-24: add a
+   dedicated workflow-service scheduler-task session runner and keep
+   `run_workflow_execution_session` as the admission/terminal wrapper. The
+   runner must materialize request inputs into scheduler task results, read a
+   run-class summary before runtime preflight/load, execute non-runtime-only
+   runs without runtime admission/load, route runtime tasks only through
+   scheduler-selected runtime-host handoff or typed fail-closed diagnostics,
+   project task results into requested run outputs, and remove the legacy
+   whole-run output-demand path instead of preserving it as fallback.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.
@@ -573,6 +577,109 @@ not call node-engine planned inference, `PlannedInferenceExecutionHost`,
 wires real `SchedulerRuntimeHandoff` dispatch, runtime inference tasks must
 stay in typed blocked/deferred/failed scheduler state with diagnostics that
 name the missing runtime-dispatch capability.
+
+### Session Execution Cutover Replan
+
+2026-05-24 revised decision: the production session cutover must be a focused
+replacement runner, not additional inline orchestration inside
+`run_workflow_execution_session` and not a compatibility wrapper around
+`workflow_run_internal`.
+
+Planned ownership:
+
+- `run_workflow_execution_session` owns request validation, queue admission,
+  creation of the path-free scheduler task graph, active-run scheduler
+  task-state initialization, terminal run closure, reservation cleanup,
+  artifact event projection, and response assembly.
+- A new workflow-service-owned scheduler-task session runner owns active-run
+  task progression after admission. It calls the existing scheduler task
+  orchestrator split APIs, awaits node-engine non-runtime work outside store
+  locks, dispatches runtime work only through the runtime-host execution port,
+  and converts terminal task state into run-level success or typed failure.
+- The runner is the only production owner of session task-loop policy. Do not
+  duplicate ready-task scans, execution-class checks, materialized-input
+  checks, output projection, or runtime-dispatch fallback decisions in
+  `run_workflow_execution_session`, node-engine, frontend adapters, or runtime
+  adapters.
+
+Cutover sequence:
+
+1. After queue admission and scheduler task-state initialization, compute a
+   run-class summary from the immutable `WorkflowSchedulerTaskGraph` and
+   active-run scheduler task-state records. The summary answers whether the
+   run has runtime-inference tasks, non-runtime-only tasks, Pumas
+   materialization tasks, unsupported tasks, or terminal invalid diagnostics.
+   It must consume `WorkflowSchedulerTaskExecutionClass`; it must not re-check
+   raw node-type strings.
+2. Materialize request `WorkflowPortBinding` inputs into scheduler-owned task
+   results for matching source/input tasks. This must be a typed conversion
+   boundary that validates node id, port id, expected template/class, value
+   type, duplicate input behavior, and result correlation. It must not mutate
+   graph node data, stash arbitrary `serde_json`, or expose Pumas paths/load
+   targets.
+3. If the summary is non-runtime-only, bypass runtime admission, runtime
+   preflight, runtime load, and runtime reservation records. Advance tasks
+   through scheduler task state until completion, failure, or blocked
+   diagnostics; then project completed scheduler results into the requested
+   workflow outputs.
+4. If the summary contains runtime-inference tasks, runtime work may become
+   executable only after all required connected upstream inputs are
+   materialized. Runtime tasks dispatch only from actual
+   `SchedulerRuntimeHandoff` values into the shared runtime-host execution
+   port. If runtime-host dispatch is not wired in the current slice, fail
+   closed with typed scheduler/workflow diagnostics that name the unsupported
+   runtime-dispatch capability.
+5. Project completed scheduler task results to `WorkflowPortBinding` outputs
+   through one typed converter, then call the existing requested-output
+   validation. Unsupported output value kinds, missing requested ports, wrong
+   value types, diagnostic-only results, or ambiguous producers fail closed
+   with typed diagnostics.
+6. Remove or make unreachable the legacy scheduler-managed session launch
+   path. The replacement must not call `workflow_run_internal`,
+   `DemandEngine::demand`, output-node demand, `PlannedInferenceExecutionHost`,
+   node-engine workflow sessions, node-engine core `execute_puma_lib`, or any
+   graph-path/model-path resolver as a successful branch.
+
+Standards constraints:
+
+- Keep sync policy decisions in pure helpers: run-class summary,
+  external-input materialization validation, task-result output projection,
+  and terminal-state selection should be synchronous and unit-testable.
+- Keep async at I/O boundaries only: non-runtime adapter calls, runtime-host
+  execution-port calls, ledger writes, and cleanup. Do not hold active-run
+  store, queue, task-state, ledger, or reservation locks across `.await`.
+- Preserve backend authority. The graph editor provides typed user constraints
+  and displays backend read models; it does not know executable Pumas paths,
+  runtime load targets, or scheduler resource reservations.
+- Treat unfinished runtime dispatch as unavailable capability, not fallback.
+  A runtime-containing run that cannot dispatch through the scheduler path
+  fails with explicit diagnostics instead of using whole-run node-engine
+  execution.
+- Keep this replacement small enough to review. If the runner needs durable
+  replay, worker pools, lease tokens, batching, or retry/cancellation policy
+  beyond the existing atomic completion operation, stop and plan that as the
+  later execution-lease/transaction slice rather than mixing it into the
+  cutover.
+
+Required tests for the cutover:
+
+- Non-runtime-only session run with request `WorkflowPortBinding` inputs
+  completes through scheduler task results, returns requested outputs, and
+  proves the runtime admission/load path and legacy host run path were not
+  called.
+- Runtime-containing session run with runtime-host dispatch unavailable fails
+  closed with typed scheduler/workflow diagnostics and does not call whole-run
+  node-engine output demand.
+- External input materialization covers valid scalar input, missing source
+  task, wrong port, wrong value type, duplicate input, and unsupported source
+  node cases.
+- Output projection covers valid scalar output, missing requested output,
+  unsupported value kind, diagnostic-only result, wrong type, and ambiguous
+  producer cases.
+- Search/deletion checks prove the new session runner does not call
+  `workflow_run_internal`, output-node demand, `DemandEngine::demand`,
+  `PlannedInferenceExecutionHost`, node-engine workflow sessions, or
+  node-engine core `execute_puma_lib`.
 
 ### Task Classification And Input Readiness Replan
 
@@ -1194,6 +1301,12 @@ shortcuts.
   inference and fail closed without scheduler task state.
 - Runtime-host dispatch tests proving requests are built from actual
   dispatch-selected `SchedulerRuntimeHandoff` values.
+- Session cutover tests proving non-runtime-only runs bypass runtime
+  admission/load and legacy whole-run output demand, runtime-containing runs
+  use scheduler-selected runtime-host dispatch or typed fail-closed
+  diagnostics, request inputs are materialized into scheduler task results
+  without graph mutation, and completed task results project through one typed
+  output converter before requested-output validation.
 - Multi-workflow tests covering task interleaving, batching compatibility, and
   fairness.
 - Resource tests using deterministic observers and reservation leases before
