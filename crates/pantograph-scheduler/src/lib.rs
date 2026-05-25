@@ -8,6 +8,9 @@
 mod batching;
 mod capability;
 mod dispatch;
+mod dispatch_selection;
+mod dispatch_selection_policy;
+mod dispatch_selection_validation;
 mod error;
 mod handoff;
 mod intent;
@@ -37,6 +40,14 @@ pub use dispatch::{
     SchedulerReservationLeaseId, SchedulerRuntimeVariantId, ValidatedSchedulerDispatchDecision,
     SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION,
 };
+pub use dispatch_selection::{
+    SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerDispatchSelectionDecision,
+    SchedulerDispatchSelectionDiagnostic, SchedulerDispatchSelectionDiagnosticCode,
+    SchedulerDispatchSelectionDiagnosticSeverity, SchedulerDispatchSelectionRequest,
+    SchedulerDispatchSelectionState, ValidatedSchedulerDispatchSelectionDecision,
+    ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
+};
+pub use dispatch_selection_policy::select_scheduler_dispatch;
 pub use error::SchedulerContractError;
 pub use handoff::{
     SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState, ValidatedSchedulerRuntimeHandoff,

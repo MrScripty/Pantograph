@@ -13,6 +13,7 @@ ownership.
 | `src/batching.rs` | Scheduler-owned batching candidate and policy decision contracts for compatible task groups. |
 | `src/capability.rs` | Backend-owned capability hint contract for graph editor and option-provider consumers. |
 | `src/dispatch.rs` | Scheduler-selected dispatch decision contract for runtime/device/model/dependency/reservation/batch facts. |
+| `src/dispatch_selection.rs` | Pure scheduler-owned dispatch candidate validation and no-fallback selection contract that produces `SchedulerDispatchDecision` only from typed path-free facts. |
 | `src/handoff.rs` | Non-legacy runtime handoff envelope consumed after scheduler readiness admission. |
 | `src/intent.rs` | Path-free schedulable task intent contract, validated workflow/run/node/task ids, runtime/device constraints, typed trait settings, and bounded estimate hints. |
 | `src/lifecycle.rs` | Backend-owned scheduler task lifecycle diagnostic snapshots for graph/run inspection. |
@@ -223,6 +224,13 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   `ValidatedSchedulerBatchPolicyDecision` values after candidate correlation,
   selected runtime/device/model facts, input-shape compatibility, checked
   memory totals, batch size bounds, and rejection diagnostics are validated.
+  Scheduler dispatch-selection policy may use
+  `ValidatedSchedulerDispatchSelectionRequest` values to select one
+  `SchedulerDispatchDecision` from typed path-free dispatch candidates or
+  return a no-selection decision with typed diagnostics. Candidate ids,
+  selected runtime/device/model facts, resource fit, reservation leases,
+  batching group ids, and source diagnostics are evidence for this scheduler
+  policy only; executable load targets and graph-local paths are rejected.
 - Lifecycle: this crate currently starts no tasks and owns no runtime handles.
   Later scheduler services must add one lifecycle owner for queues, workers,
   cancellation, shutdown, and reservation cleanup.
@@ -266,7 +274,11 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   sizes, total incremental memory bytes, candidate task correlation,
   task-family, selected runtime, selected device set, selected model ref,
   input shape signature, latency estimate, memory impact, residency state, and
-  batch diagnostic fields.
+  batch diagnostic fields; `SchedulerDispatchSelectionRequest` task intent,
+  readiness proof, environment ref, candidate id, selected runtime, optional
+  runtime variant, selected devices, selected Pumas model ref, runtime trait
+  settings, reservation fact, resource fit fact, optional batching group, and
+  typed diagnostic fields.
 - Defaults: no default scheduler owner other than `Scheduler` exists.
   Omitted runtime/device constraints mean scheduler policy decides.
 - Enum semantics: owned capability variants identify decisions and state that
@@ -295,7 +307,11 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   node-engine, frontend, or runtime adapter code to choose executable load
   targets or bypass dispatch policy. Batching decisions validate candidate
   compatibility and queue grouping facts only; runtime execution still flows
-  through scheduler dispatch and runtime host handoff.
+  through scheduler dispatch and runtime host handoff. Dispatch-selection
+  decisions are pure scheduler policy over supplied typed facts. They must not
+  alias runtime-registry technical-fit candidate shapes or scheduler batching
+  candidate shapes, and they must not use candidate ids as a ranking fallback
+  when multiple candidates remain eligible.
 - Ordering: enum declaration order is not a runtime contract.
 - Compatibility: new capability or consumer variants may be added as scheduler
   contracts expand; existing meanings must not be repurposed. New task trait

@@ -1,0 +1,90 @@
+{
+  "contract_version": 1,
+  "task_intent": {
+    "contract_version": 1,
+    "workflow_id": "workflow.image_generation",
+    "workflow_run_id": "run.001",
+    "node_id": "node.llm_inference",
+    "task_id": "task.001",
+    "fairness_key": "user.local",
+    "task_type": "image_generation",
+    "model_ref": {
+      "model_id": "pumas://models/juggernaut-xl-v10"
+    },
+    "constraints": {
+      "requested_runtime_id": "diffusers-pytorch",
+      "requested_device_id": "cuda:0"
+    },
+    "trait_settings": [
+      {
+        "trait_id": "image.width",
+        "value": {
+          "kind": "u64",
+          "value": 1024
+        }
+      }
+    ]
+  },
+  "readiness_proof": {
+    "preflight_result": {
+      "contract_version": 1,
+      "identity_key": {
+        "model_ref": {
+          "model_id": "pumas://models/juggernaut-xl-v10"
+        },
+        "task_id": "image_generation"
+      },
+      "readiness_state": "ready",
+      "dependency_requirements_id": "deps.image_generation",
+      "environment_ref": {
+        "environment_id": "env.image_generation"
+      }
+    }
+  },
+  "environment_ref": {
+    "environment_id": "env.image_generation"
+  },
+  "candidates": [
+    {
+      "candidate_id": "candidate.diffusers.cuda0",
+      "selected_runtime_id": "diffusers-pytorch",
+      "selected_runtime_variant_id": "diffusers-pytorch.cuda",
+      "selected_device_ids": ["cuda:0"],
+      "selected_model_ref": {
+        "model_id": "pumas://models/juggernaut-xl-v10",
+        "selected_artifact_id": "artifact.diffusers.bundle",
+        "selected_artifact_path": "pumas://artifacts/juggernaut-xl-v10/diffusers"
+      },
+      "runtime_trait_settings": [
+        {
+          "trait_id": "denoiser.scheduler",
+          "value": {
+            "kind": "string",
+            "value": "euler"
+          }
+        }
+      ],
+      "reservation": {
+        "reservation_lease_id": "reservation.001",
+        "workflow_run_id": "run.001",
+        "task_id": "task.001",
+        "device_id": "cuda:0",
+        "resource_kind": "device_vram",
+        "reserved_bytes": 8589934592
+      },
+      "resource_fit_assessment": {
+        "workflow_run_id": "run.001",
+        "task_id": "task.001",
+        "state": "fits"
+      },
+      "batching_group_id": "batch.image_generation.001",
+      "candidate_source_diagnostics": [
+        {
+          "severity": "info",
+          "code": "candidate_selected",
+          "message": "Candidate facts came from scheduler-owned typed evidence."
+        }
+      ]
+    }
+  ]
+}

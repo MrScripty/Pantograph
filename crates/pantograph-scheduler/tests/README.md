@@ -15,6 +15,7 @@ scheduler-owned boundary before runtime execution is wired.
 | `readiness_admission.rs` | Scheduler dependency readiness admission and policy mapping tests. |
 | `queue_state.rs` | Durable queue-state validation, idempotent replay, legacy path rejection, and exhaustive transition matrix tests. |
 | `dispatch_decision.rs` | Runtime/device/model/reservation/batch dispatch decision contract tests. |
+| `dispatch_selection.rs` | Pure scheduler dispatch-selection contract tests for typed candidates, no-selection diagnostics, hard constraints, and no legacy candidate aliases. |
 | `runtime_handoff.rs` | Runtime-host handoff validation and path-free dispatch envelope tests. |
 | `resource_residency.rs` | Platform-neutral resource observation and fit validation tests. |
 | `batching_policy.rs` | Cross-workflow task compatibility and batch rejection tests. |

@@ -15,6 +15,7 @@ graph editing, node execution, frontend adapters, or runtime hosts.
 | `capability.rs` | Backend-owned option and availability hints for graph/editor consumers. |
 | `readiness.rs` | Scheduler admission policy contracts for dependency readiness and retry/defer/fail decisions. |
 | `dispatch.rs` | Scheduler-selected runtime/device/model/reservation/batch execution decision contract. |
+| `dispatch_selection.rs` | Pure dispatch-selection contract that turns typed path-free candidates into one validated dispatch decision or typed no-selection diagnostics. |
 | `handoff.rs` | Runtime-host handoff envelope that carries readiness proof and optional dispatch decision. |
 | `resource.rs` | Platform-neutral resource observation, residency, reservation, and fit contracts. |
 | `queue.rs` | Durable phase-aware task state, typed runtime/non-runtime execution intent, and idempotent transition replay contract. |
@@ -70,6 +71,10 @@ change behind stable typed contracts.
   in for another.
 - Runtime choices from a graph are hard constraints only when explicitly
   provided; otherwise scheduler policy selects the runtime.
+- Dispatch selection consumes only typed scheduler candidates, readiness proof,
+  environment ref, reservation/resource facts, and optional batching facts. It
+  must not alias runtime-registry technical-fit candidates, scheduler batch
+  candidates, executable Pumas load targets, or graph-local path metadata.
 - All successful scheduler-facing shapes must validate into typed wrappers
   before policy or host handoff consumes them.
 
@@ -80,6 +85,9 @@ change behind stable typed contracts.
   trait/value extension.
 - Runtime host execution needs data that cannot be represented as a
   `SchedulerDispatchDecision` plus host-local Pumas load-target resolution.
+- Dispatch selection needs provider-owned I/O, history reads, Pumas calls, or
+  runtime-host probes inside scheduler policy rather than typed facts supplied
+  by an orchestration/provider layer.
 
 ## Dependencies
 **Internal:** `pantograph-dependency-planning` for path-free dependency
@@ -132,3 +140,8 @@ let _validated = ValidatedSchedulerRuntimeHandoff::try_from(raw)?;
   changes.
 - New scheduler traits, diagnostics, states, or runtime facts must be added as
   typed fields or enum variants, not incidental metadata maps.
+- Dispatch-selection requests are executable scheduler contracts. Candidate
+  source diagnostics explain evidence quality but do not rank candidates or
+  replace missing reservation/resource facts. Multiple eligible candidates are
+  no-selection diagnostics until a deliberate scheduler ranking/exploration
+  policy is added.

@@ -14,6 +14,7 @@ tests grounded in machine-consumed payloads instead of Rust-only constructors.
 | `readiness_admission_decision_ready.json` | Ready dependency admission result with scheduler-owned readiness proof. |
 | `runtime_handoff_readiness_admitted.json` | Runtime-host handoff before dispatch-selected execution facts are attached. |
 | `dispatch_decision_valid.json` | Scheduler-selected runtime/device/model/reservation/batch decision payload. |
+| `dispatch_selection_request_valid.json` | Scheduler-owned dispatch-selection request with one typed candidate and real reservation/resource facts. |
 | `resource_residency_snapshot_valid.json` | Platform-neutral resource observation and fit-assessment snapshot. |
 | `batch_policy_decision_valid.json` | Compatible batch-group decision across scheduler task candidates. |
 

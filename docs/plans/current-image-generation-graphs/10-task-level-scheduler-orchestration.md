@@ -1501,6 +1501,38 @@ Staged implementation:
    `pantograph-scheduler`. Workflow-service may request dispatch selection and
    build the validated handoff envelope, but it must not choose runtime policy,
    device policy, batching, or historical-score behavior locally.
+   2026-05-25 replan decision: use option 2 with option 3 discipline. Add the
+   minimal scheduler-owned dispatch-selection request/response now, while
+   shaping it as the future provider-consumed candidate boundary. The selector
+   request must carry a validated task intent, readiness proof, environment ref,
+   typed dispatch candidates, and bounded candidate-source diagnostics that
+   explain evidence quality but are not accepted as scheduling facts. Each
+   candidate must be path-free and must include only facts scheduler policy can
+   legally rank or select: candidate id, runtime id, optional runtime variant,
+   selected device ids, selected `PumasModelRef`, runtime trait settings,
+   readiness/resource/residency/history summary facts that already exist as
+   typed contracts, and explicit reservation/batching facts only when they have
+   been produced by their canonical owners. The new dispatch candidate is a
+   stricter scheduler contract; do not reuse `RuntimeTechnicalFitCandidate`
+   because that shape allows optional executable selection facts, derived ids,
+   compatibility-path metadata, and candidate-id ordering behavior. Do not
+   reuse `SchedulerBatchCandidate` because that shape is specific to an already
+   selected batching group. If a required reservation, resource, or candidate
+   fact is unavailable, the selector returns a typed diagnostic response and no
+   `SchedulerDispatchDecision`; do not synthesize placeholder reservation ids,
+   generic runtime candidates, CPU/auto fallbacks, or candidate-id tie-break
+   selection as compatibility behavior.
+   The response must either contain one validated `SchedulerDispatchDecision`
+   or typed diagnostics explaining no valid dispatch. Explicit graph runtime or
+   device inputs are hard requirements filtered by scheduler policy; omitted
+   inputs leave the scheduler free to select among valid candidates. Equal or
+   otherwise unrankable candidates must fail closed unless the request includes
+   a deliberate scheduler policy reason such as exploration mode with a stable
+   policy seed. Selection must stay synchronous and pure: it may validate and
+   rank supplied typed facts, but it must not query Pumas, inspect runtime
+   hosts, read history stores, hold workflow-service locks, or perform I/O.
+   This keeps the immediate API small but prevents workflow-service or
+   embedded-runtime from becoming the long-term candidate/provider owner.
 3. Extend the runtime-host response contract with typed, path-free output
    values that workflow-service can map into `WorkflowSchedulerTaskResult`.
    Runtime-host contracts own the runtime response DTO; workflow-service owns
@@ -1701,6 +1733,59 @@ responses, and fails closed for unsupported future runtime-host variants.
 The staged orchestrator handoff method now maps dispatcher responses through
 that boundary, but production session progression still does not dispatch
 runtime tasks until the scheduler-selected handoff wiring slice is implemented.
+
+2026-05-25 production dispatch-selection replan: the next runtime-handoff
+implementation boundary is scheduler-owned creation of `SchedulerDispatchDecision`.
+The repository has a dispatch decision DTO and validation, but not a production
+selector input that provides valid runtime/device/model candidates without
+fallback behavior. The next code slices should first add
+`SchedulerDispatchSelectionRequest`, `SchedulerDispatchCandidate`, and
+`SchedulerDispatchSelectionDecision` or equivalent names in `pantograph-scheduler`,
+with contract tests proving explicit runtime/device constraints are hard
+requirements, missing candidates fail closed, unrankable ambiguity fails closed,
+and a single valid candidate produces a validated `SchedulerDispatchDecision`.
+Later option 3 work can replace the caller-supplied candidate list with runtime
+registry/resource observer/Pumas provider composition without changing scheduler
+selection semantics.
+Codebase review tightened the slice: the new candidate type must not alias
+runtime-registry technical-fit candidates or scheduler batching candidates, and
+the no-selection response should carry explicit scheduler diagnostic codes such
+as no candidates, incompatible explicit runtime/device requirement, missing
+reservation, missing resource fit, invalid candidate evidence, duplicate
+candidate id, and ambiguous ranking. Reservation lease ids in a successful
+dispatch decision must come from a real resource/reservation owner fact; a
+placeholder lease is a contract violation. Workflow-service may orchestrate
+fact collection, but it must not rank candidates or construct the successful
+decision directly.
+Standards gate for this slice: implement the selector in a focused scheduler
+module such as `dispatch_selection.rs`, re-export only the public contract from
+`lib.rs`, and update `crates/pantograph-scheduler/README.md` plus
+`src/README.md` in the same slice. Public DTOs must use explicit contract
+versions, typed ids, typed diagnostic enums, `serde(deny_unknown_fields)`,
+`TryFrom` validated wrappers, `#[must_use]` on validation/selection results,
+and `#[non_exhaustive]` where future selection states or diagnostics may grow.
+Do not use `serde_json::Value`, arbitrary string maps, `Result<T, String>`,
+panics, or `unwrap`/`expect` in production selector paths. Keep the module under
+the repository decomposition threshold or split public contract, policy, and
+validation modules before continuing.
+Do not add dependencies or manifest/lockfile changes for this selector unless a
+standards note first records the owner crate, transitive cost, feature impact,
+and verification plan. Verification must include public fixture/serde tests for
+the new contract, focused selector unit tests, `cargo fmt`, default/all-features
+and no-default-features `cargo check` for touched public crates, targeted
+legacy/path-field searches, and `git diff --check`.
+
+2026-05-25 dispatch-selection contract implementation completed in
+`pantograph-scheduler`. The scheduler now owns strict path-free dispatch
+selection DTOs and a pure synchronous selector that produces a validated
+`SchedulerDispatchDecision` only when exactly one candidate satisfies explicit
+runtime/device requirements and carries real reservation/resource-fit facts.
+Missing candidates, duplicate ids, missing required facts, incompatible hard
+constraints, rejected resource fits, and ambiguous eligible candidates return
+typed no-selection diagnostics. Workflow-service still must wire production
+runtime tasks by collecting canonical candidate facts and calling the scheduler
+selector before runtime-host dispatch; graph editor and node-engine remain
+path-free and do not choose runtime/device policy.
 
 ## Effects On Existing Systems
 
