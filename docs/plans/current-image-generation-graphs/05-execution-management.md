@@ -11186,6 +11186,32 @@ Worker rules:
     `WorkflowSchedulerTaskResult` mapping slice. The active execution-plan
     warning remains a cleanup blocker for the later cross-crate handoff removal
     slice and must not be silenced.
+- 2026-05-25 Milestone 5c runtime-host response task-result mapping slice
+  completed:
+  - Slice scope: `pantograph-workflow-service` runtime-host response mapping
+    module/tests, orchestrator staged handoff method, workflow README, and
+    Milestone 5c plan notes.
+  - No-fallback confirmation: this slice maps only validated terminal
+    runtime-host responses that already passed the shared dispatcher boundary.
+    It does not launch runtime work, synthesize handoff from execution plans,
+    read graph-local paths, call node-engine planned inference, or expose Pumas
+    load targets outside the runtime host.
+  - Implementation: added focused runtime-host response to
+    `WorkflowSchedulerTaskResult` mapping for completed/failed/rejected
+    terminal states, path-free scalar/media outputs, terminal metadata, and
+    diagnostics; accepted non-terminal responses and unsupported future
+    runtime-host variants fail closed.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    workflow::runtime_host_task_result_mapping --lib`; `cargo test -p
+    pantograph-workflow-service
+    orchestrator_dispatches_runtime_task_through_shared_runtime_host_port
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`.
+  - Follow-up: all workflow-service checks still report only the known
+    `set_active_run_execution_plan` dead-code warning from the remaining
+    active execution-plan runtime handoff removal boundary.
 
 ### Traceability Links
 

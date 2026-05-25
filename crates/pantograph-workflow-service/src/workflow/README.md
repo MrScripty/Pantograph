@@ -28,6 +28,7 @@ public exports out of the service crate.
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `execution_plan_model_ref.rs` | Parse-once selected Pumas model-ref value object for run execution plans, including raw model-id normalization and local-path/unsupported-URI rejection. |
 | `execution_plan_selected_facts.rs` | Workflow-owned selected backend/runtime/device fact value objects for run execution plans. |
+| `runtime_host_task_result_mapping.rs` | Focused mapping from validated runtime-host terminal responses into typed scheduler task results without exposing executable load targets. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |
 | `session_io_artifacts.rs` | Retained workflow/session I/O artifact metadata and small text/JSON ArtifactStore materialization helpers for diagnostics-ledger projection. |
@@ -135,6 +136,10 @@ facade test module.
   converts node-engine outputs back into `WorkflowSchedulerTaskResult` values.
   It must reject runtime inference before calling node-engine and must not
   read graph data, call output demand, or execute Pumas/model-provider nodes.
+- Runtime-host task-result mapping consumes only validated terminal
+  runtime-host responses. It maps typed, path-free runtime-host outputs into
+  `WorkflowSchedulerTaskResult` values and fails closed for accepted
+  non-terminal responses or unsupported future runtime-host variants.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.

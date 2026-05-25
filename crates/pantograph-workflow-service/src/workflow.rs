@@ -37,6 +37,7 @@ mod local_network_api;
 mod media_capability_contracts;
 mod non_runtime_task_adapter;
 mod preflight_api;
+mod runtime_host_task_result_mapping;
 mod runtime_preflight;
 mod service_config;
 mod session_execution_api;
@@ -108,6 +109,9 @@ pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub use self::media_capability_contracts::*;
 pub(crate) use self::non_runtime_task_adapter::{
     execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
+};
+pub(crate) use self::runtime_host_task_result_mapping::{
+    runtime_host_response_to_task_result, WorkflowRuntimeHostTaskResultMappingError,
 };
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};

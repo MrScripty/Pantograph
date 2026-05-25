@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use pantograph_runtime_host_contracts::{
     RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, SchedulerRuntimeHostDispatcher,
+    SchedulerRuntimeHostDispatcher,
 };
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
@@ -79,7 +79,8 @@ async fn orchestrator_dispatches_runtime_task_through_shared_runtime_host_port()
         .await
         .expect("dispatch-selected handoff should reach runtime host port");
 
-    assert_eq!(result.as_ref().state, RuntimeHostExecutionState::Accepted);
+    assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
+    assert_eq!(result.outputs.len(), 2);
     let recorded = port.requests();
     assert_eq!(recorded.len(), 1);
     assert_eq!(
@@ -974,7 +975,7 @@ fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
 
 fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
     serde_json::from_str(include_str!(
-        "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_accepted.json"
+        "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_completed_outputs.json"
     ))
     .expect("runtime host response fixture")
 }

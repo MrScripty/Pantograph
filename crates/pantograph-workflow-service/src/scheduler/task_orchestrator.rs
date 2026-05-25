@@ -1,6 +1,4 @@
-use pantograph_runtime_host_contracts::{
-    RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher, ValidatedRuntimeHostExecutionResponse,
-};
+use pantograph_runtime_host_contracts::{RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher};
 use pantograph_scheduler::{
     SchedulerContractError, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
     SchedulerRuntimeHandoff, SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind,
@@ -13,7 +11,8 @@ use thiserror::Error;
 
 use crate::workflow::{
     execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
-    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
+    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
+    WorkflowPortBinding, WorkflowRuntimeHostTaskResultMappingError,
     WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
     WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
@@ -55,11 +54,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         execution_request_id: impl Into<String>,
         handoff: SchedulerRuntimeHandoff,
-    ) -> Result<ValidatedRuntimeHostExecutionResponse, WorkflowSchedulerTaskOrchestratorError> {
-        self.runtime_host_dispatcher
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        let response = self
+            .runtime_host_dispatcher
             .dispatch(execution_request_id, handoff)
             .await
-            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)?;
+        runtime_host_response_to_task_result(&response)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
     }
 
     pub(crate) fn initial_task_state_records(
@@ -616,6 +618,9 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[allow(dead_code)]
     #[error("runtime-host dispatch failed")]
     RuntimeHostDispatch(RuntimeHostDispatchError),
+    #[allow(dead_code)]
+    #[error("runtime-host task result mapping failed")]
+    RuntimeHostTaskResultMapping(WorkflowRuntimeHostTaskResultMappingError),
     #[error("scheduler contract validation failed")]
     SchedulerContract(SchedulerContractError),
     #[error("workflow service operation failed")]

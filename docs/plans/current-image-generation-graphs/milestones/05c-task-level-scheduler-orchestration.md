@@ -276,6 +276,16 @@ durable task orchestration path.
   rejected, and dispatcher response correlation still works. This slice does
   not wire runtime execution and does not revive any active-plan, reduced-plan,
   graph-path, or node-engine planned-inference fallback.
+  2026-05-25 implementation status: workflow-service now owns the focused
+  runtime-host response to `WorkflowSchedulerTaskResult` mapper. The mapper
+  consumes only validated terminal runtime-host responses, maps typed path-free
+  scalar and media/artifact outputs into scheduler task-result values, maps
+  runtime-host diagnostics into task-result diagnostics, rejects accepted
+  non-terminal responses, and fails closed for unsupported future runtime-host
+  states, outputs, or diagnostic variants. The staged orchestrator runtime
+  handoff method now consumes the mapper after shared dispatcher response
+  validation; runtime execution is still not wired into production session
+  progression.
 - [ ] Replace workflow/session run execution so the dedicated scheduler-task
   execution path, not node-engine output demand, advances workflow progress.
   A workflow must be able to pause between tasks while another workflow's
@@ -1329,3 +1339,16 @@ durable task orchestration path.
   with the known active execution-plan dead-code warning for
   `set_active_run_execution_plan`; that warning remains the recorded
   cross-crate runtime handoff removal boundary and was not hidden.
+- 2026-05-25 implementation slice completed the workflow-service
+  runtime-host response to task-result mapping boundary. Verification passed:
+  `cargo fmt -p pantograph-workflow-service -- --check`,
+  `cargo test -p pantograph-workflow-service
+  workflow::runtime_host_task_result_mapping --lib`,
+  `cargo test -p pantograph-workflow-service
+  orchestrator_dispatches_runtime_task_through_shared_runtime_host_port --lib`,
+  `cargo check -p pantograph-workflow-service`,
+  `cargo check -p pantograph-workflow-service --all-features`, and
+  `cargo check -p pantograph-workflow-service --no-default-features`.
+  Each `cargo check` still reports only the known
+  `set_active_run_execution_plan` warning from the remaining active-plan
+  runtime handoff removal boundary; no new mapper warnings remain.

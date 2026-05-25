@@ -1694,6 +1694,14 @@ host depend on workflow-service task-result DTOs. Runtime execution is still
 not wired; runtime tasks must remain fail-closed until scheduler-selected
 handoff dispatch and workflow-service result mapping are implemented.
 
+2026-05-25 implementation update: the workflow-service mapping slice is now
+complete. A focused mapper converts validated terminal runtime-host responses
+into `WorkflowSchedulerTaskResult` values, rejects accepted non-terminal
+responses, and fails closed for unsupported future runtime-host variants.
+The staged orchestrator handoff method now maps dispatcher responses through
+that boundary, but production session progression still does not dispatch
+runtime tasks until the scheduler-selected handoff wiring slice is implemented.
+
 ## Effects On Existing Systems
 
 ### Scheduler
