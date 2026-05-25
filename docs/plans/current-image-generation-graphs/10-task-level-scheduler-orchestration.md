@@ -1448,37 +1448,155 @@ active execution-plan storage read by embedded-runtime planned inference; that
 is a cross-crate bridge replacement boundary, not a local workflow-service
 dead-code deletion.
 
+## Scheduler Runtime Handoff Replacement Replan
+
+2026-05-25 decision: use option 3. Replace the active execution-plan
+planned-inference bridge with scheduler-owned runtime handoff dispatch, then
+delete the legacy bridge. This is a cross-crate replacement, not a compatibility
+period.
+
+Current conflict:
+
+- Workflow-service still stores an active `WorkflowExecutionPlan` for a run.
+- `pantograph-embedded-runtime` planned inference reads that stored plan,
+  projects a node decision into an inference backend decision, resolves Pumas
+  package facts and artifact load target, then calls the inference gateway.
+- That makes the embedded runtime a secondary runtime-decision path and keeps a
+  whole-run plan bridge alive after scheduler-task execution has become the
+  canonical workflow progress owner.
+
+Replacement contract:
+
+- Workflow-service scheduler-task execution consumes the existing
+  `SchedulerRuntimeHandoff`, `RuntimeHostExecutionRequest`,
+  `RuntimeHostExecutionPort`, and `SchedulerRuntimeHostDispatcher` contracts
+  rather than adding parallel handoff or runtime-host DTOs.
+- The handoff is built only after upstream scheduler task inputs are
+  materialized, binding resolution produces a valid `SchedulableTaskIntent`,
+  dependency readiness admits the task, and scheduler policy produces a
+  dispatch decision.
+- The handoff must remain path-free. It carries workflow/run/node/task
+  correlation, typed task intent, readiness proof, dependency environment,
+  bounded diagnostics, and a scheduler dispatch decision with selected
+  runtime/device/model facts. It must not carry executable Pumas load targets,
+  local graph model paths, frontend `modelPath` values, reduced execution-plan
+  projections, node-engine internals, worker launch data, or an
+  executor-selected runtime.
+- Runtime-host execution resolves final Pumas load-target readiness from the
+  scheduler-selected `PumasModelRef` inside the dispatch decision. Executable
+  artifact paths remain host-local facts and must not be projected back into the
+  scheduler, workflow-service task graph, node engine, or graph editor.
+- Runtime selection from graph nodes is a hard scheduler constraint only when
+  explicitly provided; otherwise the scheduler policy selects the runtime.
+  Either way, the inference crate receives the selected runtime only through
+  the scheduler-built handoff.
+
+Staged implementation:
+
+1. Consume the existing workflow-service task-result, active-run result
+   storage, binding-resolution, scheduler handoff, and runtime-host dispatch
+   contracts. Remove staged `dead_code` allowances as each integration point
+   starts using the existing boundary.
+2. Add or wire the production scheduler dispatch-decision selector inside
+   `pantograph-scheduler`. Workflow-service may request dispatch selection and
+   build the validated handoff envelope, but it must not choose runtime policy,
+   device policy, batching, or historical-score behavior locally.
+3. Extend the runtime-host response contract with typed, path-free output
+   values that workflow-service can map into `WorkflowSchedulerTaskResult`.
+   Runtime-host contracts own the runtime response DTO; workflow-service owns
+   the mapping into workflow task results. Do not make runtime-host contracts
+   depend on workflow-service. The response extension must use a stable contract
+   version, explicit output value enum variants, bounded outputs/diagnostics,
+   `serde(deny_unknown_fields)`, `TryFrom` validation, typed error enums, and
+   `#[non_exhaustive]` public enums where future runtime outputs are expected.
+   If a runtime output cannot be represented by a typed variant, stop and plan
+   the contract extension rather than adding `serde_json::Value`, arbitrary
+   metadata maps, or stringified values.
+4. Wire runtime task readiness through the existing
+   `workflow_scheduler_resolve_task_intent` binding-resolution boundary so
+   connected Pumas refs and other materialized inputs become a validated
+   `SchedulableTaskIntent` before dispatch. Do not duplicate input
+   materialization inside the runtime dispatch path.
+5. Implement the embedded-runtime `RuntimeHostExecutionPort` by accepting a
+   validated dispatch-selected runtime-host request, resolving the Pumas artifact
+   load target from the dispatch-selected `PumasModelRef`, calling the inference
+   gateway, and returning a completed or failed typed runtime-host response.
+   This implementation must not query workflow-service active execution plans.
+6. Wire runtime scheduler tasks through `SchedulerRuntimeHostDispatcher` from
+   the dedicated scheduler-task session runner. The runner must transition or
+   claim task state under the store lock, drop the lock before awaiting
+   runtime-host execution, then reacquire the store lock to persist terminal
+   state and `WorkflowSchedulerTaskResult`.
+7. Delete `set_active_run_execution_plan`, `active_run_execution_plan`,
+   `workflow_execution_session_active_execution_plan`, active execution-plan
+   store tests, embedded-runtime active-plan lookup/projection helpers,
+   `workflow_execution_plan_projection`, `EmbeddedPlannedInferenceExecutionHost`,
+   node-engine `PlannedInferenceExecutionHost`, and the image-generation success
+   branch that reconstructs dispatch from a whole-run execution plan.
+8. Update crate READMEs and this plan to state that runtime dispatch has one
+   source of truth: scheduler task state plus dispatch-selected
+   `SchedulerRuntimeHandoff`.
+
+Verification for the staged replacement:
+
+- Start each cross-layer slice with a focused failing contract or acceptance test
+  that exercises the externally meaningful input/output for that slice before
+  implementation expands shared layers.
+- Targeted `rg` proves no production code reads active execution plans for
+  runtime dispatch after the deletion stage.
+- Workflow-service tests cover binding-resolution-driven runtime readiness,
+  handoff construction from scheduler task state and scheduler dispatch
+  decisions, runtime-host response to `WorkflowSchedulerTaskResult` mapping,
+  missing/ambiguous runtime diagnostics, explicit runtime constraint
+  enforcement, and no graph-local path fallback.
+- Scheduler tests cover production dispatch-decision creation, including graph
+  runtime constraints as hard requirements, scheduler-selected runtime behavior
+  when the graph leaves runtime implicit, and no workflow-service-local policy
+  selection.
+- Embedded-runtime tests cover handoff-to-gateway execution and Pumas
+  unavailable/invalid/stale load-target diagnostics with runtime/task
+  correlation.
+- Runtime-host contract tests cover output payload validation, response/request
+  correlation, and rejection of path-shaped or executable load-target response
+  data.
+- Runtime-dispatch orchestration tests cover lock boundaries and idempotency:
+  no active-run store lock is held across runtime-host awaits, stale state or
+  duplicate terminal completion fails closed, and cancellation after dispatch
+  cannot leave a completed-without-result or result-without-completed state.
+- Session execution tests cover runtime tasks staying fail-closed before
+  handoff wiring, executing only through the handoff after wiring, persisting
+  typed task results, and deleting the old planned-inference success path.
+- `cargo fmt`, focused tests for touched crates, default/no-default/all-feature
+  checks for touched crates, and `git diff --check` must pass for each slice.
+
 ## Task Result Materialization Plan
 
-The next implementation target is the option 2 materialization boundary:
+The option 2 materialization boundary is now staged in code and must be consumed
+by the scheduler-task runner:
 
-- Add `WorkflowSchedulerTaskResult` as a workflow-service contract, not a
-  scheduler policy contract. It records what a workflow task produced so the
-  orchestrator can resolve downstream task inputs.
-- Include stable schema version, workflow id, workflow run id, node id, task
-  id, result status, typed output values, bounded diagnostics, and optional
-  terminal metadata. It must not contain local model paths, executable Pumas
-  load targets, worker launch details, runtime handoff, or raw node-engine
-  internals.
-- Use typed value variants for at least `PumasModelRef`, scalar strings,
-  booleans, signed/unsigned integers, media/artifact refs, and diagnostic-only
-  outputs. Floating-point generation settings remain blocked until the
-  scheduler trait value contract grows an explicit float variant; do not
-  stringify floats silently. If a materialization or trait slice needs
-  guidance scale, denoise strength, or other float-like generation settings,
-  stop and add the typed scheduler/workflow contract extension first.
-- Add active-run result storage and read APIs in workflow-service as the first
-  stage. Mark this as staged storage, not the final durability story, and do
-  not let the current whole-run `active_run` shape become the long-term task
-  scheduler state model for concurrent users, batching, or multi-device
-  orchestration.
-- Add binding resolution that consumes `WorkflowSchedulerTaskGraph` input
-  bindings and materialized upstream results. It emits valid scheduler intent
-  only after all required typed values exist and validate.
-- Map unresolved, wrong-type, unavailable, invalid, or ambiguous materialized
-  inputs into typed diagnostics and queue states. Do not fall back to graph
-  fields, `ModelRefV2`, `model_path`, frontend `modelPath`, or whole-workflow
-  output-node demand.
+- `WorkflowSchedulerTaskResult`, active-run result storage, source-input
+  materialization, non-runtime result conversion, output projection, and
+  dependency binding resolution already exist as focused workflow-service
+  boundaries. The next slices must wire these into the dedicated session runner
+  and remove their scoped staging `dead_code` allowances.
+- Runtime-host execution still needs a typed, path-free output payload that can
+  be mapped into `WorkflowSchedulerTaskResult`. The payload may carry output
+  port ids, scalar values, media/artifact refs, diagnostics, and terminal
+  metadata, but must not contain local model paths, executable Pumas load
+  targets, worker launch details, runtime handoff internals, or raw node-engine
+  values.
+- Floating-point generation settings remain blocked until the scheduler trait
+  value contract grows an explicit float variant; do not stringify floats
+  silently. If a materialization or trait slice needs guidance scale, denoise
+  strength, or other float-like generation settings, stop and add the typed
+  scheduler/workflow contract extension first.
+- Binding resolution consumes `WorkflowSchedulerTaskGraph` input bindings and
+  materialized upstream results. It emits valid scheduler intent only after all
+  required typed values exist and validate.
+- Unresolved, wrong-type, unavailable, invalid, or ambiguous materialized inputs
+  must become typed diagnostics and scheduler task states. Do not fall back to
+  graph fields, `ModelRefV2`, `model_path`, frontend `modelPath`, active
+  execution plans, or whole-workflow output-node demand.
 - Keep durable event-sourced task-result ledger replay as the later option 3
   objective. The active-run contract must be serializable and replay-safe so
   the later durable implementation changes storage, not semantics.
@@ -1509,6 +1627,16 @@ The next implementation target is the option 2 materialization boundary:
   graph validation and non-runtime single-task execution from already
   materialized inputs. Runtime host owns Pumas load-target resolution and
   executable runtime dispatch.
+- Runtime-host response payloads are runtime contracts, not workflow-service
+  task results. Map them at the workflow-service boundary into
+  `WorkflowSchedulerTaskResult` so the runtime host never depends on
+  workflow-service and workflow-service never receives executable load-target
+  state.
+- Runtime-host response output variants should be an intentionally mapped subset
+  or sibling contract, not a copied workflow-service DTO. Keep the mapping in a
+  focused workflow-service module with exhaustive tests so future runtime output
+  variants fail closed until the workflow task-result contract deliberately
+  supports them.
 - Active-run result storage is staged state, not the final durability claim.
   The result DTO must carry enough workflow/run/node/task correlation,
   versioning, status, and diagnostics for later diagnostics-ledger replay
@@ -1542,6 +1670,20 @@ The next implementation target is the option 2 materialization boundary:
   no node-engine output-demand runtime fallback. Verification must include
   relevant Rust format/check/test commands, default/all-features/no-default
   feature checks when public feature contracts change, and `git diff --check`.
+- New or ownership-changing source directories must update README files in the
+  same slice. Contract crates and host-facing modules must document API consumer
+  contracts, structured producer contracts, lifecycle ordering, error semantics,
+  compatibility/versioning, and rejected alternatives instead of relying only on
+  type names.
+
+2026-05-25 standards pass: the replan has been reviewed against the local plan,
+architecture, Rust API, async/concurrency, testing, tooling, and documentation
+standards. Implementation remains standards-compliant only if the runtime-host
+response extension stays typed/validated/path-free, scheduler policy stays in
+`pantograph-scheduler`, workflow-service acts as the async orchestration shell,
+runtime-host executable load targets remain host-local, and every retired
+planned-inference/active-plan surface is deleted rather than retained as a
+fallback.
 
 ## Effects On Existing Systems
 

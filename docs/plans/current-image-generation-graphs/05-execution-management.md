@@ -11117,6 +11117,50 @@ Worker rules:
     inference host. Removing it requires replacing the cross-crate
     planned-inference bridge with scheduler-selected runtime handoff
     dispatch, not a workflow-service-only deletion.
+- 2026-05-25 Milestone 5c scheduler runtime handoff replacement replan
+  recorded and refined after codebase review:
+  - Decision: use option 3. Replace the active execution-plan
+    planned-inference bridge with scheduler-owned runtime handoff dispatch by
+    consuming the existing `SchedulerRuntimeHandoff`,
+    `RuntimeHostExecutionRequest`, `RuntimeHostExecutionPort`, and
+    `SchedulerRuntimeHostDispatcher` contracts. Do not add parallel handoff or
+    runtime-host DTOs.
+  - No-fallback/no-legacy confirmation: runtime tasks remain fail-closed until
+    handoff execution is wired. Do not preserve the active execution-plan
+    lookup, reduced plan projection, node-engine planned-inference success
+    branch, graph-local model paths, or executor-selected runtime decisions as
+    alternate successful paths.
+  - Boundary clarification: `SchedulerRuntimeHandoff` remains path-free and
+    carries scheduler task intent, readiness proof, environment, diagnostics,
+    and dispatch-selected runtime/device/model facts. It must not carry
+    executable Pumas load targets, local paths, worker launch details, or
+    reduced execution-plan facts. Embedded-runtime resolves Pumas load-target
+    readiness from the scheduler-selected `PumasModelRef`.
+  - Planned stages: consume existing task-result, binding-resolution, handoff,
+    and runtime-host contracts; add or wire production scheduler dispatch
+    decision selection inside `pantograph-scheduler`; extend runtime-host
+    responses with typed path-free output values; map runtime-host outputs into
+    `WorkflowSchedulerTaskResult`; wire scheduler-task runtime execution through
+    the dispatcher; delete active execution-plan store APIs/tests,
+    embedded-runtime active-plan projection helpers,
+    `EmbeddedPlannedInferenceExecutionHost`, node-engine
+    `PlannedInferenceExecutionHost`, and related success branches; update crate
+    documentation.
+  - Verification expectation: targeted searches for active execution-plan
+    runtime dispatch reads and planned-inference host usage, focused scheduler,
+    runtime-host-contract, workflow-service, and embedded-runtime tests,
+    default/no-default/all-feature checks for touched crates, and `git diff
+    --check`.
+  - Standards pass: reviewed against local plan, architecture, Rust API,
+    async/concurrency, testing, tooling, and documentation standards. The
+    remaining work must keep runtime-host response outputs typed, validated,
+    bounded, path-free, and mapped into `WorkflowSchedulerTaskResult` only at the
+    workflow-service boundary; keep scheduler dispatch policy inside
+    `pantograph-scheduler`; avoid store locks across runtime-host awaits; start
+    cross-layer slices with failing contract/acceptance tests; update README
+    ownership docs with API/producer contract details; and delete every retired
+    active-plan/planned-inference success path rather than retaining
+    compatibility shims.
 
 ### Traceability Links
 

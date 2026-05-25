@@ -224,6 +224,47 @@ durable task orchestration path.
   with typed `SchedulerPolicyError` diagnostics and returns a
   capability-violation workflow error. Actual dispatch-selected
   `SchedulerRuntimeHandoff` construction/execution remains open.
+  2026-05-25 replan decision refined after codebase review: use option 3 and
+  replace the active-execution-plan planned-inference bridge with scheduler-owned
+  runtime handoff dispatch by consuming the existing shared contracts, not by
+  adding parallel DTOs. `SchedulerRuntimeHandoff` must remain path-free and must
+  never carry executable Pumas load targets, local paths, worker launch details,
+  or reduced execution-plan projections. The replacement must happen in staged
+  vertical slices:
+  1. consume the existing `WorkflowSchedulerTaskResult`,
+     active-run result storage, binding-resolution, `SchedulerRuntimeHandoff`,
+     `RuntimeHostExecutionRequest`, `RuntimeHostExecutionPort`, and
+     `SchedulerRuntimeHostDispatcher` boundaries;
+  2. add or wire production `pantograph-scheduler` dispatch-decision selection
+     so workflow-service does not own runtime/device/batching policy;
+  3. extend `RuntimeHostExecutionResponse` with typed, path-free output values
+     that workflow-service can map into `WorkflowSchedulerTaskResult`. The
+     response extension must use a stable contract version, explicit output
+     value enum variants, bounded outputs/diagnostics,
+     `serde(deny_unknown_fields)`, `TryFrom` validation, typed error enums, and
+     `#[non_exhaustive]` public enums where future runtime output families are
+     expected. Runtime-host contracts must not depend on workflow-service
+     result DTOs; workflow-service owns the focused mapping module and exhaustive
+     tests from runtime outputs to task results;
+  4. run runtime readiness through
+     `workflow_scheduler_resolve_task_intent` so connected Pumas refs and other
+     upstream values materialize before dispatch;
+  5. implement embedded-runtime `RuntimeHostExecutionPort` by resolving the
+     Pumas load target from the scheduler-selected `PumasModelRef`, calling the
+     inference gateway, and returning a completed or failed runtime-host
+     response without reading workflow-service execution plans;
+  6. wire the dedicated session runner to transition/claim state under the store
+     lock, drop the lock for runtime-host awaits, then persist terminal state and
+     `WorkflowSchedulerTaskResult` under a new store lock;
+  7. delete `active_run_execution_plan`,
+     `workflow_execution_session_active_execution_plan`, active execution-plan
+     store tests, embedded-runtime active-plan lookup/projection helpers,
+     `workflow_execution_plan_projection`, `EmbeddedPlannedInferenceExecutionHost`,
+     node-engine `PlannedInferenceExecutionHost`, and the image-generation
+     success branch that reconstructs dispatch from a whole-run plan.
+  Until the handoff execution slice is wired, runtime tasks must continue to fail
+  closed with typed scheduler/workflow diagnostics; do not re-enable a successful
+  active-plan or node-engine planned-inference compatibility route.
 - [ ] Replace workflow/session run execution so the dedicated scheduler-task
   execution path, not node-engine output demand, advances workflow progress.
   A workflow must be able to pause between tasks while another workflow's
@@ -364,6 +405,15 @@ durable task orchestration path.
   replan boundary: active execution-plan storage still exists because
   embedded-runtime planned inference reads it; removing it requires replacing
   that cross-crate bridge with scheduler-selected runtime handoff dispatch.
+  2026-05-25 replan decision: the cross-crate replacement must preserve the
+  task scheduler as the only source of runtime truth. Runtime selection from a
+  graph node remains a scheduler input/constraint, not an executor decision.
+  The node engine and graph editor may expose typed inference inputs and
+  option-provider hints, but they must not receive local model paths,
+  executable Pumas load targets, backend execution decisions, or direct runtime
+  launch details. The runtime-host port receives only a scheduler-built
+  handoff for a ready runtime task after upstream scheduler task inputs are
+  materialized.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
@@ -424,6 +474,15 @@ durable task orchestration path.
 - Runtime-host dispatch test proving runtime inference tasks use actual
   dispatch-selected `SchedulerRuntimeHandoff` and reject reduced execution-plan
   projections as launch input.
+- Runtime-host output contract tests proving typed output payload validation,
+  bounded diagnostics, response/request correlation, unknown/path-field
+  rejection, and fail-closed behavior for output variants not yet mapped to
+  `WorkflowSchedulerTaskResult`.
+- Runtime-dispatch orchestration tests proving no active-run store lock is held
+  across runtime-host awaits, duplicate dispatch or duplicate terminal
+  completion fails closed, cancellation cannot leave completed-without-result or
+  result-without-completed state, and stale task state cannot be completed by a
+  late runtime-host response.
 - Node-engine tests proving runtime inference nodes do not call
   `PlannedInferenceExecutionHost` and fail closed when scheduler task state is
   missing.
@@ -578,6 +637,13 @@ durable task orchestration path.
   workflow-service. Workflow-service may orchestrate against the shared port,
   and embedded-runtime may implement it, but neither crate may define a
   parallel DTO shape.
+- Runtime-host response output values must be a typed runtime-host contract with
+  an explicit workflow-service mapping boundary. Do not reuse
+  `WorkflowSchedulerTaskResult` inside the shared runtime-host crate, do not use
+  arbitrary `serde_json::Value` payloads, and do not stringify unsupported
+  values. If a runtime needs a new output kind, add the explicit runtime-host
+  variant, workflow-service mapping, focused tests, and README updates in the
+  same slice.
 - The shared runtime-host crate must remain a boundary/contract crate. It may
   define DTOs, validated wrappers, typed errors, the async execution port
   trait, and synchronous request/response validation helpers. It must not own
@@ -604,6 +670,12 @@ durable task orchestration path.
 - Every slice must update module documentation where ownership changes and run
   focused tests plus relevant Rust format/check/test commands, including
   default/all-features/no-default checks when public feature contracts change.
+- Start cross-layer runtime-dispatch slices with a failing contract or
+  acceptance test that proves the intended externally meaningful input/output
+  before broadening shared layers. README updates for new or ownership-changing
+  source directories must include API consumer contracts, structured producer
+  contracts, lifecycle/error semantics, compatibility/versioning notes, and
+  rejected alternatives.
 
 **Status:**
 
@@ -1227,3 +1299,11 @@ durable task orchestration path.
   scheduler-selected runtime-host dispatch cutover, and the remaining
   orchestrator staging `dead_code` allowances should be removed when that
   branch consumes the runtime handoff APIs.
+- 2026-05-25 standards pass: reviewed the milestone against the local plan,
+  architecture, Rust API, async/concurrency, testing, tooling, and documentation
+  standards. The remaining runtime-handoff work is standards-compliant only if
+  dispatch selection stays inside `pantograph-scheduler`, runtime-host output
+  contracts stay typed/validated/path-free, workflow-service owns mapping and
+  async orchestration without holding locks across awaits, graph editor and
+  node-engine remain path-free/non-policy consumers, and every retired
+  active-plan/planned-inference success path is deleted rather than preserved.
