@@ -265,6 +265,17 @@ durable task orchestration path.
   Until the handoff execution slice is wired, runtime tasks must continue to fail
   closed with typed scheduler/workflow diagnostics; do not re-enable a successful
   active-plan or node-engine planned-inference compatibility route.
+  2026-05-25 implementation status: the runtime-host response contract now
+  carries typed, bounded, path-free output values plus optional path-free
+  terminal metadata. `RuntimeHostExecutionOutputValue` currently supports
+  string, bool, signed/unsigned integer, media/artifact refs, and diagnostic-only
+  values; unsupported output families must add an explicit enum variant and
+  workflow-service mapping slice before use. Focused fixtures and tests prove
+  completed responses with outputs validate, path-shaped output fields are
+  rejected, output counts are bounded, outputs on non-completed responses are
+  rejected, and dispatcher response correlation still works. This slice does
+  not wire runtime execution and does not revive any active-plan, reduced-plan,
+  graph-path, or node-engine planned-inference fallback.
 - [ ] Replace workflow/session run execution so the dedicated scheduler-task
   execution path, not node-engine output demand, advances workflow progress.
   A workflow must be able to pause between tasks while another workflow's
@@ -1307,3 +1318,14 @@ durable task orchestration path.
   async orchestration without holding locks across awaits, graph editor and
   node-engine remain path-free/non-policy consumers, and every retired
   active-plan/planned-inference success path is deleted rather than preserved.
+- 2026-05-25 implementation slice completed the runtime-host response output
+  contract in `pantograph-runtime-host-contracts`. Verification passed:
+  `cargo fmt -p pantograph-runtime-host-contracts -- --check`,
+  `cargo test -p pantograph-runtime-host-contracts`,
+  `cargo check -p pantograph-runtime-host-contracts`,
+  `cargo check -p pantograph-runtime-host-contracts --all-features`, and
+  `cargo check -p pantograph-runtime-host-contracts --no-default-features`.
+  Downstream verification `cargo check -p pantograph-workflow-service` passed
+  with the known active execution-plan dead-code warning for
+  `set_active_run_execution_plan`; that warning remains the recorded
+  cross-crate runtime handoff removal boundary and was not hidden.

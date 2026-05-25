@@ -83,6 +83,83 @@ fn runtime_host_execution_response_fixture_decodes_and_validates() {
 }
 
 #[test]
+fn runtime_host_completed_response_accepts_typed_path_free_outputs() {
+    let response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_response_completed_outputs.json"
+    ))
+    .expect("completed runtime host response fixture must decode");
+
+    let validated = ValidatedRuntimeHostExecutionResponse::try_from(response)
+        .expect("completed runtime host response with typed outputs must validate");
+
+    assert_eq!(
+        validated.as_ref().state,
+        RuntimeHostExecutionState::Completed
+    );
+    assert_eq!(validated.as_ref().outputs.len(), 2);
+    assert!(validated.as_ref().terminal_metadata.is_some());
+}
+
+#[test]
+fn runtime_host_response_rejects_path_shaped_output_fields() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_response_completed_outputs.json"
+    ))
+    .expect("completed runtime host response fixture must decode as value");
+    value["outputs"][0]["value"]["path"] = json!("/tmp/generated.png");
+
+    let error = serde_json::from_value::<RuntimeHostExecutionResponse>(value)
+        .expect_err("runtime host outputs must reject path-shaped fields");
+
+    assert!(error.to_string().contains("string \"path\""), "{error}");
+}
+
+#[test]
+fn runtime_host_response_rejects_too_many_outputs() {
+    let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_response_completed_outputs.json"
+    ))
+    .expect("completed runtime host response fixture must decode");
+    let output = response
+        .outputs
+        .first()
+        .expect("fixture must contain output")
+        .clone();
+    response.outputs = vec![output; 65];
+
+    let error = ValidatedRuntimeHostExecutionResponse::try_from(response)
+        .expect_err("runtime host response outputs must be bounded");
+
+    assert_eq!(
+        error,
+        RuntimeHostExecutionContractError::TooManyOutputs {
+            actual: 65,
+            max: 64
+        }
+    );
+}
+
+#[test]
+fn runtime_host_response_rejects_outputs_without_completed_state() {
+    let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_response_completed_outputs.json"
+    ))
+    .expect("completed runtime host response fixture must decode");
+    response.state = RuntimeHostExecutionState::Accepted;
+
+    let error = ValidatedRuntimeHostExecutionResponse::try_from(response)
+        .expect_err("non-completed runtime host response must not carry outputs");
+
+    assert_eq!(
+        error,
+        RuntimeHostExecutionContractError::InvalidField {
+            field: "outputs",
+            reason: "runtime-host outputs are valid only on completed responses"
+        }
+    );
+}
+
+#[test]
 fn runtime_host_failed_response_requires_diagnostics() {
     let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
         "../tests/fixtures/runtime_host_execution_response_accepted.json"

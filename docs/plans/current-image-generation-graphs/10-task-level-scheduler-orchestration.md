@@ -1685,6 +1685,15 @@ runtime-host executable load targets remain host-local, and every retired
 planned-inference/active-plan surface is deleted rather than retained as a
 fallback.
 
+2026-05-25 implementation update: the first runtime-host response contract
+slice is complete. `pantograph-runtime-host-contracts` now exposes typed,
+bounded, path-free response output values and optional terminal metadata, with
+fixture-backed validation for completed outputs and path-shaped rejection. This
+unblocks the later workflow-service mapping slice without making the runtime
+host depend on workflow-service task-result DTOs. Runtime execution is still
+not wired; runtime tasks must remain fail-closed until scheduler-selected
+handoff dispatch and workflow-service result mapping are implemented.
+
 ## Effects On Existing Systems
 
 ### Scheduler

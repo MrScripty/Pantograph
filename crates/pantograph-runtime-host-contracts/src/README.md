@@ -10,7 +10,7 @@ trait, and scheduler dispatch helper.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Crate-level contract documentation and public re-exports. |
-| `runtime_host_execution.rs` | Runtime-host execution request/response DTOs, diagnostics, validation, and typed contract errors. |
+| `runtime_host_execution.rs` | Runtime-host execution request/response DTOs, typed output values, diagnostics, validation, and typed contract errors. |
 | `runtime_host_execution_tests.rs` | Fixture-backed runtime-host execution contract tests. |
 | `runtime_host_dispatch.rs` | Runtime-host execution port trait, scheduler dispatcher, response correlation checks, and typed dispatch errors. |
 | `runtime_host_dispatch_tests.rs` | Focused dispatcher tests using a fake runtime-host port. |
@@ -24,5 +24,8 @@ trait, and scheduler dispatch helper.
 - Runtime execution requests must contain an actual dispatch-selected
   `SchedulerRuntimeHandoff`.
 - Responses must correlate to the request and scheduler handoff ids.
+- Response outputs must be typed, bounded, and path-free. They are runtime-host
+  contract values that workflow-service maps into scheduler task results; this
+  crate must not depend on workflow-service DTOs.
 - Path-shaped legacy fields are rejected by serde contract validation rather
   than accepted as compatibility aliases.

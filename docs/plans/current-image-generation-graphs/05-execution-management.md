@@ -11161,6 +11161,31 @@ Worker rules:
     ownership docs with API/producer contract details; and delete every retired
     active-plan/planned-inference success path rather than retaining
     compatibility shims.
+- 2026-05-25 Milestone 5c runtime-host response output contract slice
+  completed:
+  - Slice scope: `pantograph-runtime-host-contracts` request/response contract,
+    fixture tests, source README, fixture README, and Milestone 5c plan notes.
+  - No-fallback confirmation: this slice added typed response output values only
+    at the shared runtime-host boundary. It did not wire runtime execution,
+    active execution-plan lookup, reduced-plan handoff synthesis, graph-local
+    model paths, node-engine planned inference, or workflow-service-local
+    runtime policy.
+  - Implementation: added bounded `RuntimeHostExecutionOutput` values,
+    `RuntimeHostExecutionOutputValue`, path-free media/artifact refs, optional
+    terminal metadata, public re-exports, fixture-backed completed-response
+    coverage, output path-field rejection, output-count validation, and
+    non-completed response output rejection.
+  - Verification passed: `cargo fmt -p pantograph-runtime-host-contracts --
+    --check`; `cargo test -p pantograph-runtime-host-contracts`; `cargo check
+    -p pantograph-runtime-host-contracts`; `cargo check -p
+    pantograph-runtime-host-contracts --all-features`; `cargo check -p
+    pantograph-runtime-host-contracts --no-default-features`; `cargo check -p
+    pantograph-workflow-service` passed with the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Follow-up: workflow-service still needs the focused runtime-host output to
+    `WorkflowSchedulerTaskResult` mapping slice. The active execution-plan
+    warning remains a cleanup blocker for the later cross-crate handoff removal
+    slice and must not be silenced.
 
 ### Traceability Links
 

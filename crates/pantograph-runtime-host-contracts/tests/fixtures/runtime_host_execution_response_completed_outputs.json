@@ -1,0 +1,39 @@
+{
+  "contract_version": 1,
+  "execution_request_id": "runtime-host.request.001",
+  "workflow_id": "workflow.image_generation",
+  "workflow_run_id": "run.2026-05-22.001",
+  "node_id": "node.image_generation",
+  "task_id": "task.image_generation.001",
+  "state": "completed",
+  "outputs": [
+    {
+      "port_id": "image",
+      "value": {
+        "value_type": "media_artifact_ref",
+        "value": {
+          "artifact_id": "artifact.image.001",
+          "media_type": "image_png"
+        }
+      }
+    },
+    {
+      "port_id": "seed",
+      "value": {
+        "value_type": "u64",
+        "value": 42
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "execution_completed",
+      "message": "Runtime host completed the scheduler dispatch handoff."
+    }
+  ],
+  "terminal_metadata": {
+    "completed_at_ms": 1770000000000,
+    "attempt": 1
+  }
+}

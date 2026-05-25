@@ -17,7 +17,9 @@ pub use runtime_host_dispatch::{
 pub use runtime_host_execution::{
     RuntimeHostExecutionContractError, RuntimeHostExecutionDiagnostic,
     RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionState, RuntimeHostExecutionTerminalMetadata,
     ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
