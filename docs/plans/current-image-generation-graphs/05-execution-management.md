@@ -11342,6 +11342,42 @@ Worker rules:
   - Remaining follow-up: add runtime input-readiness advancement and canonical
     dispatch-selection request assembly so ready runtime tasks can flow into
     scheduler selection and runtime-host dispatch.
+- 2026-05-25 Milestone 5c runtime-host input payload re-plan boundary:
+  - Boundary: runtime-containing session execution cannot be wired correctly
+    after dependent runtime tasks become input-gated because
+    `RuntimeHostExecutionRequest` currently carries only
+    `execution_request_id` and `SchedulerRuntimeHandoff`. It has no typed
+    materialized input payload for connected upstream values such as prompts,
+    images, masks, control data, or other task-result outputs.
+  - Why this must stop implementation: dispatching through the current
+    runtime-host request would either run inference without the upstream data
+    the graph connected to the inference node, or force workflow-service,
+    runtime-host, or embedded-runtime code to smuggle task inputs through
+    incidental metadata/path fields. Both would violate the no-fallback rule
+    and the graph/node-engine abstraction boundary.
+  - Options to re-plan:
+    1. Add ad hoc runtime-host input fields per image-generation node. Rejected
+       as too narrow and likely to fragment across model families/runtimes.
+    2. Extend the runtime-host execution contract with a typed,
+       bounded `RuntimeHostExecutionInput` list derived from
+       `WorkflowSchedulerTaskInputBinding` and validated
+       `WorkflowSchedulerTaskResult` values. Workflow-service would assemble
+       inputs after scheduler input-readiness proves upstream results are
+       available; runtime-host would receive only typed values plus the
+       dispatch-selected handoff. This is the recommended near-term option.
+    3. Pass durable task-result/artifact references and let runtime-host resolve
+       inputs from a store. This is useful later for large media payloads, but
+       it needs storage ownership, lifetime, and access-control design before
+       becoming the only path.
+    4. Replace runtime and non-runtime task execution with one shared typed
+       task-execution envelope. This is the clean long-term target, but it is
+       broader than the current Milestone 5c cutover.
+  - Recommended next slice after approval: plan and implement option 2 first,
+    with option 3-compatible discipline for media/artifact references. The
+    contract must be path-free, `serde(deny_unknown_fields)`, typed by port id,
+    bounded, validated through `TryFrom`, and tested for correlation,
+    unsupported input variants, unknown/path-field rejection, and no-selection
+    behavior before production runtime session execution is wired.
 
 ### Traceability Links
 
