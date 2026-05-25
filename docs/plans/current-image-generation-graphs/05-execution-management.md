@@ -11320,6 +11320,28 @@ Worker rules:
     session-owned assembly of validated dispatch-selection requests from
     canonical runtime/resource/Pumas facts before this bridge can replace the
     runtime-containing fail-closed session path.
+- 2026-05-25 Milestone 5c dependent runtime task readiness slice completed:
+  - Smallest useful vertical slice: updated workflow-service scheduler task
+    initialization so runtime inference tasks with upstream dependencies start
+    as `AwaitingInputs` even when their schedulable intent is complete. Allowed
+    write set was limited to workflow-service scheduler orchestrator
+    source/tests/README and plan status.
+  - No-fallback/no-legacy confirmation: dependent inference tasks no longer
+    enter ready/runtime dispatch before connected upstream task results are
+    materialized. This preserves scheduler-owned input readiness and avoids
+    node-engine output-demand or whole-run fallback execution.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service scheduler::task_orchestrator
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; targeted source search
+    for legacy/path/stringly/panic patterns in the touched orchestrator source;
+    and `git diff --check`. The workflow-service check commands still report
+    only the known `set_active_run_execution_plan` dead-code warning from the
+    remaining active-plan runtime handoff removal boundary.
+  - Remaining follow-up: add runtime input-readiness advancement and canonical
+    dispatch-selection request assembly so ready runtime tasks can flow into
+    scheduler selection and runtime-host dispatch.
 
 ### Traceability Links
 

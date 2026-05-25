@@ -573,6 +573,9 @@ fn initial_task_state(
 
     match task.execution_class {
         WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
+            if !task.dependency_task_ids.is_empty() {
+                return Ok(awaiting_inputs_state());
+            }
             if let Some(task_intent) = task.schedulable_intent.clone() {
                 Ok(SchedulerTaskState::Ready {
                     execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },

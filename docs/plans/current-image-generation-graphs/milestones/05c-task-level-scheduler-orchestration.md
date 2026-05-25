@@ -1485,3 +1485,19 @@ durable task orchestration path.
   active-plan runtime handoff removal boundary. Remaining follow-up:
   production session execution still needs canonical dispatch-selection request
   assembly before runtime-containing runs can leave the fail-closed path.
+- 2026-05-25 implementation slice completed dependent runtime task readiness
+  initialization. Runtime inference tasks with upstream dependencies now start
+  as `AwaitingInputs` even when they already have a valid schedulable intent,
+  so scheduler-owned input readiness must materialize connected upstream
+  results before runtime dispatch selection can run. Verification passed:
+  `cargo fmt -p pantograph-workflow-service -- --check`; `cargo test -p
+  pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+  check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-workflow-service --all-features`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; targeted source search
+  for legacy/path/stringly/panic patterns; and `git diff --check`. The
+  workflow-service checks still report only the known
+  `set_active_run_execution_plan` warning. Remaining follow-up: runtime
+  input-readiness advancement and canonical dispatch-selection request assembly
+  are still required before runtime-containing session runs can leave the
+  fail-closed path.

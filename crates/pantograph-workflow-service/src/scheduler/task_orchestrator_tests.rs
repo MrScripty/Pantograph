@@ -10,8 +10,8 @@ use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerDispatchSelectionRequest, SchedulerDispatchSelectionState,
     SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerRuntimeHandoffState,
     SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateDiagnosticCode,
-    SchedulerTaskStateDiagnosticSeverity, SchedulerWorkflowId, SchedulerWorkflowRunId,
-    ValidatedSchedulerDispatchSelectionRequest,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerWorkflowId,
+    SchedulerWorkflowRunId, ValidatedSchedulerDispatchSelectionRequest,
 };
 use serde_json::json;
 
@@ -206,6 +206,29 @@ fn orchestrator_initializes_ready_state_for_schedulable_task() {
     assert_eq!(records[0].task_id.as_str(), task_intent.task_id.as_str());
     assert_eq!(records[0].state_version, 1);
     assert!(matches!(records[0].state, SchedulerTaskState::Ready { .. }));
+}
+
+#[test]
+fn orchestrator_initializes_dependent_runtime_task_as_awaiting_inputs() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let mut task = task_from_intent(task_intent);
+    task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
+    task.input_bindings = vec![text_binding("prompt", task.task_id.as_str())];
+    let task_graph = task_graph(vec![text_input_task("prompt", "paint a red cube"), task]);
+
+    let records = orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state records");
+    let runtime_record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == "task.image_generation.001")
+        .expect("runtime task record");
+
+    assert_eq!(
+        runtime_record.state.kind(),
+        SchedulerTaskStateKind::AwaitingInputs
+    );
 }
 
 #[test]

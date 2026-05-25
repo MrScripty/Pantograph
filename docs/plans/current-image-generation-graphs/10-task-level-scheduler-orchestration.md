@@ -1799,6 +1799,13 @@ the runtime/device policy owner. Production session execution still needs the
 next slice to assemble validated dispatch-selection requests from canonical
 runtime/resource/Pumas facts for ready runtime tasks.
 
+2026-05-25 dependent runtime task readiness initialization completed. Runtime
+inference tasks with upstream dependencies now initialize as `AwaitingInputs`
+instead of `Ready`, even when the graph already provides a valid
+schedulable intent. This keeps runtime dispatch behind scheduler-owned
+input-readiness materialization and prevents inference nodes from running
+before connected upstream task results are available.
+
 ## Effects On Existing Systems
 
 ### Scheduler

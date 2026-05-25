@@ -108,6 +108,10 @@ build a dispatch-selected `SchedulerRuntimeHandoff`, and dispatch through the
 shared runtime-host port. It does not create dispatch candidates, rank runtime
 policy, inspect model paths, or call Pumas; candidate assembly remains a
 separate provider/session concern.
+Runtime inference tasks that depend on upstream task outputs initialize as
+`AwaitingInputs` even when their schedulable intent is otherwise complete.
+They may become dispatch candidates only after scheduler-owned input-readiness
+logic materializes the connected upstream results.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.
@@ -169,6 +173,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   `pantograph-scheduler` returns a selected dispatch decision. A no-selection
   dispatch-selection result stops before runtime-host dispatch and preserves
   scheduler diagnostics as the reason the task did not run.
+- Runtime inference tasks with upstream dependencies must not initialize as
+  `Ready`; they remain `AwaitingInputs` until scheduler task-result materialized
+  inputs can prove dispatch inputs are available.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable
