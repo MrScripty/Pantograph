@@ -1787,6 +1787,18 @@ runtime tasks by collecting canonical candidate facts and calling the scheduler
 selector before runtime-host dispatch; graph editor and node-engine remain
 path-free and do not choose runtime/device policy.
 
+2026-05-25 workflow-service dispatch-selected handoff bridge completed.
+`WorkflowSchedulerTaskOrchestrator` can now consume a validated scheduler
+dispatch-selection request, call `pantograph-scheduler` selection, convert only
+a selected `SchedulerDispatchDecision` into `SchedulerRuntimeHandoff`, and pass
+that handoff through the shared runtime-host dispatcher. If scheduler selection
+returns no-selection diagnostics, workflow-service stops before runtime-host
+execution. This keeps graph editor and node-engine abstracted away from runtime
+paths and keeps workflow-service as the async orchestration shell rather than
+the runtime/device policy owner. Production session execution still needs the
+next slice to assemble validated dispatch-selection requests from canonical
+runtime/resource/Pumas facts for ready runtime tasks.
+
 ## Effects On Existing Systems
 
 ### Scheduler

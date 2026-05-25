@@ -18,6 +18,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `store_task_results.rs` | Staged active-run scheduler task-result storage used by Milestone 5c before durable diagnostics-ledger replay replaces the storage backend. |
 | `store_admission.rs` | Scheduler store admission ETA projection helper used by queue diagnostics. |
 | `store_diagnostics.rs` | Scheduler snapshot diagnostics and runtime-diagnostics request projection helpers extracted from the store. |
+| `task_orchestrator.rs` | Application-layer scheduler task orchestrator for source-input materialization, non-runtime node execution, scheduler dispatch-selection handoff, and runtime-host dispatch calls. |
 | `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
 
 ## Problem
@@ -101,6 +102,12 @@ ready from those results, the node-engine single-task adapter executes only
 typed non-runtime templates, and requested outputs are projected from
 scheduler task results. This path bypasses runtime admission/load and the
 legacy whole-workflow host run.
+The scheduler task orchestrator can now consume a validated
+`SchedulerDispatchSelectionRequest`, call the `pantograph-scheduler` selector,
+build a dispatch-selected `SchedulerRuntimeHandoff`, and dispatch through the
+shared runtime-host port. It does not create dispatch candidates, rank runtime
+policy, inspect model paths, or call Pumas; candidate assembly remains a
+separate provider/session concern.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.
@@ -158,6 +165,10 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   transition with typed diagnostics. They must not enter runtime admission,
   runtime preflight/load, node-engine output demand, or the legacy whole-run
   host execution path as a compatibility route.
+- Runtime scheduler tasks may reach runtime-host execution only after
+  `pantograph-scheduler` returns a selected dispatch decision. A no-selection
+  dispatch-selection result stops before runtime-host dispatch and preserves
+  scheduler diagnostics as the reason the task did not run.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable

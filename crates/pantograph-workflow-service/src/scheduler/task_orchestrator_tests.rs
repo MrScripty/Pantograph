@@ -7,10 +7,11 @@ use pantograph_runtime_host_contracts::{
     SchedulerRuntimeHostDispatcher,
 };
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
-    SchedulerRuntimeHandoffState, SchedulerTaskId, SchedulerTaskState,
-    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerWorkflowId,
-    SchedulerWorkflowRunId,
+    SchedulableTaskIntent, SchedulerDispatchSelectionRequest, SchedulerDispatchSelectionState,
+    SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerRuntimeHandoffState,
+    SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateDiagnosticCode,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerWorkflowId, SchedulerWorkflowRunId,
+    ValidatedSchedulerDispatchSelectionRequest,
 };
 use serde_json::json;
 
@@ -115,6 +116,78 @@ async fn orchestrator_rejects_readiness_only_handoff_before_runtime_host_port() 
                 }
             )
         )
+    ));
+    assert!(port.requests().is_empty());
+}
+
+#[tokio::test]
+async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
+    let selection_request = dispatch_selection_request_fixture();
+    let task_intent = selection_request.task_intent.clone();
+    let mut response = runtime_host_response_fixture();
+    response.execution_request_id = "workflow-service-runtime-request-2".to_string();
+    response.workflow_id = task_intent.workflow_id.clone();
+    response.workflow_run_id = task_intent.workflow_run_id.clone();
+    response.node_id = task_intent.node_id.clone();
+    response.task_id = task_intent.task_id.clone();
+    let port = Arc::new(RecordingRuntimeHostPort::with_response(response));
+    let orchestrator =
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+
+    let result = orchestrator
+        .select_and_dispatch_runtime_task(
+            "workflow-service-runtime-request-2",
+            ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
+                .expect("selection request fixture must validate"),
+        )
+        .await
+        .expect("selected scheduler dispatch should reach runtime host port");
+
+    assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
+    let recorded = port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].handoff.state,
+        SchedulerRuntimeHandoffState::DispatchSelected
+    );
+    let dispatch_decision = recorded[0]
+        .handoff
+        .dispatch_decision
+        .as_ref()
+        .expect("selected handoff must carry dispatch decision");
+    assert_eq!(
+        dispatch_decision.selected_runtime_id.as_str(),
+        "diffusers-pytorch"
+    );
+    assert_eq!(
+        dispatch_decision.reservation_lease_id.as_str(),
+        "reservation.001"
+    );
+}
+
+#[tokio::test]
+async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_candidate() {
+    let mut selection_request = dispatch_selection_request_fixture();
+    selection_request.candidates.clear();
+    let port = Arc::new(RecordingRuntimeHostPort::with_response(
+        runtime_host_response_fixture(),
+    ));
+    let orchestrator =
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+
+    let error = orchestrator
+        .select_and_dispatch_runtime_task(
+            "workflow-service-runtime-request-3",
+            ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
+                .expect("selection request without candidates still validates"),
+        )
+        .await
+        .expect_err("no-selection diagnostics must stop before runtime host");
+
+    assert!(matches!(
+        error,
+        WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection)
+            if selection.state == SchedulerDispatchSelectionState::NoSelection
     ));
     assert!(port.requests().is_empty());
 }
@@ -978,6 +1051,13 @@ fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_completed_outputs.json"
     ))
     .expect("runtime host response fixture")
+}
+
+fn dispatch_selection_request_fixture() -> SchedulerDispatchSelectionRequest {
+    serde_json::from_str(include_str!(
+        "../../../pantograph-scheduler/tests/fixtures/dispatch_selection_request_valid.json"
+    ))
+    .expect("dispatch-selection request fixture")
 }
 
 fn orchestrator_without_runtime_host_response() -> WorkflowSchedulerTaskOrchestrator {

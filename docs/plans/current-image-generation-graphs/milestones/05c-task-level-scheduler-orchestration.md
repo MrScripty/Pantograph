@@ -528,7 +528,9 @@ durable task orchestration path.
   without exposing batching groups to graph inputs.
 - Runtime-host dispatch test proving runtime inference tasks use actual
   dispatch-selected `SchedulerRuntimeHandoff` and reject reduced execution-plan
-  projections as launch input.
+  projections as launch input. The workflow-service bridge from validated
+  scheduler dispatch selection to runtime-host handoff completed 2026-05-25;
+  production session request assembly remains open.
 - Scheduler dispatch-selection contract tests proving a single valid candidate
   produces a validated `SchedulerDispatchDecision`, explicit runtime/device
   constraints are hard requirements, no-candidate and missing required fact
@@ -1465,3 +1467,21 @@ durable task orchestration path.
   runtime-handoff wiring must gather typed candidate facts from canonical
   owners and call this selector; provider-composed option 3 candidate assembly
   remains a later boundary.
+- 2026-05-25 implementation slice completed the workflow-service
+  dispatch-selected handoff bridge. `WorkflowSchedulerTaskOrchestrator` can now
+  accept a validated `SchedulerDispatchSelectionRequest`, call
+  `pantograph-scheduler::select_scheduler_dispatch`, build a
+  dispatch-selected `SchedulerRuntimeHandoff` only from the returned
+  `SchedulerDispatchDecision`, and dispatch through the shared runtime-host
+  port. A no-selection scheduler result stops before runtime-host dispatch as a
+  typed orchestrator error. Verification passed: `cargo fmt -p
+  pantograph-workflow-service -- --check`; `cargo test -p
+  pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+  check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-workflow-service --all-features`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; and targeted source
+  search for legacy/path/stringly/panic patterns. The workflow-service checks
+  still report only the known `set_active_run_execution_plan` warning from the
+  active-plan runtime handoff removal boundary. Remaining follow-up:
+  production session execution still needs canonical dispatch-selection request
+  assembly before runtime-containing runs can leave the fail-closed path.

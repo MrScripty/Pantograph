@@ -11293,6 +11293,33 @@ Worker rules:
     runtime-host dispatch. The later option 3 provider-composition boundary
     remains planned; this slice only establishes the stable scheduler-owned
     selection semantics.
+- 2026-05-25 Milestone 5c workflow-service dispatch-selected handoff bridge
+  slice completed:
+  - Smallest useful vertical slice: added a workflow-service orchestrator method
+    that accepts a validated scheduler dispatch-selection request, calls
+    `pantograph-scheduler::select_scheduler_dispatch`, builds a
+    dispatch-selected `SchedulerRuntimeHandoff` only from the selected
+    `SchedulerDispatchDecision`, and dispatches through the shared runtime-host
+    port. Allowed write set was limited to workflow-service scheduler
+    orchestrator source/tests/README and plan status.
+  - No-fallback/no-legacy confirmation: workflow-service still does not rank
+    candidates, fabricate candidates, synthesize reservation leases, read Pumas
+    paths, or bypass scheduler selection. A scheduler no-selection decision
+    stops before runtime-host dispatch and is returned as a typed orchestrator
+    error.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service scheduler::task_orchestrator
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and targeted source
+    search for legacy/path/stringly/panic patterns in the touched orchestrator
+    source. The three workflow-service check commands still report only the
+    known `set_active_run_execution_plan` dead-code warning from the remaining
+    active-plan runtime handoff removal boundary.
+  - Remaining follow-up: production session execution still needs provider or
+    session-owned assembly of validated dispatch-selection requests from
+    canonical runtime/resource/Pumas facts before this bridge can replace the
+    runtime-containing fail-closed session path.
 
 ### Traceability Links
 

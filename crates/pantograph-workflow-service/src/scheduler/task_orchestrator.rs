@@ -1,10 +1,13 @@
 use pantograph_runtime_host_contracts::{RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher};
 use pantograph_scheduler::{
-    SchedulerContractError, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
-    SchedulerRuntimeHandoff, SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind,
-    SchedulerTaskExecutionIntent, SchedulerTaskState, SchedulerTaskStateDiagnostic,
-    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
-    SchedulerTaskStateRecord, SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
+    select_scheduler_dispatch, SchedulerContractError, SchedulerDispatchSelectionDecision,
+    SchedulerDispatchSelectionState, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
+    SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState, SchedulerSourceInputTaskIntent,
+    SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent, SchedulerTaskState,
+    SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
+    ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
     SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 use thiserror::Error;
@@ -62,6 +65,20 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)?;
         runtime_host_response_to_task_result(&response)
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn select_and_dispatch_runtime_task(
+        &self,
+        execution_request_id: impl Into<String>,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        let selection = select_scheduler_dispatch(selection_request)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
+            .into_inner();
+        let handoff = dispatch_selected_handoff_from_selection(selection)?;
+        self.dispatch_runtime_handoff(execution_request_id, handoff)
+            .await
     }
 
     pub(crate) fn initial_task_state_records(
@@ -511,6 +528,36 @@ impl WorkflowSchedulerTaskOrchestrator {
     }
 }
 
+fn dispatch_selected_handoff_from_selection(
+    selection: SchedulerDispatchSelectionDecision,
+) -> Result<SchedulerRuntimeHandoff, WorkflowSchedulerTaskOrchestratorError> {
+    if selection.state != SchedulerDispatchSelectionState::Selected {
+        return Err(
+            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection),
+        );
+    }
+    let Some(dispatch_decision) = selection.dispatch_decision else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract(
+            SchedulerContractError::MissingField {
+                field: "dispatch_decision",
+            },
+        ));
+    };
+    Ok(SchedulerRuntimeHandoff {
+        contract_version: SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
+        workflow_id: dispatch_decision.workflow_id.clone(),
+        workflow_run_id: dispatch_decision.workflow_run_id.clone(),
+        node_id: dispatch_decision.node_id.clone(),
+        task_id: dispatch_decision.task_id.clone(),
+        task_intent: dispatch_decision.task_intent.clone(),
+        state: SchedulerRuntimeHandoffState::DispatchSelected,
+        readiness_proof: dispatch_decision.readiness_proof.clone(),
+        environment_ref: dispatch_decision.environment_ref.clone(),
+        dispatch_decision: Some(dispatch_decision),
+        diagnostics: Vec::new(),
+    })
+}
+
 fn initial_task_state(
     task: &WorkflowSchedulerTask,
 ) -> Result<SchedulerTaskState, WorkflowSchedulerTaskOrchestratorError> {
@@ -621,6 +668,9 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[allow(dead_code)]
     #[error("runtime-host task result mapping failed")]
     RuntimeHostTaskResultMapping(WorkflowRuntimeHostTaskResultMappingError),
+    #[allow(dead_code)]
+    #[error("scheduler dispatch selection did not select a runtime task")]
+    RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
     #[error("scheduler contract validation failed")]
     SchedulerContract(SchedulerContractError),
     #[error("workflow service operation failed")]
