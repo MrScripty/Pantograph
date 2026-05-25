@@ -11378,6 +11378,68 @@ Worker rules:
     bounded, validated through `TryFrom`, and tested for correlation,
     unsupported input variants, unknown/path-field rejection, and no-selection
     behavior before production runtime session execution is wired.
+- 2026-05-25 Milestone 5d inference interface resolution planning update:
+  - Re-plan decision: add a dedicated Milestone 5d and design section for the
+    backend-owned inference interface resolver/validator. This is required
+    because the generic inference node must expose typed model-specific ports
+    from canonical Pumas and inference/runtime capability facts, while graph
+    editor draft validation, workflow save validation, scheduler task
+    materialization, and pre-dispatch validation all consume the same
+    descriptor contract.
+  - No-fallback/no-legacy confirmation: the plan rejects separate
+    port-discovery and validation logic, image-only graph-editor port tables,
+    graph-visible package facts, scheduler-owned prompt/image/settings
+    payloads, and retired planned-inference/model-path validation branches.
+  - Remaining follow-up: implement Milestone 5d before production Milestone 5b
+    runtime-host dispatch wiring and before Milestone 6 real PyTorch/diffusers
+    execution consumes model-specific inference inputs.
+- 2026-05-25 Milestone 5d resolved-design update:
+  - Recorded decisions to use a dedicated DTO-only
+    `pantograph-inference-interface-contracts` crate, split resolver and
+    validator requests, use normalized descriptors with grouped value
+    categories, typed options, coarse availability plus reason codes, persisted
+    authored snapshots in inference node data, authored-current drift reports,
+    backend-owned typed graph patch proposals, live validation sessions with
+    session/revision correlation, backend-owned enqueue summaries, and advisory
+    runtime/device alternatives for explicit invalid constraints.
+  - Remaining undecided areas require codebase investigation before
+    implementation: current `PortOptionsProvider`, selection-input,
+    expand-settings, dynamic port rendering, graph validation, frontend
+    subscription transport, graph patch ownership for unsaved drafts versus
+    saved workflows, and `RuntimeHostExecutionInput` value alignment.
+- 2026-05-25 Milestone 5d contract-crate slice completed:
+  - Smallest useful vertical slice: added the DTO-only
+    `pantograph-inference-interface-contracts` crate, registered it in the
+    workspace, documented crate/source/test boundaries, and added typed
+    resolver/validator requests, descriptors, grouped value categories,
+    defaults, option sets, availability/reason codes, diagnostics, authored
+    snapshots, drift reports, validation events, and backend-owned validation
+    summaries.
+  - No-fallback/no-legacy confirmation: this slice creates the canonical
+    contract surface only. It does not preserve or call `node.data.definition`
+    semantics, `inference_settings`, `expand-settings`, static all-port
+    descriptors, model-path inference, Pumas package facts in graph data,
+    scheduler-owned inference payloads, runtime load targets, or worker
+    execution paths.
+  - Standards/dependency result: the new crate depends only on
+    `pantograph-dependency-planning`, `serde`, and `thiserror`, reusing the
+    existing path-free `PumasModelRef`, `RuntimeIntentId`, and `DeviceIntentId`
+    instead of introducing parallel Pumas or scheduler DTOs. Public serialized
+    DTOs are versioned, bounded, `serde(deny_unknown_fields)`, and covered by
+    fixtures.
+  - Verification passed: `cargo fmt -p
+    pantograph-inference-interface-contracts`; `cargo test -p
+    pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts --no-default-features`; `cargo
+    check -p pantograph-inference-interface-contracts --all-features`; and
+    targeted source search for forbidden imports, model-path fields,
+    `inference_settings`, `expand-settings`, and untyped inference metadata in
+    the new crate.
+  - Remaining follow-up: implement the first cross-layer acceptance slice so a
+    connected Pumas model ref resolves a descriptor, projects authored ports,
+    emits a backend validation summary, and gates submit/admission without
+    invoking retired inference-interface paths.
 
 ### Traceability Links
 

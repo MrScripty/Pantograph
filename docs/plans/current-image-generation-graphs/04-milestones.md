@@ -47,6 +47,15 @@ milestone status in its file and summarize progress in
      canonical scheduler/runtime-host reattach, or scheduler task-result
      conversion work. Do not preserve them as compatibility branches.
 
+5d. [Inference Interface Resolution And Validation](milestones/05d-inference-interface-resolution-and-validation.md)
+   - Add the backend-owned resolver/validator that turns connected model
+     references into typed generic inference-node ports, defaults,
+     availability, options, and diagnostics.
+   - Graph editor draft validation, workflow save validation, scheduler task
+     materialization, and pre-dispatch validation must consume the same
+     resolved interface descriptor so task execution cannot drift from the
+     ports shown to users.
+
 5b. [Runtime Host Handoff And Legacy Execution Removal](milestones/05b-runtime-host-handoff-legacy-removal.md)
    - Replace successful `model_path`/`ModelRefV2` runtime execution with
      direct scheduler-to-runtime-host execution that consumes scheduler
@@ -62,14 +71,15 @@ P-a. [Pumas Library Contract Start](07-pumas-library-image-generation-facts.md)
 P-b. [Pumas Library Producer-Fact Completion](07-pumas-library-image-generation-facts.md)
    - Complete Pumas P2-P5 before Pantograph Milestone 5a consumes production
      model facts for scheduler dispatch, before Milestone 5c integrates
-     production task-level orchestration, before Milestone 5b resolves
+     production task-level orchestration, before Milestone 5d resolves
+     model-specific inference interfaces, before Milestone 5b resolves
      runtime-host load targets, and before Milestone 6 consumes real
      image-generation package facts.
    - Provide richer diffusers component facts, image-family evidence, GGUF
      metadata, package-fact summaries, update cursors, and SQLite cache
      migration/backfill.
    - Publish or otherwise pin the Pumas version/commit Pantograph consumes for
-     Milestone 5a, Milestone 5c, Milestone 5b, and Milestone 6.
+     Milestone 5a, Milestone 5c, Milestone 5d, Milestone 5b, and Milestone 6.
 
 6. [PyTorch/Diffusers Image Generation Execution Slice](milestones/06-pytorch-diffusers-image-generation-execution-slice.md)
    - Implement deterministic PyTorch/diffusers image-generation planning,
@@ -99,7 +109,10 @@ planning assumptions with dynamic task-level scheduling before future real
 execution work depends on dependency readiness, runtime/device selection,
 resource admission, batching, or multi-user fairness. Milestone 5c must then
 integrate option 4 durable task-level orchestration into workflow/session
-execution before the remaining Milestone 5b runtime-host wiring proceeds.
+execution. Milestone 5d must then add the canonical inference interface
+resolver/validator before the remaining Milestone 5b runtime-host wiring
+proceeds, because runtime task dispatch needs the same typed model-specific
+input/output contract that the graph editor and workflow validators expose.
 Milestone 5b must then replace runtime launch ownership with direct
 scheduler-to-runtime-host dispatch and remove successful `model_path`,
 `ModelRefV2`, and node-engine planned-inference execution contracts before
@@ -107,12 +120,14 @@ Milestone 6 implements real PyTorch/diffusers image generation.
 
 Pumas P2-P5 may proceed in parallel with Pantograph Milestones 1-5, but Pumas
 producer-fact completion is a hard gate before Milestone 5a, Milestone 5c,
-Milestone 5b, and Milestone 6 consume production image-generation model facts,
-integrate production task orchestration, or resolve runtime-host load targets.
+Milestone 5d, Milestone 5b, and Milestone 6 consume production
+image-generation model facts, integrate production task orchestration, resolve
+model-specific inference interfaces, or resolve runtime-host load targets.
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing
 candidate facts, device-resolution decision from Milestone 0 and Milestone 5,
-and scheduler-owned dynamic task dispatch from Milestone 5a plus direct
+and scheduler-owned dynamic task dispatch from Milestone 5a plus canonical
+inference interface resolution from Milestone 5d plus direct
 scheduler-to-runtime-host handoff and legacy removal from Milestone 5b. It
 must also
 consume the Pumas image-generation facts defined in
@@ -131,6 +146,7 @@ Pantograph M1-M5 and Pumas P2-P5 in parallel
 Pumas release/pin
 Pantograph M5a
 Pantograph M5c
+Pantograph M5d
 Pantograph M5b
 Pantograph M6
 Pantograph M7-M8

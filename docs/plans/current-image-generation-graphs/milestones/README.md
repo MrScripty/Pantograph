@@ -15,6 +15,7 @@ current image-generation graph and device/runtime selection plan.
 | `05-device-and-runtime-variant-selection.md` | Device policy, runtime variant, and scheduler-facing candidate slice. |
 | `05a-scheduler-owned-dynamic-task-dispatch.md` | Scheduler-owned dynamic task dispatch, capability hints, task queueing, batching, resource admission, and dispatch decisions. |
 | `05c-task-level-scheduler-orchestration.md` | Option 4 task-level workflow orchestration integration before remaining runtime-host legacy deletion. |
+| `05d-inference-interface-resolution-and-validation.md` | Backend-owned generic inference-node interface resolution and shared validation before runtime-host production wiring. |
 | `05b-runtime-host-handoff-legacy-removal.md` | Runtime-host handoff wiring and removal of successful `model_path`/`ModelRefV2` execution paths. |
 | `06-pytorch-diffusers-image-generation-execution-slice.md` | Deterministic PyTorch/diffusers execution slice. |
 | `07-candle-future-capability-guardrail.md` | Candle non-selection guardrail for image generation. |
@@ -36,6 +37,10 @@ of broad unverified horizontal changes.
 - Task-level scheduler orchestration must replace whole-workflow output demand
   as the progress driver before runtime-host dispatch is wired into production
   session execution.
+- Generic inference-node interface resolution and validation must be canonical
+  before runtime-host dispatch is wired into production session execution, so
+  graph editor draft ports, saved workflow validation, scheduler task
+  materialization, and pre-dispatch validation cannot disagree.
 - Runtime-host handoff must replace successful `model_path`/`ModelRefV2`
   execution before real PyTorch/diffusers image execution is implemented.
 - No fallback or legacy execution paths may remain reachable.
@@ -84,7 +89,9 @@ Before implementing Milestone 5a, read
 `../08-scheduler-owned-dynamic-task-dispatch.md`. Before implementing the
 option 4 orchestration milestone, read
 `../10-task-level-scheduler-orchestration.md`. Before implementing Milestone
-5b, read `../09-runtime-host-handoff-legacy-removal.md`. Update
+5d, read `../11-inference-interface-resolution-and-validation.md`. Before
+implementing Milestone 5b, read
+`../09-runtime-host-handoff-legacy-removal.md`. Update
 `../05-execution-management.md` with verification and standards notes after
 each slice passes.
 

@@ -43,7 +43,9 @@ reduced projection can feed diagnostics and inspection, but it is not the
 authoritative scheduler handoff. It does not carry the full validated dispatch
 state needed by `RuntimeHostExecutionRequest`, including the real
 `SchedulerRuntimeHandoff`, dependency environment reference, reservation lease,
-batching group, readiness proof, and selected dispatch facts.
+batching group, readiness proof, selected dispatch facts, and typed
+materialized inference inputs derived from the canonical model-specific
+interface descriptor.
 
 Milestone 5b therefore depends on option 4 task-level scheduler orchestration
 before its remaining production wiring continues. Scheduler dispatch must call
@@ -59,10 +61,11 @@ alternate successful launch path.
   resource admission, dependency policy, batching, retry/defer/fail decisions,
   and the moment a task is handed to a runtime host.
 - **Scheduler dispatch orchestrator:** builds `RuntimeHostExecutionRequest`
-  only from a validated dispatch-selected `SchedulerRuntimeHandoff`, invokes
-  the runtime-host execution port, and records the returned task state and
-  diagnostics. It must not resolve executable load targets or call worker
-  APIs directly.
+  only from a validated dispatch-selected `SchedulerRuntimeHandoff` plus
+  workflow-service-owned typed materialized inputs, invokes the runtime-host
+  execution port, and records the returned task state and diagnostics. It must
+  not resolve executable load targets, own scheduler selection policy, or call
+  worker APIs directly.
 - **Node-engine:** validates graph semantics, submits path-free task intent,
   and consumes scheduler task state/results. It must not launch inference
   runtimes, resolve executable paths, create `ModelRefV2`, choose
@@ -170,7 +173,8 @@ typed diagnostics.
 - Runtime-host tests proving Pumas load targets are resolved only inside the
   host boundary and unavailable states fail with typed diagnostics.
 - Scheduler dispatch tests proving runtime-host execution requests are built
-  only from dispatch-selected `SchedulerRuntimeHandoff` values, reject reduced
+  only from dispatch-selected `SchedulerRuntimeHandoff` values plus
+  workflow-service-owned typed materialized inputs, reject reduced
   execution-plan projections as launch input, and record typed runtime-host
   responses against scheduler task state.
 - Node-engine tests proving affected runtime nodes fail closed without

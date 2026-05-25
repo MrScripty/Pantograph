@@ -71,11 +71,17 @@ risk, lifecycle, and execution-management content.
    - Scheduler, node-engine, runtime-host, frontend, and ledger effects
    - Staged implementation and verification plan
 
-9. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)
+9. [Inference Interface Resolution And Validation](11-inference-interface-resolution-and-validation.md)
+   - Generic inference-node model interface resolution
+   - Shared descriptor contract for port discovery and validation
+   - Graph editor draft validation, save validation, and execution revalidation
+   - Scheduler, node-engine, runtime-host, and Pumas ownership boundaries
+
+10. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)
    - Risk table
    - Definition of done
 
-10. [Milestones](04-milestones.md)
+11. [Milestones](04-milestones.md)
    - Contract gate
    - Current Juggernaut graph slice
    - Retired node producer removal
@@ -84,12 +90,13 @@ risk, lifecycle, and execution-management content.
    - Device and runtime variant selection
    - Scheduler-owned dynamic task dispatch
    - Task-level scheduler orchestration
+   - Inference interface resolution and validation
    - Runtime host handoff and legacy execution removal
    - PyTorch/diffusers image generation execution slice
    - Candle guardrail
    - Release build and user validation
 
-11. [Execution Management](05-execution-management.md)
+12. [Execution Management](05-execution-management.md)
    - Execution notes
    - Commit cadence
    - Optional worker assignment
@@ -109,7 +116,8 @@ step. Pumas P0-P1 starts immediately after Pantograph Milestone 0 freezes the
 expected contract. Pumas P2-P5 may run in parallel with Pantograph Milestones
 1-5, but must complete and be pinned before Pantograph Milestone 5a consumes
 production model facts for scheduler dispatch, before Milestone 5c integrates
-production task-level orchestration, before Milestone 5b resolves runtime-host
+production task-level orchestration, before Milestone 5d resolves
+model-specific inference interfaces, before Milestone 5b resolves runtime-host
 load targets, and before Milestone 6 implements real PyTorch/diffusers image
 execution.
 

@@ -113,6 +113,13 @@ throughput decisions.
 - Retired direct inference nodes must remain unregistered built-ins.
 - Pumas remains the canonical model source. Pantograph queries Pumas facts and
   owns final workflow graph structure and runtime selection policy.
+- Generic inference nodes do not own or hardcode their effective input/output
+  ports. After a model reference is connected, backend-owned inference
+  interface resolution must derive typed ports, defaults, required inputs,
+  valid options, unavailable reasons, and diagnostics from canonical Pumas
+  facts plus inference/runtime capability facts. Graph draft validation,
+  workflow save validation, scheduler task materialization, and pre-dispatch
+  validation must consume that same resolved interface contract.
 - The scheduler owns backend/device/runtime ranking, resource placement, queue
   policy, explicit preference validation, and future learned throughput policy.
   Inference backend adapters own feasibility facts, diagnostics, resource

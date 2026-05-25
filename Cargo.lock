@@ -7422,6 +7422,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-inference-interface-contracts"
+version = "0.1.0"
+dependencies = [
+ "pantograph-dependency-planning",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pantograph-managed-dependencies"
 version = "0.1.0"
 dependencies = [

@@ -120,9 +120,11 @@ inputs are ready.
 - `RuntimeHostExecutionRequest` / `RuntimeHostExecutionResponse` /
   `RuntimeHostExecutionPort`: shared runtime-host execution contracts moved
   out of `pantograph-embedded-runtime` into a lower-level contract crate. The
-  request must carry only a dispatch-selected `SchedulerRuntimeHandoff`; it
-  must reject readiness-only handoffs, reduced execution-plan projections,
-  graph paths, local Pumas load targets, and worker launch metadata.
+  request must carry a dispatch-selected `SchedulerRuntimeHandoff` plus typed
+  materialized runtime inputs assembled from the canonical inference interface
+  descriptor and completed upstream task results. It must reject readiness-only
+  handoffs, reduced execution-plan projections, graph paths, local Pumas load
+  targets, scheduler-owned execution payloads, and worker launch metadata.
 - `SchedulerTaskStateReadModel`: backend-owned status for graph editor,
   run-inspection, and diagnostics views. It exposes waiting/running/failed
   facts, not scheduler internals or executable load targets.

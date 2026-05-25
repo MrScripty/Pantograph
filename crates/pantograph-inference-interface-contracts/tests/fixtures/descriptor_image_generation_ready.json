@@ -1,0 +1,142 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd",
+    "revision": "main",
+    "selected_artifact_id": "artifact-diffusers",
+    "selected_artifact_path": "image/stable-diffusion/tiny-sd"
+  },
+  "task_kind": "text_to_image",
+  "descriptor_fingerprint": "iface.sd15.text_to_image.v1",
+  "runtime_conditions": [
+    {
+      "condition": "artifact_kind",
+      "value": "diffusers_bundle"
+    }
+  ],
+  "inputs": [
+    {
+      "port_id": "prompt",
+      "label": "Prompt",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "any"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "steps",
+      "label": "Steps",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "u64"
+      },
+      "default": {
+        "kind": "u64",
+        "value": 30
+      },
+      "options": {
+        "kind": "numeric_range",
+        "range": {
+          "min": 1.0,
+          "max": 150.0,
+          "step": 1.0,
+          "default": 30.0
+        }
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "denoising_scheduler",
+      "label": "Denoising Scheduler",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "constraint",
+        "kind": "denoising_scheduler"
+      },
+      "default": {
+        "kind": "use_backend_default"
+      },
+      "options": {
+        "kind": "enum",
+        "values": [
+          {
+            "option_id": "euler",
+            "label": "Euler",
+            "value": {
+              "kind": "string",
+              "value": "euler"
+            },
+            "availability": {
+              "status": "available"
+            }
+          },
+          {
+            "option_id": "dpmpp_2m",
+            "label": "DPM++ 2M",
+            "value": {
+              "kind": "string",
+              "value": "dpmpp_2m"
+            },
+            "availability": {
+              "status": "not_implemented",
+              "reasons": [
+                "feature_not_implemented"
+              ]
+            },
+            "diagnostics": [
+              {
+                "severity": "warning",
+                "code": "not_implemented",
+                "message": "The selected runtime reports this scheduler as planned but not implemented."
+              }
+            ]
+          }
+        ]
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "image",
+      "label": "Image",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "artifact",
+        "kind": "image"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "availability": {
+    "status": "available"
+  },
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "descriptor_resolved",
+      "message": "Descriptor resolved from Pumas model reference and runtime capability facts."
+    }
+  ]
+}

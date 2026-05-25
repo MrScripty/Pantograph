@@ -1,0 +1,21 @@
+[package]
+name = "pantograph-inference-interface-contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Shared inference interface descriptor and validation contracts for Pantograph"
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

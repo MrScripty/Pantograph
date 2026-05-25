@@ -1,0 +1,10 @@
+{
+  "status": "blocked",
+  "executable": false,
+  "enqueue_disabled_reasons": [
+    "drift_requires_review",
+    "blocking_diagnostics"
+  ],
+  "diagnostics_count": 3,
+  "blocking_diagnostics_count": 2
+}

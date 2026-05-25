@@ -1,0 +1,52 @@
+{
+  "contract_version": 1,
+  "descriptor_fingerprint": "iface.sd15.text_to_image.v1",
+  "task_kind": "text_to_image",
+  "inputs": [
+    {
+      "port_id": "prompt",
+      "label": "Prompt",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "steps",
+      "label": "Steps",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "u64"
+      },
+      "default": {
+        "kind": "u64",
+        "value": 30
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "image",
+      "label": "Image",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "artifact",
+        "kind": "image"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ]
+}
