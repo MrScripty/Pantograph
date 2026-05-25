@@ -11440,6 +11440,39 @@ Worker rules:
     connected Pumas model ref resolves a descriptor, projects authored ports,
     emits a backend validation summary, and gates submit/admission without
     invoking retired inference-interface paths.
+- 2026-05-25 Milestone 5d static inference descriptor re-plan boundary:
+  - Boundary: the next intended acceptance slice needs to replace the static
+    all-port `llm-inference` graph interface with descriptor/authored-snapshot
+    ports. Codebase investigation found that the same static ports are also
+    used by `workflow-nodes` composed `tool-loop` contracts and inference
+    payload metadata projection tests for ports such as `prompt`, `tools`,
+    `response`, and `tool_calls`.
+  - Why this must stop implementation: deleting those static ports immediately
+    would correctly remove the retired fallback from generic graph inference,
+    but it would also break the composed tool-loop contract without a canonical
+    replacement. Keeping the ports while adding snapshot projection would leave
+    static all-port inference as a successful fallback, violating the
+    no-legacy rule.
+  - Options to re-plan:
+    1. Keep the static ports temporarily and add snapshot projection first.
+       Rejected because it preserves the legacy all-port success path.
+    2. Delete `tool-loop` composition support until a descriptor-backed
+       internal inference interface exists. This is simple and no-legacy, but
+       removes a broader text-agent composition surface while the current plan
+       is trying to reach image-generation runtime tests.
+    3. Split graph-visible generic inference from internal composed inference:
+       retire static task/model ports from graph-visible `llm-inference`, add
+       descriptor/authored snapshot projection for graph nodes, and update
+       `tool-loop` to use an explicit descriptor-backed internal authored
+       interface or a dedicated non-graph primitive that is not exposed as a
+       generic inference fallback. This is cleaner but needs a small design
+       decision before editing.
+    4. Convert `tool-loop` itself to the scheduler-owned task graph model now.
+       This aligns with the long-term architecture but is larger than the next
+       Milestone 5d slice.
+  - Recommended next action: choose option 3 unless near-term feature removal
+    is acceptable. The plan must identify the internal composition contract
+    owner before the static `llm-inference` descriptor is shrunk.
 
 ### Traceability Links
 

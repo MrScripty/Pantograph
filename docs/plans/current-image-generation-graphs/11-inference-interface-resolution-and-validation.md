@@ -533,6 +533,17 @@ falling back to previously rendered ports.
   ports, produces a backend validation summary, and gates submit/admission
   without invoking retired `inference_settings`, `expand-settings`, static
   all-port descriptors, or model-path paths.
+- 2026-05-25: Next-slice investigation found a re-plan boundary before
+  retiring the static all-port `llm-inference` descriptor. The same static
+  ports are currently consumed by `workflow-nodes` composed `tool-loop`
+  contracts and inference payload metadata projection tests. Removing the
+  static task/model ports now is the correct no-legacy direction, but doing so
+  without redesigning that internal composition would invalidate the tool-loop
+  contract mappings for `prompt`, `tools`, `response`, and `tool_calls`.
+  Keeping the static ports while adding authored snapshot projection would
+  preserve the retired fallback path. The next implementation slice must
+  decide and execute a clean transition for internal composed-node use before
+  static `llm-inference` task ports are deleted.
 
 ## Open Design Decisions
 
@@ -541,6 +552,10 @@ falling back to previously rendered ports.
   dedicated descriptor option renderer. They cannot own inference semantics.
 - Decide the resolver service module/API shape inside workflow-service after
   inspecting current graph validation and options-provider boundaries.
+- Decide how composed nodes that currently use static `llm-inference` task
+  ports, especially `tool-loop`, transition to descriptor-backed inference
+  interfaces without keeping static all-port inference as a successful graph
+  fallback.
 - Decide the inference capability fact API used by the resolver without
   coupling it to scheduler policy.
 - Decide the concrete graph patch operation owner and API shape for unsaved
@@ -624,3 +639,6 @@ falling back to previously rendered ports.
   boundaries.
 - The first vertical slice cannot prove descriptor-driven rendering and
   enqueue gating without preserving retired inference-interface behavior.
+- Static `llm-inference` task ports cannot be deleted because composed-node
+  contracts or payload metadata still depend on them and no descriptor-backed
+  replacement has been selected.
