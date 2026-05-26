@@ -1057,6 +1057,53 @@ defining an image-only inference-node interface.
     task graph construction for submitted inference workflows. The known
     broader `session_execution --lib` failures remain the validation-to-run
     submission boundary and were not expanded into this projection-state slice.
+- [x] 2026-05-26 saved-workflow validation-state address re-plan boundary:
+  - Discovered issue: execution-session queue admission currently loads saved
+    workflow graphs through `WorkflowHost::workflow_graph(workflow_id)` and
+    `WorkflowExecutionSessionRunRequest` carries no graph-session id,
+    validation-session id, validation snapshot id, or saved executable graph
+    fingerprint. The new current-validation-state owner is keyed by
+    graph-edit-session identity plus `WorkflowGraphRevision`, so queue
+    admission cannot use it for saved workflow runs without a canonical address.
+  - Discovered legacy test issue: broad `cargo test -p
+    pantograph-workflow-service session_execution --lib` still contains tests
+    that expect the retired whole-run `WorkflowHost::run_workflow` runtime path
+    or pass request inputs to non-source nodes. Preserving those expectations
+    would reintroduce a legacy execution path instead of routing inference work
+    through scheduler-owned task state, descriptor-backed validation, and the
+    runtime-host handoff.
+  - Why implementation stops: wiring queue admission directly to
+    `workflow_scheduler_task_graph_with_inference_projections` now would require
+    either guessing validation state from saved graph fields, accepting frontend
+    validation data in the run request, or preserving the old whole-run runtime
+    execution behavior. All three violate the no-fallback/no-legacy rule and
+    make scheduler placement depend on non-canonical authority.
+  - Re-plan options to decide:
+    1. Run descriptor validation synchronously from the saved workflow graph
+       during queue admission, then build scheduler projections from that
+       transient result. This is simple to address but can block admission on
+       fact lookup and duplicates the graph-editor validation lifecycle unless
+       carefully factored through the same publisher core.
+    2. Extend `WorkflowExecutionSessionRunRequest` with graph-session and
+       validation-session identity. This works for draft/edit-session runs, but
+       it does not give saved workflow submissions a stable validation address
+       and would couple queue admission to editor state.
+    3. Persist a compact executable validation snapshot at workflow save/publish
+       time, keyed by workflow id, semantic/executable version, graph
+       fingerprint, and descriptor contract version. Queue admission reads that
+       saved snapshot, rejects stale/missing/non-executable state, and only then
+       builds scheduler projections. This aligns saved-run admission with the
+       graph-editor validation UX and preserves historical authored port shape
+       without storing paths or Pumas facts.
+    4. Temporarily keep the legacy whole-run host execution tests/path until
+       runtime-host handoff is complete. This is rejected because it preserves
+       retired behavior and masks missing descriptor validation authority.
+  - Recommendation: choose option 3 for saved workflow submissions and reserve
+    option 1 only as the implementation detail inside the save/publish
+    validator that produces the persisted snapshot. The next implementation
+    slice should add the saved validation snapshot contract/owner and then
+    rewrite or delete legacy `session_execution` tests so they assert fail-
+    closed scheduler-owned behavior instead of whole-run fallback execution.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

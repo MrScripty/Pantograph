@@ -12462,6 +12462,21 @@ Worker rules:
     graph-session projection API before scheduler placement. The broader
     `session_execution --lib` failures remain the next validation-to-run
     submission boundary.
+- 2026-05-26 Milestone 5d saved-workflow validation-state address re-plan
+  boundary:
+  - Queue admission cannot yet consume current validation state for saved
+    workflow submissions because execution sessions load graphs by
+    `workflow_id` from `WorkflowHost`, while current validation state is keyed
+    by graph-edit session id plus `WorkflowGraphRevision`.
+  - Broad `session_execution --lib` failures also expose legacy test
+    assumptions around whole-run `WorkflowHost::run_workflow` execution and
+    non-source request inputs. Those expectations must be rewritten or deleted;
+    keeping them green would preserve retired execution behavior.
+  - Recommendation recorded in Milestone 5d: persist a compact executable
+    validation snapshot at workflow save/publish time and have queue admission
+    read that snapshot before scheduler projection. Saved-run admission must
+    reject missing, stale, or non-executable snapshots rather than deriving
+    scheduler intent from graph fields or frontend data.
 
 ### Traceability Links
 

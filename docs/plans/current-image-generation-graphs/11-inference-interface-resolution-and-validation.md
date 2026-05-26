@@ -755,6 +755,13 @@ falling back to previously rendered ports.
       or non-executable validation state fails closed before scheduler
       placement. Remaining work is wiring queue admission/session orchestration
       to call this wrapper for submitted inference workflows.
+    - Re-plan boundary recorded 2026-05-26: saved workflow submissions do not
+      have a canonical validation-state address yet. Queue admission loads
+      saved graphs by workflow id, while current validation state is graph-edit
+      session scoped. Add a saved executable validation snapshot at
+      save/publish time, then have queue admission consume that snapshot before
+      scheduler projection. Do not keep whole-run host execution or raw graph
+      parsing as compatibility behavior.
 12. Add queue-admission readiness validation that consumes the backend validation
     summary and fails closed before enqueue, queue-placement event recording, or
     scheduler task graph materialization when inference descriptors are pending,
