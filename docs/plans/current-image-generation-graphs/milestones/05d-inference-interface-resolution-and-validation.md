@@ -118,8 +118,21 @@ defining an image-only inference-node interface.
       the old Tauri action command with
       `DependencyEnvironmentRequest -> DependencyEnvironmentResult` and returns
       typed `not_implemented` diagnostics until a canonical dependency
-      environment service exists; remaining slices must update frontend action
-      payloads and remove old node-engine request call sites.
+      environment service exists. Re-plan decision: use option 3 for the
+      frontend/action boundary. Dependency-environment actions must consume the
+      same backend descriptor/validation summary used by graph validation,
+      submit gating, and scheduler admission. The frontend sends action intent
+      only, such as workflow/session node id, client graph revision, validation
+      session id when available, and the requested resolve/check/install action.
+      It must not build `DependencyPlanningRequest`,
+      `DependencyEnvironmentRequest`, identity keys, platform context, artifact
+      kind, scheduler intent, model facts, package facts, or local paths.
+      Workflow-service builds the canonical dependency-environment request from
+      the latest current descriptor validation summary and graph/node state,
+      then forwards it through the Tauri boundary. If descriptor validation is
+      missing, pending, stale, unavailable, unresolved, invalid, or disagrees
+      with the current graph revision, the action returns typed diagnostics and
+      does not call dependency execution.
 - [ ] Delete or rewrite `ModelDependencyRequest`/`model_path` dependency
       hydration call sites that are on the `puma-lib` -> inference path. Any
       remaining dependency-environment work must consume the canonical
@@ -159,6 +172,21 @@ defining an image-only inference-node interface.
       invalid validation state from backend events, disables submit/enqueue
       from the latest backend summary, and does not block editing while
       validation runs.
+- [ ] Add the descriptor-backed dependency-environment action intent slice.
+      Define a minimal action-intent DTO that carries only graph/session
+      identity, graph revision/validation session identity, target node id, and
+      action. Keep it in the shared inference/workflow contract surface used by
+      the graph editor and workflow-service, not in Tauri business logic. The
+      backend must derive the canonical `DependencyEnvironmentRequest` from the
+      validation summary: `pumas_model_ref` from the strict model-ref binding
+      resolver; task id/type and expected artifact kind from the resolved
+      descriptor; runtime/device constraints from validated explicit graph
+      constraints; selected binding ids and manual overrides from the
+      dependency-environment node data; platform context from host/dependency
+      planning policy; and dependency requirements/environment ids from the
+      current validated dependency planning result. `Check` and `Install`
+      actions must fail closed with missing-requirements diagnostics until a
+      current requirements id exists.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

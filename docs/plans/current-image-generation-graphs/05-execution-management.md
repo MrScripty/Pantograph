@@ -11970,6 +11970,38 @@ Worker rules:
   - Remaining follow-up: dependency-environment frontend payloads and the old
     standalone model-dependency commands still carry the retired path-shaped
     dependency contract and must be migrated or removed in later slices.
+- 2026-05-26 Milestone 5d dependency-environment option 3 re-plan decision:
+  - Decision: dependency-environment frontend actions will use the same
+    backend descriptor/validation summary as graph validation, submit gating,
+    and scheduler admission. The graph editor sends action intent only; it does
+    not construct `DependencyPlanningRequest`, `DependencyEnvironmentRequest`,
+    identity keys, platform context, artifact kind, scheduler intent, package
+    facts, model facts, or local paths.
+  - Backend ownership: workflow-service owns the action request builder. It
+    derives the canonical path-free `DependencyEnvironmentRequest` from the
+    current validation summary and graph/node state, then forwards that typed
+    request through the Tauri boundary. Tauri remains decode/forward/encode
+    only and must not contain dependency policy or descriptor resolution.
+  - Required fail-closed states: missing, pending, stale, unavailable,
+    unresolved, invalid, or graph-revision-mismatched descriptor validation
+    returns typed diagnostics and does not call dependency execution. `check`
+    and `install` actions also fail closed until a current dependency
+    requirements id is available.
+  - Field ownership: `pumas_model_ref` comes from the strict model-ref binding
+    resolver; task id/type and expected artifact kind come from the descriptor;
+    runtime/device constraints come from validated explicit graph constraints;
+    selected binding ids and manual overrides come from
+    dependency-environment node data; platform context comes from
+    host/dependency planning policy; dependency requirements/environment ids
+    come from the current validated dependency planning result.
+  - Rejected options: frontend-built canonical dependency requests and
+    translation of old `modelPath` action payloads are both rejected because
+    they duplicate backend policy and preserve a legacy path-shaped success
+    boundary.
+  - Next slice: add a minimal shared action-intent DTO and workflow-service
+    builder that returns typed diagnostics when the descriptor validation
+    summary is not current, before wiring the frontend action buttons to that
+    intent.
 
 ### Traceability Links
 
