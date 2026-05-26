@@ -12693,6 +12693,43 @@ Worker rules:
     this slice.
   - Remaining follow-up: add an end-to-end publish-to-admission acceptance test
     after a shared inference publication fixture is available for session hosts.
+- 2026-05-26 Milestone 5d dependency-environment graph-coordinator action
+  boundary re-plan decision:
+  - Decision: implement the active frontend/transport boundary with the graph
+    coordinator as the only frontend owner of dependency-environment action
+    intent construction. `DependencyEnvironmentNode` remains presentation and
+    emits only the target node action, such as resolve, check, or install. The
+    graph coordinator supplies graph session id, current graph revision,
+    optional validation session id, and target node id, then sends the typed
+    `DependencyEnvironmentActionIntent` through a transport-only Tauri command
+    to workflow-service.
+  - Ownership result: workflow-service remains the only owner of freshness
+    checks, descriptor validation summary consumption, dependency requirements
+    state, and eventual canonical `DependencyEnvironmentRequest` derivation.
+    The graph editor never owns Pumas paths/facts, platform context, artifact
+    kind, scheduler intent, dependency planning request fields, or
+    dependency-environment request fields. Tauri contains no dependency policy,
+    no descriptor resolution, and no not-implemented result construction beyond
+    forwarding typed service results.
+  - No-fallback/no-legacy result: the later slice must remove or replace the
+    active frontend `buildDependencyEnvironmentActionPayload`/
+    `DependencyEnvironmentRequest` path and retire the Tauri
+    `run_dependency_environment_action(DependencyEnvironmentRequest)` command
+    as a successful route. The old path-shaped request builder may not remain
+    as a compatibility branch while the graph-coordinator intent path is active.
+  - Verification gates: source searches must show active frontend/Tauri
+    dependency-environment actions no longer construct
+    `DependencyEnvironmentRequest`, carry model paths, or invoke the retired
+    command. Focused frontend tests must prove the node delegates actions to
+    the graph coordinator without session/revision policy. Workflow-service
+    action-intent tests remain the authority for stale graph revision, missing
+    target node, missing validation summary, and blocked action diagnostics.
+  - Implementation order: first add the transport-only command and graph
+    coordinator callback against the existing workflow-service
+    `DependencyEnvironmentActionIntent` resolver, then remove the old
+    frontend/Tauri request-building path, then continue to descriptor-backed
+    canonical dependency request derivation once executable validation summaries
+    include current dependency requirements.
 
 ### Traceability Links
 

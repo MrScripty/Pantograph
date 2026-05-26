@@ -129,15 +129,19 @@ defining an image-only inference-node interface.
       the old Tauri action command with
       `DependencyEnvironmentRequest -> DependencyEnvironmentResult` and returns
       typed `not_implemented` diagnostics until a canonical dependency
-      environment service exists. Re-plan decision: use option 3 for the
-      frontend/action boundary. Dependency-environment actions must consume the
-      same backend descriptor/validation summary used by graph validation,
-      submit gating, and scheduler admission. The frontend sends action intent
-      only, such as workflow/session node id, graph revision, validation
-      session id when available, and the requested resolve/check/install action.
-      It must not build `DependencyPlanningRequest`,
-      `DependencyEnvironmentRequest`, identity keys, platform context, artifact
-      kind, scheduler intent, model facts, package facts, or local paths.
+      environment service exists. Re-plan decision: use the graph-coordinator
+      action-intent boundary for the active frontend slice. The
+      `DependencyEnvironmentNode` emits only the user's resolve/check/install
+      action for its node. The graph coordinator owns the current graph session
+      id, graph revision, optional validation session id, and target node id,
+      then constructs the typed `DependencyEnvironmentActionIntent`. Tauri only
+      decodes/forwards that intent to workflow-service and encodes the response.
+      Dependency-environment actions must consume the same backend
+      descriptor/validation summary used by graph validation, submit gating,
+      and scheduler admission. Frontend code must not build
+      `DependencyPlanningRequest`, `DependencyEnvironmentRequest`, identity
+      keys, platform context, artifact kind, scheduler intent, model facts,
+      package facts, or local paths.
       Workflow-service builds the canonical dependency-environment request from
       the latest current descriptor validation summary and graph/node state,
       then forwards it through the Tauri boundary. If descriptor validation is
@@ -339,6 +343,17 @@ defining an image-only inference-node interface.
         descriptor validation summaries and deriving the canonical
         `DependencyEnvironmentRequest` only when those summaries are executable
         and current.
+      - Frontend/transport boundary update on 2026-05-26: the next active
+        dependency-environment implementation slice must replace
+        `DependencyEnvironmentNode.svelte` direct calls to
+        `run_dependency_environment_action` and any frontend
+        `DependencyEnvironmentRequest` payload builders with a graph-coordinator
+        callback/action API. The coordinator builds
+        `DependencyEnvironmentActionIntent` from graph session state and forwards
+        it through a transport-only Tauri command to workflow-service. The old
+        `run_dependency_environment_action(DependencyEnvironmentRequest)` Tauri
+        command and Tauri-local dependency validation/result construction are
+        retirement targets, not alternate supported paths.
 - [ ] Add the current inference-validation state owner before dependency action
       derivation. The owner must be workflow-service code, not Tauri/frontend
       code, and must be keyed by validated `graph_session_id +
