@@ -11736,6 +11736,19 @@ Worker rules:
     wire graph request extraction, resolver, projection, and validation session
     into a single event-producing service boundary with explicit graph/node
     event scope.
+- 2026-05-25 Milestone 5d live validation event scope slice completed:
+  - Decision implemented: option 3. `WorkflowGraphInferenceValidationEvent`
+    now carries a typed graph/node scope, descriptor/drift/diagnostic/update
+    proposal payloads must be node-scoped, and summary payloads must be
+    graph-scoped.
+  - No-fallback/no-legacy confirmation: event routing no longer depends on
+    single-inference assumptions, implicit event ordering, sentinel node ids, or
+    payload-specific ad hoc node fields. This preserves explicit multi-node
+    routing for multi-model workflows and future scheduler batching.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_interface_validation --lib`.
+  - Remaining follow-up: wire graph request extraction, resolver, projection,
+    and scoped validation events into a single validation service boundary.
 
 ### Traceability Links
 

@@ -31,7 +31,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_projection.rs` | Workflow-service-owned projection from resolved inference descriptors into minimal authored snapshots and backend validation summaries. |
 | `inference_interface_request.rs` | Draft-graph extraction of path-free inference-interface resolver requests from connected `puma-lib` model references and explicit inference-node constraints. |
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
-| `inference_interface_validation.rs` | Workflow-service live inference-validation session and event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
+| `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -201,6 +201,10 @@ for existing graph-edit callers.
   validation summaries are derived from descriptor availability and diagnostics.
   Frontend submit state and backend admission must consume the typed summary
   instead of inferring enqueue permission from raw diagnostics.
+- Live inference-validation events have typed graph/node scope. Descriptor,
+  drift, diagnostic, and update-proposal payloads must be node-scoped so
+  multi-inference graphs can route updates unambiguously; summary payloads are
+  graph-scoped and must not use sentinel node ids.
 - Inference-interface update proposals are graph-service contracts, not shared
   descriptor contracts. They may reference shared drift reports and authored
   snapshots, but typed operations that replace snapshots, remove invalid

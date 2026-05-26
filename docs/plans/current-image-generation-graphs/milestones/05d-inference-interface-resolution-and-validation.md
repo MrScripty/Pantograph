@@ -485,7 +485,7 @@ defining an image-only inference-node interface.
   - Remaining follow-up: feed extracted requests into the resolver/projection
     pipeline with Pumas/runtime capability facts and emit live validation events
     plus backend validation summaries for the graph editor and queue admission.
-- [ ] 2026-05-25 live validation event node-identity re-plan boundary:
+- [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and
     summaries, but they do not identify the inference node that owns a
@@ -515,3 +515,17 @@ defining an image-only inference-node interface.
     wire the graph request extraction, resolver, projection, and validation
     session into a single event-producing service boundary using explicit
     graph/node event scope.
+- [x] 2026-05-25 live validation event scope slice completed:
+  - Decision implemented: option 3. `WorkflowGraphInferenceValidationEvent`
+    now carries a typed graph/node scope, descriptor/drift/diagnostic/update
+    proposal payloads must be node-scoped, and summary payloads must be
+    graph-scoped.
+  - No-fallback/no-legacy confirmation: event routing no longer depends on
+    single-inference assumptions, implicit event ordering, sentinel node ids, or
+    payload-specific ad hoc node fields. This preserves explicit multi-node
+    routing for multi-model workflows and future scheduler batching.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service inference_interface_validation
+    --lib`.
+  - Remaining follow-up: wire graph request extraction, resolver, projection,
+    and scoped validation events into a single validation service boundary.

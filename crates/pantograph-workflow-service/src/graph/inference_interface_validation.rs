@@ -1,7 +1,7 @@
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationSummary, InferenceInterfaceContractError,
     InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceInterfaceFingerprint,
-    INFERENCE_INTERFACE_CONTRACT_VERSION,
+    WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -93,6 +93,7 @@ pub struct WorkflowGraphInferenceValidationEvent {
     pub validation_session_id: DraftGraphValidationSessionId,
     pub client_graph_revision: u64,
     pub sequence: u64,
+    pub scope: WorkflowGraphInferenceValidationEventScope,
     pub payload: WorkflowGraphInferenceValidationEventPayload,
 }
 
@@ -108,8 +109,21 @@ impl WorkflowGraphInferenceValidationEvent {
                 reason: "event sequence must be non-zero",
             });
         }
+        validate_event_scope(&self.scope, &self.payload)?;
         self.payload.validate()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "scope",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum WorkflowGraphInferenceValidationEventScope {
+    Graph,
+    Node { node_id: WorkflowNodeId },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -136,6 +150,33 @@ impl WorkflowGraphInferenceValidationEventPayload {
             Self::UpdateProposal(proposal) => proposal.validate().map_err(Into::into),
             Self::Summary(summary) => summary.validate().map_err(Into::into),
         }
+    }
+}
+
+fn validate_event_scope(
+    scope: &WorkflowGraphInferenceValidationEventScope,
+    payload: &WorkflowGraphInferenceValidationEventPayload,
+) -> Result<(), InferenceInterfaceValidationSessionError> {
+    match (scope, payload) {
+        (
+            WorkflowGraphInferenceValidationEventScope::Graph,
+            WorkflowGraphInferenceValidationEventPayload::Summary(_),
+        ) => Ok(()),
+        (WorkflowGraphInferenceValidationEventScope::Graph, _) => {
+            Err(InferenceInterfaceValidationSessionError::InvalidField {
+                field: "validation_event.scope",
+                reason:
+                    "descriptor, drift, diagnostic, and update-proposal events must be node-scoped",
+            })
+        }
+        (
+            WorkflowGraphInferenceValidationEventScope::Node { .. },
+            WorkflowGraphInferenceValidationEventPayload::Summary(_),
+        ) => Err(InferenceInterfaceValidationSessionError::InvalidField {
+            field: "validation_event.scope",
+            reason: "summary events must be graph-scoped",
+        }),
+        (WorkflowGraphInferenceValidationEventScope::Node { .. }, _) => Ok(()),
     }
 }
 
@@ -200,11 +241,11 @@ mod tests {
             latest_sequence: 2,
             summary: pending_summary(),
             events: vec![
-                event(
+                node_event(
                     1,
                     WorkflowGraphInferenceValidationEventPayload::DescriptorResolved(fingerprint()),
                 ),
-                event(
+                graph_event(
                     2,
                     WorkflowGraphInferenceValidationEventPayload::Summary(pending_summary()),
                 ),
@@ -216,7 +257,7 @@ mod tests {
 
     #[test]
     fn validation_session_rejects_stale_revision_event() {
-        let mut stale_event = event(
+        let mut stale_event = node_event(
             1,
             WorkflowGraphInferenceValidationEventPayload::DescriptorResolved(fingerprint()),
         );
@@ -248,11 +289,11 @@ mod tests {
             latest_sequence: 1,
             summary: pending_summary(),
             events: vec![
-                event(
+                node_event(
                     1,
                     WorkflowGraphInferenceValidationEventPayload::DescriptorResolved(fingerprint()),
                 ),
-                event(
+                graph_event(
                     1,
                     WorkflowGraphInferenceValidationEventPayload::Summary(pending_summary()),
                 ),
@@ -270,7 +311,42 @@ mod tests {
         );
     }
 
-    fn event(
+    #[test]
+    fn validation_event_rejects_graph_scoped_descriptor_payload() {
+        let event = graph_event(
+            1,
+            WorkflowGraphInferenceValidationEventPayload::DescriptorResolved(fingerprint()),
+        );
+
+        assert_eq!(
+            event
+                .validate()
+                .expect_err("descriptor must be node scoped"),
+            InferenceInterfaceValidationSessionError::InvalidField {
+                field: "validation_event.scope",
+                reason:
+                    "descriptor, drift, diagnostic, and update-proposal events must be node-scoped"
+            }
+        );
+    }
+
+    #[test]
+    fn validation_event_rejects_node_scoped_summary_payload() {
+        let event = node_event(
+            1,
+            WorkflowGraphInferenceValidationEventPayload::Summary(pending_summary()),
+        );
+
+        assert_eq!(
+            event.validate().expect_err("summary must be graph scoped"),
+            InferenceInterfaceValidationSessionError::InvalidField {
+                field: "validation_event.scope",
+                reason: "summary events must be graph-scoped"
+            }
+        );
+    }
+
+    fn node_event(
         sequence: u64,
         payload: WorkflowGraphInferenceValidationEventPayload,
     ) -> WorkflowGraphInferenceValidationEvent {
@@ -278,6 +354,22 @@ mod tests {
             validation_session_id: validation_session_id(),
             client_graph_revision: 7,
             sequence,
+            scope: WorkflowGraphInferenceValidationEventScope::Node {
+                node_id: WorkflowNodeId::parse("infer").unwrap(),
+            },
+            payload,
+        }
+    }
+
+    fn graph_event(
+        sequence: u64,
+        payload: WorkflowGraphInferenceValidationEventPayload,
+    ) -> WorkflowGraphInferenceValidationEvent {
+        WorkflowGraphInferenceValidationEvent {
+            validation_session_id: validation_session_id(),
+            client_graph_revision: 7,
+            sequence,
+            scope: WorkflowGraphInferenceValidationEventScope::Graph,
             payload,
         }
     }

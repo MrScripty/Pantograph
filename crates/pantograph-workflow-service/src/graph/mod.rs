@@ -73,7 +73,8 @@ pub use inference_interface_resolver::{
 };
 pub use inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationEvent,
-    WorkflowGraphInferenceValidationEventPayload, WorkflowGraphInferenceValidationSession,
+    WorkflowGraphInferenceValidationEventPayload, WorkflowGraphInferenceValidationEventScope,
+    WorkflowGraphInferenceValidationSession,
 };
 pub use inspection::{
     inspect_workflow_graph, inspect_workflow_graph_with_run_context,
