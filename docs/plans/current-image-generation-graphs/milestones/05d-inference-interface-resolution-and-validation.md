@@ -101,12 +101,19 @@ defining an image-only inference-node interface.
       successful graph semantics carry `pumas_model_ref` plus display-only
       identity only; executable paths, `entry_path`, package facts, runtime
       hints, load targets, and `inference_settings` must not be graph semantics.
-- [ ] Re-plan and replace the `puma-lib` dependency-requirements hydration
-      boundary before removing graph-authored paths. The current Tauri
-      hydration path builds `ModelDependencyRequest` from `modelPath`; the
-      replacement must use `pumas_model_ref`/model identity or a typed
-      descriptor/dependency-planning contract and must not synthesize a hidden
-      path fallback.
+- [ ] Replace the `puma-lib` dependency-requirements hydration boundary before
+      removing graph-authored paths. The chosen design is to use the canonical
+      path-free `pantograph-dependency-planning::DependencyPlanningRequest`
+      contract, or evolve that contract if a required typed field is missing.
+      Tauri command code must only decode/forward requests and encode responses;
+      it must not construct dependency policy, resolve Pumas facts, synthesize
+      `modelPath`, or adapt the canonical request back into
+      `node_engine::ModelDependencyRequest`.
+- [ ] Delete or rewrite `ModelDependencyRequest`/`model_path` dependency
+      hydration call sites that are on the `puma-lib` -> inference path. Any
+      remaining dependency-environment work must consume the canonical
+      path-free dependency-planning contract directly, not a compatibility
+      adapter around the retired request.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
@@ -666,3 +673,24 @@ defining an image-only inference-node interface.
     keep graph/node data path-free and move any Pumas-approved load target or
     dependency fact lookup behind workflow-service/scheduler-owned validation
     and dependency-planning boundaries.
+- [x] 2026-05-25 `puma-lib` dependency hydration design decision:
+  - Decision: use the existing canonical
+    `pantograph-dependency-planning::DependencyPlanningRequest` as the
+    path-free replacement contract for selected-model dependency hydration.
+    Evolve that contract only if a typed field is missing; do not add a
+    parallel puma-lib-specific request shape.
+  - Ownership: workflow-service owns graph/node validation and request assembly
+    semantics; dependency-planning owns DTO shape; host/runtime integration owns
+    any Pumas-approved load target lookup. Tauri command handlers are transport
+    adapters only and may not contain dependency policy, Pumas fact resolution,
+    scheduler/runtime selection, or path synthesis business logic.
+  - No-fallback/no-legacy confirmation: do not bridge the canonical request back
+    into `node_engine::ModelDependencyRequest`, `ModelRefV2`, `modelPath`, or
+    `model_path`. Those are replacement targets for the puma-lib/inference
+    path, not compatibility branches.
+  - Implementation staging: first route puma-lib hydration through the
+    canonical dependency-planning request and service boundary; then remove
+    graph-authored `modelPath`, `entry_path`, package facts, runtime hints, load
+    targets, and `inference_settings`; then update frontend mocks/templates and
+    node-engine tests to prove only `pumas_model_ref` plus display identity
+    remain graph-facing.

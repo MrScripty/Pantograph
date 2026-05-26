@@ -540,11 +540,15 @@ falling back to previously rendered ports.
    `pumas_model_ref` and display identity only; executable paths, `entry_path`,
    package facts, runtime hints, load targets, and `inference_settings` are
    removed from graph semantics before live validation UX is added. Before this
-   code slice removes graph-authored paths, replace the Tauri
-   dependency-requirements hydration path that currently builds
-   `ModelDependencyRequest` from `modelPath`; the replacement must use
-   model-ref/descriptor/dependency-planning identity without synthesizing a
-   hidden path fallback.
+   code slice removes graph-authored paths, replace the dependency-requirements
+   hydration path that currently builds `ModelDependencyRequest` from
+   `modelPath`. Use the existing canonical path-free
+   `pantograph-dependency-planning::DependencyPlanningRequest` contract, or
+   evolve it if a required typed field is missing. Tauri command handlers must
+   only decode/forward requests and encode responses; workflow-service and
+   dependency-planning boundaries own validation/request semantics. Do not adapt
+   the canonical request back into `ModelDependencyRequest`, `ModelRefV2`,
+   `modelPath`, or `model_path`.
 4. Tighten request extraction before it feeds live validation: use one
    workflow-service model-ref binding resolver, reject duplicate incoming
    bindings, validate source handle/type, report connected-versus-inline
@@ -671,6 +675,17 @@ falling back to previously rendered ports.
   which violates the no-fallback/no-legacy rule. The next step is to re-plan a
   model-ref-only dependency hydration contract before editing production
   puma-lib authoring.
+- 2026-05-25: Re-plan decision selected. Replace the puma-lib dependency
+  hydration boundary with the existing canonical path-free
+  `pantograph-dependency-planning::DependencyPlanningRequest`, evolving that
+  contract only if a required typed field is missing. Workflow-service owns
+  graph/node validation and request assembly semantics; dependency-planning owns
+  the DTO; host/runtime integration owns Pumas-approved load-target lookup.
+  Tauri remains a transport adapter and must not contain dependency policy,
+  Pumas fact resolution, scheduler/runtime selection, or hidden path synthesis.
+  No adapter may translate the canonical request back into
+  `node_engine::ModelDependencyRequest`, `ModelRefV2`, `modelPath`, or
+  `model_path`.
 
 ## Open Design Decisions
 

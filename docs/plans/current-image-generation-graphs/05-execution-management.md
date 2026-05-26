@@ -11828,6 +11828,24 @@ Worker rules:
   - Required decision: replace dependency hydration with a path-free
     `pumas_model_ref`/descriptor/dependency-planning contract before production
     puma-lib authoring is edited.
+- 2026-05-25 Milestone 5d `puma-lib` dependency hydration decision:
+  - Decision: use the existing canonical
+    `pantograph-dependency-planning::DependencyPlanningRequest` as the path-free
+    selected-model dependency hydration contract. If additional data is needed,
+    evolve that typed contract instead of adding a puma-lib-specific DTO.
+  - Ownership: workflow-service owns graph/node validation and request assembly
+    semantics, dependency-planning owns DTO shape, and host/runtime integration
+    owns any Pumas-approved load target lookup. Tauri command handlers are
+    transport adapters only and must not own dependency policy, Pumas fact
+    resolution, scheduler/runtime selection, or path synthesis business logic.
+  - No-fallback/no-legacy confirmation: do not adapt the canonical request back
+    into `node_engine::ModelDependencyRequest`, `ModelRefV2`, graph
+    `model_path`, or frontend `modelPath`. Those are replacement targets on the
+    puma-lib/inference path.
+  - Staging: first route puma-lib hydration through the canonical dependency
+    planning service boundary; then remove graph-authored paths/facts/settings;
+    then update frontend mocks/templates and node-engine tests to prove only
+    `pumas_model_ref` plus display identity remain graph-facing.
 
 ### Traceability Links
 
