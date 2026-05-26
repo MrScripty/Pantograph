@@ -9,6 +9,7 @@ mod executable_topology;
 mod group_mutation;
 mod inference_interface_patch;
 mod inference_interface_projection;
+mod inference_interface_request;
 mod inference_interface_resolver;
 mod inference_interface_validation;
 mod inspection;
@@ -58,6 +59,11 @@ pub use inference_interface_projection::{
     authored_snapshot_from_descriptor, resolve_inference_interface_projection,
     validation_summary_from_descriptor, InferenceInterfaceProjectionError,
     InferenceInterfaceResolutionProjection,
+};
+pub use inference_interface_request::{
+    inference_interface_resolution_inputs_from_graph, InferenceInterfaceGraphResolutionDiagnostic,
+    InferenceInterfaceGraphResolutionDiagnosticCode, InferenceInterfaceGraphResolutionInput,
+    InferenceInterfaceGraphResolutionInputs,
 };
 pub use inference_interface_resolver::{
     resolve_inference_interface_from_facts, InferenceCapabilityFacts,

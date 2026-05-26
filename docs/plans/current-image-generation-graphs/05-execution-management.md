@@ -11684,6 +11684,27 @@ Worker rules:
     and projection helper so a connected `puma-lib` output can produce current
     descriptors, authored visible ports, live validation events, and submit/
     queue-admission gating from the backend summary.
+- 2026-05-25 Milestone 5d workflow-service inference request extraction slice
+  completed:
+  - Smallest useful vertical slice: added draft-graph extraction of
+    `ResolveInferenceInterfaceRequest` values for generic inference nodes from
+    a connected `puma-lib.pumas_model_ref` source or the node's own typed
+    `pumas_model_ref` value, plus optional explicit `task_kind`, `runtime`, and
+    `device` constraints.
+  - No-fallback/no-legacy confirmation: request extraction accepts only the
+    canonical path-free `pumas_model_ref` contract. It does not read
+    `model_ref`, `model_path`, Pumas package summaries, executable load
+    targets, `inference_settings`, `expand-settings`, static all-port metadata,
+    runtime-host payloads, or scheduler decisions as alternate request sources.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_request
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo check -p
+    pantograph-workflow-service --all-features`. Workflow-service checks still
+    report only the known `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: feed extracted requests into the resolver/projection
+    pipeline with Pumas/runtime capability facts and emit live validation events
+    plus backend validation summaries for the graph editor and queue admission.
 
 ### Traceability Links
 
