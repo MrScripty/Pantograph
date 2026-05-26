@@ -28,6 +28,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
 | `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
 | `inference_interface_patch.rs` | Workflow-service-owned update proposal and typed graph patch-operation contracts for applying current inference descriptors to authored node snapshots. |
+| `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
@@ -183,6 +184,11 @@ for existing graph-edit callers.
   blocking effective-definition diagnostics; unknown future snapshot value
   categories must be rejected until the graph contract mapping is extended
   deliberately.
+- Inference-interface descriptor resolution is a workflow-service boundary:
+  lookup adapters provide path-free Pumas model state, selected-artifact state,
+  inference capability facts, and runtime availability facts. The resolver
+  assembles descriptors and typed unavailable diagnostics without guessing from
+  names, paths, package facts, or runtime-host payloads.
 - Inference-interface update proposals are graph-service contracts, not shared
   descriptor contracts. They may reference shared drift reports and authored
   snapshots, but typed operations that replace snapshots, remove invalid

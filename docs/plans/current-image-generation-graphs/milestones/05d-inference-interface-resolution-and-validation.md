@@ -86,7 +86,7 @@ defining an image-only inference-node interface.
       boolean, typed enqueue-disabled reasons, diagnostics count, and blocking
       diagnostics count. Frontend must not infer enqueue permission from raw
       diagnostics.
-- [ ] Add a workflow-service resolver boundary that combines Pumas model and
+- [x] Add a workflow-service resolver boundary that combines Pumas model and
       selected-artifact facts, inference capability facts, runtime availability
       facts, and optional graph-authored constraints into one descriptor. It
       must return typed unavailable/not-implemented diagnostics when facts or
@@ -420,3 +420,26 @@ defining an image-only inference-node interface.
   - Remaining follow-up: wire session event transport after descriptor
     resolution can produce current descriptors, drift reports, update
     proposals, and backend validation summaries.
+- [x] 2026-05-25 workflow-service inference resolver boundary slice completed:
+  - Smallest useful vertical slice: added a synchronous facts-in resolver
+    boundary in workflow-service that combines path-free Pumas model state,
+    selected-artifact state, inference capability facts, runtime availability,
+    and optional graph-authored runtime/device constraints into an
+    `InferenceInterfaceDescriptor`.
+  - No-fallback/no-legacy confirmation: the resolver does not inspect model
+    paths, Pumas package fact blobs, runtime-host payloads, static all-port
+    metadata, `inference_settings`, or `expand-settings`. Descriptor ports are
+    copied only from explicit capability facts, and missing/invalid facts return
+    typed unavailable diagnostics instead of guessed ports.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_resolver
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted source search for
+    forbidden fallback/path/package/runtime-host terms in the resolver; and
+    `git diff --check`. Workflow-service checks still report only the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: add lookup adapters that feed this resolver from Pumas
+    load-target/readiness APIs, runtime capability registries, and runtime
+    availability facts, then wire the first connected-model-ref acceptance
+    slice.

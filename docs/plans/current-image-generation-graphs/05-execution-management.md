@@ -11641,6 +11641,27 @@ Worker rules:
   - Remaining follow-up: wire validation event transport after descriptor
     resolution can produce current descriptors, drift reports, update
     proposals, and validation summaries.
+- 2026-05-25 Milestone 5d workflow-service inference resolver boundary slice
+  completed:
+  - Smallest useful vertical slice: added a synchronous facts-in descriptor
+    resolver boundary that consumes path-free Pumas model/selected-artifact
+    state, explicit inference capability facts, runtime availability facts,
+    and graph-authored runtime/device constraints to produce a typed
+    `InferenceInterfaceDescriptor`.
+  - No-fallback/no-legacy confirmation: the resolver does not inspect paths,
+    package fact blobs, runtime-host payloads, static all-port metadata,
+    `inference_settings`, or `expand-settings`; missing model/artifact/
+    capability/runtime facts become typed unavailable diagnostics.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_resolver
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted source search for
+    forbidden fallback/path/package/runtime-host terms in the resolver; and
+    `git diff --check`. Workflow-service checks still report only the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: feed the resolver from concrete Pumas/runtime
+    adapters and implement the connected-model-ref validation acceptance slice.
 
 ### Traceability Links
 
