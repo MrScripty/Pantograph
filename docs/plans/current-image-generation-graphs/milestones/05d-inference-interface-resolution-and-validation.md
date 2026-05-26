@@ -1327,11 +1327,32 @@ defining an image-only inference-node interface.
        clean long-term if multiple crates need to construct the snapshot, but
        it widens the immediate blast radius and risks moving scheduler-facing
        projection concerns out of workflow-service.
-  - Recommendation for the next slice: use option 2. Attribution owns durable
-    storage and idempotent lookup by `WorkflowVersionId`; workflow-service owns
-    typed snapshot construction, validation, serde, and projection. Do not use
-    a workflow-service sidecar store as a fallback, and do not make attribution
-    depend on workflow-service.
+  - Decision for the next slice: use option 2. Attribution owns durable opaque
+    snapshot storage and idempotent lookup by `WorkflowVersionId`;
+    workflow-service owns typed snapshot construction, validation, serde, and
+    projection. Do not use a workflow-service sidecar store as a fallback, and
+    do not make attribution depend on workflow-service.
+  - Storage contract for implementation: add attribution repository request and
+    record DTOs that carry `workflow_version_id`, `workflow_id`,
+    `workflow_execution_fingerprint`, snapshot schema version,
+    descriptor-contract version, graph revision, validation session id,
+    validation snapshot id, compact snapshot JSON, and creation timestamp.
+    Attribution validates identity/fingerprint consistency against the existing
+    workflow version row and stores the compact JSON opaquely; workflow-service
+    remains responsible for deserializing, validating, and projecting the
+    snapshot before scheduler use.
+  - Idempotency/transaction rule: storing the same workflow version and
+    identical snapshot metadata/JSON is a successful reuse. A different
+    snapshot for the same `WorkflowVersionId` is a typed conflict unless a
+    later migration explicitly introduces supersession. The write must happen
+    in the same attribution transaction as the workflow-version lookup/check so
+    publish cannot expose a version without coherent executable snapshot
+    authority.
+  - Lookup rule: lookup by `WorkflowVersionId` returns either the opaque
+    snapshot record or a typed not-found/unavailable/metadata-mismatch error.
+    Workflow-service converts those errors into publish/admission diagnostics;
+    it must not reconstruct a snapshot from graph fields, current validation
+    cache, frontend state, or runtime defaults when lookup fails.
   - No-fallback/no-legacy gate: queue admission must remain blocked until the
     durable snapshot store exists and can fail closed for missing,
     stale/mismatched, contract-incompatible, or store-unavailable snapshots.

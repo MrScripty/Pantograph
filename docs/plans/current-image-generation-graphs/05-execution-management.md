@@ -12578,12 +12578,27 @@ Worker rules:
     sidecar persistence; attribution-owned opaque JSON snapshot storage keyed
     by `WorkflowVersionId`; or moving snapshot DTOs into a lower shared
     contract crate so attribution can store typed records directly.
-  - Recommendation: extend `pantograph-runtime-attribution` with an opaque
+  - Decision: extend `pantograph-runtime-attribution` with an opaque
     executable validation snapshot table and repository methods keyed by
     `WorkflowVersionId`. Workflow-service remains typed DTO/projection owner
     and serializes/deserializes at the attribution boundary. This preserves the
     version durability owner without creating a crate dependency cycle or a
     workflow-service fallback store.
+  - Storage contract: attribution will store `workflow_version_id`,
+    `workflow_id`, `workflow_execution_fingerprint`, snapshot schema version,
+    descriptor-contract version, graph revision, validation session id,
+    validation snapshot id, compact snapshot JSON, and creation timestamp.
+    Attribution validates identity/fingerprint consistency against the existing
+    workflow version row and treats the JSON as opaque.
+  - Idempotency rule: storing identical snapshot metadata/JSON for the same
+    `WorkflowVersionId` reuses the existing row. Different snapshot contents
+    for the same `WorkflowVersionId` are a typed conflict unless a future
+    migration introduces explicit supersession.
+  - Lookup rule: workflow-service must consume attribution lookup results and
+    fail closed on not-found, unavailable, metadata mismatch, or contract
+    mismatch. It must not reconstruct executable snapshot authority from graph
+    fields, current validation cache, frontend state, runtime defaults, model
+    paths, or Pumas package facts.
   - Implementation must not continue into queue admission until durable
     snapshot storage can fail closed for missing, stale/mismatched,
     contract-incompatible, or store-unavailable snapshots.
