@@ -141,10 +141,7 @@ impl Default for NodeRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pantograph_node_contracts::{
-        ContractInferenceExecutionInputKind, ContractInferenceExecutionResultKind,
-        ContractInferenceTaskId, InferencePortPayloadRole,
-    };
+    use pantograph_node_contracts::{ContractInferenceTaskId, InferencePortPayloadRole};
 
     #[test]
     fn node_definition_preserves_inference_payload_contracts_for_llm_diagnostics() {
@@ -173,41 +170,29 @@ mod tests {
     }
 
     #[test]
-    fn node_definition_preserves_image_generation_payload_contracts() {
+    fn node_definition_keeps_image_generation_ports_descriptor_owned() {
         let registry = NodeRegistry::new();
         let definition = registry
             .get_definition("llm-inference")
             .expect("llm-inference definition");
-        let prompt = definition
-            .inputs
-            .iter()
-            .find(|port| port.id == "prompt")
-            .expect("prompt input");
-        let results = definition
-            .outputs
-            .iter()
-            .find(|port| port.id == "results")
-            .expect("results output");
 
-        assert!(prompt.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::ImageGeneration
-                && payload.input_kind == Some(ContractInferenceExecutionInputKind::ImageGeneration)
-        }));
-        assert!(results.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::ImageGeneration
-                && payload.result_kind
-                    == Some(ContractInferenceExecutionResultKind::ImageGeneration)
-        }));
+        assert!(
+            definition
+                .inputs
+                .iter()
+                .all(|port| !matches!(port.id.as_str(), "prompt" | "denoising_scheduler")),
+            "image-generation prompt/sampler ports must come from descriptor-backed snapshots"
+        );
+        assert!(
+            definition
+                .outputs
+                .iter()
+                .all(|port| !matches!(port.id.as_str(), "results" | "image")),
+            "image-generation result ports must come from descriptor-backed snapshots"
+        );
 
-        let encoded = serde_json::to_value(results).expect("encode results port");
-        assert!(encoded["inference_payloads"]
-            .as_array()
-            .is_some_and(|payloads| {
-                payloads.iter().any(|payload| {
-                    payload["task_id"] == serde_json::json!("image_generation")
-                        && payload["result_kind"] == serde_json::json!("image_generation")
-                })
-            }));
+        let encoded = serde_json::to_value(definition).expect("encode llm definition");
+        assert!(!encoded.to_string().contains("denoising_scheduler"));
     }
 
     #[test]

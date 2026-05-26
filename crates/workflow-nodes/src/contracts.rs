@@ -287,47 +287,8 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
             &llm_supported_task_ids(),
             InferencePortPayloadRole::ModelReference,
         ),
-        "generation_options" => task_role_payloads(
-            &[
-                ContractInferenceTaskId::TextGeneration,
-                ContractInferenceTaskId::ChatCompletion,
-            ],
-            InferencePortPayloadRole::Options,
-        ),
-        "task_kind" | "runtime" | "task_options" | "inference_settings" => {
+        "task_kind" | "runtime" | "device" => {
             task_role_payloads(&llm_supported_task_ids(), InferencePortPayloadRole::Options)
-        }
-        "denoising_scheduler" => task_role_payloads(
-            &[ContractInferenceTaskId::ImageGeneration],
-            InferencePortPayloadRole::Options,
-        ),
-        "prompt" | "system_prompt" | "context" | "tools" => vec![
-            InferencePortPayloadContract::task_input(
-                ContractInferenceTaskId::TextGeneration,
-                ContractInferenceExecutionInputKind::TextGeneration,
-            ),
-            InferencePortPayloadContract::task_input(
-                ContractInferenceTaskId::ChatCompletion,
-                ContractInferenceExecutionInputKind::TextGeneration,
-            ),
-            InferencePortPayloadContract::task_input(
-                ContractInferenceTaskId::ImageGeneration,
-                ContractInferenceExecutionInputKind::ImageGeneration,
-            ),
-        ],
-        "audio" => vec![InferencePortPayloadContract::task_input(
-            ContractInferenceTaskId::AudioTranscription,
-            ContractInferenceExecutionInputKind::AudioTranscription,
-        )],
-        "text" => vec![InferencePortPayloadContract::task_input(
-            ContractInferenceTaskId::Embedding,
-            ContractInferenceExecutionInputKind::Embedding,
-        )],
-        "query" | "documents" | "documents_json" => {
-            vec![InferencePortPayloadContract::task_input(
-                ContractInferenceTaskId::Rerank,
-                ContractInferenceExecutionInputKind::Rerank,
-            )]
         }
         _ => Vec::new(),
     }
@@ -335,72 +296,10 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
 
 fn llm_output_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
     match port_id {
-        "model_ref" => task_role_payloads(
-            &llm_supported_task_ids(),
-            InferencePortPayloadRole::ModelReference,
-        ),
-        "metadata" | "diagnostics" => task_role_payloads(
+        "diagnostics" => task_role_payloads(
             &llm_supported_task_ids(),
             InferencePortPayloadRole::Diagnostics,
         ),
-        "usage" => task_role_payloads(
-            &[
-                ContractInferenceTaskId::TextGeneration,
-                ContractInferenceTaskId::ChatCompletion,
-            ],
-            InferencePortPayloadRole::Usage,
-        ),
-        "response" => vec![
-            InferencePortPayloadContract::task_output(
-                ContractInferenceTaskId::TextGeneration,
-                ContractInferenceExecutionResultKind::TextGeneration,
-            ),
-            InferencePortPayloadContract::task_output(
-                ContractInferenceTaskId::ChatCompletion,
-                ContractInferenceExecutionResultKind::TextGeneration,
-            ),
-            InferencePortPayloadContract::task_output(
-                ContractInferenceTaskId::AudioTranscription,
-                ContractInferenceExecutionResultKind::AudioTranscription,
-            ),
-        ],
-        "tool_calls" | "has_tool_calls" | "stream" => {
-            vec![
-                InferencePortPayloadContract::task_output(
-                    ContractInferenceTaskId::TextGeneration,
-                    ContractInferenceExecutionResultKind::TextGeneration,
-                ),
-                InferencePortPayloadContract::task_output(
-                    ContractInferenceTaskId::ChatCompletion,
-                    ContractInferenceExecutionResultKind::TextGeneration,
-                ),
-            ]
-        }
-        "kv_cache_out" => task_role_payloads(
-            &[
-                ContractInferenceTaskId::TextGeneration,
-                ContractInferenceTaskId::ChatCompletion,
-            ],
-            InferencePortPayloadRole::CacheHandle,
-        ),
-        "embedding" => vec![InferencePortPayloadContract::task_output(
-            ContractInferenceTaskId::Embedding,
-            ContractInferenceExecutionResultKind::Embedding,
-        )],
-        "results" => vec![
-            InferencePortPayloadContract::task_output(
-                ContractInferenceTaskId::Rerank,
-                ContractInferenceExecutionResultKind::Rerank,
-            ),
-            InferencePortPayloadContract::task_output(
-                ContractInferenceTaskId::ImageGeneration,
-                ContractInferenceExecutionResultKind::ImageGeneration,
-            ),
-        ],
-        "scores" | "top_document" | "top_score" => vec![InferencePortPayloadContract::task_output(
-            ContractInferenceTaskId::Rerank,
-            ContractInferenceExecutionResultKind::Rerank,
-        )],
         _ => Vec::new(),
     }
 }
@@ -531,31 +430,64 @@ mod tests {
             .find(|contract| contract.node_type.as_str() == "llm-inference")
             .expect("llm contract");
 
-        let prompt = llm
+        let pumas_model_ref = llm
             .inputs
             .iter()
-            .find(|port| port.id.as_str() == "prompt")
-            .expect("prompt port");
-        assert_eq!(prompt.kind, PortKind::Input);
-        assert_eq!(prompt.value_type, PortValueType::Prompt);
-        assert_eq!(prompt.requirement, PortRequirement::Optional);
+            .find(|port| port.id.as_str() == "pumas_model_ref")
+            .expect("pumas_model_ref port");
+        assert_eq!(pumas_model_ref.kind, PortKind::Input);
+        assert_eq!(pumas_model_ref.value_type, PortValueType::Json);
+        assert_eq!(pumas_model_ref.requirement, PortRequirement::Optional);
 
-        let text = llm
-            .inputs
-            .iter()
-            .find(|port| port.id.as_str() == "text")
-            .expect("text port");
-        assert_eq!(text.kind, PortKind::Input);
-        assert_eq!(text.value_type, PortValueType::String);
-        assert_eq!(text.requirement, PortRequirement::Optional);
-
-        let response = llm
+        let diagnostics = llm
             .outputs
             .iter()
-            .find(|port| port.id.as_str() == "response")
-            .expect("response port");
-        assert_eq!(response.kind, PortKind::Output);
-        assert_eq!(response.value_type, PortValueType::String);
+            .find(|port| port.id.as_str() == "diagnostics")
+            .expect("diagnostics port");
+        assert_eq!(diagnostics.kind, PortKind::Output);
+        assert_eq!(diagnostics.value_type, PortValueType::Json);
+
+        for retired_port in [
+            "prompt",
+            "text",
+            "query",
+            "documents",
+            "documents_json",
+            "audio",
+            "system_prompt",
+            "context",
+            "tools",
+            "kv_cache_in",
+            "generation_options",
+            "task_options",
+            "denoising_scheduler",
+            "inference_settings",
+            "response",
+            "results",
+            "scores",
+            "top_document",
+            "top_score",
+            "embedding",
+            "image",
+            "metadata",
+            "model_ref",
+            "tool_calls",
+            "has_tool_calls",
+            "kv_cache_out",
+            "stream",
+            "usage",
+        ] {
+            assert!(
+                llm.input(&port_id(retired_port).expect("retired input port id"))
+                    .is_none(),
+                "retired static input port {retired_port} must come from descriptors"
+            );
+            assert!(
+                llm.output(&port_id(retired_port).expect("retired output port id"))
+                    .is_none(),
+                "retired static output port {retired_port} must come from descriptors"
+            );
+        }
     }
 
     #[test]
@@ -631,39 +563,12 @@ mod tests {
             contract_streaming_support(registry_audio.streaming_support)
         );
 
-        let prompt = llm
-            .input(&port_id("prompt").expect("prompt port id"))
-            .unwrap();
-        assert!(prompt.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::TextGeneration
-                && payload.input_kind == Some(ContractInferenceExecutionInputKind::TextGeneration)
-        }));
-        assert!(prompt.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::ImageGeneration
-                && payload.input_kind == Some(ContractInferenceExecutionInputKind::ImageGeneration)
-        }));
-
         let task_kind = llm
             .input(&port_id("task_kind").expect("task kind port id"))
             .unwrap();
         assert!(task_kind.inference_payloads.iter().any(|payload| {
             payload.task_id == ContractInferenceTaskId::Rerank
                 && payload.role == InferencePortPayloadRole::Options
-        }));
-
-        let audio = llm
-            .input(&port_id("audio").expect("audio port id"))
-            .unwrap();
-        assert!(audio.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::AudioTranscription
-                && payload.input_kind
-                    == Some(ContractInferenceExecutionInputKind::AudioTranscription)
-        }));
-
-        let text = llm.input(&port_id("text").expect("text port id")).unwrap();
-        assert!(text.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::Embedding
-                && payload.input_kind == Some(ContractInferenceExecutionInputKind::Embedding)
         }));
 
         let pumas_model_ref = llm
@@ -673,18 +578,6 @@ mod tests {
             payload.task_id == ContractInferenceTaskId::Embedding
                 && payload.role == InferencePortPayloadRole::ModelReference
         }));
-
-        let denoising_scheduler = llm
-            .input(&port_id("denoising_scheduler").expect("denoising scheduler port id"))
-            .unwrap();
-        assert_eq!(denoising_scheduler.inference_payloads.len(), 1);
-        assert!(denoising_scheduler
-            .inference_payloads
-            .iter()
-            .any(|payload| {
-                payload.task_id == ContractInferenceTaskId::ImageGeneration
-                    && payload.role == InferencePortPayloadRole::Options
-            }));
 
         assert!(llm
             .input(&port_id("resolved_model_source").expect("resolved model source port id"))
@@ -696,49 +589,12 @@ mod tests {
             )
             .is_none());
 
-        let results = llm
+        assert!(llm
             .output(&port_id("results").expect("results port id"))
-            .unwrap();
-        assert!(results.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::Rerank
-                && payload.result_kind == Some(ContractInferenceExecutionResultKind::Rerank)
-        }));
-        assert!(results.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::ImageGeneration
-                && payload.result_kind
-                    == Some(ContractInferenceExecutionResultKind::ImageGeneration)
-        }));
-
-        let usage = llm
-            .output(&port_id("usage").expect("usage port id"))
-            .unwrap();
-        assert!(usage.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::TextGeneration
-                && payload.role == InferencePortPayloadRole::Usage
-                && payload.result_kind.is_none()
-        }));
-
-        let kv_cache_out = llm
-            .output(&port_id("kv_cache_out").expect("kv cache out port id"))
-            .unwrap();
-        assert!(kv_cache_out.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::TextGeneration
-                && payload.role == InferencePortPayloadRole::CacheHandle
-                && payload.result_kind.is_none()
-        }));
-        assert!(kv_cache_out
-            .inference_payloads
-            .iter()
-            .all(|payload| { payload.role == InferencePortPayloadRole::CacheHandle }));
-
-        let response = llm
+            .is_none());
+        assert!(llm
             .output(&port_id("response").expect("response port id"))
-            .unwrap();
-        assert!(response.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::AudioTranscription
-                && payload.result_kind
-                    == Some(ContractInferenceExecutionResultKind::AudioTranscription)
-        }));
+            .is_none());
     }
 
     #[test]
@@ -750,28 +606,29 @@ mod tests {
             .expect("llm contract");
         let expected_tasks = llm_supported_task_ids().to_vec();
 
-        for output_id in ["diagnostics", "metadata"] {
-            let port = llm.output(&port_id(output_id).expect("diagnostics port id"));
-            let port = port.expect("diagnostics output port");
-            let projected_tasks = port
-                .inference_payloads
-                .iter()
-                .map(|payload| payload.task_id)
-                .collect::<Vec<_>>();
+        let port = llm.output(&port_id("diagnostics").expect("diagnostics port id"));
+        let port = port.expect("diagnostics output port");
+        let projected_tasks = port
+            .inference_payloads
+            .iter()
+            .map(|payload| payload.task_id)
+            .collect::<Vec<_>>();
 
-            assert_eq!(projected_tasks, expected_tasks);
-            assert!(port.inference_payloads.iter().all(|payload| {
-                payload.role == InferencePortPayloadRole::Diagnostics
-                    && payload.input_kind.is_none()
-                    && payload.result_kind.is_none()
-            }));
-            let serialized =
-                serde_json::to_string(&port.inference_payloads).expect("payload serialization");
-            assert!(!serialized.contains("backend_key"));
-            assert!(!serialized.contains("runtime_id"));
-            assert!(!serialized.contains("scheduler"));
-            assert!(!serialized.contains("reservation"));
-        }
+        assert_eq!(projected_tasks, expected_tasks);
+        assert!(port.inference_payloads.iter().all(|payload| {
+            payload.role == InferencePortPayloadRole::Diagnostics
+                && payload.input_kind.is_none()
+                && payload.result_kind.is_none()
+        }));
+        let serialized =
+            serde_json::to_string(&port.inference_payloads).expect("payload serialization");
+        assert!(!serialized.contains("backend_key"));
+        assert!(!serialized.contains("runtime_id"));
+        assert!(!serialized.contains("scheduler"));
+        assert!(!serialized.contains("reservation"));
+        assert!(llm
+            .output(&port_id("metadata").expect("metadata port id"))
+            .is_none());
     }
 
     #[test]
@@ -797,14 +654,6 @@ mod tests {
             .output(&port_id("pumas_model_ref").expect("pumas model ref port id"))
             .expect("pumas model ref output");
 
-        let llm_inference = contracts
-            .iter()
-            .find(|contract| contract.node_type.as_str() == "llm-inference")
-            .expect("llm-inference contract");
-        let denoising_scheduler = llm_inference
-            .input(&port_id("denoising_scheduler").expect("denoising scheduler port id"))
-            .expect("denoising scheduler input");
-
         #[cfg(feature = "model-library")]
         {
             let provider = pumas_model_ref
@@ -818,18 +667,21 @@ mod tests {
             assert_eq!(serialized["options_provider"]["node_type"], "puma-lib");
             assert_eq!(serialized["options_provider"]["port_id"], "pumas_model_ref");
 
-            let provider = denoising_scheduler
-                .options_provider
-                .as_ref()
-                .expect("denoising scheduler provider");
-            assert_eq!(provider.node_type.as_str(), "llm-inference");
-            assert_eq!(provider.port_id.as_str(), "denoising_scheduler");
+            let llm_inference = contracts
+                .iter()
+                .find(|contract| contract.node_type.as_str() == "llm-inference")
+                .expect("llm-inference contract");
+            assert!(
+                llm_inference
+                    .input(&port_id("denoising_scheduler").expect("denoising scheduler port id"))
+                    .is_none(),
+                "denoising scheduler options must come from descriptor-backed option sets"
+            );
         }
 
         #[cfg(not(feature = "model-library"))]
         {
             assert!(pumas_model_ref.options_provider.is_none());
-            assert!(denoising_scheduler.options_provider.is_none());
         }
     }
 

@@ -58,7 +58,7 @@ defining an image-only inference-node interface.
       remain only as a generated projection from the authored snapshot/current
       descriptor during staged integration, and must not be accepted as an
       executable fallback when descriptor validation fails.
-- [ ] Retire the current static all-port `llm-inference` interface. Keep only
+- [x] Retire the current static all-port `llm-inference` interface. Keep only
       bootstrap/control ports required before model resolution, such as
       `pumas_model_ref`, optional task kind, optional runtime/device
       constraints, and diagnostics. All task/model-specific prompt, image,
@@ -343,3 +343,39 @@ defining an image-only inference-node interface.
   - Remaining follow-up: shrink graph-visible `llm-inference` static metadata
     to bootstrap/control ports and wire the resolver/validator so connected
     Pumas model refs produce current descriptors and validation summaries.
+- [x] 2026-05-25 static `llm-inference` bootstrap descriptor slice completed:
+  - Smallest useful vertical slice: shrank the built-in `llm-inference`
+    descriptor to pre-resolution bootstrap/control ports only:
+    `task_kind`, `runtime`, `device`, `pumas_model_ref`, and `diagnostics`.
+    Removed static prompt/text/query/document/audio/tool/cache/options/sampler/
+    result/image/usage/model-ref ports from workflow-node metadata, updated
+    contract projection tests, and updated workflow-service registry tests so
+    task/model-specific ports are descriptor/authored-snapshot owned.
+  - No-fallback/no-legacy confirmation: the slice deleted the retired
+    `llm-inference.denoising_scheduler` `PortOptionsProvider` and its tests
+    instead of keeping a queryable static option source for a removed port.
+    Denoising scheduler choices must now arrive as typed descriptor-backed
+    option sets from the inference-interface resolver.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo
+    test -p workflow-nodes --lib inference`; `cargo test -p workflow-nodes
+    --lib contracts`; `cargo test -p workflow-nodes --features model-library
+    --lib contracts`; `cargo test -p pantograph-workflow-service
+    graph::registry --lib`; `cargo check -p workflow-nodes`; `cargo check -p
+    workflow-nodes --no-default-features`; `cargo check -p workflow-nodes
+    --all-features`; `cargo check -p pantograph-workflow-service`; `cargo
+    check -p pantograph-workflow-service --no-default-features`; `cargo check
+    -p pantograph-workflow-service --all-features`; and targeted source search
+    for retired static inference ports/provider symbols. Workflow-service
+    checks still report only the known `set_active_run_execution_plan`
+    dead-code warning from the active-plan runtime handoff removal boundary.
+  - Standards/decomposition note: `crates/workflow-nodes/src/contracts.rs`
+    remains over the preferred file-size threshold even after this slice
+    removed a large static-port mapping. It predates the slice and should be
+    split into production projection plus focused test modules before the next
+    broad contract-projection edit, but it was reduced rather than expanded
+    here to keep this slice atomic.
+  - Remaining follow-up: implement the workflow-service resolver boundary so
+    connected Pumas model refs produce current descriptors, validation
+    summaries, typed option sets, and authored snapshot updates without
+    restoring static all-port metadata, `inference_settings`, or
+    `expand-settings` as interface sources.

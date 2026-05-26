@@ -40,11 +40,11 @@ other so graph metadata and runtime behavior can be reviewed together.
 
 Registered `PortOptionsProvider` entries are projected into canonical port
 contracts as `options_provider` references. The provider registry remains the
-source of truth for whether a port has backend-owned authoring options; node
-descriptors do not duplicate option lists or package/runtime facts.
-The canonical `llm-inference.denoising_scheduler` provider follows this rule:
-it projects Pumas package facts into query-time option rows and leaves explicit
-override acceptance to the image planner.
+source of truth for whether a static port has backend-owned authoring options;
+node descriptors do not duplicate option lists or package/runtime facts.
+Inference-specific options, including denoising scheduler choices, are not
+static `llm-inference` providers; they must come from backend-resolved
+descriptor option sets.
 
 ## Alternatives Rejected
 - Put all node implementations in one file: rejected because node families have
@@ -113,13 +113,12 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   releases.
 - Regeneration/migration: descriptor changes require frontend registry,
   template, saved workflow, and tests updates in the same slice.
-- Inference descriptors publish graph-authoring task and port payload metadata
-  for canonical request/result families. The current `llm-inference`
-  projection derives task fields from `inference::model_contracts`, then
-  annotates text/chat, embedding, rerank, executable audio transcription, and
-  executable image-generation payloads plus graph-visible generated-image,
-  text/chat usage, and cache-handle outputs without changing frontend
-  rendering, scheduler policy, or runtime backend selection.
+- The static `llm-inference` descriptor publishes only bootstrap/control ports:
+  `task_kind`, `runtime`, `device`, `pumas_model_ref`, and `diagnostics`.
+  Request/result family task metadata still comes from
+  `inference::model_contracts`, but task/model-specific input, output, and
+  option ports must come from backend descriptors and authored inference
+  interface snapshots.
 - Retired direct inference descriptors, including direct diffusion,
   llama.cpp-specific inference, dedicated embedding/reranker, and direct
   `vision-analysis`, are not registered built-ins. Saved graph upgrades and
@@ -131,10 +130,11 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   hard scheduler requirement after capability validation. Legacy
   `runtime_hint` and `backend_key` are not descriptor inputs or compatibility
   aliases for canonical inference nodes.
-- Canonical `llm-inference` exposes image-generation denoising scheduler intent
-  through the optional `denoising_scheduler` input. Graphs must not use the
-  overloaded `scheduler` name for image sampling intent; factual Diffusers/Pumas
-  component roles may still use source package names such as `scheduler`.
+- Canonical `llm-inference` does not expose a static denoising scheduler input.
+  Graph-visible scheduler intent is a descriptor-owned typed option when the
+  connected model/task supports it. Graphs must not use the overloaded
+  `scheduler` name for image sampling intent; factual Diffusers/Pumas component
+  roles may still use source package names such as `scheduler`.
 - Direct `diffusion-inference` is retired from the built-in descriptor
   inventory. New image-generation authoring must use canonical
   `llm-inference` with `task_kind = image_generation`; old direct-diffusion

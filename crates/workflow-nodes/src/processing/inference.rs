@@ -1,7 +1,9 @@
-//! Canonical LLM inference descriptor.
+//! Canonical LLM inference bootstrap descriptor.
 //!
 //! Execution is owned by the host typed inference gateway. This module only
-//! defines the graph-visible `llm-inference` contract.
+//! defines the graph-visible `llm-inference` bootstrap contract. Model and
+//! task specific ports are resolved by workflow-service descriptors and
+//! persisted as authored inference interface snapshots.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -32,23 +34,11 @@ pub struct ToolCall {
     pub arguments: serde_json::Value,
 }
 
-/// Canonical LLM inference descriptor.
+/// Canonical LLM inference bootstrap descriptor.
 ///
 /// Hosts execute this node through the typed inference gateway. The descriptor
-/// keeps the graph-visible task/model/option/result ports stable across
-/// frontend, workflow-service, and node-engine consumers.
-///
-/// # Inputs (from context)
-/// - `{task_id}.input.prompt` - The prompt to send
-/// - `{task_id}.input.system_prompt` (optional) - System prompt
-/// - `{task_id}.input.context` (optional) - Additional context to append to prompt
-/// - `{task_id}.input.tools` (optional) - Array of ToolDefinition for tool calling
-///
-/// # Outputs (to context)
-/// - `{task_id}.output.response` - The LLM's response text
-/// - `{task_id}.output.tool_calls` - Array of ToolCall if the LLM requested tools
-/// - `{task_id}.output.has_tool_calls` - Boolean indicating if tool calls were made
-///
+/// keeps only pre-resolution control ports stable across frontend,
+/// workflow-service, and node-engine consumers.
 #[derive(Clone)]
 pub struct InferenceTask {
     /// Unique identifier for this task instance
@@ -64,62 +54,8 @@ impl InferenceTask {
     pub const PORT_DEVICE: &'static str = "device";
     /// Port ID for canonical Pumas model reference input
     pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
-    /// Port ID for canonical generation option input
-    pub const PORT_GENERATION_OPTIONS: &'static str = "generation_options";
-    /// Port ID for canonical task option input
-    pub const PORT_TASK_OPTIONS: &'static str = "task_options";
-    /// Port ID for optional image denoising scheduler selection
-    pub const PORT_DENOISING_SCHEDULER: &'static str = "denoising_scheduler";
-    /// Port ID for text input used by embedding/scoring tasks
-    pub const PORT_TEXT: &'static str = "text";
-    /// Port ID for query input used by rerank tasks
-    pub const PORT_QUERY: &'static str = "query";
-    /// Port ID for structured candidate documents input
-    pub const PORT_DOCUMENTS: &'static str = "documents";
-    /// Port ID for string-encoded candidate documents input
-    pub const PORT_DOCUMENTS_JSON: &'static str = "documents_json";
-    /// Port ID for prompt input
-    pub const PORT_PROMPT: &'static str = "prompt";
-    /// Port ID for audio input used by transcription tasks
-    pub const PORT_AUDIO: &'static str = "audio";
-    /// Port ID for system prompt input
-    pub const PORT_SYSTEM_PROMPT: &'static str = "system_prompt";
-    /// Port ID for context input (additional context to append)
-    pub const PORT_CONTEXT: &'static str = "context";
-    /// Port ID for tools input
-    pub const PORT_TOOLS: &'static str = "tools";
-    /// Port ID for optional reusable KV-cache input
-    pub const PORT_KV_CACHE_IN: &'static str = "kv_cache_in";
-    /// Port ID for response output
-    pub const PORT_RESPONSE: &'static str = "response";
-    /// Port ID for structured rerank results output
-    pub const PORT_RESULTS: &'static str = "results";
-    /// Port ID for rerank score output
-    pub const PORT_SCORES: &'static str = "scores";
-    /// Port ID for top reranked document output
-    pub const PORT_TOP_DOCUMENT: &'static str = "top_document";
-    /// Port ID for top rerank score output
-    pub const PORT_TOP_SCORE: &'static str = "top_score";
-    /// Port ID for embedding vector output
-    pub const PORT_EMBEDDING: &'static str = "embedding";
-    /// Port ID for first generated image output
-    pub const PORT_IMAGE: &'static str = "image";
-    /// Port ID for task metadata output
-    pub const PORT_METADATA: &'static str = "metadata";
-    /// Port ID for canonical model reference output
-    pub const PORT_MODEL_REF: &'static str = "model_ref";
-    /// Port ID for tool calls output
-    pub const PORT_TOOL_CALLS: &'static str = "tool_calls";
-    /// Port ID for has_tool_calls output
-    pub const PORT_HAS_TOOL_CALLS: &'static str = "has_tool_calls";
-    /// Port ID for optional reusable KV-cache output
-    pub const PORT_KV_CACHE_OUT: &'static str = "kv_cache_out";
-    /// Port ID for stream output
-    pub const PORT_STREAM: &'static str = "stream";
     /// Port ID for bounded execution diagnostics output
     pub const PORT_DIAGNOSTICS: &'static str = "diagnostics";
-    /// Port ID for bounded usage summary output
-    pub const PORT_USAGE: &'static str = "usage";
 
     /// Create a new inference task with the given ID
     pub fn new(task_id: impl Into<String>) -> Self {
@@ -140,8 +76,9 @@ impl TaskDescriptor for InferenceTask {
             node_type: "llm-inference".to_string(),
             category: NodeCategory::Processing,
             label: "LLM Inference".to_string(),
-            description: "Runs text through a language model with optional tool calling"
-                .to_string(),
+            description:
+                "Schedules a model-specific inference task through backend descriptor resolution"
+                    .to_string(),
             inputs: vec![
                 PortMetadata::optional(Self::PORT_TASK_KIND, "Task Kind", PortDataType::String),
                 PortMetadata::optional(Self::PORT_RUNTIME, "Runtime", PortDataType::String),
@@ -151,74 +88,12 @@ impl TaskDescriptor for InferenceTask {
                     "Pumas Model Ref",
                     PortDataType::Json,
                 ),
-                PortMetadata::optional(Self::PORT_TEXT, "Text", PortDataType::String),
-                PortMetadata::optional(Self::PORT_QUERY, "Query", PortDataType::String),
-                PortMetadata::optional(Self::PORT_DOCUMENTS, "Documents", PortDataType::Json),
-                PortMetadata::optional(
-                    Self::PORT_DOCUMENTS_JSON,
-                    "Documents JSON",
-                    PortDataType::String,
-                ),
-                PortMetadata::optional(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
-                PortMetadata::optional(Self::PORT_AUDIO, "Audio", PortDataType::Audio),
-                PortMetadata::optional(
-                    Self::PORT_SYSTEM_PROMPT,
-                    "System Prompt",
-                    PortDataType::String,
-                ),
-                PortMetadata::optional(Self::PORT_CONTEXT, "Context", PortDataType::String),
-                PortMetadata::optional(Self::PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
-                PortMetadata::optional(
-                    Self::PORT_KV_CACHE_IN,
-                    "KV Cache In",
-                    PortDataType::KvCache,
-                ),
-                PortMetadata::optional(
-                    Self::PORT_GENERATION_OPTIONS,
-                    "Generation Options",
-                    PortDataType::Json,
-                ),
-                PortMetadata::optional(Self::PORT_TASK_OPTIONS, "Task Options", PortDataType::Json),
-                PortMetadata::optional(
-                    Self::PORT_DENOISING_SCHEDULER,
-                    "Denoising Scheduler",
-                    PortDataType::String,
-                ),
-                PortMetadata::optional(
-                    "inference_settings",
-                    "Inference Settings",
-                    PortDataType::Json,
-                ),
             ],
-            outputs: vec![
-                PortMetadata::optional(Self::PORT_RESPONSE, "Response", PortDataType::String),
-                PortMetadata::optional(Self::PORT_RESULTS, "Results", PortDataType::Json),
-                PortMetadata::optional(Self::PORT_SCORES, "Scores", PortDataType::Json),
-                PortMetadata::optional(
-                    Self::PORT_TOP_DOCUMENT,
-                    "Top Document",
-                    PortDataType::String,
-                ),
-                PortMetadata::optional(Self::PORT_TOP_SCORE, "Top Score", PortDataType::Number),
-                PortMetadata::optional(Self::PORT_EMBEDDING, "Embedding", PortDataType::Embedding),
-                PortMetadata::optional(Self::PORT_IMAGE, "Image", PortDataType::Image),
-                PortMetadata::optional(Self::PORT_METADATA, "Metadata", PortDataType::Json),
-                PortMetadata::optional(Self::PORT_MODEL_REF, "Model Ref", PortDataType::Json),
-                PortMetadata::optional(Self::PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
-                PortMetadata::optional(
-                    Self::PORT_HAS_TOOL_CALLS,
-                    "Has Tool Calls",
-                    PortDataType::Boolean,
-                ),
-                PortMetadata::optional(
-                    Self::PORT_KV_CACHE_OUT,
-                    "KV Cache Out",
-                    PortDataType::KvCache,
-                ),
-                PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
-                PortMetadata::optional(Self::PORT_DIAGNOSTICS, "Diagnostics", PortDataType::Json),
-                PortMetadata::optional(Self::PORT_USAGE, "Usage", PortDataType::Json),
-            ],
+            outputs: vec![PortMetadata::optional(
+                Self::PORT_DIAGNOSTICS,
+                "Diagnostics",
+                PortDataType::Json,
+            )],
             execution_mode: ExecutionMode::Stream,
         }
     }
@@ -250,20 +125,57 @@ mod tests {
     }
 
     #[test]
-    fn test_descriptor_has_tool_ports() {
+    fn test_descriptor_is_bootstrap_only() {
         let meta = InferenceTask::descriptor();
 
-        // Check for tools input
-        assert!(meta.inputs.iter().any(|p| p.id == "tools"));
-        assert!(meta.inputs.iter().any(|p| p.id == "kv_cache_in"));
-        assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
-
-        // Check for tool_calls output
-        assert!(meta.outputs.iter().any(|p| p.id == "tool_calls"));
-
-        // Check for has_tool_calls output
-        assert!(meta.outputs.iter().any(|p| p.id == "has_tool_calls"));
-        assert!(meta.outputs.iter().any(|p| p.id == "kv_cache_out"));
+        assert_eq!(
+            meta.inputs
+                .iter()
+                .map(|port| port.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["task_kind", "runtime", "device", "pumas_model_ref"]
+        );
+        assert_eq!(
+            meta.outputs
+                .iter()
+                .map(|port| port.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["diagnostics"]
+        );
+        for retired_port in [
+            "prompt",
+            "text",
+            "query",
+            "documents",
+            "documents_json",
+            "audio",
+            "tools",
+            "kv_cache_in",
+            "generation_options",
+            "task_options",
+            "denoising_scheduler",
+            "inference_settings",
+            "response",
+            "results",
+            "scores",
+            "top_document",
+            "top_score",
+            "embedding",
+            "image",
+            "metadata",
+            "model_ref",
+            "tool_calls",
+            "has_tool_calls",
+            "kv_cache_out",
+            "stream",
+            "usage",
+        ] {
+            assert!(
+                meta.inputs.iter().all(|port| port.id != retired_port)
+                    && meta.outputs.iter().all(|port| port.id != retired_port),
+                "static llm-inference descriptor must not expose retired port {retired_port}"
+            );
+        }
     }
 
     #[test]
@@ -294,91 +206,15 @@ mod tests {
             .iter()
             .any(|p| p.id == InferenceTask::PORT_PUMAS_MODEL_REF
                 && p.data_type == PortDataType::Json));
-        assert!(meta.inputs.iter().any(|p| p.id == InferenceTask::PORT_TEXT
-            && p.data_type == PortDataType::String
-            && !p.required));
-        assert!(meta.inputs.iter().any(|p| p.id == InferenceTask::PORT_QUERY
-            && p.data_type == PortDataType::String
-            && !p.required));
-        assert!(meta
-            .inputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_DOCUMENTS
-                && p.data_type == PortDataType::Json
-                && !p.required));
-        assert!(meta
-            .inputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_DOCUMENTS_JSON
-                && p.data_type == PortDataType::String
-                && !p.required));
-        assert!(meta
-            .inputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_PROMPT
-                && p.data_type == PortDataType::Prompt
-                && !p.required));
-        assert!(meta
-            .inputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_AUDIO && p.data_type == PortDataType::Audio));
         assert!(!meta.inputs.iter().any(|p| p.id == "resolved_model_source"));
         assert!(!meta
             .inputs
             .iter()
             .any(|p| p.id == "resolved_model_package_facts"));
         assert!(meta
-            .inputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_GENERATION_OPTIONS
-                && p.data_type == PortDataType::Json));
-        assert!(
-            meta.inputs
-                .iter()
-                .any(|p| p.id == InferenceTask::PORT_TASK_OPTIONS
-                    && p.data_type == PortDataType::Json)
-        );
-        assert!(meta.inputs.iter().any(|p| {
-            p.id == InferenceTask::PORT_DENOISING_SCHEDULER
-                && p.data_type == PortDataType::String
-                && !p.required
-        }));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_MODEL_REF && p.data_type == PortDataType::Json));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_RESULTS && p.data_type == PortDataType::Json));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_SCORES && p.data_type == PortDataType::Json));
-        assert!(meta.outputs.iter().any(|p| {
-            p.id == InferenceTask::PORT_TOP_DOCUMENT && p.data_type == PortDataType::String
-        }));
-        assert!(meta.outputs.iter().any(|p| {
-            p.id == InferenceTask::PORT_TOP_SCORE && p.data_type == PortDataType::Number
-        }));
-        assert!(meta.outputs.iter().any(|p| {
-            p.id == InferenceTask::PORT_EMBEDDING && p.data_type == PortDataType::Embedding
-        }));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_IMAGE && p.data_type == PortDataType::Image));
-        assert!(meta.outputs.iter().any(|p| {
-            p.id == InferenceTask::PORT_METADATA && p.data_type == PortDataType::Json
-        }));
-        assert!(meta
             .outputs
             .iter()
             .any(|p| p.id == InferenceTask::PORT_DIAGNOSTICS && p.data_type == PortDataType::Json));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_USAGE && p.data_type == PortDataType::Json));
     }
 
     #[tokio::test]

@@ -14,9 +14,7 @@ adapters such as the Python runtime.
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
-| `inference.rs` | Declares the canonical `llm-inference` graph contract for text/chat, embedding, rerank, audio transcription, image generation, model refs, package facts, and graph-visible generated-image output. |
-| `inference_denoising_options.rs` | Provides backend-owned, Pumas-fact-derived options for the canonical `llm-inference.denoising_scheduler` port when the model-library feature is enabled. |
-| `inference_denoising_options_tests.rs` | Focused model-library tests for the denoising scheduler provider and Pumas missing-evidence diagnostics. |
+| `inference.rs` | Declares the canonical `llm-inference` bootstrap contract for model reference and scheduler constraint inputs before backend descriptor resolution. |
 
 ## Problem
 Workflow graphs need stable processing-node contracts across Rust, Python, and
@@ -41,10 +39,13 @@ Keep descriptors in this directory as the graph-visible contract layer and let
 host executors implement the runtime behavior. Retired direct inference
 descriptors, including old diffusion, llama.cpp, embedding, and reranker
 shapes plus the old direct `vision-analysis` image-understanding node, must not
-re-enter this directory; canonical `llm-inference` task metadata owns text/chat,
-embedding, rerank, audio-transcription, image-understanding, and
-image-generation graph contracts. Its `Task::run` implementation fails closed so
-standalone graph execution cannot bypass the host typed inference gateway.
+re-enter this directory. Canonical `llm-inference` static metadata is now only
+the bootstrap surface for `pumas_model_ref`, optional task kind, optional
+runtime/device constraints, and diagnostics. Text/chat, embedding, rerank,
+audio-transcription, image-understanding, image-generation, sampler, and result
+ports must be resolved by workflow-service descriptors and authored snapshots.
+Its `Task::run` implementation fails closed so standalone graph execution
+cannot bypass the host typed inference gateway.
 The optional `runtime` input is not projected into node-engine execution,
 worker envelopes, or inference requests directly; scheduler-produced execution
 decisions are the only source of selected runtime facts.
@@ -53,12 +54,12 @@ The dependency-environment descriptor consumes explicit `pumas_model_ref` or
 identity. Pumas remains responsible for mapping model references to approved
 artifact load targets.
 The old descriptor-local `base_url`/model generation config has been removed;
-generation and task options must flow through canonical graph ports and typed
-inference requests.
-The `llm-inference.denoising_scheduler` input uses a backend-owned
-`PortOptionsProvider` instead of frontend hardcoded scheduler choices. Provider
-rows are fact projections only: they may show unavailable scheduler classes for
-graph authoring, but explicit scheduler acceptance remains a planner decision.
+generation and task options must flow through descriptor-authored graph ports
+and typed inference requests.
+The previous static `llm-inference.denoising_scheduler` port and provider are
+retired. Denoising scheduler choices are descriptor-backed option sets owned by
+the inference-interface resolver; explicit scheduler acceptance remains a
+planner decision.
 `expand_settings.rs` follows the same contract-first rule: model-specific
 settings stay graph-visible as matching optional input/output ports while the
 schema itself still passes through unchanged for downstream inference merging.
@@ -82,18 +83,15 @@ instead of hiding behind generic JSON ports.
   rather than opaque string flags.
 - KV-cache reuse, when exposed by processing nodes, uses explicit `kv_cache`
   ports rather than generic `json` ports.
-- Expand-settings contracts must preserve the static `inference_settings`
-  passthrough while keeping per-setting override ports additive and keyed by the
-  source schema.
-- Rerank outputs must be exposed through canonical `llm-inference` ranked-result
-  fields so saved workflows and templates can consume them without
-  endpoint-specific parsing logic.
-- Canonical `llm-inference` image-generation descriptors must expose the first
-  generated image on the `image` output while keeping the full typed result
-  envelope on `results`.
-- Denoising scheduler option rows must come from backend-owned providers and
-  Pumas package facts. They must not write executable defaults into graph data
-  or bypass planner diagnostics.
+- Static `llm-inference` descriptors must not expose prompt, text, image,
+  sampler, rerank, audio, cache, usage, or result ports. Those ports come only
+  from backend-resolved descriptors and authored snapshots.
+- Expand-settings and `inference_settings` may not remain an alternate
+  inference-interface source. Existing uses are removal or descriptor-backed
+  rewrite targets in the inference-interface milestone.
+- Denoising scheduler option rows must come from descriptor-backed typed option
+  sets and Pumas package facts. They must not write executable defaults into
+  graph data or bypass planner diagnostics.
 - JSON-filter configuration defaults remain the derived empty-path/empty-default
   contract so descriptor consumers and task construction share one default
   shape.
@@ -136,8 +134,8 @@ assert_eq!(meta.node_type, "llm-inference");
 ## Structured Producer Contract
 - Descriptor metadata in this directory is machine-consumed by workflow
   registries, graph validation, and frontend node renderers.
-- New ports may be added additively; existing port IDs and meanings must remain
-  stable for saved workflows.
-- `expand-settings` publishes `inference_settings` as the authoritative schema
-  payload and may add per-setting ports keyed exactly by the upstream schema
-  `key` values.
+- New static processing ports may be added additively only when they are not
+  model/task-specific inference interface ports. Inference-specific ports must
+  be added through the descriptor resolver and authored snapshot contract.
+- `expand-settings` is not authoritative for canonical inference interfaces.
+  Future option presentation must consume backend descriptors or be removed.

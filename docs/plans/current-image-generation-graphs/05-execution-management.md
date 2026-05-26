@@ -11573,6 +11573,33 @@ Worker rules:
   - Remaining follow-up: shrink graph-visible `llm-inference` static metadata
     to bootstrap/control ports and wire the resolver/validator so connected
     Pumas model refs produce current descriptors and validation summaries.
+- 2026-05-25 Milestone 5d static `llm-inference` bootstrap descriptor slice
+  completed:
+  - Smallest useful vertical slice: replaced graph-visible static all-port
+    `llm-inference` metadata with bootstrap/control ports only:
+    `task_kind`, `runtime`, `device`, `pumas_model_ref`, and `diagnostics`.
+    Updated workflow-node contract projection and workflow-service registry
+    tests to assert prompt/result/image/sampler/usage ports are
+    descriptor/authored-snapshot owned.
+  - No-fallback/no-legacy confirmation: deleted the retired static
+    `llm-inference.denoising_scheduler` options provider and tests. The
+    scheduler/denoiser option surface must be reintroduced only through the
+    typed inference-interface descriptor resolver.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo
+    test -p workflow-nodes --lib inference`; `cargo test -p workflow-nodes
+    --lib contracts`; `cargo test -p workflow-nodes --features model-library
+    --lib contracts`; `cargo test -p pantograph-workflow-service
+    graph::registry --lib`; `cargo check -p workflow-nodes`; `cargo check -p
+    workflow-nodes --no-default-features`; `cargo check -p workflow-nodes
+    --all-features`; `cargo check -p pantograph-workflow-service`; `cargo
+    check -p pantograph-workflow-service --no-default-features`; `cargo check
+    -p pantograph-workflow-service --all-features`; and targeted source search
+    for retired static inference ports/provider symbols. Workflow-service
+    checks still report only the known `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: add the workflow-service descriptor resolver boundary
+    and descriptor-backed typed options/validation summary before frontend
+    submit/admission or runtime-host materialization slices.
 
 ### Traceability Links
 
