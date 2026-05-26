@@ -12153,6 +12153,24 @@ Worker rules:
     revision identity with `WorkflowGraphRevision`, publish executable
     descriptor validation summaries into the owner, and derive the canonical
     dependency-environment request only from current executable summary state.
+- 2026-05-26 Milestone 5d live-validation graph revision slice completed:
+  - Smallest vertical slice: replaced workflow-service live inference
+    validation session/event `client_graph_revision: u64` fields with the
+    typed shared `WorkflowGraphRevision` fingerprint used by graph edit
+    sessions and dependency-environment action intents.
+  - No-fallback/no-legacy confirmation: no numeric-to-fingerprint translation
+    layer was added. Retired `client_graph_revision` payloads are rejected by
+    the typed `serde(deny_unknown_fields)` boundary.
+  - Standards result: the change stayed inside workflow-service graph
+    validation contracts/tests and graph README/plan notes; Tauri, frontend,
+    scheduler, runtime-host, shared DTO roots, generated files, and lockfiles
+    were not touched.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service inference_interface_validation`; `git diff
+    --check`.
+  - Remaining follow-up: publish executable descriptor validation summaries
+    into the current validation-state owner and derive
+    dependency-environment requests only from current executable summary state.
 
 ### Traceability Links
 

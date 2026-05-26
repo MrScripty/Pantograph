@@ -87,6 +87,12 @@ defining an image-only inference-node interface.
       `client_graph_revision` shape must be replaced, not translated through a
       compatibility map. Event sequences remain monotonic within a validation
       session.
+      - Numeric revision replacement completed on 2026-05-26:
+        `WorkflowGraphInferenceValidationSession` and
+        `WorkflowGraphInferenceValidationEvent` now carry
+        `WorkflowGraphRevision` directly. Focused tests prove mismatched event
+        revisions fail validation and retired `client_graph_revision` payloads
+        are rejected by the typed serde boundary instead of translated.
 - [x] Define the graph validation summary contract with status, executable
       boolean, typed enqueue-disabled reasons, diagnostics count, and blocking
       diagnostics count. Frontend must not infer enqueue permission from raw

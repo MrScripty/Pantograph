@@ -1,7 +1,7 @@
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationSummary, InferenceInterfaceContractError,
     InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceInterfaceFingerprint,
-    WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -38,7 +38,7 @@ pub struct WorkflowGraphInferenceValidationSession {
     #[serde(default = "default_contract_version")]
     pub contract_version: u32,
     pub validation_session_id: DraftGraphValidationSessionId,
-    pub client_graph_revision: u64,
+    pub graph_revision: WorkflowGraphRevision,
     pub latest_sequence: u64,
     pub summary: DraftGraphValidationSummary,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -48,10 +48,6 @@ pub struct WorkflowGraphInferenceValidationSession {
 impl WorkflowGraphInferenceValidationSession {
     pub fn validate(&self) -> Result<(), InferenceInterfaceValidationSessionError> {
         validate_contract_version("validation_session.contract_version", self.contract_version)?;
-        validate_revision(
-            "validation_session.client_graph_revision",
-            self.client_graph_revision,
-        )?;
         validate_collection_len("validation_session.events", self.events.len(), MAX_EVENTS)?;
         self.summary.validate()?;
         let mut previous_sequence = 0;
@@ -63,9 +59,9 @@ impl WorkflowGraphInferenceValidationSession {
                     reason: "event session id must match validation session",
                 });
             }
-            if event.client_graph_revision != self.client_graph_revision {
+            if event.graph_revision != self.graph_revision {
                 return Err(InferenceInterfaceValidationSessionError::InvalidField {
-                    field: "validation_session.events.client_graph_revision",
+                    field: "validation_session.events.graph_revision",
                     reason: "event graph revision must match validation session",
                 });
             }
@@ -91,7 +87,7 @@ impl WorkflowGraphInferenceValidationSession {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct WorkflowGraphInferenceValidationEvent {
     pub validation_session_id: DraftGraphValidationSessionId,
-    pub client_graph_revision: u64,
+    pub graph_revision: WorkflowGraphRevision,
     pub sequence: u64,
     pub scope: WorkflowGraphInferenceValidationEventScope,
     pub payload: WorkflowGraphInferenceValidationEventPayload,
@@ -99,10 +95,6 @@ pub struct WorkflowGraphInferenceValidationEvent {
 
 impl WorkflowGraphInferenceValidationEvent {
     pub fn validate(&self) -> Result<(), InferenceInterfaceValidationSessionError> {
-        validate_revision(
-            "validation_event.client_graph_revision",
-            self.client_graph_revision,
-        )?;
         if self.sequence == 0 {
             return Err(InferenceInterfaceValidationSessionError::InvalidField {
                 field: "validation_event.sequence",
@@ -197,19 +189,6 @@ fn validate_contract_version(
     Ok(())
 }
 
-fn validate_revision(
-    field: &'static str,
-    revision: u64,
-) -> Result<(), InferenceInterfaceValidationSessionError> {
-    if revision == 0 {
-        return Err(InferenceInterfaceValidationSessionError::InvalidField {
-            field,
-            reason: "client graph revision must be non-zero",
-        });
-    }
-    Ok(())
-}
-
 fn validate_collection_len(
     field: &'static str,
     actual_len: usize,
@@ -237,7 +216,7 @@ mod tests {
         let session = WorkflowGraphInferenceValidationSession {
             contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
             validation_session_id: validation_session_id(),
-            client_graph_revision: 7,
+            graph_revision: graph_revision(),
             latest_sequence: 2,
             summary: pending_summary(),
             events: vec![
@@ -261,11 +240,11 @@ mod tests {
             1,
             WorkflowGraphInferenceValidationEventPayload::DescriptorResolved(fingerprint()),
         );
-        stale_event.client_graph_revision = 6;
+        stale_event.graph_revision = "bbbbbbbbbbbbbbbb".parse().expect("valid graph revision");
         let session = WorkflowGraphInferenceValidationSession {
             contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
             validation_session_id: validation_session_id(),
-            client_graph_revision: 7,
+            graph_revision: graph_revision(),
             latest_sequence: 1,
             summary: pending_summary(),
             events: vec![stale_event],
@@ -274,9 +253,28 @@ mod tests {
         assert_eq!(
             session.validate().expect_err("stale event must fail"),
             InferenceInterfaceValidationSessionError::InvalidField {
-                field: "validation_session.events.client_graph_revision",
+                field: "validation_session.events.graph_revision",
                 reason: "event graph revision must match validation session"
             }
+        );
+    }
+
+    #[test]
+    fn validation_session_rejects_retired_numeric_revision_payload() {
+        let payload = serde_json::json!({
+            "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+            "validation_session_id": "validation.session.1",
+            "client_graph_revision": 7,
+            "latest_sequence": 0,
+            "summary": pending_summary()
+        });
+
+        let error = serde_json::from_value::<WorkflowGraphInferenceValidationSession>(payload)
+            .expect_err("retired numeric revision field must fail");
+
+        assert!(
+            error.to_string().contains("client_graph_revision"),
+            "unexpected error: {error}"
         );
     }
 
@@ -285,7 +283,7 @@ mod tests {
         let session = WorkflowGraphInferenceValidationSession {
             contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
             validation_session_id: validation_session_id(),
-            client_graph_revision: 7,
+            graph_revision: graph_revision(),
             latest_sequence: 1,
             summary: pending_summary(),
             events: vec![
@@ -352,7 +350,7 @@ mod tests {
     ) -> WorkflowGraphInferenceValidationEvent {
         WorkflowGraphInferenceValidationEvent {
             validation_session_id: validation_session_id(),
-            client_graph_revision: 7,
+            graph_revision: graph_revision(),
             sequence,
             scope: WorkflowGraphInferenceValidationEventScope::Node {
                 node_id: WorkflowNodeId::parse("infer").unwrap(),
@@ -367,7 +365,7 @@ mod tests {
     ) -> WorkflowGraphInferenceValidationEvent {
         WorkflowGraphInferenceValidationEvent {
             validation_session_id: validation_session_id(),
-            client_graph_revision: 7,
+            graph_revision: graph_revision(),
             sequence,
             scope: WorkflowGraphInferenceValidationEventScope::Graph,
             payload,
@@ -386,6 +384,10 @@ mod tests {
 
     fn validation_session_id() -> DraftGraphValidationSessionId {
         DraftGraphValidationSessionId::parse("validation.session.1").unwrap()
+    }
+
+    fn graph_revision() -> WorkflowGraphRevision {
+        "aaaaaaaaaaaaaaaa".parse().expect("valid graph revision")
     }
 
     fn fingerprint() -> InferenceInterfaceFingerprint {

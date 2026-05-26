@@ -215,7 +215,8 @@ for existing graph-edit callers.
   destructive and require explicit confirmation before a later apply endpoint
   mutates graph state.
 - Live inference validation events use backend-issued validation session ids,
-  a monotonic client graph revision, and strictly increasing event sequence
+  the same opaque graph fingerprint revision used by graph edit sessions and
+  dependency-environment action intents, and strictly increasing event sequence
   numbers. Update-proposal events are workflow-service-owned because they carry
   graph patch operations.
 - Current inference-validation state is workflow-service-owned and keyed by
