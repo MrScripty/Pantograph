@@ -34,7 +34,9 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
 | `NumberInputNode.svelte` | Renders a metadata-driven numeric editor that adopts downstream default values and range constraints. |
-| `PumaLibNode.svelte` | Presents model-library selection and routes model metadata into the correct downstream inference node type. |
+| `PumaLibNode.svelte` | Presents model-library selection and persists canonical `pumas_model_ref` identity for downstream inference planning. |
+| `pumaLibNodeState.ts` | Projects selectable Pumas model options into path-free node data for `PumaLibNode.svelte`. |
+| `pumaLibNodeState.test.ts` | Unit coverage for Puma-Lib model option projection and rejection of path-shaped option values. |
 | `primitiveInputMetadata.ts` | Shared helpers that resolve downstream port metadata and normalize primitive editor defaults. |
 | `selectionInputState.ts` | Shared selection-input state helpers, including provider-backed unset/stale presentation and static allowed-values default adoption. |
 | `selectionInputProviderOptions.ts` | Builds backend-owned provider option queries for selection inputs and discards stale async option responses when target context changes. |
@@ -92,6 +94,9 @@ facts through `inferencePayloadDisplay.ts`, which reads only backend-neutral
 `inference_payloads` metadata from the node definition and does not render
 backend keys, runtime ids, scheduler policy, raw paths, prompts, or result
 bodies.
+`PumaLibNode.svelte` is model-ref-only authoring UI. It may display a model id
+or option label, but it must not persist `modelPath`, `model_path`, dependency
+requirements, runtime hints, or package facts as graph data.
 `DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
 component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentTypes.ts`, `dependencyEnvironmentActions.ts`,

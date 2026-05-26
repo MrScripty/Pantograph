@@ -101,6 +101,9 @@ defining an image-only inference-node interface.
       successful graph semantics carry `pumas_model_ref` plus display-only
       identity only; executable paths, `entry_path`, package facts, runtime
       hints, load targets, and `inference_settings` must not be graph semantics.
+      The active workflow `PumaLibNode.svelte` now follows this boundary by
+      projecting selectable backend port options into `modelName`, `model_id`,
+      and `pumas_model_ref` only; path-shaped options fail closed.
 - [ ] Replace the `puma-lib` dependency-requirements hydration boundary before
       removing graph-authored paths. The chosen design is to use the canonical
       path-free `pantograph-dependency-planning::DependencyPlanningRequest`

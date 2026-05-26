@@ -11918,6 +11918,32 @@ Worker rules:
     `check_model_dependencies`, `install_model_dependencies`, and
     `install_and_check_model_dependencies` commands remain removal/rewrite
     targets for later slices.
+- 2026-05-26 Milestone 5d active Puma-Lib node model-ref-only frontend slice
+  completed:
+  - Smallest useful vertical slice: replaced the active workflow
+    `PumaLibNode.svelte` authoring UI so model selection persists only
+    `modelName`, `model_id`, and canonical `pumas_model_ref` from backend-owned
+    port options. The node no longer persists `modelPath`, dependency
+    requirements, runtime hints, package facts, or generated inference settings.
+  - No-fallback/no-legacy confirmation: path-shaped port-option values are not
+    selectable and model selection throws a typed UI error instead of treating a
+    path string as model identity. The node may hydrate an existing saved
+    `model_id` through the existing Tauri command, but it does not request
+    dependency requirement hydration or pass a path.
+  - Focused unit coverage added in `pumaLibNodeState.test.ts` for canonical
+    Pumas model-ref projection, path-shaped option rejection, and model-id
+    lookup.
+  - Verification passed: `npm run typecheck`; `npm run test:frontend --
+    pumaLibNodeState.test.ts`; targeted `rg` confirming the active Puma-Lib
+    component no longer references `modelPath`, `model_path`,
+    `dependency_requirements`, or dependency/inference setting sync; and
+    `git diff --check`.
+  - Remaining follow-up: the older generic package
+    `packages/svelte-graph/src/components/nodes/PumaLibNode.svelte` still
+    contains path-shaped mock UI and must be deleted or rewritten when that
+    package renderer surface is retired or brought onto canonical node data.
+    Dependency-environment frontend action payloads still need their own
+    canonical request slice.
 
 ### Traceability Links
 
