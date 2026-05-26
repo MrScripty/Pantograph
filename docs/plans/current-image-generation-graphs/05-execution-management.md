@@ -11870,6 +11870,22 @@ Worker rules:
     typed backend validation/dependency-planning descriptors, not selector
     metadata, as the next boundary slices remove
     `ModelDependencyRequest`/`model_path` hydration call sites.
+- 2026-05-26 Milestone 5d `puma-lib` provider-port cleanup completed:
+  - Smallest useful vertical slice: switched the frontend Pumas model option
+    cache and Tauri port-options audit gate from the retired `model_path`
+    provider id to the canonical `pumas_model_ref` provider id.
+  - No-fallback/no-legacy confirmation: model option loading no longer asks
+    for a model-path provider after the `puma-lib` descriptor stopped exposing
+    that port. The command remains a transport/audit boundary and does not
+    construct dependency policy, Pumas facts, scheduler choices, or paths.
+  - Verification passed: `cargo fmt`; `npm run typecheck`; `npm run
+    test:frontend -- pumaModelOptionsCache.test.ts`; and targeted cache tests
+    proving `query_port_options` is called with `nodeType = puma-lib` and
+    `portId = pumas_model_ref`.
+  - Verification blocked: `cargo check -p pantograph` still fails before this
+    slice is typechecked by the known unrelated compile blocker
+    `src-tauri/src/app_setup.rs:96: no method named
+    set_media_conversion_executor found for Arc<WorkflowService>`.
 
 ### Traceability Links
 

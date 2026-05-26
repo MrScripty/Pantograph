@@ -147,6 +147,27 @@ test('loadPumasModelOptions checks the cached cursor before returning cached row
   );
 });
 
+test('loadPumasModelOptions queries the Pumas model reference provider', async () => {
+  const argsSeen: Record<string, unknown>[] = [];
+  const invoker: WorkflowInvoker = async (command, args) => {
+    if (command === 'query_port_options') {
+      argsSeen.push(args ?? {});
+      return portOptions([option('llm/imported/ready', 'model-library-updates:1')]) as never;
+    }
+    if (command === 'list_model_library_updates_since') {
+      return updateFeed({ cursor: 'model-library-updates:1' }) as never;
+    }
+    throw new Error(`unexpected command ${command}`);
+  };
+
+  await loadPumasModelOptions(invoker);
+
+  assert.deepEqual(argsSeen, [{
+    nodeType: 'puma-lib',
+    portId: 'pumas_model_ref',
+  }]);
+});
+
 test('loadPumasModelOptions reloads cached rows when cached cursor reports updates', async () => {
   const snapshots = [
     portOptions([option('llm/imported/initial', 'model-library-updates:1')]),

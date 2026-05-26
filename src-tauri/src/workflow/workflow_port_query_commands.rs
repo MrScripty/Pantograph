@@ -2,6 +2,9 @@ use tauri::State;
 
 use super::commands::{SharedExtensions, SharedNodeRegistry, SharedWorkflowService};
 
+const PUMA_LIB_NODE_TYPE: &str = "puma-lib";
+const PUMAS_MODEL_REF_PORT_ID: &str = "pumas_model_ref";
+
 pub async fn query_port_options(
     registry: State<'_, SharedNodeRegistry>,
     extensions: State<'_, SharedExtensions>,
@@ -44,7 +47,7 @@ fn record_pumas_port_options_audit(
     port_id: &str,
     search: Option<&str>,
 ) {
-    if node_type != "puma-lib" || port_id != "model_path" {
+    if node_type != PUMA_LIB_NODE_TYPE || port_id != PUMAS_MODEL_REF_PORT_ID {
         return;
     }
 
