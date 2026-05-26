@@ -27,7 +27,8 @@ use super::task_graph::{
     WorkflowSchedulerReadyInferenceTaskProjection,
 };
 use crate::graph::{
-    InferenceInterfaceNodeProjectionRecord, WorkflowGraphInferenceValidationPublication,
+    InferenceInterfaceNodeProjectionRecord, WorkflowGraph,
+    WorkflowGraphInferenceValidationPublication,
 };
 
 pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION: u16 = 1;
@@ -130,6 +131,17 @@ pub struct WorkflowExecutableValidationSnapshotLookupRequest {
     pub workflow_execution_fingerprint: String,
     #[serde(default = "default_descriptor_contract_version")]
     pub descriptor_contract_version: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowExecutableValidationSnapshotPublishRequest {
+    pub workflow_id: String,
+    pub workflow_semantic_version: String,
+    pub graph: WorkflowGraph,
+    pub validation_publication: WorkflowGraphInferenceValidationPublication,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_snapshot_id: Option<WorkflowExecutableValidationSnapshotId>,
 }
 
 impl WorkflowExecutableValidationSnapshotLookupRequest {

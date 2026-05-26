@@ -1,10 +1,15 @@
 use pantograph_dependency_planning::PumasModelRef;
 use pantograph_inference_interface_contracts::{
-    DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
-    InferenceAvailabilityStatus, InferenceInterfaceFingerprint, InferenceTaskKind,
+    AuthoredInferenceInterfaceSnapshot, DraftGraphValidationSessionId, DraftGraphValidationStatus,
+    DraftGraphValidationSummary, InferenceAvailability, InferenceAvailabilityStatus,
+    InferenceInterfaceDescriptor, InferenceInterfaceFingerprint, InferenceTaskKind,
     WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 
+use crate::graph::{
+    InferenceInterfaceNodeProjectionRecord, WorkflowGraphInferenceValidationPublication,
+    WorkflowGraphInferenceValidationSession,
+};
 use crate::{GraphEdge, GraphNode, Position, WorkflowGraph};
 
 use super::*;
@@ -220,6 +225,73 @@ fn workflow_executable_validation_snapshot_lookup_rejects_stale_fingerprint() {
     );
 }
 
+#[test]
+fn publish_workflow_executable_validation_snapshot_persists_publication() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let graph = graph();
+    let validation_publication = executable_validation_publication(&graph);
+    let published = service
+        .publish_workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotPublishRequest {
+                workflow_id: "workflow-versioned".to_string(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                graph: graph.clone(),
+                validation_publication,
+                validation_snapshot_id: Some(
+                    WorkflowExecutableValidationSnapshotId::parse(
+                        "wfvalsnap_00000000-0000-4000-8000-000000000011",
+                    )
+                    .expect("valid snapshot id"),
+                ),
+            },
+        )
+        .expect("publish executable snapshot");
+
+    let loaded = service
+        .workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: published.as_record().workflow_version_id.clone(),
+                workflow_execution_fingerprint: published
+                    .as_record()
+                    .workflow_execution_fingerprint
+                    .clone(),
+                descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+            },
+        )
+        .expect("published snapshot should be stored");
+
+    assert_eq!(loaded.as_record(), published.as_record());
+    assert_eq!(
+        loaded.as_record().validation_snapshot_id.as_str(),
+        "wfvalsnap_00000000-0000-4000-8000-000000000011"
+    );
+}
+
+#[test]
+fn publish_workflow_executable_validation_snapshot_rejects_stale_publication() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let graph = graph();
+    let mut validation_publication = executable_validation_publication(&graph);
+    validation_publication.validation_session.graph_revision =
+        WorkflowGraphRevision::parse("stale_revision").expect("valid stale revision");
+
+    let err = service
+        .publish_workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotPublishRequest {
+                workflow_id: "workflow-versioned".to_string(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                graph,
+                validation_publication,
+                validation_snapshot_id: None,
+            },
+        )
+        .expect_err("stale publication should fail closed");
+
+    assert!(
+        matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("graph revision"))
+    );
+}
+
 fn executable_validation_snapshot(
     version: &pantograph_runtime_attribution::WorkflowVersionRecord,
 ) -> WorkflowExecutableValidationSnapshotRecord {
@@ -265,5 +337,65 @@ fn executable_validation_snapshot(
             estimate_hints: Vec::new(),
             blocking_diagnostics: Vec::new(),
         }],
+    }
+}
+
+fn executable_validation_publication(
+    graph: &WorkflowGraph,
+) -> WorkflowGraphInferenceValidationPublication {
+    let graph_revision =
+        WorkflowGraphRevision::parse(&graph.compute_fingerprint()).expect("valid graph revision");
+    let validation_session_id = DraftGraphValidationSessionId::parse("validation_session_publish")
+        .expect("valid validation session id");
+    let summary = DraftGraphValidationSummary {
+        status: DraftGraphValidationStatus::Executable,
+        executable: true,
+        enqueue_disabled_reasons: Vec::new(),
+        diagnostics_count: 0,
+        blocking_diagnostics_count: 0,
+    };
+    let descriptor = InferenceInterfaceDescriptor {
+        contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        model_ref: PumasModelRef {
+            model_id: "pumas://model/stable-diffusion".to_string(),
+            revision: Some("main".to_string()),
+            selected_artifact_id: Some("artifact-diffusers".to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        },
+        task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
+        descriptor_fingerprint: InferenceInterfaceFingerprint::parse("descriptor_fingerprint_1")
+            .expect("valid descriptor fingerprint"),
+        runtime_conditions: Vec::new(),
+        inputs: Vec::new(),
+        outputs: Vec::new(),
+        availability: InferenceAvailability::available(),
+        diagnostics: Vec::new(),
+    };
+
+    WorkflowGraphInferenceValidationPublication {
+        validation_session: WorkflowGraphInferenceValidationSession {
+            contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+            validation_session_id,
+            graph_revision,
+            latest_sequence: 0,
+            summary: summary.clone(),
+            events: Vec::new(),
+        },
+        node_projections: vec![InferenceInterfaceNodeProjectionRecord {
+            node_id: WorkflowNodeId::parse("infer_node").expect("valid node id"),
+            authored_snapshot: AuthoredInferenceInterfaceSnapshot {
+                contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+                descriptor_fingerprint: descriptor.descriptor_fingerprint.clone(),
+                task_kind: descriptor.task_kind.clone(),
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+            },
+            descriptor,
+            validation_summary: summary,
+            runtime_constraint: None,
+            device_constraint: None,
+        }],
+        request_diagnostics: Vec::new(),
     }
 }

@@ -94,7 +94,7 @@ pub use self::executable_validation_snapshot::{
     WorkflowExecutableValidationSnapshotDiagnosticSeverity,
     WorkflowExecutableValidationSnapshotError, WorkflowExecutableValidationSnapshotId,
     WorkflowExecutableValidationSnapshotLookupRequest, WorkflowExecutableValidationSnapshotNode,
-    WorkflowExecutableValidationSnapshotRecord,
+    WorkflowExecutableValidationSnapshotPublishRequest, WorkflowExecutableValidationSnapshotRecord,
     WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_DIAGNOSTICS_PER_NODE,
     WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_ESTIMATE_HINTS_PER_NODE,
     WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_NODES,

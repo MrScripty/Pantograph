@@ -189,6 +189,10 @@ storage keyed by `WorkflowVersionId` and validates all returned attribution
 metadata before using the compact snapshot for scheduler projection. Attribution
 owns durability and version identity; workflow-service owns snapshot schema,
 serde, validation, and fail-closed projection.
+The executable publish facade validates that the backend validation publication
+matches the graph revision being published, resolves the immutable workflow
+version, compacts the publication into a snapshot, and persists it through the
+attribution bridge. Draft graph save remains separate from executable publish.
 Workflow scheduler task orchestration is a service-owned composition boundary.
 `WorkflowService` owns a `WorkflowSchedulerTaskOrchestrator`, exposes an
 explicit runtime-host execution port configuration hook, and installs a

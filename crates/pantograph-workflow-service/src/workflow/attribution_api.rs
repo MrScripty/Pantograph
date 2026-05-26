@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use pantograph_inference_interface_contracts::WorkflowGraphRevision;
 use pantograph_runtime_attribution::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
@@ -21,7 +22,8 @@ use crate::graph::{
 use super::{
     validate_workflow_id, AttributionRepository,
     ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowExecutableValidationSnapshotError,
-    WorkflowExecutableValidationSnapshotLookupRequest, WorkflowExecutableValidationSnapshotRecord,
+    WorkflowExecutableValidationSnapshotId, WorkflowExecutableValidationSnapshotLookupRequest,
+    WorkflowExecutableValidationSnapshotPublishRequest, WorkflowExecutableValidationSnapshotRecord,
     WorkflowRunGraphProjection, WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse,
     WorkflowService, WorkflowServiceError,
 };
@@ -191,6 +193,41 @@ impl WorkflowService {
             stored, &request,
         )
         .map_err(workflow_executable_validation_snapshot_service_error)
+    }
+
+    pub fn publish_workflow_executable_validation_snapshot(
+        &self,
+        request: WorkflowExecutableValidationSnapshotPublishRequest,
+    ) -> Result<ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowServiceError> {
+        validate_workflow_id(&request.workflow_id)?;
+        let graph_revision = WorkflowGraphRevision::parse(&request.graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        if graph_revision
+            != request
+                .validation_publication
+                .validation_session
+                .graph_revision
+        {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "validation publication graph revision does not match executable publish graph"
+                    .to_string(),
+            ));
+        }
+        let workflow_version = self.resolve_workflow_graph_version(
+            &request.workflow_id,
+            &request.workflow_semantic_version,
+            &request.graph,
+        )?;
+        let snapshot_id = request
+            .validation_snapshot_id
+            .unwrap_or_else(WorkflowExecutableValidationSnapshotId::generate);
+        let snapshot = WorkflowExecutableValidationSnapshotRecord::from_validation_publication(
+            &workflow_version,
+            snapshot_id,
+            &request.validation_publication,
+        )
+        .map_err(workflow_executable_validation_snapshot_service_error)?;
+        self.store_workflow_executable_validation_snapshot(snapshot)
     }
 
     pub fn workflow_run_graph_query(

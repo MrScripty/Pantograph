@@ -1423,6 +1423,39 @@ defining an image-only inference-node interface.
     the publish boundary, and queue admission still needs to require successful
     attribution snapshot lookup before queue insertion or scheduler graph
     materialization.
+- [x] 2026-05-26 workflow-service executable publish snapshot slice completed:
+  - Smallest useful vertical slice: added a typed executable publish request to
+    workflow-service that validates the backend validation publication graph
+    revision against the graph being published, resolves the immutable
+    `WorkflowVersionId`, compacts the publication into a typed executable
+    validation snapshot, and persists it through attribution-owned opaque
+    storage.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow/attribution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_version.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this milestone file,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: executable publish is separate from
+    draft graph save and refuses stale validation publications. It does not
+    derive executable authority from graph fields, frontend state, Tauri
+    payloads, current validation caches, runtime defaults, Pumas paths/facts, or
+    scheduler placement, and it persists through the attribution bridge only.
+  - Focused tests cover successful publish-to-attribution persistence and stale
+    validation-publication graph revision rejection.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    workflow_executable_validation_snapshot --lib`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; and
+    `cargo check -p pantograph-workflow-service`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: queue admission must require successful attribution
+    snapshot lookup before queue insertion, queue-placement event recording, or
+    scheduler task graph materialization.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and
