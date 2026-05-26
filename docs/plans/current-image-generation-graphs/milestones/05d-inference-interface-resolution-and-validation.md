@@ -1276,6 +1276,32 @@ defining an image-only inference-node interface.
   - Remaining follow-up: wire the service-level executable publish boundary to
     produce this snapshot, then require queue admission to consume the saved
     snapshot before queue insertion or scheduler task graph materialization.
+- [x] 2026-05-26 validation-publication snapshot compaction slice completed:
+  - Smallest useful vertical slice: added the synchronous pure-domain compactor
+    from `WorkflowGraphInferenceValidationPublication` plus
+    `WorkflowVersionRecord` into `WorkflowExecutableValidationSnapshotRecord`.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    this milestone file, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: compaction consumes only backend
+    validation-publication records and attribution-owned workflow version
+    identity. It does not inspect graph JSON, frontend state, Tauri payloads,
+    raw model paths, Pumas package facts, or scheduler placement state.
+  - Focused test added for compaction preserving workflow version id,
+    execution fingerprint, graph revision, validation summary, descriptor
+    fingerprint, model ref, task kind, and explicit runtime/device constraints
+    while leaving trait settings and estimate hints empty until a typed
+    publisher source owns them.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo fmt
+    -p pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; `cargo
+    check -p pantograph-workflow-service`; and `git diff --check`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: persist the compacted snapshot behind a service-level
+    executable publish operation. Durable storage ownership remains the next
+    boundary to resolve before queue admission can consume saved snapshots.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

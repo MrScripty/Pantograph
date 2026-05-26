@@ -12543,6 +12543,30 @@ Worker rules:
     snapshot, and queue admission must consume it before queue insertion or
     scheduler task graph materialization. The full publish-to-admission
     acceptance path is deferred until those boundaries exist.
+- 2026-05-26 Milestone 5d validation-publication snapshot compaction slice
+  completed:
+  - Added the synchronous pure-domain compactor from
+    `WorkflowGraphInferenceValidationPublication` plus `WorkflowVersionRecord`
+    into `WorkflowExecutableValidationSnapshotRecord`.
+  - No-fallback/no-legacy result: compaction is sourced only from backend
+    validation-publication records and attribution-owned workflow version
+    identity. It does not read graph JSON, frontend state, Tauri payloads, raw
+    model paths, Pumas package facts, or scheduler placement state.
+  - Focused test coverage now proves compaction preserves workflow/version
+    identity, execution fingerprint, graph revision, validation summary,
+    descriptor fingerprint, model ref, task kind, and explicit runtime/device
+    constraints while leaving trait settings and estimate hints empty until a
+    typed publisher source owns them.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo fmt
+    -p pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; `cargo
+    check -p pantograph-workflow-service`; and `git diff --check`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: add service-level executable publish persistence for
+    the compacted snapshot, then wire queue admission to consume saved
+    snapshots before enqueue or scheduler task graph materialization.
 
 ### Traceability Links
 
