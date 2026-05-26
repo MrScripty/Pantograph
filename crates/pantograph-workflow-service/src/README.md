@@ -184,6 +184,11 @@ fingerprints, task kind, Pumas model ref, explicit runtime/device constraints,
 trait settings, estimate hints, availability status, and diagnostics; it does
 not store local model paths, full Pumas package facts, frontend presentation
 state, media payloads, or scheduler placement decisions.
+Workflow-service serializes those typed snapshots into attribution-owned opaque
+storage keyed by `WorkflowVersionId` and validates all returned attribution
+metadata before using the compact snapshot for scheduler projection. Attribution
+owns durability and version identity; workflow-service owns snapshot schema,
+serde, validation, and fail-closed projection.
 Workflow scheduler task orchestration is a service-owned composition boundary.
 `WorkflowService` owns a `WorkflowSchedulerTaskOrchestrator`, exposes an
 explicit runtime-host execution port configuration hook, and installs a

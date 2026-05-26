@@ -3,9 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use pantograph_runtime_attribution::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
-    ClientSessionRecord, ClientSessionResumeRequest, WorkflowId,
-    WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest, WorkflowRunId,
-    WorkflowRunSnapshotRecord, WorkflowRunVersionProjection, WorkflowVersionId,
+    ClientSessionRecord, ClientSessionResumeRequest,
+    WorkflowExecutableValidationSnapshotLookupRequest as AttributionWorkflowExecutableValidationSnapshotLookupRequest,
+    WorkflowId, WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
+    WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunVersionProjection, WorkflowVersionId,
     WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
@@ -18,9 +19,11 @@ use crate::graph::{
 };
 
 use super::{
-    validate_workflow_id, AttributionRepository, WorkflowRunGraphProjection,
-    WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse, WorkflowService,
-    WorkflowServiceError,
+    validate_workflow_id, AttributionRepository,
+    ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowExecutableValidationSnapshotError,
+    WorkflowExecutableValidationSnapshotLookupRequest, WorkflowExecutableValidationSnapshotRecord,
+    WorkflowRunGraphProjection, WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse,
+    WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -144,6 +147,52 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)
     }
 
+    pub fn store_workflow_executable_validation_snapshot(
+        &self,
+        snapshot: WorkflowExecutableValidationSnapshotRecord,
+    ) -> Result<ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowServiceError> {
+        let snapshot = ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(snapshot)
+            .map_err(workflow_executable_validation_snapshot_service_error)?;
+        let request = snapshot
+            .to_attribution_store_request()
+            .map_err(workflow_executable_validation_snapshot_service_error)?;
+        let mut store = self.attribution_store_guard()?;
+        let stored = store
+            .store_workflow_executable_validation_snapshot(request)
+            .map_err(WorkflowServiceError::from)?;
+        let lookup_request = WorkflowExecutableValidationSnapshotLookupRequest {
+            workflow_version_id: stored.workflow_version_id.clone(),
+            workflow_execution_fingerprint: stored.workflow_execution_fingerprint.clone(),
+            descriptor_contract_version: stored.descriptor_contract_version,
+        };
+        ValidatedWorkflowExecutableValidationSnapshotRecord::from_attribution_record(
+            stored,
+            &lookup_request,
+        )
+        .map_err(workflow_executable_validation_snapshot_service_error)
+    }
+
+    pub fn workflow_executable_validation_snapshot(
+        &self,
+        request: WorkflowExecutableValidationSnapshotLookupRequest,
+    ) -> Result<ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowServiceError> {
+        request
+            .validate()
+            .map_err(workflow_executable_validation_snapshot_service_error)?;
+        let store = self.attribution_store_guard()?;
+        let stored = store
+            .workflow_executable_validation_snapshot(
+                AttributionWorkflowExecutableValidationSnapshotLookupRequest {
+                    workflow_version_id: request.workflow_version_id.clone(),
+                },
+            )
+            .map_err(WorkflowServiceError::from)?;
+        ValidatedWorkflowExecutableValidationSnapshotRecord::from_attribution_record(
+            stored, &request,
+        )
+        .map_err(workflow_executable_validation_snapshot_service_error)
+    }
+
     pub fn workflow_run_graph_query(
         &self,
         request: WorkflowRunGraphQueryRequest,
@@ -202,6 +251,17 @@ fn workflow_run_graph_projection_from_version(
         presentation_metadata,
         graph_settings,
     })
+}
+
+fn workflow_executable_validation_snapshot_service_error(
+    error: WorkflowExecutableValidationSnapshotError,
+) -> WorkflowServiceError {
+    match error {
+        WorkflowExecutableValidationSnapshotError::SnapshotSerialization { .. } => {
+            WorkflowServiceError::Internal(error.to_string())
+        }
+        _ => WorkflowServiceError::InvalidRequest(error.to_string()),
+    }
 }
 
 fn decode_run_graph_json<T: serde::de::DeserializeOwned>(

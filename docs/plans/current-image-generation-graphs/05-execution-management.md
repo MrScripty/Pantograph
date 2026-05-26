@@ -12625,6 +12625,29 @@ Worker rules:
     typed compact snapshot into this attribution boundary, and queue admission
     must require attribution snapshot lookup before enqueue or scheduler graph
     materialization.
+- 2026-05-26 Milestone 5d workflow-service executable snapshot attribution
+  bridge slice completed:
+  - Added workflow-service typed snapshot serde/conversion helpers plus facade
+    methods that store a validated compact snapshot in attribution-owned opaque
+    storage and load it back by `WorkflowVersionId` with fingerprint,
+    descriptor-contract, graph revision, validation session, and snapshot id
+    metadata checks.
+  - No-fallback/no-legacy result: production service methods use the
+    attribution boundary only and fail closed for missing/stale/mismatched
+    snapshots. They do not reconstruct executable authority from graph fields,
+    current validation caches, frontend/Tauri payloads, runtime defaults, Pumas
+    paths/facts, or scheduler placement.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    workflow_executable_validation_snapshot --lib`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; and
+    `cargo check -p pantograph-workflow-service`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: executable publish must call the bridge, then queue
+    admission must require attribution snapshot lookup before enqueue or
+    scheduler graph materialization.
 
 ### Traceability Links
 

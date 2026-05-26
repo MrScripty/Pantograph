@@ -9,7 +9,11 @@ use pantograph_inference_interface_contracts::{
     InferenceInterfaceFingerprint, InferenceTaskKind, ValidatedDraftGraphValidationSummary,
     WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
-use pantograph_runtime_attribution::{WorkflowId, WorkflowVersionId, WorkflowVersionRecord};
+use pantograph_runtime_attribution::{
+    WorkflowExecutableValidationSnapshotRecord as AttributionWorkflowExecutableValidationSnapshotRecord,
+    WorkflowExecutableValidationSnapshotStoreRequest as AttributionWorkflowExecutableValidationSnapshotStoreRequest,
+    WorkflowId, WorkflowVersionId, WorkflowVersionRecord,
+};
 use pantograph_scheduler::{
     SchedulerEstimateHint, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
     SchedulerTraitSetting,
@@ -235,6 +239,33 @@ impl WorkflowExecutableValidationSnapshotRecord {
         }
         Ok(())
     }
+
+    pub fn to_attribution_store_request(
+        &self,
+    ) -> Result<
+        AttributionWorkflowExecutableValidationSnapshotStoreRequest,
+        WorkflowExecutableValidationSnapshotError,
+    > {
+        self.validate()?;
+        let compact_snapshot_json = serde_json::to_string(self).map_err(|error| {
+            WorkflowExecutableValidationSnapshotError::SnapshotSerialization {
+                message: error.to_string(),
+            }
+        })?;
+        Ok(
+            AttributionWorkflowExecutableValidationSnapshotStoreRequest {
+                workflow_version_id: self.workflow_version_id.clone(),
+                workflow_id: self.workflow_id.clone(),
+                workflow_execution_fingerprint: self.workflow_execution_fingerprint.clone(),
+                snapshot_schema_version: self.schema_version,
+                descriptor_contract_version: self.descriptor_contract_version,
+                graph_revision: self.graph_revision.as_str().to_string(),
+                validation_session_id: self.validation_session_id.as_str().to_string(),
+                validation_snapshot_id: self.validation_snapshot_id.as_str().to_string(),
+                compact_snapshot_json,
+            },
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -437,6 +468,55 @@ impl ValidatedWorkflowExecutableValidationSnapshotRecord {
             }
         })
     }
+
+    pub fn to_attribution_store_request(
+        &self,
+    ) -> Result<
+        AttributionWorkflowExecutableValidationSnapshotStoreRequest,
+        WorkflowExecutableValidationSnapshotError,
+    > {
+        self.0.to_attribution_store_request()
+    }
+
+    pub fn from_attribution_record(
+        stored: AttributionWorkflowExecutableValidationSnapshotRecord,
+        request: &WorkflowExecutableValidationSnapshotLookupRequest,
+    ) -> Result<Self, WorkflowExecutableValidationSnapshotError> {
+        request.validate()?;
+        if stored.workflow_version_id != request.workflow_version_id {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::SnapshotMetadataMismatch {
+                    field: "workflow_version_id",
+                    workflow_version_id: request.workflow_version_id.clone(),
+                },
+            );
+        }
+        if stored.workflow_execution_fingerprint != request.workflow_execution_fingerprint {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::WorkflowFingerprintMismatch {
+                    workflow_version_id: request.workflow_version_id.clone(),
+                },
+            );
+        }
+        if stored.descriptor_contract_version != request.descriptor_contract_version {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::DescriptorContractVersionMismatch {
+                    expected: request.descriptor_contract_version,
+                    actual: stored.descriptor_contract_version,
+                },
+            );
+        }
+
+        let snapshot: WorkflowExecutableValidationSnapshotRecord =
+            serde_json::from_str(&stored.compact_snapshot_json).map_err(|error| {
+                WorkflowExecutableValidationSnapshotError::SnapshotSerialization {
+                    message: error.to_string(),
+                }
+            })?;
+        let validated = Self::try_from(snapshot)?;
+        validate_attribution_metadata(&stored, validated.as_record(), request)?;
+        Ok(validated)
+    }
 }
 
 impl TryFrom<WorkflowExecutableValidationSnapshotRecord>
@@ -615,6 +695,66 @@ pub enum WorkflowExecutableValidationSnapshotError {
     WorkflowFingerprintMismatch {
         workflow_version_id: WorkflowVersionId,
     },
+    #[error("executable validation snapshot serialization failed: {message}")]
+    SnapshotSerialization { message: String },
+    #[error("stored executable validation snapshot metadata field '{field}' does not match compact snapshot for workflow version '{workflow_version_id}'")]
+    SnapshotMetadataMismatch {
+        field: &'static str,
+        workflow_version_id: WorkflowVersionId,
+    },
+}
+
+fn validate_attribution_metadata(
+    stored: &AttributionWorkflowExecutableValidationSnapshotRecord,
+    snapshot: &WorkflowExecutableValidationSnapshotRecord,
+    request: &WorkflowExecutableValidationSnapshotLookupRequest,
+) -> Result<(), WorkflowExecutableValidationSnapshotError> {
+    if stored.workflow_id != snapshot.workflow_id {
+        return stored_metadata_mismatch("workflow_id", request);
+    }
+    if stored.workflow_version_id != snapshot.workflow_version_id {
+        return stored_metadata_mismatch("workflow_version_id", request);
+    }
+    if stored.workflow_execution_fingerprint != snapshot.workflow_execution_fingerprint {
+        return Err(
+            WorkflowExecutableValidationSnapshotError::WorkflowFingerprintMismatch {
+                workflow_version_id: request.workflow_version_id.clone(),
+            },
+        );
+    }
+    if stored.snapshot_schema_version != snapshot.schema_version {
+        return stored_metadata_mismatch("snapshot_schema_version", request);
+    }
+    if stored.descriptor_contract_version != snapshot.descriptor_contract_version {
+        return Err(
+            WorkflowExecutableValidationSnapshotError::DescriptorContractVersionMismatch {
+                expected: request.descriptor_contract_version,
+                actual: stored.descriptor_contract_version,
+            },
+        );
+    }
+    if stored.graph_revision != snapshot.graph_revision.as_str() {
+        return stored_metadata_mismatch("graph_revision", request);
+    }
+    if stored.validation_session_id != snapshot.validation_session_id.as_str() {
+        return stored_metadata_mismatch("validation_session_id", request);
+    }
+    if stored.validation_snapshot_id != snapshot.validation_snapshot_id.as_str() {
+        return stored_metadata_mismatch("validation_snapshot_id", request);
+    }
+    Ok(())
+}
+
+fn stored_metadata_mismatch<T>(
+    field: &'static str,
+    request: &WorkflowExecutableValidationSnapshotLookupRequest,
+) -> Result<T, WorkflowExecutableValidationSnapshotError> {
+    Err(
+        WorkflowExecutableValidationSnapshotError::SnapshotMetadataMismatch {
+            field,
+            workflow_version_id: request.workflow_version_id.clone(),
+        },
+    )
 }
 
 fn default_snapshot_schema_version() -> u16 {

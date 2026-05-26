@@ -1,3 +1,10 @@
+use pantograph_dependency_planning::PumasModelRef;
+use pantograph_inference_interface_contracts::{
+    DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
+    InferenceAvailabilityStatus, InferenceInterfaceFingerprint, InferenceTaskKind,
+    WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+};
+
 use crate::{GraphEdge, GraphNode, Position, WorkflowGraph};
 
 use super::*;
@@ -140,4 +147,123 @@ fn workflow_run_graph_query_returns_none_for_unknown_run() {
         .expect("query graph");
 
     assert_eq!(response.run_graph, None);
+}
+
+#[test]
+fn workflow_executable_validation_snapshot_round_trips_through_attribution() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let version = service
+        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph())
+        .expect("version");
+    let snapshot = executable_validation_snapshot(&version);
+
+    let stored = service
+        .store_workflow_executable_validation_snapshot(snapshot.clone())
+        .expect("snapshot stored");
+    let loaded = service
+        .workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: version.workflow_version_id.clone(),
+                workflow_execution_fingerprint: version.execution_fingerprint.clone(),
+                descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+            },
+        )
+        .expect("snapshot loaded");
+
+    assert_eq!(stored.as_record(), &snapshot);
+    assert_eq!(loaded.as_record(), &snapshot);
+    assert!(loaded.scheduler_inference_task_projections().is_ok());
+}
+
+#[test]
+fn workflow_executable_validation_snapshot_lookup_fails_closed_when_missing() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let version = service
+        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph())
+        .expect("version");
+
+    let err = service
+        .workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: version.workflow_version_id,
+                workflow_execution_fingerprint: version.execution_fingerprint,
+                descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+            },
+        )
+        .expect_err("missing snapshot must fail closed");
+
+    assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+}
+
+#[test]
+fn workflow_executable_validation_snapshot_lookup_rejects_stale_fingerprint() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let version = service
+        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph())
+        .expect("version");
+    service
+        .store_workflow_executable_validation_snapshot(executable_validation_snapshot(&version))
+        .expect("snapshot stored");
+
+    let err = service
+        .workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: version.workflow_version_id,
+                workflow_execution_fingerprint: "workflow-exec-blake3:stale".to_string(),
+                descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+            },
+        )
+        .expect_err("stale fingerprint must fail closed");
+
+    assert!(
+        matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("workflow fingerprint"))
+    );
+}
+
+fn executable_validation_snapshot(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+) -> WorkflowExecutableValidationSnapshotRecord {
+    WorkflowExecutableValidationSnapshotRecord {
+        schema_version: WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION,
+        validation_snapshot_id: WorkflowExecutableValidationSnapshotId::parse(
+            "wfvalsnap_00000000-0000-4000-8000-000000000010",
+        )
+        .expect("valid snapshot id"),
+        workflow_id: version.workflow_id.clone(),
+        workflow_version_id: version.workflow_version_id.clone(),
+        workflow_semantic_version: version.semantic_version.clone(),
+        workflow_execution_fingerprint: version.execution_fingerprint.clone(),
+        descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        graph_revision: WorkflowGraphRevision::parse("revision_1").expect("valid graph revision"),
+        validation_session_id: DraftGraphValidationSessionId::parse("validation_session_1")
+            .expect("valid validation session id"),
+        validation_summary: DraftGraphValidationSummary {
+            status: DraftGraphValidationStatus::Executable,
+            executable: true,
+            enqueue_disabled_reasons: Vec::new(),
+            diagnostics_count: 0,
+            blocking_diagnostics_count: 0,
+        },
+        nodes: vec![WorkflowExecutableValidationSnapshotNode {
+            node_id: WorkflowNodeId::parse("infer_node").expect("valid node id"),
+            descriptor_fingerprint: InferenceInterfaceFingerprint::parse(
+                "descriptor_fingerprint_1",
+            )
+            .expect("valid descriptor fingerprint"),
+            task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
+            model_ref: PumasModelRef {
+                model_id: "pumas://model/stable-diffusion".to_string(),
+                revision: Some("main".to_string()),
+                selected_artifact_id: Some("artifact-diffusers".to_string()),
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            },
+            constraints: Default::default(),
+            availability_status: InferenceAvailabilityStatus::Available,
+            validation_status: DraftGraphValidationStatus::Executable,
+            trait_settings: Vec::new(),
+            estimate_hints: Vec::new(),
+            blocking_diagnostics: Vec::new(),
+        }],
+    }
 }
