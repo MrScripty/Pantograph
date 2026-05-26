@@ -18,6 +18,9 @@ use crate::graph::{
     WorkflowGraphUpdateNodePositionRequest,
 };
 use crate::WorkflowRunId;
+use pantograph_inference_interface_contracts::{
+    DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
+};
 
 use super::{WorkflowService, WorkflowServiceError};
 
@@ -56,6 +59,15 @@ impl WorkflowService {
     ) -> Result<WorkflowGraphUndoRedoStateResponse, WorkflowServiceError> {
         self.graph_session_store
             .get_undo_redo_state(&request.session_id)
+            .await
+    }
+
+    pub async fn workflow_graph_resolve_dependency_environment_action_intent(
+        &self,
+        request: DependencyEnvironmentActionIntent,
+    ) -> Result<DependencyEnvironmentActionIntentResult, WorkflowServiceError> {
+        self.graph_session_store
+            .resolve_dependency_environment_action_intent(request)
             .await
     }
 

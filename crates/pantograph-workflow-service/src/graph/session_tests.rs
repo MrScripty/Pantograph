@@ -9,6 +9,10 @@ use crate::{
     WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
+use pantograph_inference_interface_contracts::{
+    DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
+    DependencyEnvironmentActionIntentStatus, InferenceDiagnosticCode,
+};
 
 fn sample_graph() -> WorkflowGraph {
     WorkflowGraph {
@@ -166,6 +170,63 @@ async fn scheduler_snapshot_tracks_running_edit_session_queue_item() {
     assert_eq!(finished_snapshot.session.queued_runs, 0);
     assert_eq!(finished_snapshot.session.run_count, 1);
     assert!(finished_snapshot.items.is_empty());
+}
+
+#[tokio::test]
+async fn dependency_environment_action_intent_fails_closed_without_validation_summary() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(sample_graph(), None).await;
+
+    let result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: None,
+            target_node_id: "text-input".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::ValidationSummaryMissing
+    );
+}
+
+#[tokio::test]
+async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(sample_graph(), None).await;
+
+    let result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: "0000000000000000".parse().expect("valid graph revision"),
+            validation_session_id: None,
+            target_node_id: "text-input".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Check,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::GraphRevisionMismatch
+    );
 }
 
 #[tokio::test]

@@ -559,6 +559,10 @@ pub enum InferenceDiagnosticCode {
     AlternativeAvailable,
     DriftDetected,
     GraphValidationPending,
+    GraphRevisionMismatch,
+    TargetNodeMissing,
+    ValidationSummaryMissing,
+    DependencyRequirementsMissing,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -758,6 +762,52 @@ impl DependencyEnvironmentActionIntent {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct DependencyEnvironmentActionIntentResult {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u32,
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub graph_revision: WorkflowGraphRevision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+    pub target_node_id: WorkflowNodeId,
+    pub action: DependencyEnvironmentAction,
+    pub status: DependencyEnvironmentActionIntentStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
+}
+
+impl DependencyEnvironmentActionIntentResult {
+    pub fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
+        validate_contract_version(self.contract_version)?;
+        validate_collection_len(
+            "dependency_environment_action_intent_result.diagnostics",
+            self.diagnostics.len(),
+            MAX_DIAGNOSTICS,
+        )?;
+        for diagnostic in &self.diagnostics {
+            diagnostic.validate()?;
+        }
+        if self.status == DependencyEnvironmentActionIntentStatus::Blocked
+            && self.diagnostics.is_empty()
+        {
+            return Err(InferenceInterfaceContractError::MissingField {
+                field: "dependency_environment_action_intent_result.diagnostics",
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DependencyEnvironmentActionIntentStatus {
+    RequestReady,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DraftGraphValidationSummary {
     pub status: DraftGraphValidationStatus,
     pub executable: bool,
@@ -899,6 +949,33 @@ impl TryFrom<DependencyEnvironmentActionIntent> for ValidatedDependencyEnvironme
     type Error = InferenceInterfaceContractError;
 
     fn try_from(value: DependencyEnvironmentActionIntent) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatedDependencyEnvironmentActionIntentResult(
+    DependencyEnvironmentActionIntentResult,
+);
+
+impl ValidatedDependencyEnvironmentActionIntentResult {
+    #[must_use]
+    pub fn as_result(&self) -> &DependencyEnvironmentActionIntentResult {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> DependencyEnvironmentActionIntentResult {
+        self.0
+    }
+}
+
+impl TryFrom<DependencyEnvironmentActionIntentResult>
+    for ValidatedDependencyEnvironmentActionIntentResult
+{
+    type Error = InferenceInterfaceContractError;
+
+    fn try_from(value: DependencyEnvironmentActionIntentResult) -> Result<Self, Self::Error> {
         value.validate()?;
         Ok(Self(value))
     }

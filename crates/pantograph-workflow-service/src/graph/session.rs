@@ -2,6 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use pantograph_inference_interface_contracts::{
+    DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
+    DependencyEnvironmentActionIntentStatus, InferenceDiagnosticCode, InferenceDiagnosticSeverity,
+    InferenceInterfaceDiagnostic, ValidatedDependencyEnvironmentActionIntent,
+};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
@@ -176,6 +181,53 @@ impl GraphSessionStore {
             items,
             diagnostics: None,
         })
+    }
+
+    pub async fn resolve_dependency_environment_action_intent(
+        &self,
+        intent: DependencyEnvironmentActionIntent,
+    ) -> Result<DependencyEnvironmentActionIntentResult, WorkflowServiceError> {
+        let intent = ValidatedDependencyEnvironmentActionIntent::try_from(intent)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?
+            .into_inner();
+        let session_id = intent.graph_session_id.as_str();
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let current_revision = state.graph.compute_fingerprint();
+
+        if current_revision != intent.graph_revision.as_str() {
+            return Ok(blocked_dependency_environment_action_result(
+                &intent,
+                InferenceDiagnosticCode::GraphRevisionMismatch,
+                "Dependency environment action was requested for a stale graph revision.",
+                Some(
+                    "Refresh graph validation for the current graph before resolving dependencies.",
+                ),
+            ));
+        }
+
+        if !state
+            .graph
+            .nodes
+            .iter()
+            .any(|node| node.id == intent.target_node_id.as_str())
+        {
+            return Ok(blocked_dependency_environment_action_result(
+                &intent,
+                InferenceDiagnosticCode::TargetNodeMissing,
+                "Dependency environment action target node does not exist in the current graph.",
+                None,
+            ));
+        }
+
+        Ok(blocked_dependency_environment_action_result(
+            &intent,
+            InferenceDiagnosticCode::ValidationSummaryMissing,
+            "Inference validation has not completed for this graph revision.",
+            Some("Run descriptor validation before resolving dependency environments."),
+        ))
     }
 
     pub async fn mark_running(
@@ -456,6 +508,30 @@ impl GraphSessionStore {
             sessions.remove(&id);
         }
         count
+    }
+}
+
+fn blocked_dependency_environment_action_result(
+    intent: &DependencyEnvironmentActionIntent,
+    code: InferenceDiagnosticCode,
+    message: &str,
+    hint: Option<&str>,
+) -> DependencyEnvironmentActionIntentResult {
+    DependencyEnvironmentActionIntentResult {
+        contract_version: intent.contract_version,
+        graph_session_id: intent.graph_session_id.clone(),
+        graph_revision: intent.graph_revision.clone(),
+        validation_session_id: intent.validation_session_id.clone(),
+        target_node_id: intent.target_node_id.clone(),
+        action: intent.action,
+        status: DependencyEnvironmentActionIntentStatus::Blocked,
+        diagnostics: vec![InferenceInterfaceDiagnostic {
+            severity: InferenceDiagnosticSeverity::Error,
+            code,
+            message: message.to_string(),
+            hint: hint.map(str::to_string),
+            port_id: None,
+        }],
     }
 }
 

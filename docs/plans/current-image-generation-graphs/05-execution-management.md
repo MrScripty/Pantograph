@@ -12025,6 +12025,36 @@ Worker rules:
     builder that checks the current validation summary and derives the
     canonical `DependencyEnvironmentRequest` before any frontend action buttons
     are rewired to this intent.
+- 2026-05-26 Milestone 5d dependency-environment action intent fail-closed
+  workflow-service sub-slice completed:
+  - Smallest useful vertical slice: added the typed action-intent result
+    envelope and workflow-service graph-session resolver for
+    `DependencyEnvironmentActionIntent`.
+  - No-fallback/no-legacy confirmation: workflow-service does not construct a
+    partial `DependencyEnvironmentRequest` when descriptor validation is not
+    current. It validates the edit-session graph revision and target node first,
+    then returns typed `GraphRevisionMismatch`, `TargetNodeMissing`, or
+    `ValidationSummaryMissing` diagnostics without calling dependency
+    execution, Tauri, scheduler, or legacy path-shaped model dependency APIs.
+  - Focused tests added: inference-interface contract tests prove blocked
+    action-intent results require diagnostics and preserve typed diagnostics;
+    graph-session tests prove stale graph revisions and missing validation
+    summaries fail closed.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-inference-interface-contracts
+    dependency_environment_action_intent`; `cargo test -p
+    pantograph-inference-interface-contracts`; `cargo test -p
+    pantograph-workflow-service dependency_environment_action_intent`; `git
+    diff --check`.
+  - Discovered issue: the targeted workflow-service test still emits the
+    pre-existing dead-code warning
+    `crates/pantograph-workflow-service/src/scheduler/store.rs:408
+    set_active_run_execution_plan`. It is outside this slice and should be
+    addressed when scheduler store cleanup is in scope.
+  - Remaining follow-up: persist or resolve current descriptor validation
+    summaries in workflow-service, then derive the canonical
+    `DependencyEnvironmentRequest` only when the summary is executable/current
+    and dependency requirements ids are available.
 
 ### Traceability Links
 

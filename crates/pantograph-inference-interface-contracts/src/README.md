@@ -12,4 +12,6 @@ optional validation-session identity, target node id, and the typed action. The
 workflow-service derives any `DependencyEnvironmentRequest` from current
 validation state; graph editor and Tauri callers must not send paths, Pumas
 facts, platform context, identity keys, dependency planning requests, or
-environment requests.
+environment requests. `DependencyEnvironmentActionIntentResult` is the
+fail-closed response envelope used before a canonical environment request can
+be derived; blocked results must carry typed diagnostics.

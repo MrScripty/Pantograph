@@ -47,6 +47,9 @@ Dependency-environment UI callers send `DependencyEnvironmentActionIntent`.
 Workflow-service validates the intent against the current graph revision and
 validation session, then derives the canonical dependency-environment request
 from backend-owned descriptor and dependency-planning state.
+If that derivation cannot happen, workflow-service returns
+`DependencyEnvironmentActionIntentResult` with typed diagnostics instead of
+constructing a partial dependency-environment request.
 
 ## Structured Producer Contract
 

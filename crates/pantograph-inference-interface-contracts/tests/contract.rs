@@ -1,11 +1,13 @@
 use pantograph_inference_interface_contracts::{
     AuthoredInferenceInterfaceSnapshot, DependencyEnvironmentAction,
-    DependencyEnvironmentActionIntent, DraftGraphEnqueueDisabledReason, DraftGraphValidationStatus,
-    DraftGraphValidationSummary, InferenceAvailabilityStatus, InferenceInterfaceContractError,
-    InferenceInterfaceDescriptor, InferenceInterfaceDriftReport, InferencePortOptions,
-    InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
-    ValidatedDependencyEnvironmentActionIntent, ValidatedDraftGraphValidationSummary,
-    ValidatedInferenceInterfaceDescriptor,
+    DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
+    DependencyEnvironmentActionIntentStatus, DraftGraphEnqueueDisabledReason,
+    DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailabilityStatus,
+    InferenceDiagnosticCode, InferenceDiagnosticSeverity, InferenceInterfaceContractError,
+    InferenceInterfaceDescriptor, InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport,
+    InferencePortOptions, InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
+    ValidatedDependencyEnvironmentActionIntent, ValidatedDependencyEnvironmentActionIntentResult,
+    ValidatedDraftGraphValidationSummary, ValidatedInferenceInterfaceDescriptor,
 };
 
 const DESCRIPTOR: &str = include_str!("fixtures/descriptor_image_generation_ready.json");
@@ -202,5 +204,62 @@ fn dependency_environment_action_intent_rejects_blank_revision_and_run_action() 
     assert!(
         action_error.to_string().contains("unknown variant"),
         "unexpected serde error: {action_error}"
+    );
+}
+
+#[test]
+fn dependency_environment_action_intent_result_requires_blocking_diagnostics() {
+    let result = DependencyEnvironmentActionIntentResult {
+        contract_version: 1,
+        graph_session_id: "graph-session-1".parse().expect("valid graph session id"),
+        graph_revision: "77f4c49c8a1b68d2".parse().expect("valid graph revision"),
+        validation_session_id: None,
+        target_node_id: "dependency-env-node-1"
+            .parse()
+            .expect("valid target node id"),
+        action: DependencyEnvironmentAction::Check,
+        status: DependencyEnvironmentActionIntentStatus::Blocked,
+        diagnostics: Vec::new(),
+    };
+
+    let error = result
+        .validate()
+        .expect_err("blocked results must explain why they are blocked");
+
+    assert_eq!(
+        error,
+        InferenceInterfaceContractError::MissingField {
+            field: "dependency_environment_action_intent_result.diagnostics"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_action_intent_result_preserves_typed_diagnostics() {
+    let result = DependencyEnvironmentActionIntentResult {
+        contract_version: 1,
+        graph_session_id: "graph-session-1".parse().expect("valid graph session id"),
+        graph_revision: "77f4c49c8a1b68d2".parse().expect("valid graph revision"),
+        validation_session_id: None,
+        target_node_id: "dependency-env-node-1"
+            .parse()
+            .expect("valid target node id"),
+        action: DependencyEnvironmentAction::Resolve,
+        status: DependencyEnvironmentActionIntentStatus::Blocked,
+        diagnostics: vec![InferenceInterfaceDiagnostic {
+            severity: InferenceDiagnosticSeverity::Error,
+            code: InferenceDiagnosticCode::ValidationSummaryMissing,
+            message: "Inference validation has not completed for this graph revision.".to_string(),
+            hint: Some("Run descriptor validation before resolving dependencies.".to_string()),
+            port_id: None,
+        }],
+    };
+
+    let validated = ValidatedDependencyEnvironmentActionIntentResult::try_from(result)
+        .expect("blocked result should validate with diagnostics");
+
+    assert_eq!(
+        validated.as_result().diagnostics[0].code,
+        InferenceDiagnosticCode::ValidationSummaryMissing
     );
 }

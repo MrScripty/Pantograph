@@ -200,6 +200,18 @@ defining an image-only inference-node interface.
         builder that validates the current descriptor summary and derives
         `DependencyEnvironmentRequest` without moving policy into Tauri or the
         frontend.
+      - Workflow-service fail-closed builder sub-slice completed on
+        2026-05-26: `GraphSessionStore` and `WorkflowService` now accept
+        `DependencyEnvironmentActionIntent`, validate it against the current
+        graph edit session, reject stale graph revisions with typed
+        `GraphRevisionMismatch` diagnostics, reject missing target nodes with
+        typed `TargetNodeMissing` diagnostics, and return typed
+        `ValidationSummaryMissing` diagnostics instead of building a partial
+        `DependencyEnvironmentRequest` when descriptor validation state is not
+        available. Remaining implementation work is storing/currently resolving
+        descriptor validation summaries and deriving the canonical
+        `DependencyEnvironmentRequest` only when those summaries are executable
+        and current.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the
