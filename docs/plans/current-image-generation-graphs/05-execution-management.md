@@ -11705,6 +11705,37 @@ Worker rules:
   - Remaining follow-up: feed extracted requests into the resolver/projection
     pipeline with Pumas/runtime capability facts and emit live validation events
     plus backend validation summaries for the graph editor and queue admission.
+- 2026-05-25 Milestone 5d live validation event node-identity re-plan
+  boundary:
+  - Discovered issue: the current live validation event payloads can carry
+    descriptor fingerprints, drift reports, diagnostics, update proposals, and
+    summaries, but they do not identify the inference node that owns a
+    descriptor/proposal event. That is not sufficient for graphs with multiple
+    inference nodes or multi-model workflows because the editor and backend
+    admission path could not unambiguously apply descriptor resolution,
+    authored-snapshot updates, drift previews, or per-node diagnostics.
+  - Why implementation stops: wiring extracted graph requests into live
+    validation events without node identity would require a single-node
+    assumption or implicit event ordering. Both violate the canonical
+    multi-inference design and would create a hidden compatibility rule that
+    scheduler batching/distribution work would later need to undo.
+  - Re-plan options to decide:
+    1. Add `node_id` to every `WorkflowGraphInferenceValidationEvent` envelope.
+       This is simple, but summary-only events would carry redundant node
+       identity or need a sentinel, weakening the event model.
+    2. Add `node_id` only to node-scoped payload variants such as descriptor,
+       drift, diagnostic, and update proposal, while keeping graph summary
+       events graph-scoped. This is explicit but spreads routing identity
+       across payload types.
+    3. Introduce a typed event scope enum on the event envelope, for example
+       graph-scoped versus node-scoped `{ node_id }`, and require descriptor,
+       drift, diagnostic, and update-proposal payloads to be node-scoped while
+       summary remains graph-scoped. This keeps one routing field, supports
+       multi-node validation, and avoids sentinel node ids.
+  - Recommendation: choose option 3 before the next implementation slice. Then
+    wire graph request extraction, resolver, projection, and validation session
+    into a single event-producing service boundary with explicit graph/node
+    event scope.
 
 ### Traceability Links
 
