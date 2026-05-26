@@ -799,6 +799,38 @@ defining an image-only inference-node interface.
   - Remaining follow-up: feed strict extracted requests into the synchronous
     validation publisher so current descriptor projections and validation
     summaries can be recorded without reintroducing frontend/Tauri policy.
+- [x] 2026-05-26 synchronous validation publisher core slice completed:
+  - Smallest useful vertical slice: added
+    `graph/inference_interface_publication.rs`, an edit-session publication API,
+    and node-scoped current validation records so workflow-service can publish a
+    validation session from the current draft graph without moving descriptor
+    policy into Tauri or frontend code.
+  - No-fallback/no-legacy confirmation: publication consumes only strict
+    extracted `pumas_model_ref` requests and supplied resolver facts, then uses
+    the existing resolver/projection boundary. It does not inspect model paths,
+    Pumas load targets, package facts, `inference_settings`, `expand-settings`,
+    static all-port metadata, or runtime-host execution payloads as alternate
+    sources.
+  - Standards result: graph-session locks are held only for canonicalization,
+    graph snapshotting, and current revision calculation. Descriptor projection
+    runs after the lock is released, current validation state remains owned by
+    workflow-service, and source ownership is documented in the graph README.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_interface_publication --lib`; `cargo test -p
+    pantograph-workflow-service
+    publish_inference_validation_session_records_current_summary --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_state
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: the workflow-service check commands continue to report the
+    pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: add the event-driven validation lifecycle owner that
+    starts/cancels/supersedes validation work and reuses this synchronous
+    publisher before frontend event delivery or queue admission consume live
+    validation updates.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

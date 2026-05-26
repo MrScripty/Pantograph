@@ -683,6 +683,12 @@ falling back to previously rendered ports.
    authored-snapshot, or summary rules. Tauri and frontend code are not touched
    in this slice except by tests or generated bindings that prove no business
    policy moved there.
+   - Implemented 2026-05-26 in
+     `graph/inference_interface_publication.rs`,
+     `graph/session_inference_validation_api.rs`, and
+     `graph/inference_validation_state.rs`. The implementation records
+     node-scoped projection state for later dependency and scheduler admission
+     work while keeping graph editing non-blocking.
 5a. Add the event-driven validation lifecycle owner before wiring UI event
     delivery. It owns validation session startup, cancellation, supersession,
     bounded event/state buffers, overflow/backpressure diagnostics, task

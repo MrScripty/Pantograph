@@ -29,6 +29,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
 | `inference_interface_patch.rs` | Workflow-service-owned update proposal and typed graph patch-operation contracts for applying current inference descriptors to authored node snapshots. |
 | `inference_interface_projection.rs` | Workflow-service-owned projection from resolved inference descriptors into minimal authored snapshots and backend validation summaries. |
+| `inference_interface_publication.rs` | Workflow-service-owned synchronous validation publisher that extracts strict graph requests, resolves descriptor projections from supplied facts, emits scoped validation events, and returns bounded node projection records. |
 | `inference_interface_request.rs` | Draft-graph extraction of path-free inference-interface resolver requests from connected `puma-lib` model references and explicit inference-node constraints. |
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
@@ -208,6 +209,11 @@ for existing graph-edit callers.
   validation summaries are derived from descriptor availability and diagnostics.
   Frontend submit state and backend admission must consume the typed summary
   instead of inferring enqueue permission from raw diagnostics.
+- Synchronous inference-validation publication is workflow-service owned. It
+  snapshots graph state under the session lock, runs descriptor projection after
+  the graph lock is released, emits node-scoped descriptor events plus a
+  graph-scoped summary event, and records current graph/node validation state
+  for later dependency-environment and scheduler admission decisions.
 - Live inference-validation events have typed graph/node scope. Descriptor,
   drift, diagnostic, and update-proposal payloads must be node-scoped so
   multi-inference graphs can route updates unambiguously; summary payloads are

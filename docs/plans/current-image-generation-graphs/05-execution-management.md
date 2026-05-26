@@ -12302,6 +12302,49 @@ Worker rules:
     `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
   - Remaining follow-up: implement the synchronous validation publisher core
     using this strict extractor before wiring event-driven frontend validation.
+- 2026-05-26 Milestone 5d synchronous validation publisher core slice
+  completed:
+  - Smallest useful vertical slice: added the workflow-service synchronous
+    inference-validation publisher core and edit-session API. The slice
+    snapshots/canonicalizes the draft graph under the graph-session lock,
+    releases the lock before descriptor projection, extracts strict
+    `pumas_model_ref` requests, resolves descriptor/authored-snapshot
+    projections from supplied facts, emits node-scoped descriptor events plus a
+    graph-scoped summary event, records current graph/node validation state,
+    and returns bounded node projection records to callers.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, and the current
+    Milestone 5d plan/status files.
+  - No-fallback/no-legacy confirmation: the publisher uses the canonical strict
+    request extractor and `resolve_inference_interface_projection`. It does not
+    read model paths, package facts, executable Pumas load targets,
+    `inference_settings`, `expand-settings`, static all-port metadata,
+    runtime-host payloads, frontend state, or Tauri policy as alternate
+    descriptor sources.
+  - Focused tests added: ready connected model publication with scoped events,
+    request-extraction diagnostics blocking publication, missing resolver facts
+    producing a fail-closed blocked projection, and edit-session publication
+    recording the current executable summary for dependency action freshness.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_interface_publication --lib`; `cargo test -p
+    pantograph-workflow-service
+    publish_inference_validation_session_records_current_summary --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_state
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: the workflow-service check commands continue to report the
+    pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: implement the event-driven validation lifecycle owner
+    on top of this sync publisher before frontend event delivery or queue
+    admission depends on live validation updates.
 
 ### Traceability Links
 

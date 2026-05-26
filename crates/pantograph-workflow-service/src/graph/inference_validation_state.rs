@@ -1,17 +1,20 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
+use pantograph_dependency_planning::{DeviceIntentId, PumasModelRef, RuntimeIntentId};
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
     DependencyEnvironmentActionIntentStatus, DraftGraphValidationSessionId,
-    DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceDiagnosticCode,
-    InferenceDiagnosticSeverity, InferenceInterfaceDiagnostic,
-    ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
+    DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailabilityStatus,
+    InferenceDiagnosticCode, InferenceDiagnosticSeverity, InferenceInterfaceDiagnostic,
+    InferenceInterfaceFingerprint, InferenceTaskKind, ValidatedDependencyEnvironmentActionIntent,
+    WorkflowGraphRevision, WorkflowNodeId,
 };
 use tokio::sync::RwLock;
 
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
+use super::InferenceInterfaceNodeProjectionRecord;
 
 #[derive(Debug)]
 pub(crate) struct CurrentInferenceValidationStateStore {
@@ -37,6 +40,16 @@ impl CurrentInferenceValidationStateStore {
         graph_session_id: pantograph_inference_interface_contracts::WorkflowGraphSessionId,
         session: WorkflowGraphInferenceValidationSession,
     ) -> Result<(), InferenceInterfaceValidationSessionError> {
+        self.record_validation_publication(graph_session_id, session, Vec::new())
+            .await
+    }
+
+    pub(crate) async fn record_validation_publication(
+        &self,
+        graph_session_id: pantograph_inference_interface_contracts::WorkflowGraphSessionId,
+        session: WorkflowGraphInferenceValidationSession,
+        node_projections: Vec<InferenceInterfaceNodeProjectionRecord>,
+    ) -> Result<(), InferenceInterfaceValidationSessionError> {
         session.validate()?;
         let key = CurrentInferenceValidationStateKey {
             graph_session_id,
@@ -45,6 +58,15 @@ impl CurrentInferenceValidationStateStore {
         let record = CurrentInferenceValidationStateRecord {
             validation_session_id: session.validation_session_id,
             summary: session.summary,
+            nodes: node_projections
+                .into_iter()
+                .map(|projection| {
+                    (
+                        projection.node_id.clone(),
+                        CurrentInferenceValidationNodeRecord::from(projection),
+                    )
+                })
+                .collect(),
         };
         self.summaries.write().await.insert(key, record);
         Ok(())
@@ -115,6 +137,17 @@ impl CurrentInferenceValidationStateStore {
             );
         }
 
+        if let Some(node_record) = record.nodes.get(&intent.target_node_id) {
+            if !node_record.has_dependency_basis() {
+                return blocked_dependency_environment_action_result(
+                    &intent,
+                    InferenceDiagnosticCode::DescriptorUnavailable,
+                    "Inference validation node state is incomplete for dependency derivation.",
+                    Some("Refresh descriptor validation before resolving dependency environments."),
+                );
+            }
+        }
+
         blocked_dependency_environment_action_result(
             &intent,
             InferenceDiagnosticCode::DependencyRequirementsMissing,
@@ -158,6 +191,71 @@ struct CurrentInferenceValidationStateKey {
 struct CurrentInferenceValidationStateRecord {
     validation_session_id: DraftGraphValidationSessionId,
     summary: DraftGraphValidationSummary,
+    nodes: BTreeMap<WorkflowNodeId, CurrentInferenceValidationNodeRecord>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CurrentInferenceValidationNodeRecord {
+    pub node_id: WorkflowNodeId,
+    pub descriptor_fingerprint: InferenceInterfaceFingerprint,
+    pub task_kind: InferenceTaskKind,
+    pub availability_status: InferenceAvailabilityStatus,
+    pub validation_status: DraftGraphValidationStatus,
+    pub pumas_model_ref: PumasModelRef,
+    pub runtime_constraint: Option<RuntimeIntentId>,
+    pub device_constraint: Option<DeviceIntentId>,
+}
+
+impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidationNodeRecord {
+    fn from(record: InferenceInterfaceNodeProjectionRecord) -> Self {
+        Self {
+            node_id: record.node_id,
+            descriptor_fingerprint: record.descriptor.descriptor_fingerprint,
+            task_kind: record.descriptor.task_kind,
+            availability_status: record.descriptor.availability.status,
+            validation_status: record.validation_summary.status,
+            pumas_model_ref: record.descriptor.model_ref,
+            runtime_constraint: record.runtime_constraint,
+            device_constraint: record.device_constraint,
+        }
+    }
+}
+
+impl CurrentInferenceValidationNodeRecord {
+    fn has_dependency_basis(&self) -> bool {
+        !self.node_id.as_str().is_empty()
+            && !self.descriptor_fingerprint.as_str().is_empty()
+            && !self.task_kind.as_str().is_empty()
+            && self.pumas_model_ref.validate().is_ok()
+            && matches!(
+                self.availability_status,
+                InferenceAvailabilityStatus::Available
+                    | InferenceAvailabilityStatus::Pending
+                    | InferenceAvailabilityStatus::Stale
+                    | InferenceAvailabilityStatus::Unavailable
+                    | InferenceAvailabilityStatus::Unsupported
+                    | InferenceAvailabilityStatus::NotImplemented
+            )
+            && matches!(
+                self.validation_status,
+                DraftGraphValidationStatus::Pending
+                    | DraftGraphValidationStatus::Stale
+                    | DraftGraphValidationStatus::Unresolved
+                    | DraftGraphValidationStatus::Unavailable
+                    | DraftGraphValidationStatus::Blocked
+                    | DraftGraphValidationStatus::Executable
+            )
+            && self
+                .runtime_constraint
+                .as_ref()
+                .map(|runtime| !runtime.as_str().is_empty())
+                .unwrap_or(true)
+            && self
+                .device_constraint
+                .as_ref()
+                .map(|device| !device.as_str().is_empty())
+                .unwrap_or(true)
+    }
 }
 
 fn blocked_dependency_environment_action_result(

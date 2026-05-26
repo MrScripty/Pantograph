@@ -2,8 +2,11 @@ use super::super::types::InsertNodePositionHint;
 use super::*;
 use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
 use crate::graph::{
-    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgesRequest,
+    InferenceCapabilityFacts, InferenceInterfaceResolverFacts, InferenceModelResolutionFacts,
+    InferenceModelResolutionState, InferenceRuntimeAvailabilityFact,
+    InferenceRuntimeAvailabilityState, WorkflowGraphDeleteSelectionRequest,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
+    WorkflowGraphRemoveEdgesRequest,
 };
 use crate::{
     WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
@@ -11,9 +14,13 @@ use crate::{
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
-    DependencyEnvironmentActionIntentStatus, DraftGraphValidationStatus,
-    DraftGraphValidationSummary, InferenceDiagnosticCode, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    DependencyEnvironmentActionIntentStatus, DraftGraphValidationSessionId,
+    DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailability,
+    InferenceDiagnosticCode, InferencePortDescriptor, InferencePortDirection, InferencePortId,
+    InferencePortOptions, InferencePortRequirement, InferenceScalarType, InferenceTaskKind,
+    InferenceValueType, RuntimeIntentId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
+use std::collections::BTreeMap;
 
 fn sample_graph() -> WorkflowGraph {
     WorkflowGraph {
@@ -245,6 +252,52 @@ async fn dependency_environment_action_intent_consumes_current_validation_summar
 }
 
 #[tokio::test]
+async fn publish_inference_validation_session_records_current_summary() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(inference_graph(), None).await;
+    let publication = store
+        .publish_inference_validation_session(
+            &session.session_id,
+            DraftGraphValidationSessionId::parse("validation.session.2")
+                .expect("valid validation session id"),
+            BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        )
+        .await
+        .expect("publish inference validation session");
+
+    assert_eq!(publication.node_projections.len(), 1);
+    assert_eq!(
+        publication.validation_session.summary.status,
+        DraftGraphValidationStatus::Executable
+    );
+    assert!(publication.validation_session.summary.executable);
+
+    let result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: Some(
+                "validation.session.2"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "infer".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::DependencyRequirementsMissing
+    );
+}
+
+#[tokio::test]
 async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
     let store = GraphSessionStore::new();
     let session = store.create_session(sample_graph(), None).await;
@@ -269,6 +322,73 @@ async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
         result.diagnostics[0].code,
         InferenceDiagnosticCode::GraphRevisionMismatch
     );
+}
+
+fn inference_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "model".to_string(),
+                node_type: "puma-lib".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({
+                    "pumas_model_ref": {
+                        "model_id": "image/example/tiny",
+                        "selected_artifact_id": "diffusers"
+                    }
+                }),
+            },
+            GraphNode {
+                id: "infer".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 200.0, y: 0.0 },
+                data: serde_json::json!({
+                    "task_kind": "image_generation",
+                    "runtime": "pytorch"
+                }),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "model-to-infer".to_string(),
+            source: "model".to_string(),
+            source_handle: "pumas_model_ref".to_string(),
+            target: "infer".to_string(),
+            target_handle: "pumas_model_ref".to_string(),
+        }],
+        derived_graph: None,
+    }
+}
+
+fn ready_inference_facts() -> InferenceInterfaceResolverFacts {
+    let runtime = RuntimeIntentId::parse("pytorch").expect("valid runtime id");
+    InferenceInterfaceResolverFacts {
+        model: InferenceModelResolutionFacts {
+            state: InferenceModelResolutionState::Ready,
+        },
+        capability: Some(InferenceCapabilityFacts {
+            task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
+            inputs: vec![InferencePortDescriptor {
+                port_id: InferencePortId::parse("prompt").expect("valid port id"),
+                label: "Prompt".to_string(),
+                direction: InferencePortDirection::Input,
+                requirement: InferencePortRequirement::Required,
+                value_type: InferenceValueType::Scalar(InferenceScalarType::String),
+                default: None,
+                options: InferencePortOptions::None,
+                availability: InferenceAvailability::available(),
+                runtime_conditions: Vec::new(),
+                diagnostics: Vec::new(),
+            }],
+            outputs: Vec::new(),
+            runtime_conditions: Vec::new(),
+            supported_runtime_ids: vec![runtime.clone()],
+        }),
+        runtimes: vec![InferenceRuntimeAvailabilityFact {
+            runtime_id: runtime,
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: Vec::new(),
+        }],
+    }
 }
 
 fn validation_session(
