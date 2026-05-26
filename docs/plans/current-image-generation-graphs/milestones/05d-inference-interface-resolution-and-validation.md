@@ -101,6 +101,12 @@ defining an image-only inference-node interface.
       successful graph semantics carry `pumas_model_ref` plus display-only
       identity only; executable paths, `entry_path`, package facts, runtime
       hints, load targets, and `inference_settings` must not be graph semantics.
+- [ ] Re-plan and replace the `puma-lib` dependency-requirements hydration
+      boundary before removing graph-authored paths. The current Tauri
+      hydration path builds `ModelDependencyRequest` from `modelPath`; the
+      replacement must use `pumas_model_ref`/model identity or a typed
+      descriptor/dependency-planning contract and must not synthesize a hidden
+      path fallback.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
@@ -643,3 +649,20 @@ defining an image-only inference-node interface.
     `set_active_run_execution_plan` dead-code warning.
   - Remaining follow-up: replace `puma-lib` graph authoring with the
     model-ref-only intermediate slice before wiring live validation UX.
+- [x] 2026-05-25 `puma-lib` model-ref-only implementation re-plan boundary:
+  - Discovered issue: graph-visible `puma-lib` can be made model-ref-only only
+    if the Tauri hydration path stops requiring `modelPath` for dependency
+    requirements. `src-tauri/src/workflow/puma_lib_commands.rs` currently
+    builds `ModelDependencyRequest` from `node_data["modelPath"]`, while
+    `node_engine::ModelDependencyRequest` and related commands still require a
+    `model_path` string.
+  - Why this blocks implementation: removing `modelPath`, `entry_path`,
+    package facts, and `inference_settings` from puma-lib graph data without
+    replacing dependency hydration would either break selected-model hydration
+    or force a hidden synthesized path, which would violate the no-fallback and
+    model-ref-only rules.
+  - Required re-plan: decide the model-ref-only dependency hydration contract
+    before editing production puma-lib authoring. The preferred direction should
+    keep graph/node data path-free and move any Pumas-approved load target or
+    dependency fact lookup behind workflow-service/scheduler-owned validation
+    and dependency-planning boundaries.

@@ -539,7 +539,12 @@ falling back to previously rendered ports.
    Saved graph/node semantics and successful node outputs carry
    `pumas_model_ref` and display identity only; executable paths, `entry_path`,
    package facts, runtime hints, load targets, and `inference_settings` are
-   removed from graph semantics before live validation UX is added.
+   removed from graph semantics before live validation UX is added. Before this
+   code slice removes graph-authored paths, replace the Tauri
+   dependency-requirements hydration path that currently builds
+   `ModelDependencyRequest` from `modelPath`; the replacement must use
+   model-ref/descriptor/dependency-planning identity without synthesizing a
+   hidden path fallback.
 4. Tighten request extraction before it feeds live validation: use one
    workflow-service model-ref binding resolver, reject duplicate incoming
    bindings, validate source handle/type, report connected-versus-inline
@@ -656,6 +661,16 @@ falling back to previously rendered ports.
   semantics, then tighten request extraction for strict model-ref binding and
   explicit constraint diagnostics. After those boundary slices pass, implement
   the thinnest cross-layer resolver/validation acceptance path.
+- 2026-05-25: Re-plan boundary found before the `puma-lib` model-ref-only code
+  slice. `src-tauri/src/workflow/puma_lib_commands.rs` still hydrates selected
+  puma-lib nodes by requiring a `modelPath` and using it to build
+  `node_engine::ModelDependencyRequest`; the node-engine dependency request and
+  related commands still require `model_path`. Removing `modelPath`,
+  `entry_path`, package facts, and `inference_settings` from graph data now
+  would either break dependency hydration or require a hidden synthesized path,
+  which violates the no-fallback/no-legacy rule. The next step is to re-plan a
+  model-ref-only dependency hydration contract before editing production
+  puma-lib authoring.
 
 ## Open Design Decisions
 

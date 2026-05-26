@@ -11816,6 +11816,18 @@ Worker rules:
     `set_active_run_execution_plan` dead-code warning.
   - Remaining follow-up: replace `puma-lib` graph authoring with the
     model-ref-only intermediate slice before live-validation UX wiring.
+- 2026-05-25 Milestone 5d `puma-lib` model-ref-only re-plan boundary:
+  - Discovered issue: the next planned puma-lib graph-authoring slice crosses a
+    dependency hydration boundary. `src-tauri/src/workflow/puma_lib_commands.rs`
+    still builds dependency requirements from `node_data["modelPath"]`, and
+    `node_engine::ModelDependencyRequest` plus related commands still require a
+    `model_path` string.
+  - Re-plan trigger: deleting graph-authored `modelPath`, `entry_path`, package
+    facts, and `inference_settings` now would either break selected-model
+    hydration or preserve a hidden synthesized path fallback.
+  - Required decision: replace dependency hydration with a path-free
+    `pumas_model_ref`/descriptor/dependency-planning contract before production
+    puma-lib authoring is edited.
 
 ### Traceability Links
 
