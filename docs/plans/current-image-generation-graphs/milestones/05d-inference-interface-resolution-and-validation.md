@@ -108,7 +108,12 @@ defining an image-only inference-node interface.
       Tauri command code must only decode/forward requests and encode responses;
       it must not construct dependency policy, resolve Pumas facts, synthesize
       `modelPath`, or adapt the canonical request back into
-      `node_engine::ModelDependencyRequest`.
+      `node_engine::ModelDependencyRequest`. The first backend slice replaces
+      the old Tauri action command with
+      `DependencyEnvironmentRequest -> DependencyEnvironmentResult` and returns
+      typed `not_implemented` diagnostics until a canonical dependency
+      environment service exists; remaining slices must update frontend action
+      payloads and remove old node-engine request call sites.
 - [ ] Delete or rewrite `ModelDependencyRequest`/`model_path` dependency
       hydration call sites that are on the `puma-lib` -> inference path. Any
       remaining dependency-environment work must consume the canonical

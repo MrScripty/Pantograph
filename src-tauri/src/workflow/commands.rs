@@ -903,11 +903,9 @@ pub async fn list_model_library_updates_since(
 
 #[command]
 pub async fn run_dependency_environment_action(
-    resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
-    request: super::dependency_environment_commands::DependencyEnvironmentActionRequest,
-) -> Result<super::dependency_environment_commands::DependencyEnvironmentActionResponse, String> {
-    super::dependency_environment_commands::run_dependency_environment_action(resolver, request)
-        .await
+    request: pantograph_dependency_planning::DependencyEnvironmentRequest,
+) -> Result<pantograph_dependency_planning::DependencyEnvironmentResult, String> {
+    super::dependency_environment_commands::run_dependency_environment_action(request).await
 }
 
 #[command]

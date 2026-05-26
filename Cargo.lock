@@ -7314,6 +7314,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-dependency-planning",
  "pantograph-embedded-runtime",
  "pantograph-managed-dependencies",
  "pantograph-media-conversion",

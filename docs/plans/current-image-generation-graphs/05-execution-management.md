@@ -11886,6 +11886,38 @@ Worker rules:
     slice is typechecked by the known unrelated compile blocker
     `src-tauri/src/app_setup.rs:96: no method named
     set_media_conversion_executor found for Arc<WorkflowService>`.
+- 2026-05-26 Milestone 5d dependency-environment backend boundary slice
+  completed:
+  - Smallest useful vertical slice: replaced the Tauri
+    `run_dependency_environment_action` implementation that accepted
+    camelCase `modelPath` action payloads and adapted them into
+    `node_engine::ModelDependencyRequest`. The command now accepts the
+    canonical path-free
+    `pantograph_dependency_planning::DependencyEnvironmentRequest` and returns
+    `DependencyEnvironmentResult`.
+  - No-fallback/no-legacy confirmation: the command no longer constructs
+    dependency policy, Pumas facts, local paths, manifest paths, or
+    `ModelDependencyRequest`. Because the canonical dependency-environment
+    service is not wired yet, valid requests fail closed with typed
+    `not_implemented` diagnostics instead of routing through the retired
+    resolver.
+  - Verification passed: `cargo fmt`; `npm run typecheck`; `git diff
+    --check`.
+  - Focused unit coverage added in `dependency_environment_commands.rs` for
+    typed `not_implemented` results and rejection of legacy path-shaped JSON.
+  - Verification blocked: `cargo test -p pantograph
+    dependency_environment_action --bin pantograph` still fails before tests
+    run due to the known unrelated
+    `src-tauri/src/app_setup.rs:96 set_media_conversion_executor` compile
+    blocker. The command compiled dependency crates before reaching that
+    blocker.
+  - Remaining follow-up: frontend dependency-environment action payloads still
+    need to stop building `modelPath` requests and instead build canonical
+    dependency-environment requests from validated descriptor/planning state.
+    The old standalone `resolve_model_dependency_requirements`,
+    `check_model_dependencies`, `install_model_dependencies`, and
+    `install_and_check_model_dependencies` commands remain removal/rewrite
+    targets for later slices.
 
 ### Traceability Links
 
