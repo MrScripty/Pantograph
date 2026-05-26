@@ -79,9 +79,14 @@ defining an image-only inference-node interface.
       inference-interface contract crate may provide drift types, but graph
       patch operations must live with graph mutation ownership.
 - [x] Define live draft validation session contracts with backend-issued
-      validation session ids, monotonic client graph revisions, event sequence
+      validation session ids, graph fingerprint revisions, event sequence
       numbers, descriptor/drift/diagnostic/update-proposal events, and a
-      backend-owned validation summary.
+      backend-owned validation summary. Re-plan update: the live-validation
+      contract must use the same `WorkflowGraphRevision` fingerprint as graph
+      edit sessions and `DependencyEnvironmentActionIntent`; the older numeric
+      `client_graph_revision` shape must be replaced, not translated through a
+      compatibility map. Event sequences remain monotonic within a validation
+      session.
 - [x] Define the graph validation summary contract with status, executable
       boolean, typed enqueue-disabled reasons, diagnostics count, and blocking
       diagnostics count. Frontend must not infer enqueue permission from raw
@@ -133,6 +138,15 @@ defining an image-only inference-node interface.
       missing, pending, stale, unavailable, unresolved, invalid, or disagrees
       with the current graph revision, the action returns typed diagnostics and
       does not call dependency execution.
+      Re-plan update: before deriving canonical dependency-environment
+      requests, replace numeric validation revision identity with graph
+      fingerprint revision identity and store/read the latest current
+      validation state by `graph_session_id + graph_revision` with optional
+      `validation_session_id`. This is option 2 now with option 3 discipline:
+      the initial implementation may be a narrow workflow-service state map,
+      but its API must look like a dedicated validation-state owner so later
+      submit gating and scheduler admission can consume the same source without
+      rewriting callers.
 - [ ] Delete or rewrite `ModelDependencyRequest`/`model_path` dependency
       hydration call sites that are on the `puma-lib` -> inference path. Any
       remaining dependency-environment work must consume the canonical
@@ -216,7 +230,7 @@ defining an image-only inference-node interface.
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the
       lock before Pumas/inference fact resolution, and publish events only for
-      the current validation session id and client graph revision.
+      the current validation session id and graph revision.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply
@@ -531,9 +545,12 @@ defining an image-only inference-node interface.
     reports.
 - [x] 2026-05-25 live inference-validation session contract slice completed:
   - Smallest useful vertical slice: added workflow-service live validation
-    session/event DTOs with backend-issued validation session ids, non-zero
+    session/event DTOs with backend-issued validation session ids, numeric
     client graph revisions, strictly increasing event sequences, descriptor,
-    drift, diagnostic, update-proposal, and summary payloads.
+    drift, diagnostic, update-proposal, and summary payloads. This numeric
+    revision field is superseded by the 2026-05-26 current-validation-state
+    re-plan and must be replaced with graph fingerprint revision identity
+    before dependency-environment request derivation is implemented.
   - No-fallback/no-legacy confirmation: the slice defines the event contract
     only. It does not add transport, resolver, graph mutation, or frontend
     fallback behavior, and update-proposal payloads stay workflow-service-owned

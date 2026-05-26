@@ -168,9 +168,11 @@ Out of scope:
   graph-scoped for summary events and node-scoped for descriptor, drift,
   diagnostic, and update-proposal events. Do not use shared unscoped validation
   events as a transport or compatibility path.
-- Correlate live validation with a backend-issued validation session id plus a
-  monotonic client graph revision. Frontend must ignore stale events for old
-  sessions or revisions.
+- Correlate live validation with a backend-issued validation session id plus
+  the same graph fingerprint revision used by graph edit sessions. Frontend
+  must ignore stale events for old sessions or revisions. Event sequence
+  numbers remain monotonic within each validation session; graph identity must
+  not use a separate numeric revision or a translation map.
 - Graph-level enqueue gating uses a backend-owned validation summary with a
   status enum, executable boolean, typed disabled reasons, and diagnostic
   counts. Frontend must not infer queue eligibility from raw diagnostics.
@@ -513,9 +515,9 @@ falling back to previously rendered ports.
   executability.
 - **Risk:** Async resolver work introduces stale event races or lock
   contention.
-  **Mitigation:** Use validation session ids, graph revisions, event sequence
-  numbers, lock-free resolution after snapshotting, and stale-event rejection
-  tests.
+  **Mitigation:** Use validation session ids, graph fingerprint revisions,
+  event sequence numbers, lock-free resolution after snapshotting, and
+  stale-event rejection tests.
 - **Risk:** The contract crate accidentally imports runtime or lookup behavior.
   **Mitigation:** Keep the crate DTO-only, document dependencies in its README,
   and add dependency-direction review to the first implementation slice.
@@ -549,6 +551,15 @@ falling back to previously rendered ports.
    dependency-planning boundaries own validation/request semantics. Do not adapt
    the canonical request back into `ModelDependencyRequest`, `ModelRefV2`,
    `modelPath`, or `model_path`.
+3a. Replace validation-session numeric graph revision identity with the
+   graph-session `WorkflowGraphRevision` fingerprint and introduce the first
+   workflow-service current-validation-state owner keyed by
+   `graph_session_id + graph_revision` with optional `validation_session_id`.
+   This is the option-2 implementation path with option-3 discipline: start
+   narrow enough to unblock dependency-environment actions, but expose a
+   single owner-shaped API that submit gating and scheduler admission can later
+   consume without adding parallel validation-summary caches or frontend-owned
+   policy.
 4. Tighten request extraction before it feeds live validation: use one
    workflow-service model-ref binding resolver, reject duplicate incoming
    bindings, validate source handle/type, report connected-versus-inline

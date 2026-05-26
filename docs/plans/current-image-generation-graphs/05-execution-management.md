@@ -11625,8 +11625,12 @@ Worker rules:
   completed:
   - Smallest useful vertical slice: added workflow-service live validation
     session/event DTOs carrying backend-issued validation session ids,
-    non-zero client graph revisions, strictly increasing event sequences,
+    numeric client graph revisions, strictly increasing event sequences,
     descriptor, drift, diagnostic, update-proposal, and summary events.
+    This numeric revision field is superseded by the 2026-05-26
+    current-validation-state re-plan and must be replaced with graph
+    fingerprint revision identity before dependency-environment request
+    derivation is implemented.
   - No-fallback/no-legacy confirmation: the slice adds only the contract
     envelope for later transport and resolver integration. It does not mutate
     graphs, restore `node.data.definition`, or introduce frontend-owned
@@ -12015,8 +12019,8 @@ Worker rules:
     paths, platform context, identity keys, `DependencyPlanningRequest`, or
     `DependencyEnvironmentRequest`. The retired `run` action does not decode.
   - Focused tests added: contract tests validate round-trip behavior, rejection
-    of backend-owned/path-shaped fields, rejection of zero graph revisions, and
-    rejection of the retired `run` action.
+    of backend-owned/path-shaped fields, rejection of blank graph revisions,
+    and rejection of the retired `run` action.
   - Verification passed: `cargo fmt`; `cargo test -p
     pantograph-inference-interface-contracts
     dependency_environment_action_intent`; `cargo test -p
@@ -12055,6 +12059,30 @@ Worker rules:
     summaries in workflow-service, then derive the canonical
     `DependencyEnvironmentRequest` only when the summary is executable/current
     and dependency requirements ids are available.
+- 2026-05-26 Milestone 5d current validation-state re-plan decision:
+  - Re-plan trigger: dependency-environment actions now use graph-session
+    `graph_revision` fingerprints, but the existing live validation session
+    contract still carries a numeric `client_graph_revision`. Deriving a
+    dependency-environment request from that state would require a translation
+    layer or risk accepting a stale validation summary.
+  - Decision: use option 2 now with option 3 discipline. Replace numeric
+    validation revision identity with the graph-session
+    `WorkflowGraphRevision` fingerprint, then store/read current inference
+    validation state by `graph_session_id + graph_revision` with optional
+    `validation_session_id`.
+  - Design constraint: the first implementation may be a narrow
+    workflow-service state map, but its public module/API must look like a
+    single validation-state owner. Dependency-environment actions, frontend
+    submit gating, backend queue admission, and later scheduler admission must
+    all consume that owner rather than adding parallel validation-summary
+    caches or frontend-owned policy.
+  - No-fallback/no-legacy confirmation: do not add a numeric-to-fingerprint
+    compatibility map, do not let Tauri or frontend synthesize validation
+    freshness, and do not derive `DependencyEnvironmentRequest` unless the
+    stored validation summary belongs to the exact current graph revision.
+  - Next implementation slice: replace the workflow-service live validation
+    session DTO revision field with graph fingerprint revision and add focused
+    tests proving stale numeric/old revision payloads are rejected or removed.
 
 ### Traceability Links
 
