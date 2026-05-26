@@ -46,6 +46,7 @@ pantograph-media-conversion = { path = "../crates/pantograph-media-conversion" }
 pantograph-runtime-identity = { path = "../crates/pantograph-runtime-identity" }
 pantograph-runtime-registry = { path = "../crates/pantograph-runtime-registry" }
 pantograph-dependency-planning = { path = "../crates/pantograph-dependency-planning" }
+pantograph-inference-interface-contracts = { path = "../crates/pantograph-inference-interface-contracts" }
 
 # Workspace dependencies
 serde.workspace = true

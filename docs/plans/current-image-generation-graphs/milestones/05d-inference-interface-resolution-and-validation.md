@@ -354,6 +354,18 @@ defining an image-only inference-node interface.
         `run_dependency_environment_action(DependencyEnvironmentRequest)` Tauri
         command and Tauri-local dependency validation/result construction are
         retirement targets, not alternate supported paths.
+      - Frontend/transport boundary sub-slice completed on 2026-05-26: the
+        active dependency-environment node now delegates resolve/check/install
+        through a graph-coordinator context, `WorkflowGraph.svelte` supplies the
+        coordinator, `workflowGraphBackendActions.ts` adds the active graph edit
+        session and `WorkflowGraphRevision`, and Tauri registers only the
+        transport-only `resolve_dependency_environment_action_intent` command
+        for this path. The retired
+        `run_dependency_environment_action(DependencyEnvironmentRequest)`
+        command, Tauri-local not-implemented dependency result construction,
+        and frontend path-shaped action payload builder were removed. Remaining
+        work is descriptor-backed dependency request derivation after executable
+        validation summaries carry current dependency requirements.
 - [ ] Add the current inference-validation state owner before dependency action
       derivation. The owner must be workflow-service code, not Tauri/frontend
       code, and must be keyed by validated `graph_session_id +

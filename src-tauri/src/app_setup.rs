@@ -549,6 +549,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::workflow_execution_tauri_commands::ungroup_in_execution,
             crate::workflow::workflow_execution_tauri_commands::update_group_ports_in_execution,
             crate::workflow::workflow_execution_tauri_commands::get_execution_graph,
+            crate::workflow::workflow_execution_tauri_commands::resolve_dependency_environment_action_intent,
             crate::workflow::workflow_execution_tauri_commands::remove_execution,
             // Port options query commands
             crate::workflow::commands::query_port_options,
@@ -564,7 +565,6 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::model_package_facts_summary_snapshot,
             crate::workflow::commands::resolve_model_package_facts_summary,
             crate::workflow::commands::list_model_library_updates_since,
-            crate::workflow::commands::run_dependency_environment_action,
             crate::workflow::commands::resolve_model_dependency_requirements,
             crate::workflow::commands::check_model_dependencies,
             crate::workflow::commands::install_model_dependencies,

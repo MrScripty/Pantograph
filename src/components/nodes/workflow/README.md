@@ -97,17 +97,19 @@ bodies.
 `PumaLibNode.svelte` is model-ref-only authoring UI. It may display a model id
 or option label, but it must not persist `modelPath`, `model_path`, dependency
 requirements, runtime hints, or package facts as graph data.
-`DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
-component, while dependency contracts and pure override state helpers live in
+`DependencyEnvironmentNode.svelte` keeps UI state and emits dependency action
+requests to the graph coordinator. It must not build backend dependency
+requests, call Tauri directly, or derive graph session/revision context.
+Dependency contracts and pure override state helpers live in
 `dependencyEnvironmentTypes.ts`, `dependencyEnvironmentActions.ts`,
 `dependencyEnvironmentActivityListener.ts`, `dependencyEnvironmentNodeState.ts`,
 `dependencyEnvironmentOverrides.ts`, `dependencyEnvironmentSelection.ts`,
 `dependencyEnvironmentDisplay.ts`, and `dependencyEnvironmentSources.ts` so
-payload projection, node prop/data contracts, node-local state projection,
-upstream requirement adoption, backend action execution bracketing, mount-time
-activity listener setup, graph-input projection, binding selection, override
-reads and scope clears, override form value projection, parsing, merge,
-timestamps, and formatting behavior can be tested without mounting the node.
+node prop/data contracts, node-local state projection, upstream requirement
+adoption, backend action execution bracketing, mount-time activity listener
+setup, graph-input projection, binding selection, override reads and scope
+clears, override form value projection, parsing, merge, timestamps, and
+formatting behavior can be tested without mounting the node.
 `dependencyEnvironmentState.ts` remains as a stable re-export surface for
 component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
@@ -187,6 +189,10 @@ and finality metadata in runtime data while the component reads bytes lazily wit
 - `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
   merge semantics aligned with the backend patch contract in
   `dependencyEnvironmentOverrides.ts`.
+- `DependencyEnvironmentNode.svelte` must delegate resolve/check/install to the
+  graph-level dependency action coordinator. The graph coordinator supplies
+  session and revision identity; workflow-service owns freshness checks and
+  dependency request derivation.
 - `dependencyEnvironmentOverrides.ts` owns displayed override values, scope
   clears, summary counts, local override checks, override timestamps, and form
   value projection; the Svelte component must only assign returned patch arrays
@@ -194,9 +200,9 @@ and finality metadata in runtime data while the component reads bytes lazily wit
 - `dependencyEnvironmentSelection.ts` owns binding filtering and selection
   toggles; the Svelte component must not duplicate selected-binding rules
   inline.
-- `dependencyEnvironmentNodeState.ts` owns dependency node persistence payloads,
-  backend action response projection, and upstream requirement adoption; the
-  Svelte component must not duplicate that state-shape mapping inline.
+- `dependencyEnvironmentNodeState.ts` owns dependency node persistence payloads
+  and upstream requirement adoption; the Svelte component must not duplicate
+  that state-shape mapping inline.
 - `DependencyEnvironmentNode.svelte` may seed local state from the incoming
   node data once, but that initialization must be an explicit snapshot so
   subsequent prop updates are handled by the node's persistence and upstream

@@ -12730,6 +12730,46 @@ Worker rules:
     frontend/Tauri request-building path, then continue to descriptor-backed
     canonical dependency request derivation once executable validation summaries
     include current dependency requirements.
+- 2026-05-26 Milestone 5d dependency-environment graph-coordinator action
+  boundary slice completed:
+  - Smallest useful vertical slice: rewired the active dependency-environment
+    frontend action path so `DependencyEnvironmentNode.svelte` emits only
+    node-local resolve/check/install requests to a graph-coordinator context.
+    `WorkflowGraph.svelte` supplies that coordinator, and
+    `workflowGraphBackendActions.ts` builds the typed
+    `DependencyEnvironmentActionIntent` from active graph edit session id,
+    current graph revision, target node id, and action.
+  - Transport result: Tauri now registers
+    `resolve_dependency_environment_action_intent` as a transport-only command
+    forwarding to workflow-service. The retired
+    `run_dependency_environment_action(DependencyEnvironmentRequest)` command,
+    Tauri-local dependency-environment not-implemented result construction, and
+    frontend path-shaped action payload builder were removed.
+  - No-fallback/no-legacy result: active frontend/Tauri dependency-environment
+    actions no longer construct `DependencyEnvironmentRequest`, pass model
+    paths, synthesize platform/model facts, or preserve the old `run` action.
+    Workflow-service remains the only owner of validation freshness and eventual
+    canonical dependency request derivation.
+  - Focused tests updated: dependency-environment frontend helper tests now
+    cover action-intent result formatting, request-ready status handling,
+    blocked diagnostics, failure logging, and busy-state bracketing without
+    backend node-data mutation.
+  - Verification passed: `cargo fmt --all -- --check`; `npm run typecheck`;
+    `node --experimental-strip-types --test
+    src/components/nodes/workflow/dependencyEnvironmentState.test.ts`; `cargo
+    check -p pantograph-workflow-service`; targeted source searches proving the
+    retired action request/command names are absent from active frontend/Tauri
+    sources; and `git diff --check`.
+  - Verification blocked: `cargo check --manifest-path src-tauri/Cargo.toml`
+    still fails before validating the app crate because of the pre-existing
+    unrelated `src-tauri/src/app_setup.rs:96
+    set_media_conversion_executor` missing-method blocker. The check also
+    continues to report the known workflow-service dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: derive canonical dependency-environment requests only
+    from current executable descriptor validation summaries once those
+    summaries include current dependency requirements; then add the broader
+    graph-coordinator UI acceptance coverage.
 
 ### Traceability Links
 

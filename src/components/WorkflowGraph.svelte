@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, setContext } from 'svelte';
   import type { Node, Edge, Connection } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
   import {
@@ -80,7 +80,12 @@
     loadWorkflowConnectionIntentState,
     removeWorkflowGraphEdge,
     removeWorkflowGraphEdges,
+    runWorkflowDependencyEnvironmentAction,
   } from './workflowGraphBackendActions.ts';
+  import {
+    DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT,
+    type DependencyEnvironmentActionCoordinator,
+  } from './dependencyEnvironmentActionContext.ts';
   import {
     isWorkflowPaletteEdgeInsertEnabled,
     clearActiveWorkflowPaletteDragDefinition,
@@ -148,6 +153,19 @@
   let edgeInsertPreview = $state<EdgeInsertPreviewState>(createEdgeInsertPreviewState());
   let edgeInsertPreviewRequestId = $state(0);
   let currentGraphRevision = $derived($workflowGraph.derived_graph?.graph_fingerprint ?? '');
+
+  const dependencyEnvironmentActionCoordinator: DependencyEnvironmentActionCoordinator = (request) =>
+    runWorkflowDependencyEnvironmentAction({
+      action: request.action,
+      graphRevision: getGraphRevision(),
+      targetNodeId: request.targetNodeId,
+      validationSessionId: null,
+    });
+
+  setContext(
+    DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT,
+    dependencyEnvironmentActionCoordinator,
+  );
 
   // Track previous store references so we only push genuine changes to SvelteFlow.
   // SvelteFlow enriches node/edge objects with internal metadata (measured, internals).

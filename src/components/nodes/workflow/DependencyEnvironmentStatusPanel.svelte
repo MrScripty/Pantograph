@@ -7,31 +7,29 @@
   }
 
   interface Props {
-    hasModelPath: boolean;
+    hasModelBinding: boolean;
     dependencyBadge: DependencyBadge;
     dependencyStatus: ModelDependencyStatus | null;
     isBusy: boolean;
-    onRun: () => void;
     onResolve: () => void;
     onCheck: () => void;
     onInstall: () => void;
   }
 
   let {
-    hasModelPath,
+    hasModelBinding,
     dependencyBadge,
     dependencyStatus,
     isBusy,
-    onRun,
     onResolve,
     onCheck,
     onInstall,
   }: Props = $props();
 </script>
 
-{#if !hasModelPath}
+{#if !hasModelBinding}
   <div class="text-[10px] text-amber-400">
-    Connect Puma-Lib `model_path` and `dependency_requirements`.
+    Connect a Puma-Lib model reference.
   </div>
 {:else}
   <div class="rounded border px-2 py-1 text-[10px] {dependencyBadge.className}">
@@ -40,14 +38,6 @@
       <button
         type="button"
         class="ml-auto text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-        onclick={onRun}
-        disabled={isBusy}
-      >
-        Run
-      </button>
-      <button
-        type="button"
-        class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
         onclick={onResolve}
         disabled={isBusy}
       >

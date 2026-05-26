@@ -1,4 +1,8 @@
 import type { NodeDefinition } from '../../../services/workflow/types';
+import type {
+  DependencyEnvironmentAction,
+  DependencyEnvironmentActionIntentResult,
+} from '../../../services/workflow/dependencyEnvironmentActionIntent.ts';
 
 export type DependencyState =
   | 'unresolved'
@@ -125,38 +129,9 @@ export type StringOverrideField =
   | 'wheel_source_path'
   | 'package_source_override';
 
-export interface DependencyEnvironmentActionRequest {
-  action: 'resolve' | 'check' | 'install' | 'run';
-  mode?: 'auto' | 'manual';
-  modelPath: string;
-  modelId?: string;
-  modelType?: string;
-  taskTypePrimary?: string;
-  backendKey?: string;
-  platformContext?: Record<string, string>;
-  selectedBindingIds?: string[];
-  dependencyRequirements?: ModelDependencyRequirements;
-  dependencyOverridePatches?: DependencyOverridePatchV1[];
-}
+export type DependencyEnvironmentNodeAction = DependencyEnvironmentAction;
 
-export interface DependencyEnvironmentActionResponse {
-  nodeData: Record<string, unknown>;
-}
-
-export interface DependencyEnvironmentActionPayloadInput {
-  action: DependencyEnvironmentActionRequest['action'];
-  mode: 'auto' | 'manual';
-  upstreamModelPath: string | null;
-  upstreamModelId: string | null;
-  upstreamModelType: string | null;
-  upstreamTaskType: string | null;
-  upstreamBackendKey: string | null;
-  upstreamPlatformContext: Record<string, string> | null;
-  selectedBindingIds: string[];
-  upstreamRequirements: ModelDependencyRequirements | null;
-  dependencyRequirements: ModelDependencyRequirements | null;
-  effectiveManualOverrides: DependencyOverridePatchV1[];
-}
+export type DependencyEnvironmentActionResponse = DependencyEnvironmentActionIntentResult;
 
 export interface DependencyBadge {
   label: string;

@@ -89,6 +89,10 @@ retention summary, and projection states together. Saved graph inspection uses
 `WorkflowGraphInspectionProjection` without fabricating a workflow run id.
 Frontend services forward these requests exactly and do not reconstruct those
 persisted facts from multiple run-specific queries.
+Dependency-environment action intents are forwarded as graph-session commands.
+Frontend service code may carry the typed action intent and result DTOs, but it
+does not build dependency planning or dependency-environment requests, resolve
+Pumas paths/facts, or own validation freshness policy.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.

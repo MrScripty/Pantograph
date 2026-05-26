@@ -888,13 +888,6 @@ pub async fn list_model_library_updates_since(
 }
 
 #[command]
-pub async fn run_dependency_environment_action(
-    request: pantograph_dependency_planning::DependencyEnvironmentRequest,
-) -> Result<pantograph_dependency_planning::DependencyEnvironmentResult, String> {
-    super::dependency_environment_commands::run_dependency_environment_action(request).await
-}
-
-#[command]
 pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     request: node_engine::ModelDependencyRequest,

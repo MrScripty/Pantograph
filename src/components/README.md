@@ -21,7 +21,7 @@ architecture views on top of the shared editor.
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, backend candidate projection, commit anchors, and revision selection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh/staleness/cleanup decisions, and rendered-edge hit testing. |
-| `workflowGraphBackendActions.ts` | Owns app graph `WorkflowService` session lookup, edge insertion, backend graph refresh, and adapters into shared package backend action primitives. |
+| `workflowGraphBackendActions.ts` | Owns app graph `WorkflowService` session lookup, dependency-environment action intent construction, edge insertion, backend graph refresh, and adapters into shared package backend action primitives. |
 | `workflowGraphEdgeInsertPreview.ts` | Coordinates palette edge-insert preview refresh requests and stale-response guards around the edge-insert interaction state helpers. |
 | `workflowGraphKeyboardActions.ts` | Coordinates app graph container keyboard commands and horseshoe window keyboard dispatch. |
 | `workflowGraphPaletteHandlers.ts` | Coordinates app palette drop and drag-over events before delegating to node insertion or edge-insert preview handlers. |
@@ -156,6 +156,11 @@ preservation, edge removal, and reconnect rollback now use the package
 graph keeps `WorkflowService` session lookup and rejected-connect refresh
 side effects local so shared package code does not depend on Pantograph
 singletons.
+Dependency-environment actions also use this boundary: node components emit
+node-local resolve/check/install actions, `WorkflowGraph.svelte` supplies the
+graph coordinator context, and `workflowGraphBackendActions.ts` adds the active
+graph session/revision before forwarding a typed action intent to
+workflow-service.
 App graph delete-selection projection, reconnect-start branching, and reconnect
 result handling now use the package graph interaction helpers. The app graph
 still owns architecture mode, palette edge-insert preview, and

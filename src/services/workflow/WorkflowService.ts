@@ -1,5 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  DependencyEnvironmentActionIntent,
+  DependencyEnvironmentActionIntentResult,
+} from './dependencyEnvironmentActionIntent.ts';
+import type {
   WorkflowNodeStatusQueryRequest,
   WorkflowNodeStatusQueryResponse,
   WorkflowProjectionRebuildRequest,
@@ -72,6 +76,35 @@ export class WorkflowService extends WorkflowCommandService {
     }
     // When using real backend, definitions should be cached
     return undefined;
+  }
+
+  async resolveDependencyEnvironmentActionIntent(
+    request: DependencyEnvironmentActionIntent,
+  ): Promise<DependencyEnvironmentActionIntentResult> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        contract_version: 1,
+        graph_session_id: request.graph_session_id,
+        graph_revision: request.graph_revision,
+        validation_session_id: request.validation_session_id ?? null,
+        target_node_id: request.target_node_id,
+        action: request.action,
+        status: 'blocked',
+        diagnostics: [
+          {
+            code: 'validation_summary_missing',
+            severity: 'error',
+            message: 'Mock workflow service does not provide dependency-environment validation summaries.',
+            node_id: request.target_node_id,
+          },
+        ],
+      };
+    }
+
+    return invokeWorkflowCommand<DependencyEnvironmentActionIntentResult>(
+      'resolve_dependency_environment_action_intent',
+      { request },
+    );
   }
 
   // --- Connection Validation ---

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { getContext, hasContext, onMount, untrack } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import DependencyEnvironmentActivityLog from './DependencyEnvironmentActivityLog.svelte';
   import DependencyEnvironmentBindingsPanel from './DependencyEnvironmentBindingsPanel.svelte';
@@ -8,10 +8,8 @@
   import DependencyEnvironmentRefPanel from './DependencyEnvironmentRefPanel.svelte';
   import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
   import {
-    buildDependencyEnvironmentActionPayload,
     adoptDependencyEnvironmentUpstreamRequirements,
     appendDependencyActivityLogLine,
-    applyDependencyEnvironmentActionNodeData,
     buildDependencyEnvironmentNodeData,
     clearDependencyBindingOverrides,
     clearDependencyRequirementOverrides,
@@ -40,8 +38,7 @@
     upsertExtraIndexUrls,
     upsertStringOverrideField,
     type DependencyActivityEvent,
-    type DependencyEnvironmentActionRequest,
-    type DependencyEnvironmentActionResponse,
+    type DependencyEnvironmentNodeAction,
     type DependencyEnvironmentNodeDataState,
     type DependencyEnvironmentNodeProps,
     type DependencyOverridePatchV1,
@@ -50,8 +47,11 @@
     type ModelDependencyStatus,
     type StringOverrideField,
   } from './dependencyEnvironmentState';
+  import {
+    DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT,
+    type DependencyEnvironmentActionCoordinator,
+  } from '../../dependencyEnvironmentActionContext.ts';
   import { edges, nodes, updateNodeData } from '../../../stores/workflowStore';
-  import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
 
   let { id, data, selected = false }: DependencyEnvironmentNodeProps = $props();
@@ -73,13 +73,17 @@
 
   let upstreamState = $derived(resolveDependencyEnvironmentUpstreamState(id, $nodes, $edges));
   let upstreamModelPath = $derived(upstreamState.modelPath);
-  let upstreamModelId = $derived(upstreamState.modelId);
-  let upstreamModelType = $derived(upstreamState.modelType);
-  let upstreamTaskType = $derived(upstreamState.taskType);
-  let upstreamBackendKey = $derived(upstreamState.backendKey);
-  let upstreamPlatformContext = $derived(upstreamState.platformContext);
   let upstreamRequirements = $derived(upstreamState.requirements);
   let upstreamManualOverrides = $derived(upstreamState.manualOverrides);
+  let hasUpstreamModelBinding = $derived(
+    Boolean(upstreamState.modelId || upstreamState.requirements)
+  );
+
+  const dependencyActionCoordinator = hasContext(DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT)
+    ? getContext<DependencyEnvironmentActionCoordinator>(
+        DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT
+      )
+    : null;
 
   let effectiveManualOverrides = $derived.by(() =>
     mergeOverridePatches(upstreamManualOverrides, manualOverrides)
@@ -116,45 +120,21 @@
     updateNodeData(id, buildDependencyEnvironmentNodeData(currentNodeState()));
   }
 
-  function dependencyActionPayload(action: DependencyEnvironmentActionRequest['action']): DependencyEnvironmentActionRequest | null {
-    return buildDependencyEnvironmentActionPayload({
-      action,
-      mode,
-      upstreamModelPath,
-      upstreamModelId,
-      upstreamModelType,
-      upstreamTaskType,
-      upstreamBackendKey,
-      upstreamPlatformContext,
-      selectedBindingIds,
-      upstreamRequirements,
-      dependencyRequirements,
-      effectiveManualOverrides,
-    });
-  }
-
-  function applyDependencyActionNodeData(nodeData: Record<string, unknown>) {
-    updateNodeData(id, nodeData);
-    const nextState = applyDependencyEnvironmentActionNodeData(currentNodeState(), nodeData);
-    mode = nextState.mode;
-    selectedBindingIds = nextState.selectedBindingIds;
-    dependencyRequirements = nextState.dependencyRequirements;
-    dependencyStatus = nextState.dependencyStatus;
-    environmentRef = nextState.environmentRef;
-  }
-
   async function runDependencyEnvironmentAction(
-    action: DependencyEnvironmentActionRequest['action']
+    action: DependencyEnvironmentNodeAction
   ) {
-    const payload = dependencyActionPayload(action);
+    if (!dependencyActionCoordinator) {
+      appendActivityLine(`${action}: error="Dependency environment action coordinator is unavailable"`);
+      return;
+    }
+
     await runDependencyEnvironmentActionRequest({
       action,
-      payload,
-      invokeAction: (request) =>
-        invoke<DependencyEnvironmentActionResponse>('run_dependency_environment_action', {
-          request,
+      invokeAction: () =>
+        dependencyActionCoordinator({
+          targetNodeId: id,
+          action,
         }),
-      applyNodeData: applyDependencyActionNodeData,
       appendActivityLine,
       setBusy: (busy) => {
         isBusy = busy;
@@ -317,10 +297,6 @@
     await runDependencyEnvironmentAction('install');
   }
 
-  async function runModeAction() {
-    await runDependencyEnvironmentAction('run');
-  }
-
   function toggleBinding(bindingId: string) {
     selectedBindingIds = toggleDependencyEnvironmentBindingSelection(selectedBindingIds, bindingId);
     persistNodeState();
@@ -366,11 +342,10 @@
 
       <div class="space-y-2">
         <DependencyEnvironmentStatusPanel
-          hasModelPath={Boolean(upstreamModelPath)}
+          hasModelBinding={hasUpstreamModelBinding}
           {dependencyBadge}
           {dependencyStatus}
           {isBusy}
-          onRun={runModeAction}
           onResolve={resolveDependencyRequirements}
           onCheck={checkDependencies}
           onInstall={installDependencies}

@@ -16,6 +16,10 @@ import {
 } from '../stores/workflowStore';
 import { workflowService } from '../services/workflow/WorkflowService';
 import type {
+  DependencyEnvironmentAction,
+  DependencyEnvironmentActionIntentResult,
+} from '../services/workflow/dependencyEnvironmentActionIntent.ts';
+import type {
   ConnectionAnchor,
   ConnectionCommitResponse,
   InsertNodeConnectionResponse,
@@ -77,6 +81,13 @@ interface ReconnectCommitParams {
 
 export type WorkflowReconnectCommitResult = SharedWorkflowReconnectCommitResult;
 
+interface DependencyEnvironmentActionParams {
+  action: DependencyEnvironmentAction;
+  graphRevision: string;
+  targetNodeId: string;
+  validationSessionId?: string | null;
+}
+
 function currentSessionId(): string | null {
   return workflowService.getCurrentExecutionId();
 }
@@ -100,6 +111,30 @@ function applyAcceptedGraphMutation(
   return applyAcceptedWorkflowGraphMutation(response, {
     setNodeExecutionState,
     syncGraph: (graph) => syncGraphForSession(graph, sessionId),
+  });
+}
+
+export async function runWorkflowDependencyEnvironmentAction({
+  action,
+  graphRevision,
+  targetNodeId,
+  validationSessionId,
+}: DependencyEnvironmentActionParams): Promise<DependencyEnvironmentActionIntentResult> {
+  const sessionId = currentSessionId();
+  if (!sessionId) {
+    throw new Error('Dependency environment action requires an active graph edit session.');
+  }
+  if (!graphRevision) {
+    throw new Error('Dependency environment action requires a current graph revision.');
+  }
+
+  return workflowService.resolveDependencyEnvironmentActionIntent({
+    contract_version: 1,
+    graph_session_id: sessionId,
+    graph_revision: graphRevision,
+    validation_session_id: validationSessionId ?? null,
+    target_node_id: targetNodeId,
+    action,
   });
 }
 

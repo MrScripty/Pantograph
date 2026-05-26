@@ -22,7 +22,6 @@
 //! ```
 
 pub mod commands;
-pub mod dependency_environment_commands;
 pub mod diagnostics;
 pub mod event_adapter;
 pub mod events;

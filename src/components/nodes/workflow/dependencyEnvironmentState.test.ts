@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildDependencyEnvironmentActionPayload,
   adoptDependencyEnvironmentUpstreamRequirements,
   appendDependencyActivityLogLine,
   applyDependencyEnvironmentActionNodeData,
@@ -16,6 +15,7 @@ import {
   dependencyBadgeFor,
   filterDependencyEnvironmentBindings,
   formatDependencyEnvironmentActionError,
+  formatDependencyEnvironmentActionResult,
   formatDependencyEnvironmentListenerError,
   formatDependencyActivityLine,
   formatDependencyActivityTimestamp,
@@ -531,64 +531,53 @@ test('upsertExtraIndexUrls dedupes comma-separated URLs', () => {
   ]);
 });
 
-test('buildDependencyEnvironmentActionPayload projects upstream model and override state', () => {
-  const payload = buildDependencyEnvironmentActionPayload({
-    action: 'run',
-    mode: 'manual',
-    upstreamModelPath: ' /models/model.gguf ',
-    upstreamModelId: 'model-a',
-    upstreamModelType: 'embedding',
-    upstreamTaskType: 'embed',
-    upstreamBackendKey: 'llama_cpp',
-    upstreamPlatformContext: { os: 'linux' },
-    selectedBindingIds: ['binding-a'],
-    upstreamRequirements: null,
-    dependencyRequirements: {
-      model_id: 'model-a',
-      platform_key: 'linux-x86_64',
-      backend_key: 'llama_cpp',
-      dependency_contract_version: 1,
-      validation_state: 'resolved',
-      validation_errors: [],
-      bindings: [],
-      selected_binding_ids: [],
-    },
-    effectiveManualOverrides: [
-      {
-        contract_version: 1,
-        binding_id: 'binding-a',
-        scope: 'binding',
-        fields: { python_executable: '/usr/bin/python3' },
-      },
-    ],
-  });
+test('formatDependencyEnvironmentActionResult reports backend intent status', () => {
+  assert.equal(
+    formatDependencyEnvironmentActionResult({
+      contract_version: 1,
+      graph_session_id: 'session-a',
+      graph_revision: 'revision-a',
+      target_node_id: 'dependency-node',
+      action: 'resolve',
+      status: 'request_ready',
+    }),
+    'resolve: request ready',
+  );
 
-  assert.equal(payload?.modelPath, '/models/model.gguf');
-  assert.equal(payload?.modelId, 'model-a');
-  assert.deepEqual(payload?.selectedBindingIds, ['binding-a']);
-  assert.equal(payload?.dependencyOverridePatches?.length, 1);
+  assert.equal(
+    formatDependencyEnvironmentActionResult({
+      contract_version: 1,
+      graph_session_id: 'session-a',
+      graph_revision: 'revision-a',
+      target_node_id: 'dependency-node',
+      action: 'check',
+      status: 'blocked',
+      diagnostics: [
+        {
+          code: 'validation_summary_missing',
+          severity: 'error',
+          message: 'Validation summary is missing.',
+        },
+      ],
+    }),
+    'check: blocked="Validation summary is missing."',
+  );
 });
 
-test('runDependencyEnvironmentActionRequest applies backend node data and busy state', async () => {
+test('runDependencyEnvironmentActionRequest records backend intent status and busy state', async () => {
   const busyStates: boolean[] = [];
-  const appliedNodeData: Record<string, unknown>[] = [];
   const activityLines: string[] = [];
 
   const didRun = await runDependencyEnvironmentActionRequest({
     action: 'check',
-    payload: {
-      action: 'check',
-      mode: 'manual',
-      modelPath: '/models/model.gguf',
-    },
     invokeAction: async () => ({
-      nodeData: {
-        dependency_status: { state: 'ready' },
-      },
+      contract_version: 1,
+      graph_session_id: 'session-a',
+      graph_revision: 'revision-a',
+      target_node_id: 'dependency-node',
+      action: 'check',
+      status: 'request_ready',
     }),
-    applyNodeData: (nodeData) => {
-      appliedNodeData.push(nodeData);
-    },
     appendActivityLine: (line) => {
       activityLines.push(line);
     },
@@ -599,24 +588,31 @@ test('runDependencyEnvironmentActionRequest applies backend node data and busy s
 
   assert.equal(didRun, true);
   assert.deepEqual(busyStates, [true, false]);
-  assert.deepEqual(appliedNodeData, [{ dependency_status: { state: 'ready' } }]);
-  assert.deepEqual(activityLines, []);
+  assert.deepEqual(activityLines, ['check: request ready']);
 });
 
-test('runDependencyEnvironmentActionRequest skips empty payloads and logs failures', async () => {
+test('runDependencyEnvironmentActionRequest logs blocked results and failures', async () => {
   const busyStates: boolean[] = [];
   const activityLines: string[] = [];
   const error = new Error('backend unavailable');
 
   const didRun = await runDependencyEnvironmentActionRequest({
-    action: 'install',
-    payload: null,
-    invokeAction: async () => {
-      throw new Error('unexpected invocation');
-    },
-    applyNodeData: () => {
-      throw new Error('unexpected apply');
-    },
+    action: 'resolve',
+    invokeAction: async () => ({
+      contract_version: 1,
+      graph_session_id: 'session-a',
+      graph_revision: 'revision-a',
+      target_node_id: 'dependency-node',
+      action: 'resolve',
+      status: 'blocked',
+      diagnostics: [
+        {
+          code: 'validation_summary_missing',
+          severity: 'error',
+          message: 'Validation summary is missing.',
+        },
+      ],
+    }),
     appendActivityLine: (line) => {
       activityLines.push(line);
     },
@@ -626,22 +622,14 @@ test('runDependencyEnvironmentActionRequest skips empty payloads and logs failur
   });
 
   assert.equal(didRun, false);
-  assert.equal(busyStates.length, 0);
-  assert.equal(activityLines.length, 0);
+  assert.deepEqual(busyStates, [true, false]);
+  assert.deepEqual(activityLines, ['resolve: blocked="Validation summary is missing."']);
 
   await assert.rejects(
     runDependencyEnvironmentActionRequest({
       action: 'install',
-      payload: {
-        action: 'install',
-        mode: 'manual',
-        modelPath: '/models/model.gguf',
-      },
       invokeAction: async () => {
         throw error;
-      },
-      applyNodeData: () => {
-        throw new Error('unexpected apply');
       },
       appendActivityLine: (line) => {
         activityLines.push(line);
@@ -653,8 +641,11 @@ test('runDependencyEnvironmentActionRequest skips empty payloads and logs failur
     error,
   );
 
-  assert.deepEqual(busyStates, [true, false]);
-  assert.deepEqual(activityLines, [formatDependencyEnvironmentActionError('install', error)]);
+  assert.deepEqual(busyStates, [true, false, true, false]);
+  assert.deepEqual(activityLines, [
+    'resolve: blocked="Validation summary is missing."',
+    formatDependencyEnvironmentActionError('install', error),
+  ]);
 });
 
 test('resolveDependencyEnvironmentUpstreamState projects connected model and override inputs', () => {

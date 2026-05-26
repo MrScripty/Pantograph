@@ -8,6 +8,9 @@ use super::events::WorkflowEvent;
 use super::workflow_execution_commands::{
     RunWorkflowExecutionSessionInput, WorkflowEditSessionRunResponse, WorkflowExecutionRuntimeState,
 };
+use pantograph_inference_interface_contracts::{
+    DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
+};
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
@@ -297,6 +300,17 @@ pub async fn get_execution_graph(
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowGraph, String> {
     super::workflow_execution_commands::get_execution_graph(execution_id, workflow_service).await
+}
+
+#[command]
+pub async fn resolve_dependency_environment_action_intent(
+    request: DependencyEnvironmentActionIntent,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<DependencyEnvironmentActionIntentResult, String> {
+    workflow_service
+        .workflow_graph_resolve_dependency_environment_action_intent(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
 }
 
 #[command]

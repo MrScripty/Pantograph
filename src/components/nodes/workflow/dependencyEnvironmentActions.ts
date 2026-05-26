@@ -1,76 +1,50 @@
 import type {
-  DependencyEnvironmentActionPayloadInput,
-  DependencyEnvironmentActionRequest,
   DependencyEnvironmentActionResponse,
+  DependencyEnvironmentNodeAction,
 } from './dependencyEnvironmentTypes.ts';
 
-export type DependencyEnvironmentActionInvoker = (
-  request: DependencyEnvironmentActionRequest,
-) => Promise<DependencyEnvironmentActionResponse>;
+export type DependencyEnvironmentActionInvoker = () => Promise<DependencyEnvironmentActionResponse>;
 
 export interface DependencyEnvironmentActionRunnerInput {
-  action: DependencyEnvironmentActionRequest['action'];
-  payload: DependencyEnvironmentActionRequest | null;
+  action: DependencyEnvironmentNodeAction;
   invokeAction: DependencyEnvironmentActionInvoker;
-  applyNodeData: (nodeData: Record<string, unknown>) => void;
   appendActivityLine: (line: string) => void;
   setBusy: (busy: boolean) => void;
 }
 
-export function buildDependencyEnvironmentActionPayload({
-  action,
-  mode,
-  upstreamModelPath,
-  upstreamModelId,
-  upstreamModelType,
-  upstreamTaskType,
-  upstreamBackendKey,
-  upstreamPlatformContext,
-  selectedBindingIds,
-  upstreamRequirements,
-  dependencyRequirements,
-  effectiveManualOverrides,
-}: DependencyEnvironmentActionPayloadInput): DependencyEnvironmentActionRequest | null {
-  const modelPath = (upstreamModelPath ?? '').trim();
-  if (!modelPath) return null;
-  return {
-    action,
-    mode,
-    modelPath,
-    modelId: upstreamModelId ?? dependencyRequirements?.model_id ?? undefined,
-    modelType: upstreamModelType ?? undefined,
-    taskTypePrimary: upstreamTaskType ?? undefined,
-    backendKey: upstreamBackendKey ?? dependencyRequirements?.backend_key ?? undefined,
-    platformContext: upstreamPlatformContext ?? undefined,
-    selectedBindingIds,
-    dependencyRequirements: upstreamRequirements ?? dependencyRequirements ?? undefined,
-    dependencyOverridePatches: effectiveManualOverrides.length > 0 ? effectiveManualOverrides : undefined,
-  };
-}
-
 export function formatDependencyEnvironmentActionError(
-  action: DependencyEnvironmentActionRequest['action'],
+  action: DependencyEnvironmentNodeAction,
   error: unknown,
 ): string {
   const message = error instanceof Error ? error.message : String(error);
   return `${action}: error="${message}"`;
 }
 
+export function formatDependencyEnvironmentActionResult(
+  response: DependencyEnvironmentActionResponse,
+): string {
+  if (response.status === 'request_ready') {
+    return `${response.action}: request ready`;
+  }
+
+  const diagnosticMessages = response.diagnostics
+    ?.map((diagnostic) => diagnostic.message.trim())
+    .filter((message) => message.length > 0);
+  const message = diagnosticMessages?.[0] ?? 'blocked by backend validation';
+  return `${response.action}: blocked="${message}"`;
+}
+
 export async function runDependencyEnvironmentActionRequest({
   action,
-  payload,
   invokeAction,
-  applyNodeData,
   appendActivityLine,
   setBusy,
 }: DependencyEnvironmentActionRunnerInput): Promise<boolean> {
-  if (!payload) return false;
-
   setBusy(true);
   try {
-    const response = await invokeAction(payload);
-    applyNodeData(response.nodeData);
-    return true;
+    const response = await invokeAction();
+    appendActivityLine(formatDependencyEnvironmentActionResult(response));
+    return response.status === 'request_ready';
   } catch (error) {
     appendActivityLine(formatDependencyEnvironmentActionError(action, error));
     throw error;
