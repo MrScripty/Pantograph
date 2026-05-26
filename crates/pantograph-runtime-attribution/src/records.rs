@@ -428,6 +428,38 @@ pub struct WorkflowVersionResolveRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowExecutableValidationSnapshotRecord {
+    pub workflow_version_id: WorkflowVersionId,
+    pub workflow_id: WorkflowId,
+    pub workflow_execution_fingerprint: String,
+    pub snapshot_schema_version: u16,
+    pub descriptor_contract_version: u32,
+    pub graph_revision: String,
+    pub validation_session_id: String,
+    pub validation_snapshot_id: String,
+    pub compact_snapshot_json: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowExecutableValidationSnapshotStoreRequest {
+    pub workflow_version_id: WorkflowVersionId,
+    pub workflow_id: WorkflowId,
+    pub workflow_execution_fingerprint: String,
+    pub snapshot_schema_version: u16,
+    pub descriptor_contract_version: u32,
+    pub graph_revision: String,
+    pub validation_session_id: String,
+    pub validation_snapshot_id: String,
+    pub compact_snapshot_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowExecutableValidationSnapshotLookupRequest {
+    pub workflow_version_id: WorkflowVersionId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowPresentationRevisionResolveRequest {
     pub workflow_id: WorkflowId,
     pub workflow_version_id: WorkflowVersionId,

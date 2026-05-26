@@ -21,11 +21,12 @@ use crate::{
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord,
-    WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
-    WorkflowRunAttributionContext, WorkflowRunAttributionResolveRequest, WorkflowRunRecord,
-    WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
-    WorkflowRunStatus, WorkflowRunVersionProjection, WorkflowVersionRecord,
-    WorkflowVersionResolveRequest,
+    WorkflowExecutableValidationSnapshotLookupRequest, WorkflowExecutableValidationSnapshotRecord,
+    WorkflowExecutableValidationSnapshotStoreRequest, WorkflowPresentationRevisionRecord,
+    WorkflowPresentationRevisionResolveRequest, WorkflowRunAttributionContext,
+    WorkflowRunAttributionResolveRequest, WorkflowRunRecord, WorkflowRunSnapshotRecord,
+    WorkflowRunSnapshotRequest, WorkflowRunStartRequest, WorkflowRunStatus,
+    WorkflowRunVersionProjection, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 const MAX_SEMANTIC_VERSION_LEN: usize = 64;
@@ -35,6 +36,10 @@ const MAX_EXECUTABLE_TOPOLOGY_JSON_LEN: usize = 262_144;
 const MAX_PRESENTATION_METADATA_JSON_LEN: usize = 262_144;
 const MAX_WORKFLOW_EXECUTION_SESSION_ID_LEN: usize = 128;
 const MAX_RUN_SNAPSHOT_JSON_LEN: usize = 262_144;
+const MAX_EXECUTABLE_VALIDATION_SNAPSHOT_JSON_LEN: usize = 262_144;
+const MAX_VALIDATION_GRAPH_REVISION_LEN: usize = 128;
+const MAX_VALIDATION_SESSION_ID_LEN: usize = 128;
+const MAX_VALIDATION_SNAPSHOT_ID_LEN: usize = 128;
 
 pub struct SqliteAttributionStore {
     pub(crate) conn: Connection,
@@ -680,6 +685,128 @@ impl AttributionRepository for SqliteAttributionStore {
         })
     }
 
+    fn store_workflow_executable_validation_snapshot(
+        &mut self,
+        request: WorkflowExecutableValidationSnapshotStoreRequest,
+    ) -> Result<WorkflowExecutableValidationSnapshotRecord, AttributionError> {
+        let workflow_execution_fingerprint = validate_required_boundary_text(
+            "workflow_execution_fingerprint",
+            request.workflow_execution_fingerprint,
+            MAX_EXECUTION_FINGERPRINT_LEN,
+        )?;
+        let graph_revision = validate_required_boundary_text(
+            "graph_revision",
+            request.graph_revision,
+            MAX_VALIDATION_GRAPH_REVISION_LEN,
+        )?;
+        let validation_session_id = validate_required_boundary_text(
+            "validation_session_id",
+            request.validation_session_id,
+            MAX_VALIDATION_SESSION_ID_LEN,
+        )?;
+        let validation_snapshot_id = validate_required_boundary_text(
+            "validation_snapshot_id",
+            request.validation_snapshot_id,
+            MAX_VALIDATION_SNAPSHOT_ID_LEN,
+        )?;
+        let compact_snapshot_json = validate_json_text_with_limit(
+            "compact_snapshot_json",
+            request.compact_snapshot_json,
+            MAX_EXECUTABLE_VALIDATION_SNAPSHOT_JSON_LEN,
+        )?;
+
+        let tx = self.conn.transaction()?;
+        let version = workflow_version_by_id(&tx, &request.workflow_version_id)?.ok_or(
+            AttributionError::NotFound {
+                entity: "workflow_version",
+            },
+        )?;
+        if version.workflow_id != request.workflow_id
+            || version.execution_fingerprint != workflow_execution_fingerprint
+        {
+            return Err(AttributionError::WorkflowFingerprintVersionConflict {
+                workflow_id: request.workflow_id,
+                execution_fingerprint: workflow_execution_fingerprint,
+            });
+        }
+
+        if let Some(existing) = workflow_executable_validation_snapshot_by_version_id(
+            &tx,
+            &request.workflow_version_id,
+        )? {
+            let incoming = WorkflowExecutableValidationSnapshotRecord {
+                workflow_version_id: request.workflow_version_id,
+                workflow_id: request.workflow_id,
+                workflow_execution_fingerprint,
+                snapshot_schema_version: request.snapshot_schema_version,
+                descriptor_contract_version: request.descriptor_contract_version,
+                graph_revision,
+                validation_session_id,
+                validation_snapshot_id,
+                compact_snapshot_json,
+                created_at_ms: existing.created_at_ms,
+            };
+            if existing == incoming {
+                return Ok(existing);
+            }
+            return Err(
+                AttributionError::WorkflowExecutableValidationSnapshotConflict {
+                    workflow_id: incoming.workflow_id,
+                    workflow_version_id: incoming.workflow_version_id,
+                },
+            );
+        }
+
+        let now = now_ms();
+        tx.execute(
+            "INSERT INTO workflow_executable_validation_snapshots
+                (workflow_version_id, workflow_id, workflow_execution_fingerprint,
+                 snapshot_schema_version, descriptor_contract_version, graph_revision,
+                 validation_session_id, validation_snapshot_id, compact_snapshot_json,
+                 created_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                request.workflow_version_id.as_str(),
+                request.workflow_id.as_str(),
+                workflow_execution_fingerprint.as_str(),
+                request.snapshot_schema_version,
+                request.descriptor_contract_version,
+                graph_revision.as_str(),
+                validation_session_id.as_str(),
+                validation_snapshot_id.as_str(),
+                compact_snapshot_json.as_str(),
+                now
+            ],
+        )?;
+        tx.commit()?;
+
+        Ok(WorkflowExecutableValidationSnapshotRecord {
+            workflow_version_id: request.workflow_version_id,
+            workflow_id: request.workflow_id,
+            workflow_execution_fingerprint,
+            snapshot_schema_version: request.snapshot_schema_version,
+            descriptor_contract_version: request.descriptor_contract_version,
+            graph_revision,
+            validation_session_id,
+            validation_snapshot_id,
+            compact_snapshot_json,
+            created_at_ms: now,
+        })
+    }
+
+    fn workflow_executable_validation_snapshot(
+        &self,
+        request: WorkflowExecutableValidationSnapshotLookupRequest,
+    ) -> Result<WorkflowExecutableValidationSnapshotRecord, AttributionError> {
+        workflow_executable_validation_snapshot_by_version_id(
+            &self.conn,
+            &request.workflow_version_id,
+        )?
+        .ok_or(AttributionError::NotFound {
+            entity: "workflow_executable_validation_snapshot",
+        })
+    }
+
     fn create_workflow_run_snapshot(
         &mut self,
         request: WorkflowRunSnapshotRequest,
@@ -899,6 +1026,46 @@ fn workflow_presentation_revision_from_row(
         presentation_fingerprint: row.get(3)?,
         presentation_metadata_json: row.get(4)?,
         created_at_ms: row.get(5)?,
+    })
+}
+
+fn workflow_executable_validation_snapshot_by_version_id(
+    conn: &rusqlite::Connection,
+    workflow_version_id: &crate::WorkflowVersionId,
+) -> Result<Option<WorkflowExecutableValidationSnapshotRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_version_id, workflow_id, workflow_execution_fingerprint,
+                snapshot_schema_version, descriptor_contract_version, graph_revision,
+                validation_session_id, validation_snapshot_id, compact_snapshot_json,
+                created_at_ms
+         FROM workflow_executable_validation_snapshots
+         WHERE workflow_version_id = ?1",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_version_id.as_str()],
+            workflow_executable_validation_snapshot_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_executable_validation_snapshot_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<WorkflowExecutableValidationSnapshotRecord> {
+    Ok(WorkflowExecutableValidationSnapshotRecord {
+        workflow_version_id: row
+            .get::<_, String>(0)
+            .and_then(parse_workflow_version_id)?,
+        workflow_id: row.get::<_, String>(1).and_then(parse_workflow_id)?,
+        workflow_execution_fingerprint: row.get(2)?,
+        snapshot_schema_version: row.get(3)?,
+        descriptor_contract_version: row.get(4)?,
+        graph_revision: row.get(5)?,
+        validation_session_id: row.get(6)?,
+        validation_snapshot_id: row.get(7)?,
+        compact_snapshot_json: row.get(8)?,
+        created_at_ms: row.get(9)?,
     })
 }
 

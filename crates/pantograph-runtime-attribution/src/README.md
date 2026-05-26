@@ -3,9 +3,10 @@
 ## Purpose
 This directory owns Pantograph's durable attribution domain for clients,
 credentials, client sessions, buckets, workflow versions, workflow
-presentation revisions, and workflow runs. Runtime execution, diagnostics,
-adapters, bindings, and nodes consume validated attribution facts from this
-crate instead of trusting caller-supplied ids.
+presentation revisions, executable validation snapshot storage, and workflow
+runs. Runtime execution, diagnostics, adapters, bindings, and nodes consume
+validated attribution facts from this crate instead of trusting caller-supplied
+ids.
 
 ## Contents
 | File/Folder | Description |
@@ -29,6 +30,9 @@ verification, bucket lineage, or one-active-session enforcement.
   creation and enforce strict semantic-version/fingerprint agreement.
 - Workflow-presentation revisions are resolved against an existing workflow
   version and track display metadata without changing diagnostics grouping.
+- Workflow executable validation snapshots are stored opaquely against an
+  existing workflow version and must agree with that version's workflow id and
+  execution fingerprint.
 - Workflow-run snapshots capture the immutable workflow version, presentation
   revision, execution fingerprint, queue/session context, input references,
   output targets, override selection, graph settings, and model/runtime
@@ -66,6 +70,9 @@ paths.
   one semantic version.
 - Each `(workflow_version_id, presentation_fingerprint)` maps to exactly one
   presentation metadata payload.
+- Each `workflow_version_id` maps to at most one executable validation snapshot
+  payload. Re-storing identical metadata and JSON is idempotent; different
+  payloads are a hard conflict.
 - Presentation revisions never replace workflow execution versions as
   diagnostics grouping keys.
 - Explicit bucket selection must stay inside the session client's namespace.
@@ -132,7 +139,7 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
   snapshots before admission.
 
 ## Structured Producer Contract
-- SQLite schema version `7` is the current breaking-cutover schema version.
+- SQLite schema version `8` is the current breaking-cutover schema version.
 - Persisted credential rows contain credential id, client id, salt bytes,
   digest bytes, status, timestamps, and no raw secret.
 - Persisted workflow-version rows contain workflow id, semantic version,
@@ -142,6 +149,12 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
   version id, presentation fingerprint, canonical presentation metadata JSON,
   and creation timestamp. They are deduplicated by workflow version and
   presentation fingerprint.
+- Persisted workflow executable validation snapshot rows contain workflow
+  version id, workflow id, workflow execution fingerprint, snapshot schema
+  version, descriptor-contract version, graph revision, validation session id,
+  validation snapshot id, compact snapshot JSON, and creation timestamp. The
+  compact JSON is opaque to attribution; workflow-service owns its typed schema,
+  serde validation, and scheduler projection.
 - Persisted workflow-run snapshot rows are immutable inserts keyed by
   workflow-run id and must agree with the referenced workflow-version and
   workflow-presentation revision rows.

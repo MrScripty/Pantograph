@@ -6,7 +6,9 @@ use crate::{
     AttributionError, AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketId,
     BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionResumeRequest,
-    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId,
+    CredentialProofRequest, CredentialSecret, SqliteAttributionStore,
+    WorkflowExecutableValidationSnapshotLookupRequest,
+    WorkflowExecutableValidationSnapshotStoreRequest, WorkflowId,
     WorkflowPresentationRevisionResolveRequest, WorkflowRunAttributionResolveRequest,
     WorkflowRunId, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
     WorkflowVersionResolveRequest,
@@ -54,6 +56,27 @@ fn presentation_revision_request(
             "schema_version": 1,
             "nodes": [],
             "edges": []
+        })
+        .to_string(),
+    }
+}
+
+fn executable_validation_snapshot_request(
+    version: &crate::WorkflowVersionRecord,
+) -> WorkflowExecutableValidationSnapshotStoreRequest {
+    WorkflowExecutableValidationSnapshotStoreRequest {
+        workflow_version_id: version.workflow_version_id.clone(),
+        workflow_id: version.workflow_id.clone(),
+        workflow_execution_fingerprint: version.execution_fingerprint.clone(),
+        snapshot_schema_version: 1,
+        descriptor_contract_version: 1,
+        graph_revision: "graph-revision-1".to_string(),
+        validation_session_id: "validation-session-1".to_string(),
+        validation_snapshot_id: "wfvalsnap-1".to_string(),
+        compact_snapshot_json: serde_json::json!({
+            "schema_version": 1,
+            "workflow_version_id": version.workflow_version_id.as_str(),
+            "nodes": []
         })
         .to_string(),
     }
@@ -350,6 +373,140 @@ fn workflow_presentation_revision_rejects_fingerprint_metadata_conflict() {
     assert!(matches!(
         err,
         AttributionError::WorkflowPresentationRevisionConflict { .. }
+    ));
+}
+
+#[test]
+fn executable_validation_snapshot_store_reuses_identical_snapshot() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let request = executable_validation_snapshot_request(&version);
+
+    let first = store
+        .store_workflow_executable_validation_snapshot(request.clone())
+        .expect("store executable validation snapshot");
+    let second = store
+        .store_workflow_executable_validation_snapshot(request)
+        .expect("reuse executable validation snapshot");
+
+    assert_eq!(first, second);
+    assert_eq!(first.workflow_version_id, version.workflow_version_id);
+    assert_eq!(first.workflow_id, version.workflow_id);
+    assert_eq!(
+        first.workflow_execution_fingerprint,
+        version.execution_fingerprint
+    );
+    assert_eq!(first.snapshot_schema_version, 1);
+    assert_eq!(first.descriptor_contract_version, 1);
+}
+
+#[test]
+fn executable_validation_snapshot_lookup_returns_stored_snapshot() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let stored = store
+        .store_workflow_executable_validation_snapshot(executable_validation_snapshot_request(
+            &version,
+        ))
+        .expect("store executable validation snapshot");
+
+    let fetched = store
+        .workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: version.workflow_version_id,
+            },
+        )
+        .expect("fetch executable validation snapshot");
+
+    assert_eq!(fetched, stored);
+}
+
+#[test]
+fn executable_validation_snapshot_store_rejects_conflicting_snapshot() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let request = executable_validation_snapshot_request(&version);
+    store
+        .store_workflow_executable_validation_snapshot(request.clone())
+        .expect("store executable validation snapshot");
+    let mut conflict = request;
+    conflict.compact_snapshot_json = serde_json::json!({
+        "schema_version": 1,
+        "workflow_version_id": version.workflow_version_id.as_str(),
+        "nodes": [{"node_id": "changed"}]
+    })
+    .to_string();
+
+    let err = store
+        .store_workflow_executable_validation_snapshot(conflict)
+        .expect_err("conflicting executable validation snapshot");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowExecutableValidationSnapshotConflict { .. }
+    ));
+}
+
+#[test]
+fn executable_validation_snapshot_store_rejects_version_mismatch() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let mut request = executable_validation_snapshot_request(&version);
+    request.workflow_execution_fingerprint = "workflow-exec-blake3:different".to_string();
+
+    let err = store
+        .store_workflow_executable_validation_snapshot(request)
+        .expect_err("fingerprint mismatch");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowFingerprintVersionConflict { .. }
+    ));
+}
+
+#[test]
+fn executable_validation_snapshot_lookup_fails_closed_when_missing() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+
+    let err = store
+        .workflow_executable_validation_snapshot(
+            WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: version.workflow_version_id,
+            },
+        )
+        .expect_err("missing executable validation snapshot");
+
+    assert!(matches!(
+        err,
+        AttributionError::NotFound {
+            entity: "workflow_executable_validation_snapshot"
+        }
     ));
 }
 

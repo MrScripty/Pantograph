@@ -58,6 +58,11 @@ pub enum AttributionError {
         workflow_id: WorkflowId,
         presentation_fingerprint: String,
     },
+    #[error("workflow executable validation snapshot already exists with different contents")]
+    WorkflowExecutableValidationSnapshotConflict {
+        workflow_id: WorkflowId,
+        workflow_version_id: crate::WorkflowVersionId,
+    },
     #[error("record was not found")]
     NotFound { entity: &'static str },
     #[error("unsupported attribution schema version {found}")]

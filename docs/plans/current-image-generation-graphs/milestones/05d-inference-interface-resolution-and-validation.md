@@ -1356,6 +1356,39 @@ defining an image-only inference-node interface.
   - No-fallback/no-legacy gate: queue admission must remain blocked until the
     durable snapshot store exists and can fail closed for missing,
     stale/mismatched, contract-incompatible, or store-unavailable snapshots.
+- [x] 2026-05-26 attribution executable snapshot storage slice completed:
+  - Smallest useful vertical slice: added attribution-owned opaque executable
+    validation snapshot storage keyed by `WorkflowVersionId`, including public
+    request/record DTOs, repository methods, sqlite schema version 8,
+    idempotent insert/reuse, lookup by workflow version, and typed conflict or
+    not-found errors.
+  - Allowed files touched:
+    `crates/pantograph-runtime-attribution/src/error.rs`,
+    `crates/pantograph-runtime-attribution/src/lib.rs`,
+    `crates/pantograph-runtime-attribution/src/records.rs`,
+    `crates/pantograph-runtime-attribution/src/repository.rs`,
+    `crates/pantograph-runtime-attribution/src/schema.rs`,
+    `crates/pantograph-runtime-attribution/src/sqlite.rs`,
+    `crates/pantograph-runtime-attribution/src/tests.rs`,
+    `crates/pantograph-runtime-attribution/src/README.md`, this milestone file,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: attribution stores compact snapshot
+    JSON opaquely and validates only workflow-version identity, execution
+    fingerprint, bounded metadata, and JSON shape. It does not parse
+    workflow-service snapshot internals, depend on workflow-service, reconstruct
+    snapshots from graph fields, read frontend/Tauri/runtime state, or provide a
+    sidecar fallback store.
+  - Focused tests added for idempotent identical snapshot reuse, successful
+    lookup, conflicting snapshot rejection, workflow-version fingerprint
+    mismatch rejection, and fail-closed missing snapshot lookup.
+  - Verification passed: `cargo fmt -p pantograph-runtime-attribution -- --check`;
+    `cargo test -p pantograph-runtime-attribution executable_validation_snapshot`;
+    `cargo test -p pantograph-runtime-attribution`; `cargo check -p
+    pantograph-runtime-attribution`; and `git diff --check`.
+  - Remaining follow-up: wire workflow-service executable publish to serialize
+    its typed compact snapshot into this attribution boundary, then wire queue
+    admission to require attribution snapshot lookup before enqueue or scheduler
+    graph materialization.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

@@ -12602,6 +12602,29 @@ Worker rules:
   - Implementation must not continue into queue admission until durable
     snapshot storage can fail closed for missing, stale/mismatched,
     contract-incompatible, or store-unavailable snapshots.
+- 2026-05-26 Milestone 5d attribution executable snapshot storage slice
+  completed:
+  - Added attribution-owned opaque executable validation snapshot storage keyed
+    by `WorkflowVersionId`, including public request/record DTOs, repository
+    methods, sqlite schema version 8, idempotent insert/reuse, lookup by
+    workflow version, and typed conflict or not-found errors.
+  - No-fallback/no-legacy result: attribution validates workflow-version
+    identity, execution fingerprint, bounded metadata, and JSON shape only. It
+    stores compact snapshot JSON opaquely and does not parse workflow-service
+    snapshot internals, depend on workflow-service, reconstruct snapshots from
+    graph fields, read frontend/Tauri/runtime state, or provide a sidecar
+    fallback store.
+  - Focused tests cover idempotent identical snapshot reuse, successful lookup,
+    conflicting snapshot rejection, workflow-version fingerprint mismatch
+    rejection, and fail-closed missing snapshot lookup.
+  - Verification passed: `cargo fmt -p pantograph-runtime-attribution -- --check`;
+    `cargo test -p pantograph-runtime-attribution executable_validation_snapshot`;
+    `cargo test -p pantograph-runtime-attribution`; `cargo check -p
+    pantograph-runtime-attribution`; and `git diff --check`.
+  - Remaining follow-up: workflow-service executable publish must serialize its
+    typed compact snapshot into this attribution boundary, and queue admission
+    must require attribution snapshot lookup before enqueue or scheduler graph
+    materialization.
 
 ### Traceability Links
 
