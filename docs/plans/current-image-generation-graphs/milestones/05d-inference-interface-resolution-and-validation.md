@@ -53,7 +53,7 @@ defining an image-only inference-node interface.
       defaults, and last known availability status/reasons. It must not contain
       Pumas package facts, executable paths, runtime load targets, worker
       settings, scheduler decisions, full runtime API schemas, or large media.
-- [ ] Replace inference-node use of `node.data.definition` as a semantic
+- [x] Replace inference-node use of `node.data.definition` as a semantic
       dynamic-port source. For inference nodes, `node.data.definition` may
       remain only as a generated projection from the authored snapshot/current
       descriptor during staged integration, and must not be accepted as an
@@ -290,3 +290,30 @@ defining an image-only inference-node interface.
     scheduler-owned agent-loop expansion must build on descriptor-backed
     materialized inference turns rather than restoring a composed static
     inference contract.
+- [x] 2026-05-25 inference `node.data.definition` fallback rejection slice
+      completed:
+  - Smallest useful vertical slice: updated workflow-service effective
+    definition resolution so `llm-inference` nodes reject
+    `node.data.definition` as an executable dynamic-port source, while
+    non-inference dynamic overlays remain supported. Contract validation now
+    emits a blocking `invalid_dynamic_definition` diagnostic for inference
+    nodes carrying legacy dynamic definitions.
+  - No-fallback/no-legacy confirmation: model-specific inference ports must
+    come from authored inference interface snapshots and backend descriptor
+    validation. The graph validator no longer accepts inference-specific
+    prompt/option/result ports from arbitrary saved JSON dynamic definitions.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    graph::effective_definition --lib`; `cargo test -p
+    pantograph-workflow-service
+    contract_diagnostics_reject_inference_dynamic_definition_fallbacks --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted graph source search;
+    and `git diff --check`. The check commands still report only the known
+    `set_active_run_execution_plan` dead-code warning from the active-plan
+    runtime handoff removal boundary.
+  - Remaining follow-up: project authored inference interface snapshots into
+    effective inference ports, then retire task/model-specific static
+    `llm-inference` ports without reusing `node.data.definition` as the
+    fallback source.

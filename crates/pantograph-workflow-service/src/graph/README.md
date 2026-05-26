@@ -168,9 +168,12 @@ for existing graph-edit callers.
   schedulable inference must resolve through the canonical Pumas model-ref
   and scheduler-owned runtime handoff boundaries.
 - Dynamic `node.data.definition` overlays may add or override ports for a
-  specific node instance through backend-owned effective contracts, but they
-  must not invalidate the registry node type or silently remove unrelated
-  static ports.
+  specific non-inference node instance through backend-owned effective
+  contracts, but they must not invalidate the registry node type or silently
+  remove unrelated static ports. Generic inference nodes must not use
+  `node.data.definition` as an executable interface source; their model-specific
+  ports must come from authored inference interface snapshots and backend
+  descriptor validation.
 - Dynamic `node.data.definition` overlays that carry `inference_payloads` must
   preserve them as structured task/input/result/role metadata through effective
   definition and contract projection. Those payloads remain backend-neutral

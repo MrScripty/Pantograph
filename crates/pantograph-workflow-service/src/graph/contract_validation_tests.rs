@@ -168,6 +168,45 @@ fn contract_diagnostics_classify_invalid_pumas_model_refs_without_live_lookup() 
 }
 
 #[test]
+fn contract_diagnostics_reject_inference_dynamic_definition_fallbacks() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![GraphNode {
+            id: "llm".to_string(),
+            node_type: "llm-inference".to_string(),
+            position: Position::default(),
+            data: serde_json::json!({
+                "definition": {
+                    "node_type": "llm-inference",
+                    "inputs": [
+                        {
+                            "id": "temperature",
+                            "label": "Temperature",
+                            "data_type": "number"
+                        }
+                    ]
+                }
+            }),
+        }],
+        edges: Vec::new(),
+        derived_graph: None,
+    };
+
+    let diagnostics = validate_workflow_graph_contract_diagnostics(&graph, &registry);
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].code,
+        WorkflowGraphDiagnosticCode::InvalidDynamicDefinition
+    );
+    assert_eq!(diagnostics[0].node_id.as_deref(), Some("llm"));
+    assert!(diagnostics[0].blocking_submission);
+    assert!(diagnostics[0]
+        .message
+        .contains("authored inference interface snapshot"));
+}
+
+#[test]
 fn contract_diagnostics_classify_missing_edge_endpoints_and_handles() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

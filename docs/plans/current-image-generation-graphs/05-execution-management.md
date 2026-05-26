@@ -11519,6 +11519,33 @@ Worker rules:
     Scheduler-owned agent-loop expansion remains later work and must consume
     descriptor-backed materialized inference turns instead of restoring the
     static composed mapping.
+- 2026-05-25 Milestone 5d inference `node.data.definition` fallback rejection
+  slice completed:
+  - Smallest useful vertical slice: changed workflow-service effective
+    definition resolution so `llm-inference` nodes reject
+    `node.data.definition` as an executable dynamic-port source, while
+    non-inference dynamic overlays remain supported. Graph contract validation
+    now reports a blocking `invalid_dynamic_definition` diagnostic when an
+    inference node carries that legacy dynamic definition shape.
+  - No-fallback/no-legacy confirmation: inference-specific ports can no longer
+    be accepted from arbitrary saved graph JSON in `node.data.definition`.
+    Model-specific inference ports must come from authored inference interface
+    snapshots and backend descriptor validation in the next slices.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    graph::effective_definition --lib`; `cargo test -p
+    pantograph-workflow-service
+    contract_diagnostics_reject_inference_dynamic_definition_fallbacks --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted graph source search;
+    and `git diff --check`. The workflow-service check commands still report
+    only the known `set_active_run_execution_plan` dead-code warning from the
+    active-plan runtime handoff removal boundary.
+  - Remaining follow-up: project authored inference interface snapshots into
+    effective inference ports, then remove graph-visible task/model-specific
+    static `llm-inference` ports without restoring `node.data.definition` as a
+    fallback source.
 
 ### Traceability Links
 

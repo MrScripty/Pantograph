@@ -8,6 +8,12 @@ use pantograph_node_contracts::{
 use super::registry::{convert_port, NodeRegistry};
 use super::types::{GraphNode, NodeDefinition, PortDefinition};
 
+const GENERIC_INFERENCE_NODE_TYPE: &str = "llm-inference";
+const INFERENCE_DYNAMIC_DEFINITION_REJECTION: &str = concat!(
+    "llm-inference node.data.definition is not an executable interface source; ",
+    "inference ports must come from the authored inference interface snapshot"
+);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EffectiveDefinitionError {
     UnknownNodeType(String),
@@ -73,6 +79,12 @@ fn dynamic_contract_ports(
     let Some(dynamic_definition) = node.data.get("definition") else {
         return Ok(overlay);
     };
+
+    if node.node_type == GENERIC_INFERENCE_NODE_TYPE {
+        return Err(EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: INFERENCE_DYNAMIC_DEFINITION_REJECTION.to_string(),
+        });
+    }
 
     if let Some(dynamic_node_type) = dynamic_definition.get("node_type").and_then(|v| v.as_str()) {
         if dynamic_node_type != node.node_type {
@@ -168,12 +180,12 @@ mod tests {
     fn effective_node_definition_merges_dynamic_ports_without_dropping_static_ports() {
         let registry = NodeRegistry::new();
         let node = GraphNode {
-            id: "llm".to_string(),
-            node_type: "llm-inference".to_string(),
+            id: "text".to_string(),
+            node_type: "text-input".to_string(),
             position: Position::default(),
             data: json!({
                 "definition": {
-                    "node_type": "llm-inference",
+                    "node_type": "text-input",
                     "inputs": [
                         {
                             "id": "temperature",
@@ -190,8 +202,8 @@ mod tests {
         let definition = effective_node_definition(&node, &registry).expect("definition");
 
         assert!(
-            definition.inputs.iter().any(|port| port.id == "prompt"),
-            "static prompt input must remain available"
+            definition.inputs.iter().any(|port| port.id == "text"),
+            "static text input must remain available"
         );
         assert_eq!(
             definition
@@ -207,12 +219,12 @@ mod tests {
     fn effective_node_definition_preserves_dynamic_inference_payload_contracts() {
         let registry = NodeRegistry::new();
         let node = GraphNode {
-            id: "llm".to_string(),
-            node_type: "llm-inference".to_string(),
+            id: "text".to_string(),
+            node_type: "text-output".to_string(),
             position: Position::default(),
             data: json!({
                 "definition": {
-                    "node_type": "llm-inference",
+                    "node_type": "text-output",
                     "outputs": [
                         {
                             "id": "rerank_debug_results",
@@ -278,16 +290,16 @@ mod tests {
     fn effective_node_contract_reports_mismatched_dynamic_definition() {
         let registry = NodeRegistry::new();
         let node = GraphNode {
-            id: "llm".to_string(),
-            node_type: "llm-inference".to_string(),
+            id: "text".to_string(),
+            node_type: "text-input".to_string(),
             position: Position::default(),
             data: json!({
                 "definition": {
-                    "node_type": "text-input",
+                    "node_type": "text-output",
                     "inputs": [
                         {
-                            "id": "temperature",
-                            "label": "Temperature",
+                            "id": "foreign_dynamic_input",
+                            "label": "Foreign Dynamic Input",
                             "data_type": "number"
                         }
                     ]
@@ -301,7 +313,7 @@ mod tests {
             effective
                 .inputs
                 .iter()
-                .all(|port| port.base.id.as_str() != "temperature"),
+                .all(|port| port.base.id.as_str() != "foreign_dynamic_input"),
             "mismatched dynamic definition must not add ports"
         );
         assert_eq!(
@@ -314,12 +326,12 @@ mod tests {
     fn effective_node_contract_records_dynamic_expansion_reason() {
         let registry = NodeRegistry::new();
         let node = GraphNode {
-            id: "llm".to_string(),
-            node_type: "llm-inference".to_string(),
+            id: "text".to_string(),
+            node_type: "text-input".to_string(),
             position: Position::default(),
             data: json!({
                 "definition": {
-                    "node_type": "llm-inference",
+                    "node_type": "text-input",
                     "inputs": [
                         {
                             "id": "temperature",
@@ -344,6 +356,38 @@ mod tests {
                 .expect("dynamic port")
                 .expansion_reasons,
             vec![ContractExpansionReason::DynamicConfiguration]
+        );
+    }
+
+    #[test]
+    fn effective_node_contract_rejects_inference_node_data_definition() {
+        let registry = NodeRegistry::new();
+        let node = GraphNode {
+            id: "llm".to_string(),
+            node_type: "llm-inference".to_string(),
+            position: Position::default(),
+            data: json!({
+                "definition": {
+                    "node_type": "llm-inference",
+                    "inputs": [
+                        {
+                            "id": "temperature",
+                            "label": "Temperature",
+                            "data_type": "number"
+                        }
+                    ]
+                }
+            }),
+        };
+
+        let error = effective_node_contract(&node, &registry)
+            .expect_err("inference node definitions must not be semantic fallbacks");
+
+        assert_eq!(
+            error,
+            EffectiveDefinitionError::InvalidDynamicDefinition {
+                message: INFERENCE_DYNAMIC_DEFINITION_REJECTION.to_string(),
+            }
         );
     }
 }
