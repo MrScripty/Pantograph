@@ -29,8 +29,8 @@ facts, executable paths, scheduler choices, or frontend-only metadata.
   scheduler decisions, full runtime API schemas, or media payloads.
 - Scheduler/runtime/device fields express constraints or diagnostics only.
   Scheduler-selected execution remains outside this crate.
-- Dependency-environment action intents carry graph-session identity, client
-  graph revision, optional validation-session identity, target node id, and
+- Dependency-environment action intents carry graph-session identity, graph
+  revision, optional validation-session identity, target node id, and
   resolve/check/install action only. They must not carry model paths, Pumas
   facts, platform context, identity keys, dependency-planning requests, or
   dependency-environment requests.

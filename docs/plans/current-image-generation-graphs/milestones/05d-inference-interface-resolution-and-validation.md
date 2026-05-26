@@ -122,7 +122,7 @@ defining an image-only inference-node interface.
       frontend/action boundary. Dependency-environment actions must consume the
       same backend descriptor/validation summary used by graph validation,
       submit gating, and scheduler admission. The frontend sends action intent
-      only, such as workflow/session node id, client graph revision, validation
+      only, such as workflow/session node id, graph revision, validation
       session id when available, and the requested resolve/check/install action.
       It must not build `DependencyPlanningRequest`,
       `DependencyEnvironmentRequest`, identity keys, platform context, artifact
@@ -193,7 +193,7 @@ defining an image-only inference-node interface.
         `ValidatedDependencyEnvironmentActionIntent`, and
         `WorkflowGraphSessionId`. The intent reuses the canonical
         `DependencyEnvironmentAction` enum and carries only graph session id,
-        nonzero client graph revision, optional validation session id, target
+        graph revision, optional validation session id, target
         node id, and action. Tests prove it rejects retired `run` actions and
         unknown legacy/backend-owned fields such as paths, model refs, and
         platform context. Remaining implementation work is the workflow-service

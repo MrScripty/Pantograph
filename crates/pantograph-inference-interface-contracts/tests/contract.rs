@@ -125,7 +125,7 @@ fn dependency_environment_action_intent_carries_only_graph_identity_and_action()
     let intent: DependencyEnvironmentActionIntent = serde_json::from_value(serde_json::json!({
         "contract_version": 1,
         "graph_session_id": "graph-session-1",
-        "client_graph_revision": 42,
+        "graph_revision": "77f4c49c8a1b68d2",
         "validation_session_id": "validation-session-1",
         "target_node_id": "dependency-env-node-1",
         "action": "resolve"
@@ -139,7 +139,10 @@ fn dependency_environment_action_intent_carries_only_graph_identity_and_action()
         validated.as_intent().action,
         DependencyEnvironmentAction::Resolve
     );
-    assert_eq!(validated.as_intent().client_graph_revision, 42);
+    assert_eq!(
+        validated.as_intent().graph_revision.as_str(),
+        "77f4c49c8a1b68d2"
+    );
 
     let encoded =
         serde_json::to_value(validated.as_intent()).expect("intent should encode as json");
@@ -154,7 +157,7 @@ fn dependency_environment_action_intent_rejects_legacy_or_backend_owned_fields()
     let error = serde_json::from_value::<DependencyEnvironmentActionIntent>(serde_json::json!({
         "contract_version": 1,
         "graph_session_id": "graph-session-1",
-        "client_graph_revision": 42,
+        "graph_revision": "77f4c49c8a1b68d2",
         "target_node_id": "dependency-env-node-1",
         "action": "check",
         "model_path": "/models/sd15",
@@ -170,33 +173,27 @@ fn dependency_environment_action_intent_rejects_legacy_or_backend_owned_fields()
 }
 
 #[test]
-fn dependency_environment_action_intent_rejects_zero_revision_and_run_action() {
-    let revision_error = DependencyEnvironmentActionIntent {
-        contract_version: 1,
-        graph_session_id: "graph-session-1".parse().expect("valid graph session id"),
-        client_graph_revision: 0,
-        validation_session_id: None,
-        target_node_id: "dependency-env-node-1"
-            .parse()
-            .expect("valid target node id"),
-        action: DependencyEnvironmentAction::Install,
-    }
-    .validate()
-    .expect_err("zero graph revisions must fail closed");
+fn dependency_environment_action_intent_rejects_blank_revision_and_run_action() {
+    let revision_error =
+        serde_json::from_value::<DependencyEnvironmentActionIntent>(serde_json::json!({
+            "contract_version": 1,
+            "graph_session_id": "graph-session-1",
+            "graph_revision": " ",
+            "target_node_id": "dependency-env-node-1",
+            "action": "install"
+        }))
+        .expect_err("blank graph revisions must fail closed");
 
-    assert_eq!(
-        revision_error,
-        InferenceInterfaceContractError::InvalidField {
-            field: "dependency_environment_action_intent.client_graph_revision",
-            reason: "revision must be non-zero"
-        }
+    assert!(
+        revision_error.to_string().contains("graph_revision"),
+        "unexpected serde error: {revision_error}"
     );
 
     let action_error =
         serde_json::from_value::<DependencyEnvironmentActionIntent>(serde_json::json!({
             "contract_version": 1,
             "graph_session_id": "graph-session-1",
-            "client_graph_revision": 42,
+            "graph_revision": "77f4c49c8a1b68d2",
             "target_node_id": "dependency-env-node-1",
             "action": "run"
         }))

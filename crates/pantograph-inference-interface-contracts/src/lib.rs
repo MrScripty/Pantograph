@@ -131,6 +131,7 @@ validated_id!(InferenceInterfaceFingerprint, "descriptor_fingerprint");
 validated_id!(InferencePortId, "port_id");
 validated_id!(InferenceOptionId, "option_id");
 validated_id!(WorkflowGraphSessionId, "graph_session_id");
+validated_id!(WorkflowGraphRevision, "graph_revision");
 validated_id!(WorkflowNodeId, "node_id");
 validated_id!(DraftGraphValidationSessionId, "validation_session_id");
 
@@ -742,7 +743,7 @@ pub struct DependencyEnvironmentActionIntent {
     #[serde(default = "default_contract_version")]
     pub contract_version: u32,
     pub graph_session_id: WorkflowGraphSessionId,
-    pub client_graph_revision: u64,
+    pub graph_revision: WorkflowGraphRevision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validation_session_id: Option<DraftGraphValidationSessionId>,
     pub target_node_id: WorkflowNodeId,
@@ -751,11 +752,7 @@ pub struct DependencyEnvironmentActionIntent {
 
 impl DependencyEnvironmentActionIntent {
     pub fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
-        validate_contract_version(self.contract_version)?;
-        validate_revision(
-            "dependency_environment_action_intent.client_graph_revision",
-            self.client_graph_revision,
-        )
+        validate_contract_version(self.contract_version)
     }
 }
 
@@ -945,19 +942,6 @@ fn validate_collection_len(
             field,
             actual_len,
             max_len,
-        });
-    }
-    Ok(())
-}
-
-fn validate_revision(
-    field: &'static str,
-    value: u64,
-) -> Result<(), InferenceInterfaceContractError> {
-    if value == 0 {
-        return Err(InferenceInterfaceContractError::InvalidField {
-            field,
-            reason: "revision must be non-zero",
         });
     }
     Ok(())

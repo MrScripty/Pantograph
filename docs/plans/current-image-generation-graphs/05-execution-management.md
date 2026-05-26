@@ -12007,7 +12007,7 @@ Worker rules:
   - Smallest useful vertical slice: added the shared
     `DependencyEnvironmentActionIntent` contract to
     `pantograph-inference-interface-contracts` so graph editor callers can send
-    only graph session identity, nonzero client graph revision, optional
+    only graph session identity, graph revision, optional
     validation session id, target node id, and typed resolve/check/install
     action.
   - No-fallback/no-legacy confirmation: the intent reuses the canonical
