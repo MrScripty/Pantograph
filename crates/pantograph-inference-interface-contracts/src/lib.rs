@@ -12,7 +12,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-pub use pantograph_dependency_planning::{DeviceIntentId, PumasModelRef, RuntimeIntentId};
+pub use pantograph_dependency_planning::{
+    DependencyEnvironmentAction, DeviceIntentId, PumasModelRef, RuntimeIntentId,
+};
 
 pub const INFERENCE_INTERFACE_CONTRACT_VERSION: u32 = 1;
 
@@ -128,6 +130,7 @@ validated_id!(InferenceTaskKind, "task_kind");
 validated_id!(InferenceInterfaceFingerprint, "descriptor_fingerprint");
 validated_id!(InferencePortId, "port_id");
 validated_id!(InferenceOptionId, "option_id");
+validated_id!(WorkflowGraphSessionId, "graph_session_id");
 validated_id!(WorkflowNodeId, "node_id");
 validated_id!(DraftGraphValidationSessionId, "validation_session_id");
 
@@ -735,6 +738,29 @@ pub struct InferenceSelectedOption {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct DependencyEnvironmentActionIntent {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u32,
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub client_graph_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+    pub target_node_id: WorkflowNodeId,
+    pub action: DependencyEnvironmentAction,
+}
+
+impl DependencyEnvironmentActionIntent {
+    pub fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
+        validate_contract_version(self.contract_version)?;
+        validate_revision(
+            "dependency_environment_action_intent.client_graph_revision",
+            self.client_graph_revision,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DraftGraphValidationSummary {
     pub status: DraftGraphValidationStatus,
     pub executable: bool,
@@ -858,6 +884,29 @@ impl TryFrom<DraftGraphValidationSummary> for ValidatedDraftGraphValidationSumma
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatedDependencyEnvironmentActionIntent(DependencyEnvironmentActionIntent);
+
+impl ValidatedDependencyEnvironmentActionIntent {
+    #[must_use]
+    pub fn as_intent(&self) -> &DependencyEnvironmentActionIntent {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> DependencyEnvironmentActionIntent {
+        self.0
+    }
+}
+
+impl TryFrom<DependencyEnvironmentActionIntent> for ValidatedDependencyEnvironmentActionIntent {
+    type Error = InferenceInterfaceContractError;
+
+    fn try_from(value: DependencyEnvironmentActionIntent) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
 fn default_contract_version() -> u32 {
     INFERENCE_INTERFACE_CONTRACT_VERSION
 }
@@ -896,6 +945,19 @@ fn validate_collection_len(
             field,
             actual_len,
             max_len,
+        });
+    }
+    Ok(())
+}
+
+fn validate_revision(
+    field: &'static str,
+    value: u64,
+) -> Result<(), InferenceInterfaceContractError> {
+    if value == 0 {
+        return Err(InferenceInterfaceContractError::InvalidField {
+            field,
+            reason: "revision must be non-zero",
         });
     }
     Ok(())

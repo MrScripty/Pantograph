@@ -12002,6 +12002,29 @@ Worker rules:
     builder that returns typed diagnostics when the descriptor validation
     summary is not current, before wiring the frontend action buttons to that
     intent.
+- 2026-05-26 Milestone 5d dependency-environment action intent contract
+  sub-slice completed:
+  - Smallest useful vertical slice: added the shared
+    `DependencyEnvironmentActionIntent` contract to
+    `pantograph-inference-interface-contracts` so graph editor callers can send
+    only graph session identity, nonzero client graph revision, optional
+    validation session id, target node id, and typed resolve/check/install
+    action.
+  - No-fallback/no-legacy confirmation: the intent reuses the canonical
+    `DependencyEnvironmentAction` enum and does not carry Pumas facts, model
+    paths, platform context, identity keys, `DependencyPlanningRequest`, or
+    `DependencyEnvironmentRequest`. The retired `run` action does not decode.
+  - Focused tests added: contract tests validate round-trip behavior, rejection
+    of backend-owned/path-shaped fields, rejection of zero graph revisions, and
+    rejection of the retired `run` action.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-inference-interface-contracts
+    dependency_environment_action_intent`; `cargo test -p
+    pantograph-inference-interface-contracts`.
+  - Remaining follow-up: workflow-service still needs the descriptor-backed
+    builder that checks the current validation summary and derives the
+    canonical `DependencyEnvironmentRequest` before any frontend action buttons
+    are rewired to this intent.
 
 ### Traceability Links
 

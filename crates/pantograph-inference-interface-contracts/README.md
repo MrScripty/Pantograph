@@ -9,7 +9,8 @@ facts, executable paths, scheduler choices, or frontend-only metadata.
 ## Dependencies
 
 - Depends on `pantograph-dependency-planning` only for stable path-free model
-  references and scheduler intent identifiers.
+  references, scheduler intent identifiers, and the typed dependency-environment
+  action enum.
 - Does not import workflow-service, scheduler, runtime-host, Pumas lookup or
   lifecycle code, inference execution, worker dispatch, or frontend rendering
   policy.
@@ -28,6 +29,11 @@ facts, executable paths, scheduler choices, or frontend-only metadata.
   scheduler decisions, full runtime API schemas, or media payloads.
 - Scheduler/runtime/device fields express constraints or diagnostics only.
   Scheduler-selected execution remains outside this crate.
+- Dependency-environment action intents carry graph-session identity, client
+  graph revision, optional validation-session identity, target node id, and
+  resolve/check/install action only. They must not carry model paths, Pumas
+  facts, platform context, identity keys, dependency-planning requests, or
+  dependency-environment requests.
 
 ## API Consumer Contract
 
@@ -36,6 +42,11 @@ Consumers may validate incoming DTOs with the provided `Validated*` wrappers or
 Frontend code should use the coarse availability and validation summary fields
 for UI state and should display diagnostics as supporting detail. It must not
 infer enqueue permission from raw diagnostic counts.
+
+Dependency-environment UI callers send `DependencyEnvironmentActionIntent`.
+Workflow-service validates the intent against the current graph revision and
+validation session, then derives the canonical dependency-environment request
+from backend-owned descriptor and dependency-planning state.
 
 ## Structured Producer Contract
 

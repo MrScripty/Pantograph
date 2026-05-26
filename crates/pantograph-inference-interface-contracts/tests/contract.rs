@@ -1,9 +1,11 @@
 use pantograph_inference_interface_contracts::{
-    AuthoredInferenceInterfaceSnapshot, DraftGraphEnqueueDisabledReason,
-    DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailabilityStatus,
-    InferenceInterfaceContractError, InferenceInterfaceDescriptor, InferenceInterfaceDriftReport,
-    InferencePortOptions, InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
-    ValidatedDraftGraphValidationSummary, ValidatedInferenceInterfaceDescriptor,
+    AuthoredInferenceInterfaceSnapshot, DependencyEnvironmentAction,
+    DependencyEnvironmentActionIntent, DraftGraphEnqueueDisabledReason, DraftGraphValidationStatus,
+    DraftGraphValidationSummary, InferenceAvailabilityStatus, InferenceInterfaceContractError,
+    InferenceInterfaceDescriptor, InferenceInterfaceDriftReport, InferencePortOptions,
+    InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
+    ValidatedDependencyEnvironmentActionIntent, ValidatedDraftGraphValidationSummary,
+    ValidatedInferenceInterfaceDescriptor,
 };
 
 const DESCRIPTOR: &str = include_str!("fixtures/descriptor_image_generation_ready.json");
@@ -115,5 +117,93 @@ fn executable_summary_requires_executable_status() {
             field: "validation_summary.executable",
             reason: "only executable summaries may set executable true"
         }
+    );
+}
+
+#[test]
+fn dependency_environment_action_intent_carries_only_graph_identity_and_action() {
+    let intent: DependencyEnvironmentActionIntent = serde_json::from_value(serde_json::json!({
+        "contract_version": 1,
+        "graph_session_id": "graph-session-1",
+        "client_graph_revision": 42,
+        "validation_session_id": "validation-session-1",
+        "target_node_id": "dependency-env-node-1",
+        "action": "resolve"
+    }))
+    .expect("intent should decode");
+
+    let validated = ValidatedDependencyEnvironmentActionIntent::try_from(intent)
+        .expect("intent should validate");
+
+    assert_eq!(
+        validated.as_intent().action,
+        DependencyEnvironmentAction::Resolve
+    );
+    assert_eq!(validated.as_intent().client_graph_revision, 42);
+
+    let encoded =
+        serde_json::to_value(validated.as_intent()).expect("intent should encode as json");
+    assert!(encoded.get("pumas_model_ref").is_none());
+    assert!(encoded.get("dependency_environment_request").is_none());
+    assert!(encoded.get("dependency_planning_request").is_none());
+    assert!(encoded.get("model_path").is_none());
+}
+
+#[test]
+fn dependency_environment_action_intent_rejects_legacy_or_backend_owned_fields() {
+    let error = serde_json::from_value::<DependencyEnvironmentActionIntent>(serde_json::json!({
+        "contract_version": 1,
+        "graph_session_id": "graph-session-1",
+        "client_graph_revision": 42,
+        "target_node_id": "dependency-env-node-1",
+        "action": "check",
+        "model_path": "/models/sd15",
+        "pumas_model_ref": {"model_id": "model-1"},
+        "platform_context": {"os": "linux"}
+    }))
+    .expect_err("intent must deny frontend-built planning or path fields");
+
+    assert!(
+        error.to_string().contains("unknown field"),
+        "unexpected serde error: {error}"
+    );
+}
+
+#[test]
+fn dependency_environment_action_intent_rejects_zero_revision_and_run_action() {
+    let revision_error = DependencyEnvironmentActionIntent {
+        contract_version: 1,
+        graph_session_id: "graph-session-1".parse().expect("valid graph session id"),
+        client_graph_revision: 0,
+        validation_session_id: None,
+        target_node_id: "dependency-env-node-1"
+            .parse()
+            .expect("valid target node id"),
+        action: DependencyEnvironmentAction::Install,
+    }
+    .validate()
+    .expect_err("zero graph revisions must fail closed");
+
+    assert_eq!(
+        revision_error,
+        InferenceInterfaceContractError::InvalidField {
+            field: "dependency_environment_action_intent.client_graph_revision",
+            reason: "revision must be non-zero"
+        }
+    );
+
+    let action_error =
+        serde_json::from_value::<DependencyEnvironmentActionIntent>(serde_json::json!({
+            "contract_version": 1,
+            "graph_session_id": "graph-session-1",
+            "client_graph_revision": 42,
+            "target_node_id": "dependency-env-node-1",
+            "action": "run"
+        }))
+        .expect_err("retired run actions must not decode");
+
+    assert!(
+        action_error.to_string().contains("unknown variant"),
+        "unexpected serde error: {action_error}"
     );
 }

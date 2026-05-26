@@ -187,6 +187,19 @@ defining an image-only inference-node interface.
       current validated dependency planning result. `Check` and `Install`
       actions must fail closed with missing-requirements diagnostics until a
       current requirements id exists.
+      - Contract sub-slice completed on 2026-05-26:
+        `pantograph-inference-interface-contracts` now owns
+        `DependencyEnvironmentActionIntent`,
+        `ValidatedDependencyEnvironmentActionIntent`, and
+        `WorkflowGraphSessionId`. The intent reuses the canonical
+        `DependencyEnvironmentAction` enum and carries only graph session id,
+        nonzero client graph revision, optional validation session id, target
+        node id, and action. Tests prove it rejects retired `run` actions and
+        unknown legacy/backend-owned fields such as paths, model refs, and
+        platform context. Remaining implementation work is the workflow-service
+        builder that validates the current descriptor summary and derives
+        `DependencyEnvironmentRequest` without moving policy into Tauri or the
+        frontend.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the
