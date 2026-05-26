@@ -12793,6 +12793,46 @@ Worker rules:
     dependency-environment data flow, do not let frontend/Tauri infer subjects
     from `modelPath`/`model_path`, package facts, platform context, or arbitrary
     edge guesses, and do not make node-engine execute dependency actions.
+- 2026-05-26 Milestone 5d dependency-environment sidecar blast-radius review:
+  - Findings accepted: the sidecar association was still underspecified because
+    `GraphEdge` has no edge kind and canonical `llm-inference` had no
+    dependency-environment association port; the dependency-environment
+    descriptor still exposed model/task/backend/platform authority fields; the
+    frontend helper still inferred dependency subjects from `model_path`,
+    backend keys, platform context, and package-shaped data; workflow-service
+    still only checked target existence before consulting inference validation
+    state keyed by inference node id; the shared diagnostics did not distinguish
+    missing, duplicate, wrong-handle/type, stale, unavailable, or invalid
+    sidecar associations; and embedded runtime still has graph-input
+    `environment_ref` dependency gates.
+  - Plan resolution: use an explicit association/control port pair in this
+    milestone instead of introducing a graph edge-kind system. The
+    `dependency-environment` descriptor exposes one association output and
+    canonical `llm-inference` exposes one optional association input with
+    matching port ids. Workflow-service interprets only that typed edge as the
+    dependency sidecar association; node-engine must not treat it as runtime
+    data.
+  - Descriptor cleanup: remove graph-facing dependency-environment ports that
+    carry model/task/backend/platform authority (`pumas_model_ref`, `model_id`,
+    `model_type`, `task_type_primary`, `backend_key`, `platform_context`, and
+    direct `dependency_requirements` input). Keep only selected binding ids,
+    mode, manual override patches, backend-issued status/environment reference,
+    and activity/display state. Persisted display snapshots are stale unless
+    matched to current graph revision, validation session, descriptor
+    fingerprint, and dependency planning identity.
+  - Resolver/API cleanup: add dedicated sidecar diagnostics before implementing
+    the resolver; add a focused workflow-service dependency action subject
+    resolver module instead of expanding `graph/session.rs`; and derive
+    `DependencyEnvironmentRequest` only after resolving exactly one associated
+    inference node, joining current validation state, and confirming current
+    dependency requirements identity.
+  - Frontend/runtime cleanup: retire `dependencyEnvironmentSources.ts`
+    path-era subject inference and tests that treat `modelPath`/`model_path`,
+    backend keys, package facts, or platform context as successful dependency
+    action inputs. Canonical dependency readiness flows through dependency
+    planning preflight/readiness proof into scheduler dispatch and runtime
+    handoff; embedded-runtime/node-engine `environment_ref` input gates are
+    retirement targets once scheduler readiness proof is wired.
 
 ### Traceability Links
 

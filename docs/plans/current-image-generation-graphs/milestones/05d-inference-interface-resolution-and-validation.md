@@ -173,6 +173,45 @@ defining an image-only inference-node interface.
       validation record, and return typed diagnostics for zero, duplicate,
       stale, unavailable, invalid, or ambiguous subjects. The frontend and
       Tauri layers continue to send action intent only.
+      Blast-radius review resolution: make the association representation
+      explicit before implementing the resolver. Use a typed association/control
+      port pair instead of adding an edge-kind system now: the
+      `dependency-environment` descriptor exposes one association output and
+      the canonical `llm-inference` bootstrap descriptor exposes one optional
+      association input with matching port ids. Workflow-service interprets
+      only that edge as the sidecar association; node-engine must not treat it
+      as runtime data, and scheduler admission must consume the resulting
+      dependency readiness proof rather than raw graph inputs. The first
+      resolver slice must reject missing association edges, duplicate
+      associations, wrong target/source node types, wrong handles, stale
+      validation sessions, and unavailable/invalid associated inference
+      descriptors with dedicated typed diagnostics.
+      Descriptor cleanup resolution: rewrite the graph-facing
+      `dependency-environment` descriptor to remove model/task/backend/platform
+      authority fields (`pumas_model_ref`, `model_id`, `model_type`,
+      `task_type_primary`, `backend_key`, `platform_context`, and direct
+      `dependency_requirements` input). Keep only sidecar-owned user choices
+      and display state: selected binding ids, mode, manual override patches,
+      backend-issued dependency status, backend-issued environment reference,
+      and action/activity presentation state. If a backend-issued
+      requirements/status snapshot is persisted for display/history, it must be
+      treated as stale unless it matches the current graph revision,
+      validation session, descriptor fingerprint, and dependency planning
+      identity; workflow-service must never use it as request authority.
+      Frontend cleanup resolution: retire `dependencyEnvironmentSources.ts`
+      path-era subject inference and tests that prove successful
+      `modelPath`/`model_path`, `backend_key`, package-fact, or
+      `platform_context` dependency action flows. Frontend dependency UI may
+      display backend validation/action state and maintain transient form
+      inputs, but it must not synthesize dependency subjects, requirements, or
+      platform context from graph edges.
+      Scheduler/runtime boundary resolution: canonical dependency readiness
+      flows through dependency planning preflight/readiness proof into scheduler
+      dispatch and runtime handoff. Retire node-engine/embedded-runtime
+      `environment_ref` input gates as dependency-admission authority once the
+      scheduler proof path is wired. Runtime executors may receive the selected
+      environment identity only from scheduler handoff, not from graph-authored
+      dependency-environment node output data.
       Standards iteration update: the next implementation slice must not add
       more validation-state logic to `graph/session.rs` because that module is
       already over the decomposition review threshold. Create a focused
@@ -342,6 +381,27 @@ defining an image-only inference-node interface.
       from canonical typed structure, return typed diagnostics instead of
       falling back to path-shaped frontend state, package facts, or arbitrary
       edge guesses.
+      Implementation sequence for the action-intent slice:
+      1. Extend shared diagnostics with sidecar-specific codes for wrong target
+         type, missing association, duplicate association, invalid association
+         handle/type, stale associated inference descriptor, and unavailable or
+         invalid associated inference descriptor.
+      2. Add the explicit association/control port pair to
+         `dependency-environment` and `llm-inference` descriptors, with tests
+         proving the ports are association-only and retired model/path/backend/
+         platform ports are absent from dependency-environment.
+      3. Add a focused workflow-service dependency action subject resolver
+         module that snapshots the graph under lock, releases the lock, proves
+         the single associated inference node from the typed association edge,
+         then joins to the current validation-state owner.
+      4. Derive `DependencyEnvironmentRequest` only after subject resolution,
+         current executable descriptor validation, and current dependency
+         planning requirements identity are available. `Resolve` may create the
+         current requirements identity; `Check` and `Install` must fail closed
+         until it exists.
+      5. Remove frontend path-era dependency subject inference and embedded
+         runtime/node-engine `environment_ref` gates as active dependency
+         admission paths once scheduler readiness proof is wired.
       - Contract sub-slice completed on 2026-05-26:
         `pantograph-inference-interface-contracts` now owns
         `DependencyEnvironmentActionIntent`,

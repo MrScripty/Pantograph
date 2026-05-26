@@ -671,14 +671,32 @@ falling back to previously rendered ports.
    a dependency-environment node associated with exactly one inference node; it
    is not connected to inference result outputs, does not consume generated
    media/text data, and is not an ordinary node-engine execution step.
-   Workflow-service must own a typed dependency action subject resolver that
-   validates the target node type, proves the single associated inference node
-   from canonical typed graph structure, joins that inference node to current
-   descriptor validation state, and returns typed diagnostics for missing,
-   duplicate, stale, unavailable, invalid, or ambiguous subjects. Frontend and
-   Tauri code continue to send only graph action intent and must not infer
-   subjects from `modelPath`/`model_path`, package facts, platform context, or
-   arbitrary edge guesses.
+   Use a typed association/control port pair instead of introducing graph edge
+   kinds in this milestone: the dependency-environment descriptor exposes one
+   association output and the canonical `llm-inference` bootstrap descriptor
+   exposes one optional association input with matching port ids. Workflow-
+   service must own a typed dependency action subject resolver that validates
+   the target node type, proves the single associated inference node from that
+   typed association edge, joins that inference node to current descriptor
+   validation state, and returns typed diagnostics for missing, duplicate,
+   wrong-handle/type, stale, unavailable, invalid, or ambiguous subjects.
+   Frontend and Tauri code continue to send only graph action intent and must
+   not infer subjects from `modelPath`/`model_path`, package facts, platform
+   context, or arbitrary edge guesses.
+3c. Clean up dependency-environment ownership before request derivation. Remove
+   graph-facing dependency-environment ports that carry model/task/backend/
+   platform authority (`pumas_model_ref`, `model_id`, `model_type`,
+   `task_type_primary`, `backend_key`, `platform_context`, and direct
+   `dependency_requirements` input). Keep only sidecar-owned user choices and
+   display state: selected binding ids, mode, manual override patches,
+   backend-issued dependency status, backend-issued environment reference, and
+   action/activity presentation state. Retire frontend path-era subject
+   inference and tests that treat `modelPath`/`model_path`, package facts,
+   backend keys, or platform context as successful dependency action inputs.
+   Canonical dependency readiness flows through dependency planning
+   preflight/readiness proof into scheduler dispatch and runtime handoff; once
+   that path is wired, retire node-engine/embedded-runtime `environment_ref`
+   input gates as dependency-admission authority.
 4. Tighten request extraction before it feeds live validation. This is a hard
    prerequisite for the synchronous validation publisher and the later
    event-driven path: use one
