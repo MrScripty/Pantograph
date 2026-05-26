@@ -7,6 +7,7 @@ mod effective_definition;
 mod effective_definition_tests;
 mod executable_topology;
 mod group_mutation;
+mod inference_interface_patch;
 mod inspection;
 mod memory_impact;
 mod persistence;
@@ -44,6 +45,11 @@ pub use executable_topology::{
     workflow_executable_topology, workflow_executable_topology_with_node_versions,
     workflow_execution_fingerprint, workflow_execution_fingerprint_for_topology,
     WorkflowExecutableTopology, WorkflowExecutableTopologyEdge, WorkflowExecutableTopologyNode,
+};
+pub use inference_interface_patch::{
+    GraphPatchProposalId, InferenceInterfaceAffectedEdge, InferenceInterfaceEdgeRemovalReason,
+    InferenceInterfaceGraphPatchError, InferenceInterfaceGraphPatchOperation,
+    InferenceInterfaceLiteralRemovalReason, InferenceInterfaceUpdateProposal, WorkflowEdgeId,
 };
 pub use inspection::{
     inspect_workflow_graph, inspect_workflow_graph_with_run_context,

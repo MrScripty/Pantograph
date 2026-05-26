@@ -27,6 +27,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
 | `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
 | `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
+| `inference_interface_patch.rs` | Workflow-service-owned update proposal and typed graph patch-operation contracts for applying current inference descriptors to authored node snapshots. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -181,6 +182,14 @@ for existing graph-edit callers.
   blocking effective-definition diagnostics; unknown future snapshot value
   categories must be rejected until the graph contract mapping is extended
   deliberately.
+- Inference-interface update proposals are graph-service contracts, not shared
+  descriptor contracts. They may reference shared drift reports and authored
+  snapshots, but typed operations that replace snapshots, remove invalid
+  edges, or clear invalid literals live in this module because graph mutation
+  ownership belongs to workflow-service.
+- Destructive inference-interface patch operations must mark the proposal
+  destructive and require explicit confirmation before a later apply endpoint
+  mutates graph state.
 - Dynamic `node.data.definition` overlays that carry `inference_payloads` must
   preserve them as structured task/input/result/role metadata through effective
   definition and contract projection. Those payloads remain backend-neutral
@@ -204,7 +213,8 @@ for existing graph-edit callers.
   can preserve old backend-specific model edges without diagnostic removal.
 
 ## Dependencies
-**Internal:** `node-engine`, `workflow-nodes`, workflow service error types.
+**Internal:** `node-engine`, `workflow-nodes`,
+`pantograph-inference-interface-contracts`, workflow service error types.
 
 **External:** `serde`, `tokio`, `uuid`, `chrono`.
 

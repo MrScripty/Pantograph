@@ -11600,6 +11600,27 @@ Worker rules:
   - Remaining follow-up: add the workflow-service descriptor resolver boundary
     and descriptor-backed typed options/validation summary before frontend
     submit/admission or runtime-host materialization slices.
+- 2026-05-25 Milestone 5d inference-interface graph patch DTO slice
+  completed:
+  - Smallest useful vertical slice: added workflow-service-owned update
+    proposal and typed graph patch operation DTOs for authored inference
+    snapshot replacement, invalid edge removal, and invalid literal clearing.
+    Shared drift reports remain in `pantograph-inference-interface-contracts`;
+    graph mutation contracts live in workflow-service.
+  - No-fallback/no-legacy confirmation: the slice defines proposal contracts
+    only and does not restore `node.data.definition`, static all-port
+    metadata, `inference_settings`, or `expand-settings` as successful
+    inference-interface paths.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_patch
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted source search for
+    forbidden fallback terms in the new DTO module; and `git diff --check`.
+    Workflow-service checks still report only the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: connect proposals to live validation events and apply
+    endpoints after descriptor resolution and drift reporting exist.
 
 ### Traceability Links
 

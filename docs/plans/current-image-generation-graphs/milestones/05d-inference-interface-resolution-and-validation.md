@@ -74,7 +74,7 @@ defining an image-only inference-node interface.
       added/removed ports, type changes, requirement/default/option changes,
       availability changes, task/runtime-condition changes, severity, and
       blocking diagnostics.
-- [ ] Define workflow graph/service-owned typed graph patch operations and
+- [x] Define workflow graph/service-owned typed graph patch operations and
       update proposal contracts for "update to current interface." The
       inference-interface contract crate may provide drift types, but graph
       patch operations must live with graph mutation ownership.
@@ -379,3 +379,25 @@ defining an image-only inference-node interface.
     summaries, typed option sets, and authored snapshot updates without
     restoring static all-port metadata, `inference_settings`, or
     `expand-settings` as interface sources.
+- [x] 2026-05-25 inference-interface graph patch DTO slice completed:
+  - Smallest useful vertical slice: added workflow-service-owned
+    `InferenceInterfaceUpdateProposal` and typed graph patch operation DTOs for
+    replacing authored inference snapshots, removing invalid edges, and
+    clearing invalid literals. The DTOs reference shared drift reports and
+    authored snapshots but keep graph mutation operations in workflow-service.
+  - No-fallback/no-legacy confirmation: this slice adds proposal contracts
+    only. It does not apply patches, mutate saved graphs, restore
+    `node.data.definition`, or accept `inference_settings`/`expand-settings` as
+    inference-interface sources. Destructive operations must mark the proposal
+    destructive and require explicit confirmation.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_patch
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted source search for
+    forbidden fallback terms in the new DTO module; and `git diff --check`.
+    Workflow-service checks still report only the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire live validation proposal events and apply/update
+    endpoints after the resolver can produce current descriptors and drift
+    reports.
