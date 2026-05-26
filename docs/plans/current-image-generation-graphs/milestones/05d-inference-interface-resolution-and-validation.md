@@ -157,6 +157,22 @@ defining an image-only inference-node interface.
       but its API must look like a dedicated validation-state owner so later
       submit gating and scheduler admission can consume the same source without
       rewriting callers.
+      Re-plan decision: keep `dependency-environment` as a graph-authored
+      sidecar/control node associated with exactly one inference node, not as a
+      consumer of inference result outputs and not as an ordinary node-engine
+      execution step. The node owns user-visible dependency environment choices
+      such as selected binding ids, manual override patches, action activity,
+      status display, and optional persisted environment references. It does
+      not own model paths, Pumas package facts, platform context, runtime
+      policy, dependency request construction, or scheduler admission. Before
+      deriving a canonical `DependencyEnvironmentRequest`, workflow-service
+      must resolve a typed dependency action subject from the current graph:
+      validate that the action target is a `dependency-environment` node,
+      resolve exactly one associated inference node through canonical typed
+      graph structure, join that inference node to the current descriptor
+      validation record, and return typed diagnostics for zero, duplicate,
+      stale, unavailable, invalid, or ambiguous subjects. The frontend and
+      Tauri layers continue to send action intent only.
       Standards iteration update: the next implementation slice must not add
       more validation-state logic to `graph/session.rs` because that module is
       already over the decomposition review threshold. Create a focused
@@ -318,6 +334,14 @@ defining an image-only inference-node interface.
       current validated dependency planning result. `Check` and `Install`
       actions must fail closed with missing-requirements diagnostics until a
       current requirements id exists.
+      The dependency-environment target is a sidecar/control node. It must be
+      resolved by workflow-service to exactly one associated inference node
+      before request derivation. Do not connect it to inference result outputs
+      or let it consume generated media/text data. Do not make the node-engine
+      execute dependency actions. If the graph cannot prove the association
+      from canonical typed structure, return typed diagnostics instead of
+      falling back to path-shaped frontend state, package facts, or arbitrary
+      edge guesses.
       - Contract sub-slice completed on 2026-05-26:
         `pantograph-inference-interface-contracts` now owns
         `DependencyEnvironmentActionIntent`,

@@ -12770,6 +12770,29 @@ Worker rules:
     from current executable descriptor validation summaries once those
     summaries include current dependency requirements; then add the broader
     graph-coordinator UI acceptance coverage.
+- 2026-05-26 Milestone 5d dependency-environment sidecar/control-node re-plan
+  decision:
+  - Decision: use option 2. Keep `dependency-environment` as a graph-authored
+    sidecar/control node associated with exactly one inference node. It is not
+    connected to inference result outputs, does not consume generated
+    media/text data, and is not an ordinary node-engine execution step.
+  - Ownership: the node owns user-visible dependency choices and display state:
+    selected binding ids, manual override patches, resolve/check/install
+    action activity, dependency status display, and optional persisted
+    environment references. It does not own model paths, Pumas package facts,
+    platform context, runtime policy, dependency request construction, or
+    scheduler admission.
+  - Workflow-service requirement: before deriving
+    `DependencyEnvironmentRequest`, add a typed dependency action subject
+    resolver that validates the action target is a `dependency-environment`
+    node, resolves exactly one associated inference node through canonical typed
+    graph structure, joins that inference node to the current descriptor
+    validation record, and returns typed diagnostics for zero, duplicate,
+    stale, unavailable, invalid, or ambiguous subjects.
+  - No-fallback/no-legacy confirmation: do not support inference-output to
+    dependency-environment data flow, do not let frontend/Tauri infer subjects
+    from `modelPath`/`model_path`, package facts, platform context, or arbitrary
+    edge guesses, and do not make node-engine execute dependency actions.
 
 ### Traceability Links
 

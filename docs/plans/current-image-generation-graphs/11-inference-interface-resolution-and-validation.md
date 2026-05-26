@@ -666,6 +666,19 @@ falling back to previously rendered ports.
    validation DTOs. Tests must prove stale graph revisions are rejected through
    the owner API, old numeric revision payloads no longer deserialize after the
    replacement, and the graph lock is not held across resolver work.
+3b. Resolve dependency-environment actions through a graph-authored
+   sidecar/control-node association. A dependency-environment action target is
+   a dependency-environment node associated with exactly one inference node; it
+   is not connected to inference result outputs, does not consume generated
+   media/text data, and is not an ordinary node-engine execution step.
+   Workflow-service must own a typed dependency action subject resolver that
+   validates the target node type, proves the single associated inference node
+   from canonical typed graph structure, joins that inference node to current
+   descriptor validation state, and returns typed diagnostics for missing,
+   duplicate, stale, unavailable, invalid, or ambiguous subjects. Frontend and
+   Tauri code continue to send only graph action intent and must not infer
+   subjects from `modelPath`/`model_path`, package facts, platform context, or
+   arbitrary edge guesses.
 4. Tighten request extraction before it feeds live validation. This is a hard
    prerequisite for the synchronous validation publisher and the later
    event-driven path: use one
