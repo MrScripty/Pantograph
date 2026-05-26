@@ -733,6 +733,11 @@ falling back to previously rendered ports.
     fingerprint, and typed upstream values. Raw graph `task_kind`, runtime,
     device, and trait fields remain resolver inputs only and must not be parsed
     again as execution authority during scheduler projection.
+    - Re-plan boundary recorded 2026-05-26: current task graph projection has
+      only `WorkflowGraph` as input and still parses raw `node.data.task_kind`.
+      Add a descriptor-backed task projection input before deleting that raw
+      execution-authority path so the scheduler can consume current validation
+      state without preserving legacy graph semantics.
 12. Add queue-admission readiness validation that consumes the backend validation
     summary and fails closed before enqueue, queue-placement event recording, or
     scheduler task graph materialization when inference descriptors are pending,

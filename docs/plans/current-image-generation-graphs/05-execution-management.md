@@ -12405,6 +12405,21 @@ Worker rules:
   - Remaining follow-up: implement the event-driven validation lifecycle owner
     using provider -> sync publisher -> current-state recorder; do not expose
     raw resolver-fact transport inputs.
+- 2026-05-26 Milestone 5d descriptor-task-kind scheduler projection re-plan
+  boundary:
+  - Discovered issue: `workflow_scheduler_task_graph` still receives only
+    `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as
+    execution authority when building `SchedulableTaskIntent`.
+  - Why this stops implementation: the Milestone 5d rule says graph-authored
+    `task_kind` is only a resolver constraint. Making descriptor task kind
+    authoritative requires a descriptor-backed validation-state input to
+    scheduler task projection. Editing `task_graph.rs` without that input would
+    either keep the retired raw graph-field path or fail all runtime inference
+    tasks before real inference-run testing can proceed.
+  - Options recorded in the Milestone 5d checklist. Recommendation: add a
+    descriptor-backed task projection input first, then have the later
+    queue-admission owner call that API once current validation state is
+    available.
 
 ### Traceability Links
 

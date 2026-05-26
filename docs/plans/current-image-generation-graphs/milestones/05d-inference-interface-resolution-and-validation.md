@@ -230,6 +230,35 @@ defining an image-only inference-node interface.
       scheduler task projection/materialization consumes the resolved descriptor
       task kind and fails closed when explicit graph constraints cannot be
       satisfied.
+      Re-plan boundary discovered 2026-05-26: current
+      `workflow_scheduler_task_graph` receives only the saved `WorkflowGraph`
+      and still parses raw inference-node `node.data.task_kind` as execution
+      authority. Implementing this item directly would either preserve the
+      retired raw graph field as scheduler authority or fail every runtime
+      inference task because descriptor-backed validation state is not yet an
+      input to task projection. Required design decision: choose the scheduler
+      projection boundary that supplies current descriptor validation state to
+      task materialization before editing `task_graph.rs`.
+      Options to resolve:
+      1. Remove raw `task_kind` parsing immediately and make all inference
+         scheduler tasks fail closed until admission/materialization is rebuilt.
+         This is strict but blocks real inference-run testing.
+      2. Add a descriptor-backed projection input to the task graph builder so
+         scheduler materialization consumes current validation-state records:
+         descriptor task kind, descriptor fingerprint, validated model ref, and
+         validated runtime/device/trait constraints. This is the cleanest
+         incremental code path because the existing task graph builder can stay
+         deterministic and tests can inject validation state.
+      3. Route all scheduler task graph creation through a graph-session or
+         queue-admission service that owns validation-state lookup before
+         calling task projection. This is the eventual production shape, but it
+         is broader because queue admission, saved workflow submission, and
+         scheduler materialization all need the same owner.
+      Recommendation: implement option 2 first, shaped so option 3 can call it.
+      Keep raw graph `task_kind`, runtime, device, and trait values as resolver
+      inputs only; once descriptor-backed projection input exists, delete the
+      raw execution-authority parsing path instead of keeping a compatibility
+      branch.
 - [x] Add the workflow-service inference-interface fact-provider boundary before
       the event-driven validation lifecycle owner. The provider accepts typed
       request inputs from the strict extractor, resolves Pumas model/artifact
@@ -913,6 +942,22 @@ defining an image-only inference-node interface.
   - Remaining follow-up: implement the event-driven validation lifecycle owner
     on top of provider -> sync publisher -> current-state recorder before
     frontend event delivery or queue admission consumes live validation updates.
+- [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
+  - Discovered issue: `workflow_scheduler_task_graph` currently receives only
+    `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
+    source for `SchedulableTaskIntent` materialization.
+  - Why implementation stops: Milestone 5d now requires graph-authored
+    `task_kind`, runtime, device, and trait fields to remain resolver
+    constraints only. Scheduler materialization must consume the resolved
+    descriptor task kind from current validation state. Changing
+    `task_graph.rs` before that descriptor-backed input exists would either
+    preserve retired graph-field execution authority or make all runtime
+    inference tasks fail before the validation/admission boundary can supply the
+    selected descriptor.
+  - Re-plan result: options and recommendation are recorded in this checklist.
+    The next implementation slice should add a deterministic descriptor-backed
+    projection input to the scheduler task graph builder, then delete raw
+    graph-field execution parsing instead of keeping a compatibility branch.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and
