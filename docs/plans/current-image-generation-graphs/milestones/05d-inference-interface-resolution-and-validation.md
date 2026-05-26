@@ -103,7 +103,10 @@ defining an image-only inference-node interface.
       hints, load targets, and `inference_settings` must not be graph semantics.
       The active workflow `PumaLibNode.svelte` now follows this boundary by
       projecting selectable backend port options into `modelName`, `model_id`,
-      and `pumas_model_ref` only; path-shaped options fail closed.
+      and `pumas_model_ref` only; path-shaped options fail closed. The
+      `hydrate_puma_lib_node` Tauri command now accepts only `model_id` and
+      selector access for saved-node rehydration, so path-shaped hydration and
+      dependency selection state are no longer successful Puma-Lib paths.
 - [ ] Replace the `puma-lib` dependency-requirements hydration boundary before
       removing graph-authored paths. The chosen design is to use the canonical
       path-free `pantograph-dependency-planning::DependencyPlanningRequest`

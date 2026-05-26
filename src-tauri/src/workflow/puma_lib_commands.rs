@@ -4,8 +4,7 @@ use std::sync::Arc;
 use tauri::State;
 use workflow_nodes::setup::{PumasSelectedModelDetail, PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
-use super::commands::{SharedExtensions, SharedNodeRegistry, SharedWorkflowService};
-use super::model_dependencies::SharedModelDependencyResolver;
+use super::commands::{SharedExtensions, SharedWorkflowService};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -45,44 +44,26 @@ async fn require_pumas_api(
 }
 
 pub async fn hydrate_puma_lib_node(
-    _registry: State<'_, SharedNodeRegistry>,
     extensions: State<'_, SharedExtensions>,
-    _resolver: State<'_, SharedModelDependencyResolver>,
-    model_path: Option<String>,
     model_id: Option<String>,
-    selected_binding_ids: Option<Vec<String>>,
-    resolve_requirements: Option<bool>,
 ) -> Result<PumaLibNodeHydrationResponse, String> {
-    let requested_model_path = clean_optional(model_path);
     let requested_model_id = clean_optional(model_id);
-    if requested_model_path.is_none() && requested_model_id.is_none() {
-        return Err("model_path or model_id is required".to_string());
-    }
+    let requested_model_id =
+        requested_model_id.ok_or_else(|| "model_id is required".to_string())?;
 
-    let (selector_access, owner_api) = {
+    let selector_access = {
         let ext = extensions.read().await;
-        (
-            pumas_update_feed_access_from_extensions(&ext),
-            ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
-                .cloned(),
-        )
+        pumas_update_feed_access_from_extensions(&ext)
     };
-    let option = find_puma_lib_hydration_option(
-        selector_access,
-        owner_api,
-        requested_model_path.as_deref(),
-        requested_model_id.as_deref(),
-    )
-    .await?;
+    let selector_access = selector_access.ok_or_else(|| {
+        "Pumas selector access not available in executor extensions for model_id hydration"
+            .to_string()
+    })?;
+    let option =
+        find_matching_model_option_from_selector_access(&selector_access, &requested_model_id)
+            .await?;
 
-    let node_data = build_hydrated_node_data(&option, selected_binding_ids.unwrap_or_default())?;
-
-    if resolve_requirements.unwrap_or(false) {
-        return Err(
-            "Puma-Lib dependency requirement hydration now requires the path-free dependency-environment contract"
-                .to_string(),
-        );
-    }
+    let node_data = build_hydrated_node_data(&option)?;
 
     Ok(PumaLibNodeHydrationResponse { node_data })
 }
@@ -154,25 +135,6 @@ pub async fn start_hf_download_with_audit(
         download_id,
         audit_event_seq,
     })
-}
-
-async fn find_puma_lib_hydration_option(
-    selector_access: Option<Arc<PumasSelectorAccess>>,
-    owner_api: Option<Arc<pumas_library::PumasApi>>,
-    requested_model_path: Option<&str>,
-    requested_model_id: Option<&str>,
-) -> Result<node_engine::PortOption, String> {
-    if let Some(model_id) = requested_model_id {
-        let selector_access = selector_access.ok_or_else(|| {
-            "Pumas selector access not available in executor extensions for model_id hydration"
-                .to_string()
-        })?;
-        return find_matching_model_option_from_selector_access(&selector_access, model_id).await;
-    }
-
-    let api =
-        owner_api.ok_or_else(|| "Pumas API not available in executor extensions".to_string())?;
-    find_matching_model_option(&api, requested_model_path, None).await
 }
 
 pub async fn model_package_facts_summary_snapshot(
@@ -353,79 +315,6 @@ fn record_hf_model_search_audit(workflow_service: &SharedWorkflowService) -> Opt
     }
 }
 
-async fn find_matching_model_option(
-    api: &Arc<pumas_library::PumasApi>,
-    requested_model_path: Option<&str>,
-    requested_model_id: Option<&str>,
-) -> Result<node_engine::PortOption, String> {
-    let lookup = requested_model_id
-        .or(requested_model_path)
-        .ok_or_else(|| "model_path or model_id is required".to_string())?;
-    let model_ref = api
-        .resolve_pumas_model_ref(lookup)
-        .await
-        .map_err(|error| error.to_string())?;
-    let model_id = model_ref.model_id.clone();
-
-    let record = api
-        .get_model(&model_id)
-        .await
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("Unable to resolve Puma-Lib model for model_id '{model_id}'"))?;
-    let descriptor = api
-        .resolve_model_execution_descriptors_batch(vec![model_id.clone()])
-        .await
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|item| item.model_id == model_id)
-        .and_then(|item| item.descriptor);
-    let summary_result = api
-        .resolve_model_package_facts_summaries(vec![model_id.clone()])
-        .await
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|item| item.model_id == model_id)
-        .and_then(|item| item.result);
-    let model_ref_value = serde_json::to_value(&model_ref).map_err(|error| error.to_string())?;
-
-    Ok(node_engine::PortOption {
-        value: model_ref_value.clone(),
-        label: record.official_name,
-        description: Some(format!(
-            "{} | {}",
-            record.model_type,
-            record.tags.join(", ")
-        )),
-        metadata: Some(json!({
-            "id": model_id,
-            "model_ref": model_ref_value.clone(),
-            "pumas_model_ref": model_ref_value,
-            "model_type": record.model_type,
-            "cleaned_name": record.cleaned_name,
-            "pipeline_tag": summary_result.as_ref().and_then(|result| {
-                result.summary.as_ref().and_then(|summary| summary.task.pipeline_tag.clone())
-            }),
-            "task_type_primary": descriptor
-                .as_ref()
-                .map(|descriptor| descriptor.task_type_primary.clone())
-                .or_else(|| {
-                    summary_result.as_ref().and_then(|result| {
-                        result.summary.as_ref().and_then(|summary| {
-                            summary.task.task_type_primary.clone()
-                        })
-                    })
-            }),
-            "recommended_backend": descriptor
-                .as_ref()
-                .and_then(|descriptor| descriptor.recommended_backend.clone()),
-        })),
-        disabled: false,
-        unavailable_state: None,
-        unavailable_reason_code: None,
-        unavailable_reason: None,
-    })
-}
-
 async fn find_matching_model_option_from_selector_access(
     selector_access: &Arc<PumasSelectorAccess>,
     model_id: &str,
@@ -504,10 +393,7 @@ fn build_selected_model_option_from_detail(
     })
 }
 
-fn build_hydrated_node_data(
-    option: &node_engine::PortOption,
-    selected_binding_ids: Vec<String>,
-) -> Result<Value, String> {
+fn build_hydrated_node_data(option: &node_engine::PortOption) -> Result<Value, String> {
     let metadata = option
         .metadata
         .as_ref()
@@ -533,7 +419,6 @@ fn build_hydrated_node_data(
         "modelName": option.label,
         "model_id": model_id,
         "pumas_model_ref": pumas_model_ref,
-        "selected_binding_ids": sanitize_selected_binding_ids(selected_binding_ids),
     });
 
     Ok(node_data)
@@ -666,22 +551,6 @@ fn validate_hf_repo_id_for_audit(repo_id: &str) -> Result<&str, String> {
     Ok(trimmed)
 }
 
-fn sanitize_selected_binding_ids(selected_binding_ids: Vec<String>) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for binding_id in selected_binding_ids {
-        let trimmed = binding_id.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let owned = trimmed.to_string();
-        if seen.insert(owned.clone()) {
-            out.push(owned);
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,8 +631,7 @@ mod tests {
 
     #[test]
     fn build_hydrated_node_data_uses_backend_owned_defaults() {
-        let node_data = build_hydrated_node_data(&sample_option(), vec![" binding-a ".to_string()])
-            .expect("node data");
+        let node_data = build_hydrated_node_data(&sample_option()).expect("node data");
 
         assert_eq!(node_data["modelName"], json!("Tiny SD Turbo"));
         assert_eq!(
@@ -774,8 +642,8 @@ mod tests {
             node_data["pumas_model_ref"],
             json!({ "model_id": "diffusion/cc-nms/tiny-sd-turbo" })
         );
-        assert_eq!(node_data["selected_binding_ids"], json!(["binding-a"]));
         assert!(node_data.get("modelPath").is_none());
+        assert!(node_data.get("selected_binding_ids").is_none());
         assert!(node_data.get("entry_path").is_none());
         assert!(node_data.get("inference_settings").is_none());
         assert!(node_data.get("dependency_requirements").is_none());
@@ -856,27 +724,6 @@ mod tests {
         assert_eq!(metadata["recommended_backend"], json!("llamacpp"));
         assert!(metadata.get("entry_path").is_none());
         assert!(metadata.get("inference_settings").is_none());
-    }
-
-    #[tokio::test]
-    async fn model_id_hydration_requires_explicit_selector_access() {
-        let temp_dir = create_test_env();
-        let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
-                .build()
-                .await
-                .unwrap(),
-        );
-
-        let error =
-            find_puma_lib_hydration_option(None, Some(api), None, Some("llm/imported/test-gguf"))
-                .await
-                .expect_err("model_id hydration must not fall back to raw PUMAS_API");
-
-        assert!(
-            error.contains("Pumas selector access not available"),
-            "unexpected error: {error}"
-        );
     }
 
     #[tokio::test]
@@ -996,21 +843,6 @@ mod tests {
             .expect("read-only selector summary should resolve");
 
         assert_eq!(summary.model_id, model_id);
-    }
-
-    #[test]
-    fn sanitize_selected_binding_ids_deduplicates_and_trims() {
-        let bindings = sanitize_selected_binding_ids(vec![
-            " binding-a ".to_string(),
-            "".to_string(),
-            "binding-a".to_string(),
-            "binding-b".to_string(),
-        ]);
-
-        assert_eq!(
-            bindings,
-            vec!["binding-a".to_string(), "binding-b".to_string()]
-        );
     }
 
     #[test]

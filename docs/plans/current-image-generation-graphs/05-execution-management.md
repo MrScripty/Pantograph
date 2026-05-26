@@ -11944,6 +11944,32 @@ Worker rules:
     package renderer surface is retired or brought onto canonical node data.
     Dependency-environment frontend action payloads still need their own
     canonical request slice.
+- 2026-05-26 Milestone 5d Puma-Lib hydration path removal slice completed:
+  - Smallest useful vertical slice: changed the `hydrate_puma_lib_node` Tauri
+    command and implementation to accept only `model_id` and selector access.
+    The path-based owner API lookup branch, `model_path` command argument,
+    selected-binding persistence, and dependency-requirement hydration flag were
+    removed from the successful hydration path.
+  - No-fallback/no-legacy confirmation: Puma-Lib hydration no longer resolves a
+    path-shaped request, no longer accepts `modelPath` from the active frontend,
+    and no longer stores dependency selection state on the model-reference
+    node. Missing model identity returns a typed command error instead of
+    falling back to path lookup.
+  - Focused unit coverage updated in `puma_lib_commands.rs` so hydrated node
+    data is asserted to contain only display name, `model_id`, and
+    `pumas_model_ref`, with no `modelPath`, selected binding ids, entry path,
+    inference settings, or dependency requirements.
+  - Verification passed: `cargo fmt`; `npm run typecheck`; targeted `rg`
+    confirming the active Puma-Lib frontend and hydration command no longer
+    carry successful path/selected-binding hydration fields; and `git diff
+    --check`.
+  - Verification blocked: `cargo test -p pantograph puma_lib --bin pantograph`
+    still fails before tests run due to the known unrelated
+    `src-tauri/src/app_setup.rs:96 set_media_conversion_executor` compile
+    blocker.
+  - Remaining follow-up: dependency-environment frontend payloads and the old
+    standalone model-dependency commands still carry the retired path-shaped
+    dependency contract and must be migrated or removed in later slices.
 
 ### Traceability Links
 
