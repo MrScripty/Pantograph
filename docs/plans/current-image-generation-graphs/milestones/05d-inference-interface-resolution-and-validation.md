@@ -1088,9 +1088,9 @@ defining an image-only inference-node interface.
        validation-session identity. This works for draft/edit-session runs, but
        it does not give saved workflow submissions a stable validation address
        and would couple queue admission to editor state.
-    3. Persist a compact executable validation snapshot at workflow save/publish
-       time, keyed by workflow id, semantic/executable version, graph
-       fingerprint, and descriptor contract version. Queue admission reads that
+    3. Persist a compact executable validation snapshot at executable publish
+       time, keyed under the existing workflow version identity plus graph
+       fingerprint and descriptor contract version. Queue admission reads that
        saved snapshot, rejects stale/missing/non-executable state, and only then
        builds scheduler projections. This aligns saved-run admission with the
        graph-editor validation UX and preserves historical authored port shape
@@ -1099,11 +1099,145 @@ defining an image-only inference-node interface.
        runtime-host handoff is complete. This is rejected because it preserves
        retired behavior and masks missing descriptor validation authority.
   - Recommendation: choose option 3 for saved workflow submissions and reserve
-    option 1 only as the implementation detail inside the save/publish
+    option 1 only as the implementation detail inside the executable publish
     validator that produces the persisted snapshot. The next implementation
     slice should add the saved validation snapshot contract/owner and then
     rewrite or delete legacy `session_execution` tests so they assert fail-
     closed scheduler-owned behavior instead of whole-run fallback execution.
+- [x] 2026-05-26 saved executable validation snapshot decision:
+  - Decision: implement option 3. Saved workflow submissions must use a compact
+    executable validation snapshot produced by the service-level executable
+    publish boundary and consumed by execution-session queue admission. Queue
+    admission must not depend on an open graph-edit session, frontend-provided
+    validation state, raw graph inference fields, Pumas paths/facts, or the
+    retired whole-run runtime execution path.
+  - Snapshot identity: do not introduce a parallel executable-version identity.
+    Persist executable validation snapshots under the existing attribution
+    `WorkflowVersionId`, with workflow id, semantic version, canonical
+    executable graph fingerprint, descriptor-contract version, and validation
+    snapshot id recorded as typed snapshot fields. The snapshot must record the
+    graph revision it validated and enough node-scoped descriptor projection
+    records to build `WorkflowSchedulerInferenceTaskProjections`. Do not store
+    runtime load paths, Pumas package facts, frontend presentation state, media
+    payloads, or scheduler placement decisions in the snapshot.
+  - Snapshot contents: store only bounded, typed admission authority:
+    validation summary, validation session/snapshot id, descriptor fingerprint,
+    resolved descriptor task kind, validated `PumasModelRef`, explicit
+    runtime/device/trait constraints, descriptor defaults needed for later
+    materialization, availability status, and blocking diagnostics. Optional
+    authored-port shape remains in the saved graph as authoring history; the
+    validation snapshot stores execution authority, not graph-editor display
+    history. The saved executable snapshot must be derived from the backend
+    validation publication/projection records, not from the lossy current-state
+    scheduler projection cache alone; current-state records may be used as a
+    live-edit cache but are not a persisted authority unless they first round
+    trip through the compact snapshot DTO.
+  - Save/publish rule: keep draft file save and executable publish as separate
+    service-level operations. Draft save remains graph persistence and may
+    preserve the editable graph/history without producing execution authority.
+    Executable publish is the async workflow-service boundary that runs or
+    reuses the validation publisher core, resolves the existing workflow version,
+    and persists the executable validation snapshot. If descriptor facts are
+    missing, stale, unavailable, unresolved, invalid, not implemented, or if the
+    executable snapshot/version store is unavailable, the workflow may remain a
+    draft but must not be marked executable or admitted to the queue.
+  - Queue admission rule: before queue insertion, queue-placement diagnostic
+    event recording, or scheduler task graph materialization, admission must run
+    a pre-admission preparation step that loads the saved graph, resolves the
+    submitted workflow version, loads the saved executable validation snapshot
+    for that version/fingerprint, converts it to scheduler projections, and
+    builds the scheduler task graph. Admission fails closed when the snapshot is
+    missing, stale, non-executable, contract-incompatible, mismatched, or the
+    required snapshot store is not configured. Only this snapshot may provide
+    inference scheduler projections for saved workflow runs.
+  - Legacy cleanup rule: tests and code that assert successful whole-run
+    `WorkflowHost::run_workflow` execution for runtime/inference workflows must
+    be rewritten to assert scheduler-owned/runtime-host handoff behavior or
+    removed when the system they cover is retired. Request inputs must target
+    source-input tasks; tests that pass values to non-source nodes as successful
+    runtime inputs are legacy and must not be kept green through compatibility
+    shims. The cleanup blast radius includes workflow-service tests plus
+    embedded-runtime, HTTP, Rustler, UniFFI, and Tauri command contract tests
+    that currently encode retired whole-run runtime behavior. Tauri remains a
+    transport boundary and must not own validation, snapshot, or scheduler
+    business logic.
+  - Thin-slice order:
+    1. Add the saved executable validation snapshot contract/owner keyed by
+       existing `WorkflowVersionId`, plus focused tests for identity, bounded
+       contents, snapshot-store-unavailable diagnostics, and fail-closed lookup.
+    2. Add the service-level executable publish boundary while keeping draft
+       `save_workflow` as graph persistence; create snapshots only from the
+       backend validation publication/projection path and return typed publish
+       status/diagnostics for the editor.
+    3. Wire execution-session queue admission to consume snapshots before
+       scheduler projection and to reject missing/stale/non-executable
+       snapshots before queue insertion, queue-placement event recording, or
+       scheduler task graph materialization.
+    4. Rewrite/delete legacy `session_execution` and adapter contract tests
+       around whole-run runtime fallback and non-source request inputs, then add
+       scheduler-owned admission/runtime-host tests for the replacement
+       behavior.
+    5. Add pre-dispatch descriptor fingerprint revalidation against the saved
+       snapshot before runtime-host dispatch selection.
+- [x] 2026-05-26 saved executable validation snapshot standards iteration:
+  - Standards reviewed:
+    `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+    `TESTING-STANDARDS.md`, `INTEROP-STANDARDS.md`,
+    `FRONTEND-STANDARDS.md`, `CONCURRENCY-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`,
+    `languages/rust/RUST-ASYNC-STANDARDS.md`,
+    `languages/rust/RUST-INTEROP-STANDARDS.md`, and
+    `DOCUMENTATION-STANDARDS.md`.
+  - Executable-contract gate: the snapshot request/record/diagnostic DTOs must
+    be executable boundary contracts with explicit serde casing/tagging,
+    `deny_unknown_fields` where persisted compatibility permits it, typed
+    workflow/version/fingerprint/status identifiers, `TryFrom`/validated
+    constructors for raw boundary input, and non-stringly diagnostic enums.
+    Internal APIs must accept validated snapshot/version types, not raw
+    `String`, unvalidated JSON, or loosely typed maps.
+  - Sync-core/async-shell gate: snapshot validation, compacting publication
+    records, freshness checks, and projection into
+    `WorkflowSchedulerInferenceTaskProjections` must be synchronous pure/domain
+    functions. Async is allowed only at the executable publish shell and queue
+    admission shell for fact-provider, persistence, or host I/O. The
+    implementation must not hold graph/session/store locks across `.await`,
+    must not run blocking filesystem/sqlite work directly inside async request
+    paths unless it remains behind an existing synchronous boundary or is
+    isolated with an explicit blocking/transaction owner, and must re-plan if a
+    multi-step durable write cannot be made transactional or idempotent.
+  - Persistence/concurrency gate: resolving `WorkflowVersionId`, writing the
+    executable validation snapshot, and exposing executable status must be one
+    coherent publish transaction or an idempotent durable state machine with
+    typed recovery diagnostics. Queue admission must build an immutable
+    pre-admission result before any enqueue, queue-placement event, or scheduler
+    state mutation. If current APIs force observable queue side effects before
+    snapshot validation, implementation must stop and re-plan instead of adding
+    compensation fallback.
+  - Interop/binding gate: any public wire shape for executable publish,
+    snapshot lookup, queue-admission diagnostics, or editor submit gating must
+    update Rust producers and TypeScript/Tauri, HTTP, UniFFI, and Rustler
+    consumers in the same logical slice when they cross those boundaries.
+    Serde fixture tests must prove Rust serialization/deserialization matches
+    host-language expectations, including enum casing, omitted defaults,
+    blocking diagnostics, and snapshot-store-unavailable errors.
+  - Frontend ownership gate: the graph editor may display draft, pending,
+    executable, stale, or blocked status and disable submit from backend
+    validation/publish state, but it must not optimistically mark a workflow
+    executable, synthesize scheduler projections, or persist execution
+    authority. Validation refresh must remain event-driven or request-driven and
+    must not add broad polling loops.
+  - Testing gate: the first implementation slice must include a failing-first
+    vertical acceptance test that exercises publish -> saved snapshot -> saved
+    workflow queue admission -> scheduler task graph/projection or typed
+    rejection. Unit tests must cover DTO validation, snapshot compaction,
+    lookup mismatch, store-unavailable, and projection conversion. Integration
+    tests must isolate sqlite/temp workflow roots per test or explicitly
+    serialize the affected suite, and broad adapter tests must verify no retired
+    whole-run runtime fallback remains.
+  - Documentation gate: the slice that adds the snapshot owner must update the
+    affected source README or add an ADR covering API consumer contract,
+    structured producer contract, lifecycle/transaction rules, error semantics,
+    compatibility/replay behavior for saved workflows, and revisit triggers.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

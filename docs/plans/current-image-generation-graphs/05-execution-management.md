@@ -12473,10 +12473,49 @@ Worker rules:
     non-source request inputs. Those expectations must be rewritten or deleted;
     keeping them green would preserve retired execution behavior.
   - Recommendation recorded in Milestone 5d: persist a compact executable
-    validation snapshot at workflow save/publish time and have queue admission
+    validation snapshot at executable publish time and have queue admission
     read that snapshot before scheduler projection. Saved-run admission must
     reject missing, stale, or non-executable snapshots rather than deriving
     scheduler intent from graph fields or frontend data.
+- 2026-05-26 Milestone 5d saved executable validation snapshot decision:
+  - Decision: saved workflow submissions use option 3 from the re-plan. The
+    backend executable publish boundary produces a compact executable validation
+    snapshot keyed under the existing attribution `WorkflowVersionId` and
+    recording workflow id, semantic version, canonical graph fingerprint,
+    descriptor-contract version, and validation snapshot id as typed fields.
+    Draft `save_workflow` remains graph persistence and does not create
+    execution authority.
+  - Queue admission must run a pre-admission preparation step that consumes the
+    saved executable snapshot before queue insertion, queue-placement event
+    recording, or scheduler task graph materialization. Missing snapshot
+    storage, stale/missing/non-executable snapshots, contract incompatibility,
+    and fingerprint mismatches fail closed with typed diagnostics.
+  - No-fallback/no-legacy result: saved-run scheduler projections must not be
+    derived from raw graph fields, frontend validation state, Tauri transport
+    payloads, Pumas paths/facts, lossy current-state caches, or the retired
+    whole-run runtime host path. Legacy `session_execution` and adapter
+    contract tests that rely on those behaviors must be rewritten around
+    scheduler-owned/runtime-host handoff behavior or deleted with the retired
+    code they cover. Tauri remains transport-only.
+  - Planned thin slices: `WorkflowVersionId`-owned snapshot contract/owner;
+    service-level executable publish snapshot production; queue-admission
+    pre-admission snapshot consumption; legacy session/adapter test and code
+    cleanup; pre-dispatch descriptor fingerprint revalidation.
+- 2026-05-26 Milestone 5d saved executable validation snapshot standards
+  iteration:
+  - Standards reviewed: plan sequencing/worktree hygiene, executable boundary
+    contracts, backend-owned data, Rust typed API boundaries, sync-core and
+    async-shell design, durable transaction/idempotency rules, interop serde
+    alignment, frontend ownership, isolated durable test state, and
+    documentation traceability.
+  - Required implementation gates: validated typed snapshot DTOs and
+    diagnostics; pure synchronous snapshot compaction/freshness/projection
+    functions behind async publish/admission shells; transactional or
+    idempotent `WorkflowVersionId` plus snapshot persistence; immutable
+    pre-admission queue planning before enqueue/events/scheduler mutation;
+    cross-binding serialization tests for public wire shapes; no frontend or
+    Tauri ownership of executable state; isolated sqlite/temp workflow roots in
+    tests; and README or ADR updates for the snapshot owner.
 
 ### Traceability Links
 

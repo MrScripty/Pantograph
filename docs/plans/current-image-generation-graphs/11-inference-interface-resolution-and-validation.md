@@ -758,10 +758,31 @@ falling back to previously rendered ports.
     - Re-plan boundary recorded 2026-05-26: saved workflow submissions do not
       have a canonical validation-state address yet. Queue admission loads
       saved graphs by workflow id, while current validation state is graph-edit
-      session scoped. Add a saved executable validation snapshot at
-      save/publish time, then have queue admission consume that snapshot before
+      session scoped. Add a saved executable validation snapshot at executable
+      publish time, then have queue admission consume that snapshot before
       scheduler projection. Do not keep whole-run host execution or raw graph
       parsing as compatibility behavior.
+    - Decision recorded 2026-05-26: implement the saved executable validation
+      snapshot as the authority for saved workflow submissions. The snapshot is
+      produced by a service-level executable publish boundary, keyed under the
+      existing attribution `WorkflowVersionId`, and consumed by queue admission
+      before queue insertion, queue-placement event recording, or scheduler task
+      graph materialization. Draft `save_workflow` remains graph persistence and
+      does not create execution authority. The snapshot stores bounded typed
+      descriptor projection authority derived from backend validation
+      publication records; graph-editor authored shape remains in the saved
+      graph, and Pumas facts/paths, frontend state, Tauri payloads, raw
+      inference-node fields, lossy current-state caches, and whole-run
+      runtime-host execution are not valid fallback sources. Missing snapshot
+      storage, missing/stale/non-executable snapshots, and contract mismatches
+      fail closed with typed diagnostics.
+    - Standards iteration recorded 2026-05-26: implementation must treat the
+      saved executable validation snapshot as an executable boundary contract
+      with validated typed DTOs, sync-core/async-shell factoring,
+      transactional or idempotent publish persistence, no frontend-owned
+      executable state, no Tauri business logic, cross-binding serde round-trip
+      checks, isolated sqlite/temp workflow roots in tests, and a failing-first
+      vertical acceptance path from executable publish through queue admission.
 12. Add queue-admission readiness validation that consumes the backend validation
     summary and fails closed before enqueue, queue-placement event recording, or
     scheduler task graph materialization when inference descriptors are pending,
