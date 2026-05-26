@@ -544,6 +544,23 @@ falling back to previously rendered ports.
   preserve the retired fallback path. The next implementation slice must
   decide and execute a clean transition for internal composed-node use before
   static `llm-inference` task ports are deleted.
+- 2026-05-25: Re-plan decision selected. Agent/tool loops remain a required
+  workflow capability, but they must become scheduler-owned agent loop
+  primitives rather than composed wrappers over the retired static
+  `llm-inference` port shape. The graph-visible `tool-loop` node should expose
+  stable loop-level inputs and outputs such as model reference, prompt,
+  system prompt, tools, max turns, optional runtime/device constraints,
+  response, turns, tool calls, and diagnostics. Workflow-service/scheduler
+  then expands each loop turn into typed inference and tool tasks only when
+  the previous turn requires it, stores tool results as scheduler task
+  results, supports early termination, and interleaves other users' work
+  between turns. This avoids forcing users to draw fixed-length chains or
+  clients to resubmit workflow runs as a loop workaround.
+- Implementation staging: first remove `tool-loop`'s dependency on static
+  `llm-inference` composed-contract mappings and make any not-yet-executable
+  path fail closed with typed diagnostics. Then add the scheduler-owned
+  agent-loop task graph expansion after descriptor-backed generic inference
+  can materialize one real inference turn.
 
 ## Open Design Decisions
 
@@ -552,10 +569,6 @@ falling back to previously rendered ports.
   dedicated descriptor option renderer. They cannot own inference semantics.
 - Decide the resolver service module/API shape inside workflow-service after
   inspecting current graph validation and options-provider boundaries.
-- Decide how composed nodes that currently use static `llm-inference` task
-  ports, especially `tool-loop`, transition to descriptor-backed inference
-  interfaces without keeping static all-port inference as a successful graph
-  fallback.
 - Decide the inference capability fact API used by the resolver without
   coupling it to scheduler policy.
 - Decide the concrete graph patch operation owner and API shape for unsaved

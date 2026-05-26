@@ -11473,6 +11473,27 @@ Worker rules:
   - Recommended next action: choose option 3 unless near-term feature removal
     is acceptable. The plan must identify the internal composition contract
     owner before the static `llm-inference` descriptor is shrunk.
+- 2026-05-25 Milestone 5d tool-loop re-plan decision:
+  - Decision: keep agent/tool loops as a required workflow capability, but
+    replace the current composed `tool-loop -> llm-inference -> tool-executor`
+    dependency with a scheduler-owned agent loop primitive. The graph-visible
+    node remains simple and loop-level; workflow-service/scheduler expands
+    each turn into typed inference and tool tasks only as needed.
+  - Rationale: fixed graph chains make users over-author possible turns, while
+    client-submitted repeat workflow runs push orchestration complexity out of
+    Pantograph. Scheduler-owned loop turns preserve early termination,
+    tool-result diagnostics, batching, runtime residency, concurrent users,
+    and interleaving with other workflow tasks.
+  - No-fallback/no-legacy confirmation: the selected design does not keep
+    static all-port `llm-inference` as the hidden implementation contract for
+    `tool-loop`. Until executable scheduler loop orchestration is implemented,
+    loop execution paths must fail closed with typed diagnostics rather than
+    running through the retired static inference shape.
+  - Implementation staging: first remove the composed-contract dependency on
+    static `llm-inference` task ports and preserve only the stable loop-level
+    authoring contract. Then implement scheduler-owned agent-loop expansion
+    after descriptor-backed generic inference can execute one materialized
+    inference turn.
 
 ### Traceability Links
 
