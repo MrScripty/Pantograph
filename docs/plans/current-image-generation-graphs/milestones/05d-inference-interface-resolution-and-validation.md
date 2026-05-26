@@ -196,6 +196,21 @@ defining an image-only inference-node interface.
       may stay lightweight, but descriptor rendering and dependency-action
       derivation must not require Tauri/frontend code to resolve descriptors,
       carry Pumas facts, or infer scheduler policy.
+      Re-plan update after the Stage 1 publisher slice: Stage 2 needs a
+      workflow-service fact-source boundary before the event-driven lifecycle
+      owner can start validation from graph edits. Decision: implement option 2
+      now with option 3 discipline. Add a focused provider API, for example
+      `InferenceInterfaceFactsProvider`, that accepts typed graph resolution
+      inputs and returns per-node `InferenceInterfaceResolverFacts` from Pumas
+      model/artifact readiness, inference capability facts, and runtime
+      availability. The provider may be async, but graph-session locks must be
+      released before it runs. The default provider fails closed with typed
+      unavailable/not-implemented facts. Tests may inject facts directly, but
+      Tauri and frontend callers must never provide raw Pumas facts, runtime
+      facts, package summaries, load targets, paths, or capability blobs as
+      validation authority. If this provider grows beyond simple fact lookup,
+      promote it later into a dedicated workflow-service resolver service
+      without changing the sync publisher or creating a second resolution path.
 - [x] Add a strict model-ref binding resolver for inference request extraction.
       It must reject duplicate incoming `pumas_model_ref` edges, verify the
       source handle and source node/type can provide a Pumas model ref, and
@@ -215,6 +230,17 @@ defining an image-only inference-node interface.
       scheduler task projection/materialization consumes the resolved descriptor
       task kind and fails closed when explicit graph constraints cannot be
       satisfied.
+- [x] Add the workflow-service inference-interface fact-provider boundary before
+      the event-driven validation lifecycle owner. The provider accepts typed
+      request inputs from the strict extractor, resolves Pumas model/artifact
+      readiness, inference capability facts, and runtime availability, and
+      returns bounded `InferenceInterfaceResolverFacts` keyed by node. The
+      initial provider may return typed unavailable/not-implemented facts until
+      production Pumas/runtime adapters are wired, but it must not guess from
+      names, model paths, package facts, frontend state, Tauri payloads, or
+      runtime-host execution payloads. Keep the provider small and injectable
+      for tests; promote it later to a dedicated resolver service only if
+      lifecycle orchestration requires it.
 - [ ] Implement the first cross-layer acceptance slice before broad horizontal
       expansion, after the boundary cleanup slices pass: connected model ref
       input resolves a descriptor, projects authored visible ports, produces a
@@ -332,6 +358,10 @@ defining an image-only inference-node interface.
       bounded projection records, and current-state publication. Stage 2 may add
       event delivery/cancellation, but it must reuse this publisher core rather
       than adding a second validation path.
+      Fact-source tightening: Stage 2 must also reuse the workflow-service fact
+      provider. Event-driven validation may trigger from graph edits or explicit
+      validation requests, but those triggers pass identity/revision intent only;
+      they do not carry resolver facts from frontend or Tauri.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit
@@ -340,6 +370,10 @@ defining an image-only inference-node interface.
       validation work when a graph/session closes. Domain validation/projection
       remains sync-core; async is limited to fact lookup, persistence, transport,
       and event delivery boundaries.
+      Dependency: implement the fact-provider boundary first so the lifecycle
+      owner can call provider -> sync publisher -> current-state recorder without
+      accepting raw facts from transport callers or duplicating descriptor
+      resolution policy.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply
@@ -831,6 +865,54 @@ defining an image-only inference-node interface.
     starts/cancels/supersedes validation work and reuses this synchronous
     publisher before frontend event delivery or queue admission consume live
     validation updates.
+- [x] 2026-05-26 live validation fact-source boundary re-plan decision:
+  - Decision: implement option 2 now with option 3 discipline. The next
+    implementation slice should add a workflow-service fact-provider boundary
+    that turns strict graph resolution inputs into per-node
+    `InferenceInterfaceResolverFacts` for the existing synchronous publisher.
+  - Why: the current publisher is deterministic and backend-owned, but it still
+    requires facts supplied by the caller. Event-driven validation cannot start
+    from graph edits until workflow-service owns Pumas model/artifact readiness,
+    inference capability facts, and runtime availability lookup behind a typed
+    provider.
+  - No-fallback/no-legacy confirmation: frontend and Tauri must not pass raw
+    Pumas facts, runtime facts, package summaries, executable load targets,
+    paths, capability blobs, or scheduler decisions as validation authority.
+    The default provider must fail closed with typed unavailable/not-implemented
+    facts rather than guessing from names or legacy graph metadata.
+  - Later objective: if the provider grows beyond simple fact lookup, promote it
+    into a dedicated workflow-service resolver service that still reuses the
+    sync publisher and does not create a parallel descriptor-resolution path.
+- [x] 2026-05-26 workflow-service fact-provider boundary slice completed:
+  - Smallest useful vertical slice: added `InferenceInterfaceFactsProvider` and
+    the fail-closed `UnavailableInferenceInterfaceFactsProvider`, injected the
+    provider into `GraphSessionStore`, and changed
+    `publish_inference_validation_session` so transport/session callers request
+    validation by graph/session identity while workflow-service supplies facts
+    to the sync publisher.
+  - No-fallback/no-legacy confirmation: the default provider returns typed
+    missing-model-facts projections. The session publisher no longer accepts raw
+    resolver facts from callers and still does not read model paths, package
+    facts, executable load targets, `inference_settings`, `expand-settings`,
+    runtime-host payloads, frontend state, or scheduler decisions as alternate
+    descriptor sources.
+  - Standards result: graph-session locks are held only for canonicalization,
+    graph snapshotting, and revision calculation. Provider fact lookup runs
+    after the lock is released, stays injectable for tests, and keeps Tauri and
+    frontend as intent/transport callers rather than validation-policy owners.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service inference_interface_publication --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: the workflow-service check commands continue to report the
+    pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: implement the event-driven validation lifecycle owner
+    on top of provider -> sync publisher -> current-state recorder before
+    frontend event delivery or queue admission consumes live validation updates.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

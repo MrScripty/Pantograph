@@ -9,21 +9,19 @@ use pantograph_inference_interface_contracts::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::inference_interface_facts::missing_model_facts;
 use super::inference_interface_projection::{
     resolve_inference_interface_projection, InferenceInterfaceProjectionError,
 };
 use super::inference_interface_request::{
-    inference_interface_resolution_inputs_from_graph, InferenceInterfaceGraphResolutionDiagnostic,
+    InferenceInterfaceGraphResolutionDiagnostic, InferenceInterfaceGraphResolutionInputs,
 };
-use super::inference_interface_resolver::{
-    InferenceInterfaceResolverFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
-};
+use super::inference_interface_resolver::InferenceInterfaceResolverFacts;
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationEvent,
     WorkflowGraphInferenceValidationEventPayload, WorkflowGraphInferenceValidationEventScope,
     WorkflowGraphInferenceValidationSession,
 };
-use super::types::WorkflowGraph;
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -68,13 +66,29 @@ impl InferenceInterfaceNodeProjectionRecord {
     }
 }
 
-pub fn publish_inference_validation_for_graph(
+#[cfg(test)]
+pub(crate) fn publish_inference_validation_for_graph(
     validation_session_id: DraftGraphValidationSessionId,
     graph_revision: WorkflowGraphRevision,
-    graph: &WorkflowGraph,
+    graph: &super::types::WorkflowGraph,
     facts_by_node_id: BTreeMap<String, InferenceInterfaceResolverFacts>,
 ) -> Result<WorkflowGraphInferenceValidationPublication, InferenceInterfacePublicationError> {
-    let resolution_inputs = inference_interface_resolution_inputs_from_graph(graph);
+    let resolution_inputs =
+        super::inference_interface_request::inference_interface_resolution_inputs_from_graph(graph);
+    publish_inference_validation_for_resolution_inputs(
+        validation_session_id,
+        graph_revision,
+        resolution_inputs,
+        facts_by_node_id,
+    )
+}
+
+pub(crate) fn publish_inference_validation_for_resolution_inputs(
+    validation_session_id: DraftGraphValidationSessionId,
+    graph_revision: WorkflowGraphRevision,
+    resolution_inputs: InferenceInterfaceGraphResolutionInputs,
+    facts_by_node_id: BTreeMap<String, InferenceInterfaceResolverFacts>,
+) -> Result<WorkflowGraphInferenceValidationPublication, InferenceInterfacePublicationError> {
     let mut node_projections = Vec::new();
 
     for input in &resolution_inputs.requests {
@@ -120,16 +134,6 @@ pub fn publish_inference_validation_for_graph(
         node_projections,
         request_diagnostics: resolution_inputs.diagnostics,
     })
-}
-
-fn missing_model_facts() -> InferenceInterfaceResolverFacts {
-    InferenceInterfaceResolverFacts {
-        model: InferenceModelResolutionFacts {
-            state: InferenceModelResolutionState::MissingModelFacts,
-        },
-        capability: None,
-        runtimes: Vec::new(),
-    }
 }
 
 fn aggregate_summary(
@@ -274,8 +278,9 @@ mod tests {
     use serde_json::json;
 
     use crate::graph::{
-        GraphEdge, GraphNode, InferenceCapabilityFacts, InferenceRuntimeAvailabilityFact,
-        InferenceRuntimeAvailabilityState, Position,
+        GraphEdge, GraphNode, InferenceCapabilityFacts, InferenceModelResolutionFacts,
+        InferenceModelResolutionState, InferenceRuntimeAvailabilityFact,
+        InferenceRuntimeAvailabilityState, Position, WorkflowGraph,
     };
 
     #[test]

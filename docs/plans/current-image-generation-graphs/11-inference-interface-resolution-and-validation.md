@@ -689,11 +689,26 @@ falling back to previously rendered ports.
      `graph/inference_validation_state.rs`. The implementation records
      node-scoped projection state for later dependency and scheduler admission
      work while keeping graph editing non-blocking.
-5a. Add the event-driven validation lifecycle owner before wiring UI event
+5a. Add the workflow-service inference-interface fact-provider boundary before
+    event-driven validation starts from graph edits. This is option 2 with
+    option 3 discipline: define a focused provider API that accepts typed graph
+    resolution inputs and returns per-node `InferenceInterfaceResolverFacts`
+    from Pumas model/artifact state, inference capability facts, and runtime
+    availability. The default implementation must return typed
+    unavailable/not-implemented facts instead of guessing. Tests may inject
+    facts directly, but frontend and Tauri callers must not pass raw Pumas
+    facts, runtime facts, package summaries, load targets, paths, or capability
+    blobs as validation authority.
+    - Implemented 2026-05-26 in `graph/inference_interface_facts.rs` and the
+      edit-session publisher API. `GraphSessionStore` now owns the injectable
+      provider and the public session publisher no longer accepts caller-supplied
+      resolver facts.
+5b. Add the event-driven validation lifecycle owner before wiring UI event
     delivery. It owns validation session startup, cancellation, supersession,
     bounded event/state buffers, overflow/backpressure diagnostics, task
     observation, and cleanup on graph/session close. It reuses the synchronous
-    publisher core and changes only scheduling/transport behavior.
+    publisher core plus the workflow-service fact-provider boundary and changes
+    only scheduling/transport behavior.
 6. Add the thinnest cross-layer acceptance slice proving model ref input can
    resolve a descriptor, project authored ports, produce a validation summary,
    and gate submit/admission without invoking legacy inference settings.
@@ -702,9 +717,12 @@ falling back to previously rendered ports.
    rendering and graph validation. For inference nodes, this projection must
    be derived from the authored snapshot or current descriptor, not from
    frontend-authored `node.data.definition`.
-8. Add a resolver service boundary in workflow-service that can return typed
-   unavailable/not-implemented diagnostics when Pumas facts or inference
-   capability facts are not sufficient.
+8. Promote the fact-provider boundary into a dedicated resolver service only
+   when the implementation needs broader orchestration than a provider can keep
+   simple. That later service may own request extraction, Pumas/runtime fact
+   lookup, descriptor publication, validation state recording, and lifecycle
+   hooks, but it must still reuse the sync publisher core and must not create a
+   second descriptor-resolution path.
 9. Wire graph editor draft validation to render descriptor ports and disabled
    reasons without frontend-inferred family logic.
 10. Wire workflow save validation to consume the same descriptor contract and

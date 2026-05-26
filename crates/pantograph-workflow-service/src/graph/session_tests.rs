@@ -2,16 +2,18 @@ use super::super::types::InsertNodePositionHint;
 use super::*;
 use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
 use crate::graph::{
-    InferenceCapabilityFacts, InferenceInterfaceResolverFacts, InferenceModelResolutionFacts,
-    InferenceModelResolutionState, InferenceRuntimeAvailabilityFact,
-    InferenceRuntimeAvailabilityState, WorkflowGraphDeleteSelectionRequest,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
-    WorkflowGraphRemoveEdgesRequest,
+    InferenceCapabilityFacts, InferenceInterfaceFactsProvider,
+    InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
+    InferenceInterfaceResolverFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
+    InferenceRuntimeAvailabilityFact, InferenceRuntimeAvailabilityState,
+    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgesRequest,
 };
 use crate::{
     WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
+use async_trait::async_trait;
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
     DependencyEnvironmentActionIntentStatus, DraftGraphValidationSessionId,
@@ -21,6 +23,7 @@ use pantograph_inference_interface_contracts::{
     InferenceValueType, RuntimeIntentId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 fn sample_graph() -> WorkflowGraph {
     WorkflowGraph {
@@ -253,14 +256,17 @@ async fn dependency_environment_action_intent_consumes_current_validation_summar
 
 #[tokio::test]
 async fn publish_inference_validation_session_records_current_summary() {
-    let store = GraphSessionStore::new();
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
     let session = store.create_session(inference_graph(), None).await;
     let publication = store
         .publish_inference_validation_session(
             &session.session_id,
             DraftGraphValidationSessionId::parse("validation.session.2")
                 .expect("valid validation session id"),
-            BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
         )
         .await
         .expect("publish inference validation session");
@@ -295,6 +301,27 @@ async fn publish_inference_validation_session_records_current_summary() {
         result.diagnostics[0].code,
         InferenceDiagnosticCode::DependencyRequirementsMissing
     );
+}
+
+#[tokio::test]
+async fn publish_inference_validation_session_defaults_to_unavailable_facts() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(inference_graph(), None).await;
+    let publication = store
+        .publish_inference_validation_session(
+            &session.session_id,
+            DraftGraphValidationSessionId::parse("validation.session.3")
+                .expect("valid validation session id"),
+        )
+        .await
+        .expect("publish inference validation session");
+
+    assert_eq!(
+        publication.validation_session.summary.status,
+        DraftGraphValidationStatus::Blocked
+    );
+    assert!(!publication.validation_session.summary.executable);
+    assert_eq!(publication.node_projections.len(), 1);
 }
 
 #[tokio::test]
@@ -356,6 +383,32 @@ fn inference_graph() -> WorkflowGraph {
             target_handle: "pumas_model_ref".to_string(),
         }],
         derived_graph: None,
+    }
+}
+
+#[derive(Debug)]
+struct StaticInferenceFactsProvider {
+    facts: BTreeMap<String, InferenceInterfaceResolverFacts>,
+}
+
+#[async_trait]
+impl InferenceInterfaceFactsProvider for StaticInferenceFactsProvider {
+    async fn facts_for_resolution_inputs(
+        &self,
+        inputs: &[InferenceInterfaceGraphResolutionInput],
+    ) -> Result<
+        BTreeMap<String, InferenceInterfaceResolverFacts>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        Ok(inputs
+            .iter()
+            .filter_map(|input| {
+                self.facts
+                    .get(&input.node_id)
+                    .cloned()
+                    .map(|facts| (input.node_id.clone(), facts))
+            })
+            .collect())
     }
 }
 

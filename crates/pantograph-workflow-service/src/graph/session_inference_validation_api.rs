@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
 };
@@ -7,9 +5,9 @@ use pantograph_inference_interface_contracts::{
 use crate::workflow::WorkflowServiceError;
 
 use super::super::inference_interface_publication::{
-    publish_inference_validation_for_graph, WorkflowGraphInferenceValidationPublication,
+    publish_inference_validation_for_resolution_inputs, WorkflowGraphInferenceValidationPublication,
 };
-use super::super::inference_interface_resolver::InferenceInterfaceResolverFacts;
+use super::super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
 use super::GraphSessionStore;
 
@@ -49,7 +47,6 @@ impl GraphSessionStore {
         &self,
         session_id: &str,
         validation_session_id: DraftGraphValidationSessionId,
-        facts_by_node_id: BTreeMap<String, InferenceInterfaceResolverFacts>,
     ) -> Result<WorkflowGraphInferenceValidationPublication, WorkflowServiceError> {
         let graph_session_id = WorkflowGraphSessionId::parse(session_id)
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
@@ -62,10 +59,17 @@ impl GraphSessionStore {
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
-        let publication = publish_inference_validation_for_graph(
+        let resolution_inputs = inference_interface_resolution_inputs_from_graph(&graph);
+        let facts_by_node_id = self
+            .inference_interface_facts_provider
+            .facts_for_resolution_inputs(&resolution_inputs.requests)
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+
+        let publication = publish_inference_validation_for_resolution_inputs(
             validation_session_id,
             graph_revision,
-            &graph,
+            resolution_inputs,
             facts_by_node_id,
         )
         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;

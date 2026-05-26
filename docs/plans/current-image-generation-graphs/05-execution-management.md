@@ -12345,6 +12345,66 @@ Worker rules:
   - Remaining follow-up: implement the event-driven validation lifecycle owner
     on top of this sync publisher before frontend event delivery or queue
     admission depends on live validation updates.
+- 2026-05-26 Milestone 5d live-validation fact-source re-plan decision:
+  - Decision: use option 2 now with option 3 discipline. Add a focused
+    workflow-service fact-provider boundary before the event-driven validation
+    lifecycle owner. The provider accepts typed graph resolution inputs from the
+    strict extractor and returns per-node `InferenceInterfaceResolverFacts` from
+    Pumas model/artifact readiness, inference capability facts, and runtime
+    availability.
+  - Architectural constraint: the synchronous publisher remains the only
+    descriptor publication core. The fact provider feeds that publisher; it does
+    not resolve descriptors itself or create a second validation path.
+  - Default/fail-closed behavior: until production Pumas/runtime adapters are
+    wired, the provider returns typed unavailable/not-implemented facts. It must
+    not guess from model names, package summaries, local paths, frontend state,
+    Tauri payloads, runtime-host execution payloads, or scheduler decisions.
+  - No-fallback/no-legacy confirmation: tests may inject facts directly, but
+    transport callers must pass only validation intent/revision identity.
+    Frontend and Tauri must not provide raw Pumas facts, runtime facts,
+    capability blobs, executable load targets, paths, or package facts as
+    validation authority.
+  - Later objective: if simple fact lookup grows into lifecycle orchestration,
+    promote the provider into a dedicated workflow-service resolver service
+    while preserving the same sync publisher and current validation-state owner.
+- 2026-05-26 Milestone 5d workflow-service fact-provider boundary slice
+  completed:
+  - Smallest useful vertical slice: added the workflow-service
+    `InferenceInterfaceFactsProvider` boundary, a fail-closed
+    `UnavailableInferenceInterfaceFactsProvider`, provider injection on
+    `GraphSessionStore`, and a session publisher path that extracts strict graph
+    requests, asks the provider for facts after releasing the graph lock, and
+    feeds the existing sync validation publisher.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_facts.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, and the current
+    Milestone 5d plan/status files.
+  - No-fallback/no-legacy confirmation: transport/session callers no longer
+    pass raw resolver facts to `publish_inference_validation_session`. The
+    default provider returns typed unavailable facts and does not guess from
+    model names, local paths, package summaries, frontend state, Tauri payloads,
+    runtime-host execution payloads, or scheduler decisions.
+  - Focused tests updated/added: injected ready provider publication records an
+    executable current summary, and the default provider path produces a
+    fail-closed blocked validation summary.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service inference_interface_publication --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: the workflow-service check commands continue to report the
+    pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: implement the event-driven validation lifecycle owner
+    using provider -> sync publisher -> current-state recorder; do not expose
+    raw resolver-fact transport inputs.
 
 ### Traceability Links
 

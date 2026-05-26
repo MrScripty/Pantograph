@@ -16,6 +16,9 @@ use crate::workflow::{
 use super::group_mutation::{
     create_node_group_graph, ungroup_node_graph, update_group_ports_graph,
 };
+use super::inference_interface_facts::{
+    InferenceInterfaceFactsProvider, UnavailableInferenceInterfaceFactsProvider,
+};
 use super::inference_validation_state::{
     CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
 };
@@ -61,6 +64,7 @@ fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]
 pub struct GraphSessionStore {
     sessions: RwLock<HashMap<String, GraphSessionHandle>>,
     validation_state: CurrentInferenceValidationStateStore,
+    inference_interface_facts_provider: Arc<dyn InferenceInterfaceFactsProvider>,
     stale_timeout: Duration,
 }
 
@@ -76,9 +80,29 @@ impl GraphSessionStore {
     }
 
     pub fn with_timeout(timeout: Duration) -> Self {
+        Self::with_timeout_and_inference_interface_facts_provider(
+            timeout,
+            Arc::new(UnavailableInferenceInterfaceFactsProvider),
+        )
+    }
+
+    pub fn with_inference_interface_facts_provider(
+        provider: Arc<dyn InferenceInterfaceFactsProvider>,
+    ) -> Self {
+        Self::with_timeout_and_inference_interface_facts_provider(
+            Duration::from_secs(5 * 60),
+            provider,
+        )
+    }
+
+    pub fn with_timeout_and_inference_interface_facts_provider(
+        timeout: Duration,
+        provider: Arc<dyn InferenceInterfaceFactsProvider>,
+    ) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
             validation_state: CurrentInferenceValidationStateStore::new(),
+            inference_interface_facts_provider: provider,
             stale_timeout: timeout,
         }
     }

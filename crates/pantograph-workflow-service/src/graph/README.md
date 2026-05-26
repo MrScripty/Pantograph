@@ -27,6 +27,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
 | `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
 | `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
+| `inference_interface_facts.rs` | Workflow-service fact-provider boundary that supplies path-free Pumas readiness, inference capability, and runtime availability facts to validation publishers without frontend/Tauri ownership. |
 | `inference_interface_patch.rs` | Workflow-service-owned update proposal and typed graph patch-operation contracts for applying current inference descriptors to authored node snapshots. |
 | `inference_interface_projection.rs` | Workflow-service-owned projection from resolved inference descriptors into minimal authored snapshots and backend validation summaries. |
 | `inference_interface_publication.rs` | Workflow-service-owned synchronous validation publisher that extracts strict graph requests, resolves descriptor projections from supplied facts, emits scoped validation events, and returns bounded node projection records. |
@@ -214,6 +215,11 @@ for existing graph-edit callers.
   the graph lock is released, emits node-scoped descriptor events plus a
   graph-scoped summary event, and records current graph/node validation state
   for later dependency-environment and scheduler admission decisions.
+- Inference-interface facts are supplied through a workflow-service provider
+  boundary. Frontend and transport adapters may request validation by identity
+  and graph revision, but must not provide raw Pumas facts, runtime facts,
+  package summaries, executable load targets, local paths, or capability blobs
+  as validation authority.
 - Live inference-validation events have typed graph/node scope. Descriptor,
   drift, diagnostic, and update-proposal payloads must be node-scoped so
   multi-inference graphs can route updates unambiguously; summary payloads are
