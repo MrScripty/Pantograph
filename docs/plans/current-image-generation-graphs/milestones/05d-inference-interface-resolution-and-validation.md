@@ -147,6 +147,15 @@ defining an image-only inference-node interface.
       but its API must look like a dedicated validation-state owner so later
       submit gating and scheduler admission can consume the same source without
       rewriting callers.
+      Standards iteration update: the next implementation slice must not add
+      more validation-state logic to `graph/session.rs` because that module is
+      already over the decomposition review threshold. Create a focused
+      workflow-service validation-state module, expose a small owner API, move
+      the dependency-action intent freshness checks behind that API, and update
+      the graph source-directory README or ADR. The owner API must accept
+      validated intent/revision/session types after boundary parsing; raw
+      strings, numeric revisions, or JSON maps may not become internal
+      freshness keys.
 - [ ] Delete or rewrite `ModelDependencyRequest`/`model_path` dependency
       hydration call sites that are on the `puma-lib` -> inference path. Any
       remaining dependency-environment work must consume the canonical
@@ -226,6 +235,17 @@ defining an image-only inference-node interface.
         descriptor validation summaries and deriving the canonical
         `DependencyEnvironmentRequest` only when those summaries are executable
         and current.
+- [ ] Add the current inference-validation state owner before dependency action
+      derivation. The owner must be workflow-service code, not Tauri/frontend
+      code, and must be keyed by validated `graph_session_id +
+      WorkflowGraphRevision` plus optional validation session id. It stores the
+      latest descriptor-backed validation summary and enough node-scoped
+      descriptor metadata to let later slices derive dependency-environment
+      requests without passing Pumas facts or paths through the graph editor.
+      It must publish/update state only after confirming the graph revision is
+      still current, must not hold graph-session locks across Pumas/inference
+      resolution, and must return typed diagnostics for missing, pending,
+      stale, unavailable, invalid, or mismatched validation.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

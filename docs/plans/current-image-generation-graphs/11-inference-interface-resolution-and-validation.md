@@ -123,6 +123,19 @@ Out of scope:
   `modelPath`, executable entry paths, unscoped validation events,
   `inference_settings`, `expand-settings`, static all-port inference metadata, or
   semantic `node.data.definition` inference overlays.
+- Decomposition rule for the current validation-state work: do not add more
+  state-machine or dependency-action logic to oversized modules such as
+  `graph/session.rs` or the shared contract crate root. The implementation must
+  introduce a focused workflow-service validation-state module with a small
+  public facade and update the graph module README or ADR. If shared contract
+  changes are required in `pantograph-inference-interface-contracts`, split
+  contracts into focused modules or record and execute a decomposition slice in
+  the same milestone rather than expanding `src/lib.rs` further.
+- Apply parse-once semantics at every boundary. IPC/API payloads may enter as
+  serialized DTOs, but workflow-service internals should consume validated
+  action intents, graph revisions, validation session ids, and state records.
+  Do not pass raw `String`, raw `u64`, or unbounded JSON maps through the
+  validation-state owner when a validated newtype or enum exists.
 
 ## Resolved Design Decisions
 
@@ -560,6 +573,12 @@ falling back to previously rendered ports.
    single owner-shaped API that submit gating and scheduler admission can later
    consume without adding parallel validation-summary caches or frontend-owned
    policy.
+   Standards sequencing for this step: first create a focused validation-state
+   module and move dependency-action intent freshness checks out of
+   `graph/session.rs`; then replace the numeric revision field in live
+   validation DTOs. Tests must prove stale graph revisions are rejected through
+   the owner API, old numeric revision payloads no longer deserialize after the
+   replacement, and the graph lock is not held across resolver work.
 4. Tighten request extraction before it feeds live validation: use one
    workflow-service model-ref binding resolver, reject duplicate incoming
    bindings, validate source handle/type, report connected-versus-inline

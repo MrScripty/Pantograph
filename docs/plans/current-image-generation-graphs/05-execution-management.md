@@ -12080,9 +12080,49 @@ Worker rules:
     compatibility map, do not let Tauri or frontend synthesize validation
     freshness, and do not derive `DependencyEnvironmentRequest` unless the
     stored validation summary belongs to the exact current graph revision.
-  - Next implementation slice: replace the workflow-service live validation
-    session DTO revision field with graph fingerprint revision and add focused
-    tests proving stale numeric/old revision payloads are rejected or removed.
+  - Next implementation slice: first create the focused workflow-service
+    current-validation-state owner and move dependency-action freshness checks
+    behind it; then replace the workflow-service live validation session DTO
+    revision field with graph fingerprint revision and add focused tests
+    proving stale numeric/old revision payloads are rejected or removed.
+- 2026-05-26 Milestone 5d standards iteration for current validation-state
+  re-plan:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `PLAN-STANDARDS.md`,
+    `TESTING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`, and
+    `languages/rust/RUST-API-STANDARDS.md`.
+  - Findings: `crates/pantograph-workflow-service/src/graph/session.rs` is
+    already over the 500-line decomposition review threshold, and
+    `crates/pantograph-inference-interface-contracts/src/lib.rs` is also over
+    the threshold. The next validation-state implementation must not expand
+    those files with more state-machine logic.
+  - Plan update: before replacing numeric validation revision identity, create
+    a focused workflow-service current-validation-state module with a small
+    owner API, move dependency-action intent freshness checks behind that API,
+    and update the graph module README or ADR. If the shared contract crate root
+    must be touched again, split DTOs into focused modules or execute a
+    decomposition slice instead of growing `src/lib.rs`.
+  - Rust/API compliance: parse IPC/API payloads once at the boundary into
+    validated DTO/newtype values. The validation-state owner must consume
+    validated `DependencyEnvironmentActionIntent`, `WorkflowGraphRevision`,
+    graph session id, and optional validation session id; raw strings, numeric
+    revisions, or unbounded JSON maps must not become internal freshness keys.
+  - Backend-owned data compliance: graph editor and Tauri remain action/transport
+    surfaces only. Descriptor validation summaries, enqueue eligibility,
+    dependency-environment request derivation, and stale-state checks remain
+    workflow-service owned.
+  - Concurrency compliance: graph-session locks may be held only long enough to
+    snapshot graph state and current revision. Pumas lookup, inference
+    capability resolution, runtime availability checks, and dependency request
+    derivation must run after releasing the lock, then publish state only if the
+    validation session id and graph revision are still current.
+  - Verification impact: add focused owner tests for stale revision rejection,
+    missing/pending validation diagnostics, old numeric revision payload
+    rejection after replacement, and current-state consumption by dependency
+    action intent handling. The first cross-layer acceptance slice must still
+    prove model ref -> descriptor -> authored ports -> validation summary ->
+    submit/admission gate before broad horizontal expansion.
 
 ### Traceability Links
 
