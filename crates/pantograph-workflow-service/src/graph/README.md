@@ -16,6 +16,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `canonicalization_inference.rs` | Dynamic inference-setting schema expansion, per-node definition overlay rebuilds, and passthrough port helpers. |
 | `canonicalization_tests.rs` | Current canonicalization, no-legacy, and inference-overlay regression tests. |
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
+| `effective_definition_tests.rs` | Effective-definition tests for dynamic overlays, inference authored snapshots, and no-fallback inference definition rejection. |
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
 | `presentation_revision.rs` | Canonical display-metadata projection and BLAKE3 presentation fingerprint calculation for historic graph presentation revisions. |
 | `run_settings.rs` | Canonical node settings projection used by immutable workflow-run audit snapshots. |
@@ -174,6 +175,12 @@ for existing graph-edit callers.
   `node.data.definition` as an executable interface source; their model-specific
   ports must come from authored inference interface snapshots and backend
   descriptor validation.
+- `llm-inference` effective port projection consumes the typed
+  `node.data.inference_interface_snapshot` shape from
+  `pantograph-inference-interface-contracts`. Invalid snapshots produce
+  blocking effective-definition diagnostics; unknown future snapshot value
+  categories must be rejected until the graph contract mapping is extended
+  deliberately.
 - Dynamic `node.data.definition` overlays that carry `inference_payloads` must
   preserve them as structured task/input/result/role metadata through effective
   definition and contract projection. Those payloads remain backend-neutral

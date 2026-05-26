@@ -3,6 +3,8 @@ mod connection_intent;
 mod contract_validation;
 mod diagnostics;
 mod effective_definition;
+#[cfg(test)]
+mod effective_definition_tests;
 mod executable_topology;
 mod group_mutation;
 mod inspection;

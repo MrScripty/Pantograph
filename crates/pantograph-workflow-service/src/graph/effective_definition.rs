@@ -1,8 +1,15 @@
 use serde_json::Value;
 
+use pantograph_inference_interface_contracts::{
+    AuthoredInferenceInterfaceSnapshot, AuthoredInferencePortSnapshot, InferenceArtifactType,
+    InferenceConstraintType, InferencePortDirection, InferencePortRequirement,
+    InferenceReferenceType, InferenceScalarType, InferenceValueType,
+    ValidatedAuthoredInferenceInterfaceSnapshot,
+};
 use pantograph_node_contracts::{
     ContractResolutionWarning, EffectiveNodeContract, NodeInstanceContext, NodeInstanceId,
-    NodeTypeId, PortContract, PortKind,
+    NodeTypeId, PortCardinality, PortContract, PortId, PortKind, PortRequirement, PortValueType,
+    PortVisibility,
 };
 
 use super::registry::{convert_port, NodeRegistry};
@@ -13,6 +20,7 @@ const INFERENCE_DYNAMIC_DEFINITION_REJECTION: &str = concat!(
     "llm-inference node.data.definition is not an executable interface source; ",
     "inference ports must come from the authored inference interface snapshot"
 );
+const INFERENCE_INTERFACE_SNAPSHOT_FIELD: &str = "inference_interface_snapshot";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EffectiveDefinitionError {
@@ -76,6 +84,12 @@ fn dynamic_contract_ports(
     node: &GraphNode,
 ) -> Result<DynamicContractPorts, EffectiveDefinitionError> {
     let mut overlay = DynamicContractPorts::default();
+    if node.node_type == GENERIC_INFERENCE_NODE_TYPE {
+        if let Some(snapshot_value) = node.data.get(INFERENCE_INTERFACE_SNAPSHOT_FIELD) {
+            return inference_snapshot_contract_ports(snapshot_value);
+        }
+    }
+
     let Some(dynamic_definition) = node.data.get("definition") else {
         return Ok(overlay);
     };
@@ -113,6 +127,135 @@ struct DynamicContractPorts {
     inputs: Option<Vec<PortContract>>,
     outputs: Option<Vec<PortContract>>,
     warnings: Vec<ContractResolutionWarning>,
+}
+
+fn inference_snapshot_contract_ports(
+    value: &Value,
+) -> Result<DynamicContractPorts, EffectiveDefinitionError> {
+    let snapshot = serde_json::from_value::<AuthoredInferenceInterfaceSnapshot>(value.clone())
+        .map_err(|error| EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: format!("node.data.{INFERENCE_INTERFACE_SNAPSHOT_FIELD} is invalid: {error}"),
+        })?;
+    let snapshot =
+        ValidatedAuthoredInferenceInterfaceSnapshot::try_from(snapshot).map_err(|error| {
+            EffectiveDefinitionError::InvalidDynamicDefinition {
+                message: format!(
+                    "node.data.{INFERENCE_INTERFACE_SNAPSHOT_FIELD} is invalid: {error}"
+                ),
+            }
+        })?;
+    let snapshot = snapshot.as_snapshot();
+    Ok(DynamicContractPorts {
+        inputs: Some(snapshot_ports_to_contracts(
+            &snapshot.inputs,
+            InferencePortDirection::Input,
+            PortKind::Input,
+        )?),
+        outputs: Some(snapshot_ports_to_contracts(
+            &snapshot.outputs,
+            InferencePortDirection::Output,
+            PortKind::Output,
+        )?),
+        warnings: Vec::new(),
+    })
+}
+
+fn snapshot_ports_to_contracts(
+    ports: &[AuthoredInferencePortSnapshot],
+    expected_direction: InferencePortDirection,
+    kind: PortKind,
+) -> Result<Vec<PortContract>, EffectiveDefinitionError> {
+    ports
+        .iter()
+        .filter(|port| port.direction == expected_direction)
+        .map(|port| snapshot_port_to_contract(port, kind))
+        .collect()
+}
+
+fn snapshot_port_to_contract(
+    port: &AuthoredInferencePortSnapshot,
+    kind: PortKind,
+) -> Result<PortContract, EffectiveDefinitionError> {
+    let port_id = PortId::try_from(port.port_id.as_str().to_string()).map_err(|error| {
+        EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: format!(
+                "node.data.{INFERENCE_INTERFACE_SNAPSHOT_FIELD} port '{}' is invalid: {error}",
+                port.port_id.as_str()
+            ),
+        }
+    })?;
+    let contract = PortContract {
+        id: port_id,
+        kind,
+        label: port.label.clone(),
+        value_type: inference_value_type_to_port_value_type(&port.value_type)?,
+        requirement: inference_requirement_to_port_requirement(port.requirement)?,
+        cardinality: PortCardinality::Single,
+        visibility: PortVisibility::Public,
+        constraints: Vec::new(),
+        editor_hints: Vec::new(),
+        inference_payloads: Vec::new(),
+        options_provider: None,
+    };
+    contract
+        .validate()
+        .map_err(|error| EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: format!(
+                "node.data.{INFERENCE_INTERFACE_SNAPSHOT_FIELD} port '{}' is invalid: {error}",
+                port.port_id.as_str()
+            ),
+        })?;
+    Ok(contract)
+}
+
+fn inference_requirement_to_port_requirement(
+    requirement: InferencePortRequirement,
+) -> Result<PortRequirement, EffectiveDefinitionError> {
+    match requirement {
+        InferencePortRequirement::Required => Ok(PortRequirement::Required),
+        InferencePortRequirement::Optional => Ok(PortRequirement::Optional),
+        _ => Err(EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: "authored inference snapshot uses an unsupported port requirement".to_string(),
+        }),
+    }
+}
+
+fn inference_value_type_to_port_value_type(
+    value_type: &InferenceValueType,
+) -> Result<PortValueType, EffectiveDefinitionError> {
+    let value_type = match value_type {
+        InferenceValueType::Scalar(InferenceScalarType::String) => PortValueType::String,
+        InferenceValueType::Scalar(InferenceScalarType::Bool) => PortValueType::Boolean,
+        InferenceValueType::Scalar(
+            InferenceScalarType::I64 | InferenceScalarType::U64 | InferenceScalarType::F64,
+        ) => PortValueType::Number,
+        InferenceValueType::Artifact(InferenceArtifactType::Image) => PortValueType::Image,
+        InferenceValueType::Artifact(InferenceArtifactType::Audio) => PortValueType::Audio,
+        InferenceValueType::Artifact(InferenceArtifactType::Tensor) => PortValueType::Tensor,
+        InferenceValueType::Artifact(InferenceArtifactType::Document) => PortValueType::Document,
+        InferenceValueType::Artifact(
+            InferenceArtifactType::Video | InferenceArtifactType::Media,
+        ) => PortValueType::Json,
+        InferenceValueType::Reference(
+            InferenceReferenceType::PumasModel
+            | InferenceReferenceType::MediaArtifact
+            | InferenceReferenceType::RuntimeArtifact
+            | InferenceReferenceType::SchedulerTaskResult,
+        ) => PortValueType::Json,
+        InferenceValueType::Constraint(
+            InferenceConstraintType::Runtime
+            | InferenceConstraintType::Device
+            | InferenceConstraintType::DenoisingScheduler
+            | InferenceConstraintType::SamplingMethod,
+        ) => PortValueType::String,
+        _ => {
+            return Err(EffectiveDefinitionError::InvalidDynamicDefinition {
+                message: "authored inference snapshot uses an unsupported port value type"
+                    .to_string(),
+            });
+        }
+    };
+    Ok(value_type)
 }
 
 fn parse_node_instance_id(node_id: &str) -> Result<NodeInstanceId, EffectiveDefinitionError> {
@@ -163,231 +306,4 @@ fn workflow_port_to_contract(
             message: format!("dynamic port '{port_id}' is invalid: {error}"),
         }
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-    use crate::graph::{PortDataType, Position};
-    use pantograph_node_contracts::{
-        ContractExpansionReason, ContractInferenceExecutionResultKind, ContractInferenceTaskId,
-        InferencePortPayloadRole,
-    };
-
-    #[test]
-    fn effective_node_definition_merges_dynamic_ports_without_dropping_static_ports() {
-        let registry = NodeRegistry::new();
-        let node = GraphNode {
-            id: "text".to_string(),
-            node_type: "text-input".to_string(),
-            position: Position::default(),
-            data: json!({
-                "definition": {
-                    "node_type": "text-input",
-                    "inputs": [
-                        {
-                            "id": "temperature",
-                            "label": "Temperature",
-                            "data_type": "number",
-                            "required": false,
-                            "multiple": false
-                        }
-                    ]
-                }
-            }),
-        };
-
-        let definition = effective_node_definition(&node, &registry).expect("definition");
-
-        assert!(
-            definition.inputs.iter().any(|port| port.id == "text"),
-            "static text input must remain available"
-        );
-        assert_eq!(
-            definition
-                .inputs
-                .iter()
-                .find(|port| port.id == "temperature")
-                .map(|port| &port.data_type),
-            Some(&PortDataType::Number)
-        );
-    }
-
-    #[test]
-    fn effective_node_definition_preserves_dynamic_inference_payload_contracts() {
-        let registry = NodeRegistry::new();
-        let node = GraphNode {
-            id: "text".to_string(),
-            node_type: "text-output".to_string(),
-            position: Position::default(),
-            data: json!({
-                "definition": {
-                    "node_type": "text-output",
-                    "outputs": [
-                        {
-                            "id": "rerank_debug_results",
-                            "label": "Rerank Debug Results",
-                            "data_type": "json",
-                            "required": false,
-                            "multiple": false,
-                            "inference_payloads": [
-                                {
-                                    "task_id": "rerank",
-                                    "role": "task_output",
-                                    "result_kind": "rerank"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }),
-        };
-
-        let definition = effective_node_definition(&node, &registry).expect("definition");
-        let dynamic_output = definition
-            .outputs
-            .iter()
-            .find(|port| port.id == "rerank_debug_results")
-            .expect("dynamic output");
-        assert_eq!(dynamic_output.inference_payloads.len(), 1);
-        let payload = &dynamic_output.inference_payloads[0];
-        assert_eq!(payload.task_id, ContractInferenceTaskId::Rerank);
-        assert_eq!(payload.role, InferencePortPayloadRole::TaskOutput);
-        assert_eq!(
-            payload.result_kind,
-            Some(ContractInferenceExecutionResultKind::Rerank)
-        );
-
-        let effective = effective_node_contract(&node, &registry).expect("contract");
-        let contract_output = effective
-            .outputs
-            .iter()
-            .find(|port| port.base.id.as_str() == "rerank_debug_results")
-            .expect("dynamic contract output");
-        assert_eq!(
-            contract_output.base.inference_payloads,
-            dynamic_output.inference_payloads
-        );
-
-        let encoded = serde_json::to_value(dynamic_output).expect("dynamic output encodes");
-        assert_eq!(
-            encoded["inference_payloads"][0]["task_id"],
-            serde_json::json!("rerank")
-        );
-        assert_eq!(
-            encoded["inference_payloads"][0]["role"],
-            serde_json::json!("task_output")
-        );
-        assert_eq!(
-            encoded["inference_payloads"][0]["result_kind"],
-            serde_json::json!("rerank")
-        );
-    }
-
-    #[test]
-    fn effective_node_contract_reports_mismatched_dynamic_definition() {
-        let registry = NodeRegistry::new();
-        let node = GraphNode {
-            id: "text".to_string(),
-            node_type: "text-input".to_string(),
-            position: Position::default(),
-            data: json!({
-                "definition": {
-                    "node_type": "text-output",
-                    "inputs": [
-                        {
-                            "id": "foreign_dynamic_input",
-                            "label": "Foreign Dynamic Input",
-                            "data_type": "number"
-                        }
-                    ]
-                }
-            }),
-        };
-
-        let effective = effective_node_contract(&node, &registry).expect("contract");
-
-        assert!(
-            effective
-                .inputs
-                .iter()
-                .all(|port| port.base.id.as_str() != "foreign_dynamic_input"),
-            "mismatched dynamic definition must not add ports"
-        );
-        assert_eq!(
-            effective.diagnostics.warnings[0].code,
-            "dynamic_node_type_mismatch"
-        );
-    }
-
-    #[test]
-    fn effective_node_contract_records_dynamic_expansion_reason() {
-        let registry = NodeRegistry::new();
-        let node = GraphNode {
-            id: "text".to_string(),
-            node_type: "text-input".to_string(),
-            position: Position::default(),
-            data: json!({
-                "definition": {
-                    "node_type": "text-input",
-                    "inputs": [
-                        {
-                            "id": "temperature",
-                            "label": "Temperature",
-                            "data_type": "number"
-                        }
-                    ]
-                }
-            }),
-        };
-
-        let effective = effective_node_contract(&node, &registry).expect("contract");
-
-        assert_eq!(
-            effective.diagnostics.expansion_reasons,
-            vec![ContractExpansionReason::DynamicConfiguration]
-        );
-        assert_eq!(
-            effective
-                .inputs
-                .last()
-                .expect("dynamic port")
-                .expansion_reasons,
-            vec![ContractExpansionReason::DynamicConfiguration]
-        );
-    }
-
-    #[test]
-    fn effective_node_contract_rejects_inference_node_data_definition() {
-        let registry = NodeRegistry::new();
-        let node = GraphNode {
-            id: "llm".to_string(),
-            node_type: "llm-inference".to_string(),
-            position: Position::default(),
-            data: json!({
-                "definition": {
-                    "node_type": "llm-inference",
-                    "inputs": [
-                        {
-                            "id": "temperature",
-                            "label": "Temperature",
-                            "data_type": "number"
-                        }
-                    ]
-                }
-            }),
-        };
-
-        let error = effective_node_contract(&node, &registry)
-            .expect_err("inference node definitions must not be semantic fallbacks");
-
-        assert_eq!(
-            error,
-            EffectiveDefinitionError::InvalidDynamicDefinition {
-                message: INFERENCE_DYNAMIC_DEFINITION_REJECTION.to_string(),
-            }
-        );
-    }
 }

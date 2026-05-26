@@ -11546,6 +11546,33 @@ Worker rules:
     effective inference ports, then remove graph-visible task/model-specific
     static `llm-inference` ports without restoring `node.data.definition` as a
     fallback source.
+- 2026-05-25 Milestone 5d authored inference snapshot effective-port
+  projection slice completed:
+  - Smallest useful vertical slice: added workflow-service projection from
+    typed `node.data.inference_interface_snapshot` authored snapshots into
+    effective `llm-inference` ports. The projection ignores legacy
+    `node.data.definition` when a valid authored snapshot is present, rejects
+    invalid snapshots with typed effective-definition errors, and rejects
+    unknown future snapshot value/requirement variants until the graph contract
+    mapping is deliberately extended.
+  - No-fallback/no-legacy confirmation: authored snapshots now have a canonical
+    backend path into graph-effective ports. The slice does not re-enable
+    `node.data.definition`, Pumas package facts, runtime load targets, model
+    paths, or scheduler decisions as inference interface sources.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    graph::effective_definition --lib`; `cargo test -p
+    pantograph-workflow-service
+    contract_diagnostics_reject_inference_dynamic_definition_fallbacks --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`. The
+    workflow-service check commands still report only the known
+    `set_active_run_execution_plan` dead-code warning from the active-plan
+    runtime handoff removal boundary.
+  - Remaining follow-up: shrink graph-visible `llm-inference` static metadata
+    to bootstrap/control ports and wire the resolver/validator so connected
+    Pumas model refs produce current descriptors and validation summaries.
 
 ### Traceability Links
 
