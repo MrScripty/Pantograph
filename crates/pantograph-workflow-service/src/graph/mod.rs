@@ -8,6 +8,7 @@ mod effective_definition_tests;
 mod executable_topology;
 mod group_mutation;
 mod inference_interface_patch;
+mod inference_interface_validation;
 mod inspection;
 mod memory_impact;
 mod persistence;
@@ -50,6 +51,10 @@ pub use inference_interface_patch::{
     GraphPatchProposalId, InferenceInterfaceAffectedEdge, InferenceInterfaceEdgeRemovalReason,
     InferenceInterfaceGraphPatchError, InferenceInterfaceGraphPatchOperation,
     InferenceInterfaceLiteralRemovalReason, InferenceInterfaceUpdateProposal, WorkflowEdgeId,
+};
+pub use inference_interface_validation::{
+    InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationEvent,
+    WorkflowGraphInferenceValidationEventPayload, WorkflowGraphInferenceValidationSession,
 };
 pub use inspection::{
     inspect_workflow_graph, inspect_workflow_graph_with_run_context,

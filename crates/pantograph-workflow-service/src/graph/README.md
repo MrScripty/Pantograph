@@ -28,6 +28,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
 | `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
 | `inference_interface_patch.rs` | Workflow-service-owned update proposal and typed graph patch-operation contracts for applying current inference descriptors to authored node snapshots. |
+| `inference_interface_validation.rs` | Workflow-service live inference-validation session and event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -190,6 +191,10 @@ for existing graph-edit callers.
 - Destructive inference-interface patch operations must mark the proposal
   destructive and require explicit confirmation before a later apply endpoint
   mutates graph state.
+- Live inference validation events use backend-issued validation session ids,
+  a monotonic client graph revision, and strictly increasing event sequence
+  numbers. Update-proposal events are workflow-service-owned because they carry
+  graph patch operations.
 - Dynamic `node.data.definition` overlays that carry `inference_payloads` must
   preserve them as structured task/input/result/role metadata through effective
   definition and contract projection. Those payloads remain backend-neutral

@@ -11621,6 +11621,26 @@ Worker rules:
     `set_active_run_execution_plan` dead-code warning.
   - Remaining follow-up: connect proposals to live validation events and apply
     endpoints after descriptor resolution and drift reporting exist.
+- 2026-05-25 Milestone 5d live inference-validation session contract slice
+  completed:
+  - Smallest useful vertical slice: added workflow-service live validation
+    session/event DTOs carrying backend-issued validation session ids,
+    non-zero client graph revisions, strictly increasing event sequences,
+    descriptor, drift, diagnostic, update-proposal, and summary events.
+  - No-fallback/no-legacy confirmation: the slice adds only the contract
+    envelope for later transport and resolver integration. It does not mutate
+    graphs, restore `node.data.definition`, or introduce frontend-owned
+    validation behavior.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    inference_interface_validation --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `git diff --check`. Workflow-service checks still
+    report only the known `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire validation event transport after descriptor
+    resolution can produce current descriptors, drift reports, update
+    proposals, and validation summaries.
 
 ### Traceability Links
 

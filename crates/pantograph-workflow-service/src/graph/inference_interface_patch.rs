@@ -332,7 +332,7 @@ mod tests {
             "drift_report": drift_report_fixture(),
             "requires_confirmation": false,
             "destructive": false,
-            "legacy_metadata": {}
+            "unknown_extra": {}
         });
 
         let error = serde_json::from_value::<InferenceInterfaceUpdateProposal>(json)

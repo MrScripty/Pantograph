@@ -78,7 +78,7 @@ defining an image-only inference-node interface.
       update proposal contracts for "update to current interface." The
       inference-interface contract crate may provide drift types, but graph
       patch operations must live with graph mutation ownership.
-- [ ] Define live draft validation session contracts with backend-issued
+- [x] Define live draft validation session contracts with backend-issued
       validation session ids, monotonic client graph revisions, event sequence
       numbers, descriptor/drift/diagnostic/update-proposal events, and a
       backend-owned validation summary.
@@ -401,3 +401,22 @@ defining an image-only inference-node interface.
   - Remaining follow-up: wire live validation proposal events and apply/update
     endpoints after the resolver can produce current descriptors and drift
     reports.
+- [x] 2026-05-25 live inference-validation session contract slice completed:
+  - Smallest useful vertical slice: added workflow-service live validation
+    session/event DTOs with backend-issued validation session ids, non-zero
+    client graph revisions, strictly increasing event sequences, descriptor,
+    drift, diagnostic, update-proposal, and summary payloads.
+  - No-fallback/no-legacy confirmation: the slice defines the event contract
+    only. It does not add transport, resolver, graph mutation, or frontend
+    fallback behavior, and update-proposal payloads stay workflow-service-owned
+    because they carry graph patch operations.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    inference_interface_validation --lib`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-workflow-service
+    --no-default-features`; `cargo check -p pantograph-workflow-service
+    --all-features`; and `git diff --check`. Workflow-service checks still
+    report only the known `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire session event transport after descriptor
+    resolution can produce current descriptors, drift reports, update
+    proposals, and backend validation summaries.
