@@ -8,6 +8,7 @@ mod effective_definition_tests;
 mod executable_topology;
 mod group_mutation;
 mod inference_interface_patch;
+mod inference_interface_projection;
 mod inference_interface_resolver;
 mod inference_interface_validation;
 mod inspection;
@@ -52,6 +53,11 @@ pub use inference_interface_patch::{
     GraphPatchProposalId, InferenceInterfaceAffectedEdge, InferenceInterfaceEdgeRemovalReason,
     InferenceInterfaceGraphPatchError, InferenceInterfaceGraphPatchOperation,
     InferenceInterfaceLiteralRemovalReason, InferenceInterfaceUpdateProposal, WorkflowEdgeId,
+};
+pub use inference_interface_projection::{
+    authored_snapshot_from_descriptor, resolve_inference_interface_projection,
+    validation_summary_from_descriptor, InferenceInterfaceProjectionError,
+    InferenceInterfaceResolutionProjection,
 };
 pub use inference_interface_resolver::{
     resolve_inference_interface_from_facts, InferenceCapabilityFacts,

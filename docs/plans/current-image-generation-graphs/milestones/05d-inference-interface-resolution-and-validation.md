@@ -443,3 +443,24 @@ defining an image-only inference-node interface.
     load-target/readiness APIs, runtime capability registries, and runtime
     availability facts, then wire the first connected-model-ref acceptance
     slice.
+- [x] 2026-05-25 workflow-service inference projection slice completed:
+  - Smallest useful vertical slice: added workflow-service projection from a
+    resolved `InferenceInterfaceDescriptor` into the minimal authored inference
+    snapshot persisted in node data plus the backend validation summary that
+    frontend submit state and backend admission must consume.
+  - No-fallback/no-legacy confirmation: the projection consumes only validated
+    descriptors from the canonical resolver path. It does not read
+    `node.data.definition`, `inference_settings`, `expand-settings`, static
+    all-port metadata, Pumas package facts, model paths, runtime-host payloads,
+    or scheduler decisions. Explicit invalid runtime/device constraints become
+    blocking summary reasons instead of alternate execution choices.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_projection
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo check -p
+    pantograph-workflow-service --all-features`. Workflow-service checks still
+    report only the known `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire graph/model-ref lookup adapters into the resolver
+    and projection helper so a connected `puma-lib` output can produce current
+    descriptors, authored visible ports, live validation events, and submit/
+    queue-admission gating from the backend summary.

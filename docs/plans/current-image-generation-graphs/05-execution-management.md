@@ -11662,6 +11662,28 @@ Worker rules:
     `set_active_run_execution_plan` dead-code warning.
   - Remaining follow-up: feed the resolver from concrete Pumas/runtime
     adapters and implement the connected-model-ref validation acceptance slice.
+- 2026-05-25 Milestone 5d workflow-service inference projection slice
+  completed:
+  - Smallest useful vertical slice: added workflow-service projection from a
+    resolved `InferenceInterfaceDescriptor` into the minimal authored inference
+    snapshot and backend validation summary used to gate frontend submit state
+    and backend admission.
+  - No-fallback/no-legacy confirmation: the projection consumes validated
+    descriptors only. It does not read `node.data.definition`,
+    `inference_settings`, `expand-settings`, static all-port metadata, Pumas
+    package facts, model paths, runtime-host payloads, or scheduler decisions.
+    Explicit invalid runtime/device constraints become blocking typed summary
+    reasons rather than alternate execution choices.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_projection
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo check -p
+    pantograph-workflow-service --all-features`. Workflow-service checks still
+    report only the known `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire graph/model-ref lookup adapters into the resolver
+    and projection helper so a connected `puma-lib` output can produce current
+    descriptors, authored visible ports, live validation events, and submit/
+    queue-admission gating from the backend summary.
 
 ### Traceability Links
 
