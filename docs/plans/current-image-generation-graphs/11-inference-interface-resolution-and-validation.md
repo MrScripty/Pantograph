@@ -738,6 +738,12 @@ falling back to previously rendered ports.
       Add a descriptor-backed task projection input before deleting that raw
       execution-authority path so the scheduler can consume current validation
       state without preserving legacy graph semantics.
+    - Decision recorded 2026-05-26: implement the descriptor-backed projection
+      input first. The input must carry per-inference-node current validation
+      records into scheduler task graph construction and must make missing,
+      stale, unavailable, or invalid descriptors typed blocking diagnostics.
+      Queue admission/session orchestration remains the later owner of
+      validation-state lookup and will call this projection API once ready.
 12. Add queue-admission readiness validation that consumes the backend validation
     summary and fails closed before enqueue, queue-placement event recording, or
     scheduler task graph materialization when inference descriptors are pending,

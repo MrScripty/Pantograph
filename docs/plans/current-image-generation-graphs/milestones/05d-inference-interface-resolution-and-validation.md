@@ -259,6 +259,19 @@ defining an image-only inference-node interface.
       inputs only; once descriptor-backed projection input exists, delete the
       raw execution-authority parsing path instead of keeping a compatibility
       branch.
+      Decision recorded 2026-05-26: use option 2 for the next implementation
+      slice and retain option 3 as the later queue-admission/session ownership
+      boundary. The option 2 slice must add a deterministic descriptor-backed
+      projection input to `workflow_scheduler_task_graph` or an adjacent
+      builder function. That input is keyed by inference node id and carries the
+      current validation record needed for task materialization: resolved
+      descriptor task kind, descriptor fingerprint, validated path-free Pumas
+      model ref, validated runtime/device constraints, validated trait
+      settings, and typed blocking diagnostics when the descriptor is missing,
+      stale, unavailable, or invalid. After this input exists, remove
+      `required_task_type` and any scheduler-authority parsing of raw
+      `node.data.task_kind`. Raw graph fields remain extractor/resolver inputs
+      only.
 - [x] Add the workflow-service inference-interface fact-provider boundary before
       the event-driven validation lifecycle owner. The provider accepts typed
       request inputs from the strict extractor, resolves Pumas model/artifact
@@ -958,6 +971,24 @@ defining an image-only inference-node interface.
     The next implementation slice should add a deterministic descriptor-backed
     projection input to the scheduler task graph builder, then delete raw
     graph-field execution parsing instead of keeping a compatibility branch.
+- [x] 2026-05-26 descriptor-task-kind scheduler projection decision:
+  - Decision: implement option 2 next. Add the descriptor-backed projection
+    input at the workflow-service task graph boundary before changing
+    scheduler materialization semantics.
+  - Slice boundary: allowed production files are the workflow-service task
+    graph module/contracts plus directly affected workflow-service call sites
+    that currently call `workflow_scheduler_task_graph`. Allowed tests are the
+    focused task graph, task binding, external input materialization, and
+    session execution tests needed to prove descriptor-backed projection and
+    fail-closed diagnostics.
+  - No-fallback/no-legacy confirmation: the implementation must delete
+    scheduler-authority parsing of raw `node.data.task_kind` rather than
+    preserving it as a fallback. Graph-authored `task_kind`, runtime, device,
+    and trait values stay on the resolver/extractor side only.
+  - Later objective: option 3 will move validation-state lookup and enqueue
+    readiness ownership into queue admission or graph session orchestration.
+    That owner must call the option 2 projection API instead of creating a
+    second scheduler materialization path.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

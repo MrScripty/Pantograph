@@ -12420,6 +12420,18 @@ Worker rules:
     descriptor-backed task projection input first, then have the later
     queue-admission owner call that API once current validation state is
     available.
+- 2026-05-26 Milestone 5d descriptor-task-kind scheduler projection decision:
+  - Decision: use the descriptor-backed task projection input as the next
+    implementation slice. This keeps task graph construction deterministic and
+    lets tests inject current validation records before queue admission owns
+    validation-state lookup.
+  - Required cleanup: remove scheduler-authority parsing of raw
+    `node.data.task_kind` once the descriptor-backed input exists. Do not keep
+    the raw graph field as a compatibility branch; graph-authored `task_kind`,
+    runtime, device, and trait values remain resolver constraints only.
+  - Later boundary: queue admission or graph session orchestration becomes the
+    production owner that looks up current validation state and calls this
+    projection API before scheduler placement.
 
 ### Traceability Links
 
