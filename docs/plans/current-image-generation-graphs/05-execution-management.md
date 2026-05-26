@@ -12123,6 +12123,36 @@ Worker rules:
     action intent handling. The first cross-layer acceptance slice must still
     prove model ref -> descriptor -> authored ports -> validation summary ->
     submit/admission gate before broad horizontal expansion.
+- 2026-05-26 Milestone 5d current validation-state owner/freshness slice
+  completed:
+  - Smallest vertical slice: added
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`
+    as the focused workflow-service owner for dependency-environment action
+    freshness checks, wired `GraphSessionStore` to parse validated intent and
+    current `WorkflowGraphRevision` before delegating to that owner, and
+    updated the graph module README invariants.
+  - No-fallback/no-legacy confirmation: the owner returns typed blocked
+    diagnostics for stale graph revisions, missing target nodes, and missing
+    current validation summaries. It does not translate numeric validation
+    revisions, synthesize validation state in Tauri/frontend code, call
+    dependency execution, or derive a partial `DependencyEnvironmentRequest`.
+  - Standards result: the slice moved freshness policy out of the already large
+    `graph/session.rs` state-machine file, keeps the graph-session lock scoped
+    to canonicalization/current-revision/target-node checks, keeps raw strings
+    out of the validation-state key, and leaves `graph/session.rs` below the
+    500-line decomposition threshold after relocating a sibling node-API helper.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service inference_validation_state`; `cargo test -p
+    pantograph-workflow-service dependency_environment_action_intent`.
+  - Discovered issue: the targeted workflow-service tests still emit the
+    pre-existing dead-code warning
+    `crates/pantograph-workflow-service/src/scheduler/store.rs:408
+    set_active_run_execution_plan`. It is outside this slice and remains a
+    scheduler cleanup follow-up.
+  - Remaining follow-up: replace the workflow-service live validation numeric
+    revision identity with `WorkflowGraphRevision`, publish executable
+    descriptor validation summaries into the owner, and derive the canonical
+    dependency-environment request only from current executable summary state.
 
 ### Traceability Links
 

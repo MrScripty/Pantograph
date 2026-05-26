@@ -246,6 +246,19 @@ defining an image-only inference-node interface.
       still current, must not hold graph-session locks across Pumas/inference
       resolution, and must return typed diagnostics for missing, pending,
       stale, unavailable, invalid, or mismatched validation.
+      - Initial owner/freshness sub-slice completed on 2026-05-26:
+        `graph/inference_validation_state.rs` now owns dependency-environment
+        action freshness checks keyed by validated graph session id and
+        `WorkflowGraphRevision`. `GraphSessionStore` parses the boundary input,
+        canonicalizes the graph only long enough to compute the current
+        revision and target-node existence, releases the graph lock, then
+        delegates to the owner. The slice preserves the no-fallback rule:
+        stale revisions, missing target nodes, and missing current summaries
+        return typed blocked diagnostics and never derive a partial
+        `DependencyEnvironmentRequest`. Remaining work is replacing numeric
+        live-validation revision identity, publishing executable validation
+        summaries into this owner, and deriving dependency-environment requests
+        only from current executable summary state.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

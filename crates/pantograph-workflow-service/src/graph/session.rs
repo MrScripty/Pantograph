@@ -4,8 +4,7 @@ use std::time::Duration;
 
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
-    DependencyEnvironmentActionIntentStatus, InferenceDiagnosticCode, InferenceDiagnosticSeverity,
-    InferenceInterfaceDiagnostic, ValidatedDependencyEnvironmentActionIntent,
+    ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
 };
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -16,6 +15,9 @@ use crate::workflow::{
 
 use super::group_mutation::{
     create_node_group_graph, ungroup_node_graph, update_group_ports_graph,
+};
+use super::inference_validation_state::{
+    CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
 };
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::session_contract::WorkflowGraphEditSessionGraphResponse;
@@ -44,29 +46,19 @@ mod session_node_api;
 
 type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
 
-fn append_unique_strings(target: &mut Vec<String>, values: Vec<String>) {
-    let mut seen = target.iter().cloned().collect::<HashSet<_>>();
-    for value in values {
-        if seen.insert(value.clone()) {
-            target.push(value);
-        }
-    }
-}
-
 fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]) -> Vec<String> {
-    let mut dirty_tasks = Vec::new();
-    for node_id in node_ids {
-        append_unique_strings(
-            &mut dirty_tasks,
-            dirty_tasks_from_seed_nodes(graph, std::slice::from_ref(node_id)),
-        );
-    }
-    dirty_tasks
+    let mut seen = HashSet::new();
+    node_ids
+        .iter()
+        .flat_map(|node_id| dirty_tasks_from_seed_nodes(graph, std::slice::from_ref(node_id)))
+        .filter(|task_id| seen.insert((*task_id).clone()))
+        .collect()
 }
 
 #[derive(Debug)]
 pub struct GraphSessionStore {
     sessions: RwLock<HashMap<String, GraphSessionHandle>>,
+    validation_state: CurrentInferenceValidationStateStore,
     stale_timeout: Duration,
 }
 
@@ -84,6 +76,7 @@ impl GraphSessionStore {
     pub fn with_timeout(timeout: Duration) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
+            validation_state: CurrentInferenceValidationStateStore::new(),
             stale_timeout: timeout,
         }
     }
@@ -188,46 +181,32 @@ impl GraphSessionStore {
         intent: DependencyEnvironmentActionIntent,
     ) -> Result<DependencyEnvironmentActionIntentResult, WorkflowServiceError> {
         let intent = ValidatedDependencyEnvironmentActionIntent::try_from(intent)
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?
-            .into_inner();
-        let session_id = intent.graph_session_id.as_str();
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let session_id = intent.as_intent().graph_session_id.as_str();
         let handle = self.get_session_handle(session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
         state.canonicalize_graph();
         let current_revision = state.graph.compute_fingerprint();
-
-        if current_revision != intent.graph_revision.as_str() {
-            return Ok(blocked_dependency_environment_action_result(
-                &intent,
-                InferenceDiagnosticCode::GraphRevisionMismatch,
-                "Dependency environment action was requested for a stale graph revision.",
-                Some(
-                    "Refresh graph validation for the current graph before resolving dependencies.",
-                ),
-            ));
-        }
-
-        if !state
+        let current_graph_revision = WorkflowGraphRevision::parse(&current_revision)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let target_node_exists = state
             .graph
             .nodes
             .iter()
-            .any(|node| node.id == intent.target_node_id.as_str())
-        {
-            return Ok(blocked_dependency_environment_action_result(
-                &intent,
-                InferenceDiagnosticCode::TargetNodeMissing,
-                "Dependency environment action target node does not exist in the current graph.",
-                None,
-            ));
-        }
+            .any(|node| node.id == intent.as_intent().target_node_id.as_str());
+        drop(state);
 
-        Ok(blocked_dependency_environment_action_result(
-            &intent,
-            InferenceDiagnosticCode::ValidationSummaryMissing,
-            "Inference validation has not completed for this graph revision.",
-            Some("Run descriptor validation before resolving dependency environments."),
-        ))
+        Ok(self
+            .validation_state
+            .resolve_dependency_environment_action_intent(
+                DependencyEnvironmentActionIntentStateRequest {
+                    intent,
+                    current_graph_revision,
+                    target_node_exists,
+                },
+            )
+            .await)
     }
 
     pub async fn mark_running(
@@ -508,30 +487,6 @@ impl GraphSessionStore {
             sessions.remove(&id);
         }
         count
-    }
-}
-
-fn blocked_dependency_environment_action_result(
-    intent: &DependencyEnvironmentActionIntent,
-    code: InferenceDiagnosticCode,
-    message: &str,
-    hint: Option<&str>,
-) -> DependencyEnvironmentActionIntentResult {
-    DependencyEnvironmentActionIntentResult {
-        contract_version: intent.contract_version,
-        graph_session_id: intent.graph_session_id.clone(),
-        graph_revision: intent.graph_revision.clone(),
-        validation_session_id: intent.validation_session_id.clone(),
-        target_node_id: intent.target_node_id.clone(),
-        action: intent.action,
-        status: DependencyEnvironmentActionIntentStatus::Blocked,
-        diagnostics: vec![InferenceInterfaceDiagnostic {
-            severity: InferenceDiagnosticSeverity::Error,
-            code,
-            message: message.to_string(),
-            hint: hint.map(str::to_string),
-            port_id: None,
-        }],
     }
 }
 

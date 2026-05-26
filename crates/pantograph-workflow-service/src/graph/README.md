@@ -32,6 +32,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_request.rs` | Draft-graph extraction of path-free inference-interface resolver requests from connected `puma-lib` model references and explicit inference-node constraints. |
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
+| `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks and dependency-environment action diagnostics. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -217,6 +218,16 @@ for existing graph-edit callers.
   a monotonic client graph revision, and strictly increasing event sequence
   numbers. Update-proposal events are workflow-service-owned because they carry
   graph patch operations.
+- Current inference-validation state is workflow-service-owned and keyed by
+  graph session plus graph revision. Dependency-environment actions, submit
+  gating, and scheduler admission must consume that owner instead of carrying
+  separate validation-summary caches or reconstructing freshness in Tauri or
+  frontend code.
+- Graph-session locks may be held only long enough to canonicalize/snapshot
+  graph state, compute the current graph revision, and check target-node
+  existence. Pumas lookup, inference capability resolution, runtime availability
+  checks, dependency requirement resolution, and dependency-environment request
+  derivation must run after releasing the graph lock.
 - Dynamic `node.data.definition` overlays that carry `inference_payloads` must
   preserve them as structured task/input/result/role metadata through effective
   definition and contract projection. Those payloads remain backend-neutral

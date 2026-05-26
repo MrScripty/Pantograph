@@ -15,6 +15,15 @@ use super::{
     dirty_tasks_from_seed_nodes_unique, phase6_memory_impact_projection, GraphSessionStore,
 };
 
+fn append_unique_strings(target: &mut Vec<String>, values: Vec<String>) {
+    let mut seen = target.iter().cloned().collect::<HashSet<_>>();
+    target.extend(
+        values
+            .into_iter()
+            .filter(|value| seen.insert(value.clone())),
+    );
+}
+
 impl GraphSessionStore {
     pub async fn update_node_data(
         &self,
@@ -199,7 +208,7 @@ impl GraphSessionStore {
             .map(|edge| edge.target.clone())
             .collect::<Vec<_>>();
         let mut dirty_tasks = dirty_tasks_from_seed_nodes_unique(&before_graph, &selected_node_ids);
-        super::append_unique_strings(
+        append_unique_strings(
             &mut dirty_tasks,
             dirty_tasks_from_seed_nodes_unique(&before_graph, &edge_target_node_ids),
         );

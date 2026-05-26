@@ -12,6 +12,7 @@ mod inference_interface_projection;
 mod inference_interface_request;
 mod inference_interface_resolver;
 mod inference_interface_validation;
+mod inference_validation_state;
 mod inspection;
 mod memory_impact;
 mod persistence;
