@@ -12226,6 +12226,82 @@ Worker rules:
     releases the graph lock before descriptor resolution, records only current
     validation summaries, and returns typed events/summary without touching
     Tauri/frontend policy.
+- 2026-05-26 Milestone 5d validation publication blast-radius review:
+  - Findings accepted into the plan: strict model-ref binding and optional
+    constraint parsing must be the first code slice before any validation
+    publisher consumes graph requests; the synchronous publisher must return and
+    store bounded node-scoped descriptor/authored-port projection records rather
+    than only fingerprints; backend validation-summary admission must happen
+    before queue insertion and queue-placement diagnostics; scheduler task
+    projection must consume descriptor-backed validation state instead of
+    reparsing raw inference-node execution fields; and remaining
+    `modelPath`/`ModelDependencyRequest`/`ModelRefV2`/`inference_settings`/
+    `expand-settings` occurrences are implementation gates, not cleanup notes.
+  - Standards update: new shared DTO families must not continue expanding the
+    already-large `pantograph-inference-interface-contracts/src/lib.rs`. Add a
+    focused module or perform a decomposition slice before introducing
+    validation publication records, node projection DTOs, or further
+    dependency-action contracts.
+  - No-fallback/no-legacy confirmation: these changes do not approve Tauri or
+    frontend validation policy, descriptor resolution, dependency request
+    construction, queue eligibility inference, or legacy graph/node inference
+    paths. Any slice that needs those paths to keep working must stop and
+    re-plan.
+- 2026-05-26 Milestone 5d standards compliance iteration:
+  - Standards reviewed:
+    plan, architecture, concurrency, testing, documentation, security, interop,
+    frontend, dependency, Rust API, Rust async, Rust security, Rust interop, and
+    Rust dependency standards from
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`.
+  - Plan update: live validation now requires an explicit workflow-service
+    lifecycle owner before frontend event delivery. The owner must start,
+    cancel, supersede, and clean up validation sessions; use bounded event/state
+    buffers; define overflow/backpressure diagnostics; observe task failures;
+    and keep domain validation/projection sync-core with async only at fact
+    lookup, transport, persistence, or event-delivery boundaries.
+  - Plan update: frontend validation stores must discard stale events by
+    validation session id, graph fingerprint revision, event sequence, and node
+    scope; keep graph display/editing available while validation is pending; and
+    clean up subscriptions or temporary timers on graph/session lifecycle
+    changes.
+  - Plan update: verification now explicitly covers lifecycle cancellation,
+    stale-event rejection, bounded queue/state behavior, frontend cleanup,
+    dependency ownership/feature checks, and source-directory README/ADR updates
+    for touched boundaries.
+  - No-fallback/no-legacy confirmation: these standards tighten the canonical
+    validation path only. They do not authorize frontend polling as the primary
+    sync path, Tauri business logic, compatibility shims, model-path hydration,
+    unscoped validation events, or fallback execution from retired inference
+    metadata.
+- 2026-05-26 Milestone 5d strict inference request extraction slice completed:
+  - Smallest useful vertical slice: tightened workflow-service inference request
+    extraction so generic inference nodes accept exactly one incoming
+    `pumas_model_ref` binding, require the source handle and `puma-lib` source
+    node type, reject connected-versus-inline model-ref disagreement, and treat
+    wrong-type optional `task_kind`/`runtime`/`device` values as invalid
+    diagnostics while keeping missing, null, and blank strings absent.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_request.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, and the current
+    Milestone 5d plan/status files.
+  - No-fallback/no-legacy confirmation: the extractor still consumes only the
+    canonical path-free `pumas_model_ref` and typed optional constraints. It does
+    not read model paths, package facts, executable load targets,
+    `inference_settings`, `expand-settings`, static all-port metadata,
+    runtime-host payloads, or scheduler decisions as alternate request sources.
+  - Focused tests added: duplicate model-ref binding, wrong source handle,
+    wrong source node type, inline/connected disagreement, wrong-type optional
+    constraints, and null/blank optional constraint absence.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_request
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: the workflow-service check commands continue to report the
+    pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: implement the synchronous validation publisher core
+    using this strict extractor before wiring event-driven frontend validation.
 
 ### Traceability Links
 

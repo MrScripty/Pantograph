@@ -99,6 +99,9 @@ Out of scope:
 - Parse and validate external/persisted/IPC payloads at the boundary into
   typed contracts. Internal code must consume validated values rather than
   repeatedly checking raw strings, raw JSON, or unbounded maps.
+- Draft graph extraction is a validation boundary, not a best-effort helper.
+  Strict model-ref binding and explicit constraint parsing must land before any
+  synchronous or event-driven validation publisher consumes graph requests.
 - Keep backend-owned data authoritative. The frontend may hold transient draft
   UI state, but current descriptor semantics, validation summaries, update
   proposals, and enqueue eligibility come from the backend.
@@ -118,6 +121,14 @@ Out of scope:
 - The first implementation pass must be a validated vertical slice before broad
   horizontal expansion: model ref input -> descriptor resolution -> authored
   port projection -> validation summary -> submit/admission gate.
+- The first validation publication pass must return and store bounded
+  node-scoped projection records, not only descriptor fingerprints. The graph
+  editor needs descriptor/authored-port data for rendering, and dependency
+  action derivation needs current node metadata without asking the frontend to
+  carry Pumas facts, paths, or scheduler policy.
+- Backend queue admission must consume the current validation summary before
+  queue insertion or queue-placement diagnostics are recorded. Frontend gating
+  is presentation only; backend admission remains the source of truth.
 - API-breaking cleanup is expected for retired graph/runtime/interface paths.
   Do not keep aliases, compatibility shims, or alternate successful routes for
   `modelPath`, executable entry paths, unscoped validation events,
@@ -130,12 +141,71 @@ Out of scope:
   public facade and update the graph module README or ADR. If shared contract
   changes are required in `pantograph-inference-interface-contracts`, split
   contracts into focused modules or record and execute a decomposition slice in
-  the same milestone rather than expanding `src/lib.rs` further.
+  the same milestone rather than expanding `src/lib.rs` further. The current
+  contract crate root is already large enough that new DTO families for
+  validation publication, descriptor projections, or dependency actions need a
+  focused module unless the change is only a few lines on an existing type.
 - Apply parse-once semantics at every boundary. IPC/API payloads may enter as
   serialized DTOs, but workflow-service internals should consume validated
   action intents, graph revisions, validation session ids, and state records.
   Do not pass raw `String`, raw `u64`, or unbounded JSON maps through the
   validation-state owner when a validated newtype or enum exists.
+- Live validation has an explicit lifecycle owner in workflow-service. No slice
+  may add fire-and-forget validation tasks, unbounded event buffers, or frontend
+  polling loops as the primary sync mechanism. Event-driven validation must use
+  bounded queues or bounded state records, define overflow/backpressure behavior,
+  cancel or supersede work on graph revision changes and session close, observe
+  task errors/panics at the owner, and clean up subscriptions deterministically.
+- Keep the validation core synchronous wherever it only parses, validates,
+  projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
+  lookup, event delivery, IPC, or persistence boundaries, and locks must be
+  released before any `.await` or blocking work.
+- Frontend validation stores must be keyed by backend-issued validation session
+  id, graph fingerprint revision, event sequence, and node scope. Stale responses
+  must be discarded without mutating current node state, editing must remain
+  available while validation is pending, and submit/enqueue presentation must
+  depend only on the latest backend validation summary.
+- Validation summaries, projection records, events, diagnostics, and persisted
+  authored snapshots must remain bounded and path-free. Do not include executable
+  local paths, Pumas package fact blobs, runtime load targets, large media,
+  secrets, environment variables, or scheduler decisions in graph/editor-facing
+  state.
+- New dependency or feature additions must follow dependency ownership rules:
+  declare dependencies at the narrowest crate/package that executes them, keep
+  DTO crates lean with minimal default features, and record tree/feature impact
+  when adding nontrivial crates or frontend packages.
+
+## Standards Compliance Review Notes
+
+Standards reviewed for this milestone: plan, architecture, concurrency,
+testing, documentation, security, interop, frontend, dependency, Rust API, Rust
+async, Rust security, Rust interop, and Rust dependency standards from
+`/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`.
+
+The plan must preserve these compliance decisions during implementation:
+
+- **Layering:** graph editor stays presentation-only, Tauri stays transport-only,
+  workflow-service owns validation orchestration, the scheduler owns only
+  runtime/device/resource policy, and runtime-host owns dispatch execution.
+- **Validation:** deserialize and parse at IPC/API/persisted graph boundaries
+  into typed DTOs/newtypes; after that, internal code consumes validated
+  graph-session, revision, node, descriptor, and action types.
+- **Async/concurrency:** validation session management owns cancellation,
+  supersession, bounded queues/state, and task observation. Domain projection and
+  validation logic stays sync-core; async-shell code is limited to fact lookup,
+  transport, persistence, or event delivery.
+- **Frontend:** event-driven updates replace polling where feasible, stale
+  validation responses are ignored by session/revision/sequence, subscriptions
+  are cleaned up on graph/session lifecycle changes, and validation does not
+  block graph display or editing.
+- **Docs:** every source module boundary created or materially changed by this
+  milestone must update a source-directory README or ADR with purpose, API
+  consumer contract, structured producer contract when applicable, invariants,
+  alternatives rejected, and revisit triggers.
+- **Tests:** each slice needs focused unit/integration tests plus the thinnest
+  cross-layer acceptance path before broad horizontal expansion. Lifecycle tests
+  are required for cancellation, stale-event rejection, bounded queue/state
+  behavior, and frontend subscription cleanup.
 
 ## Resolved Design Decisions
 
@@ -230,6 +300,14 @@ Out of scope:
   `pumas_model_ref` bindings, verify the source handle and source node/type can
   provide a Pumas model ref, and report connected-versus-inline disagreement as
   a typed diagnostic instead of silently choosing a winner.
+- Synchronous validation and later live validation share one workflow-service
+  publisher core. The core snapshots the graph, releases the graph/session lock,
+  resolves descriptor projections, records current graph/node validation state,
+  and returns the same bounded projection records the event-driven path will
+  publish. Lightweight events may carry fingerprints for routing, but a caller
+  must be able to obtain descriptor/authored-port data from the validation
+  response or current validation-state owner without resolving again in Tauri or
+  frontend code.
 - Existing `PortOptionsProvider`, selection-input, and option-cache plumbing may
   be reused only to render backend-projected option rows. Typed option identity,
   availability, diagnostics, and defaults remain owned by
@@ -239,7 +317,9 @@ Out of scope:
 - Backend validation summary is the queue-admission authority. The frontend
   disables submit/enqueue from the latest backend summary, and workflow-service
   must run the same descriptor-backed readiness validation before queue
-  admission so UI and backend cannot diverge.
+  admission so UI and backend cannot diverge. That check must happen before the
+  run is inserted into the scheduler queue or queue-placement diagnostics are
+  emitted.
 - Runtime-host input contract alignment is required before production dispatch.
   Runtime-host execution requests must carry scheduler-selected handoff plus
   typed, path-free materialized inputs and artifact/result references assembled
@@ -458,8 +538,11 @@ Validation sessions should reuse existing graph-session response and event
 transport patterns where practical, but they must not hold graph/session locks
 while resolving Pumas or inference facts. The workflow-service should snapshot
 draft graph state under the relevant lock, release it, resolve asynchronously,
-then publish events only when the validation session id and client graph
-revision are still current.
+then publish events only when the validation session id and graph fingerprint
+revision are still current. The workflow-service validation-session lifecycle
+owner must cancel or supersede in-flight validation for replaced graph
+revisions, stop accepting validation work when a graph/session closes, and
+observe task errors before reporting final session state.
 
 ## Resolution Flow
 
@@ -491,7 +574,9 @@ falling back to previously rendered ports.
   contract.
 - **Task graph projection:** stores only path-free model refs, typed
   constraints, resolved descriptor task kind, descriptor fingerprint, and
-  bindings needed for scheduler task orchestration.
+  bindings needed for scheduler task orchestration. Projection must consume the
+  current descriptor-backed validation state rather than reinterpreting raw
+  graph `task_kind`, `runtime`, `device`, or trait JSON as executable truth.
 - **Input materialization:** combines connected upstream task results, graph
   literal values, and descriptor defaults into typed runtime-host execution
   inputs.
@@ -499,7 +584,9 @@ falling back to previously rendered ports.
   runtime-relevant availability facts before scheduler dispatch selection.
 - **Queue admission:** consumes the same descriptor-backed validation summary
   used by the editor, and rejects non-executable graphs before enqueue rather
-  than relying only on structural stale-graph diagnostics.
+  than relying only on structural stale-graph diagnostics. Queue admission must
+  run before queue insertion, queue-placement event recording, and scheduler task
+  graph materialization.
 
 ## No-Fallback Requirements
 
@@ -579,39 +666,59 @@ falling back to previously rendered ports.
    validation DTOs. Tests must prove stale graph revisions are rejected through
    the owner API, old numeric revision payloads no longer deserialize after the
    replacement, and the graph lock is not held across resolver work.
-4. Tighten request extraction before it feeds live validation: use one
+4. Tighten request extraction before it feeds live validation. This is a hard
+   prerequisite for the synchronous validation publisher and the later
+   event-driven path: use one
    workflow-service model-ref binding resolver, reject duplicate incoming
    bindings, validate source handle/type, report connected-versus-inline
    disagreement, and treat wrong-type or unparsable explicit constraints as
    invalid diagnostics rather than absent values.
-5. Add the thinnest cross-layer acceptance slice proving model ref input can
+5. Add the synchronous workflow-service validation publisher core. It snapshots
+   the draft graph under lock, releases the lock, extracts strict model-ref and
+   constraint requests, resolves descriptor projections, builds scoped
+   validation events and graph summary, stores current graph/node validation
+   records in the validation-state owner, and returns a validation session plus
+   bounded per-node projection records. The core must use
+   `resolve_inference_interface_projection` rather than duplicating descriptor,
+   authored-snapshot, or summary rules. Tauri and frontend code are not touched
+   in this slice except by tests or generated bindings that prove no business
+   policy moved there.
+5a. Add the event-driven validation lifecycle owner before wiring UI event
+    delivery. It owns validation session startup, cancellation, supersession,
+    bounded event/state buffers, overflow/backpressure diagnostics, task
+    observation, and cleanup on graph/session close. It reuses the synchronous
+    publisher core and changes only scheduling/transport behavior.
+6. Add the thinnest cross-layer acceptance slice proving model ref input can
    resolve a descriptor, project authored ports, produce a validation summary,
    and gate submit/admission without invoking legacy inference settings.
-6. Add a generated projection from authored/current descriptors into the
+7. Add a generated projection from authored/current descriptors into the
    existing effective node definition path only where needed for staged
    rendering and graph validation. For inference nodes, this projection must
    be derived from the authored snapshot or current descriptor, not from
    frontend-authored `node.data.definition`.
-7. Add a resolver service boundary in workflow-service that can return typed
+8. Add a resolver service boundary in workflow-service that can return typed
    unavailable/not-implemented diagnostics when Pumas facts or inference
    capability facts are not sufficient.
-8. Wire graph editor draft validation to render descriptor ports and disabled
+9. Wire graph editor draft validation to render descriptor ports and disabled
    reasons without frontend-inferred family logic.
-9. Wire workflow save validation to consume the same descriptor contract and
+10. Wire workflow save validation to consume the same descriptor contract and
    reject stale or invalid ports.
-10. Wire scheduler task projection/materialization and runtime-host input
-    assembly to consume the resolved descriptor task kind, descriptor defaults,
-    typed constraints, and typed upstream values. Raw graph `task_kind` remains
-    only an optional resolver constraint.
-11. Add queue-admission readiness validation that consumes the backend validation
-   summary and fails closed before enqueue when inference descriptors are
-   pending, stale, unavailable, unresolved, or blocked.
-12. Add pre-dispatch descriptor fingerprint revalidation before runtime-host
+11. Wire scheduler task projection/materialization and runtime-host input
+    assembly to consume current descriptor-backed validation state: resolved
+    descriptor task kind, descriptor defaults, typed constraints, descriptor
+    fingerprint, and typed upstream values. Raw graph `task_kind`, runtime,
+    device, and trait fields remain resolver inputs only and must not be parsed
+    again as execution authority during scheduler projection.
+12. Add queue-admission readiness validation that consumes the backend validation
+    summary and fails closed before enqueue, queue-placement event recording, or
+    scheduler task graph materialization when inference descriptors are pending,
+    stale, unavailable, unresolved, or blocked.
+13. Add pre-dispatch descriptor fingerprint revalidation before runtime-host
    dispatch selection.
-13. Delete or rewrite any remaining retired inference-node port tables,
+14. Delete or rewrite any remaining retired inference-node port tables,
     model-path-derived support checks, or planned-inference validation branches
     replaced by this resolver.
-14. Delete or rewrite `inference_settings` JSON canonicalization and
+15. Delete or rewrite `inference_settings` JSON canonicalization and
     `expand-settings` dynamic inference-interface paths once the descriptor
     projection owns graph-visible inference ports.
 
@@ -744,7 +851,9 @@ falling back to previously rendered ports.
 - Decide the live validation transport over the current app shell after
   inspecting existing frontend/Tauri subscription patterns. The event envelope
   ownership and graph/node scope are no longer open; only the delivery mechanism,
-  cleanup/cancellation behavior, and frontend store integration remain to choose.
+  concrete bounded-capacity/backpressure thresholds, and frontend store
+  integration remain to choose. Cleanup, cancellation, supersession, and task
+  observation are workflow-service lifecycle-owner requirements.
 - Align `RuntimeHostExecutionInput` with the value categories here without
   coupling runtime-host to graph-editor-specific drift or patch contracts.
 
@@ -761,6 +870,14 @@ falling back to previously rendered ports.
   boundaries.
 - First vertical-slice acceptance test proving model ref -> descriptor ->
   authored port projection -> validation summary -> submit/admission gate.
+- Validation publisher tests proving the synchronous core snapshots the graph,
+  releases locks before Pumas/inference/runtime fact lookup, records bounded
+  graph/node validation state, rejects stale graph revisions and validation
+  session ids, and returns typed diagnostics instead of partial state.
+- Event-driven lifecycle tests proving validation sessions are cancelled or
+  superseded on graph revision changes, cleaned up on session close, bounded
+  event/state buffers apply the documented overflow/backpressure behavior, and
+  task errors or panics are observed at the workflow-service owner.
 - Contract-crate deletion tests/source search proving shared unscoped
   validation event/stream DTOs are not exported or used as transport, while
   shared validation summary serde fixtures still round trip.
@@ -796,6 +913,13 @@ falling back to previously rendered ports.
 - Frontend submit-gating tests proving the toolbar and queue submission use the
   backend validation summary instead of inferring eligibility from local raw
   diagnostics.
+- Frontend validation-store tests proving stale validation events/responses are
+  ignored by session id, graph fingerprint revision, sequence, and node scope;
+  graph display/editing remains available while validation is pending; and event
+  subscriptions or any temporary timers are cleaned up on graph/session changes.
+- Dependency ownership checks for any new crate/package or feature added by this
+  milestone, including workspace dependency placement, minimal default features,
+  and package-local command verification for touched frontend workspaces.
 
 ## Completion Criteria
 

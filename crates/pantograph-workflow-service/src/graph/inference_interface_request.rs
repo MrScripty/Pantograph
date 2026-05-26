@@ -7,13 +7,14 @@ use pantograph_inference_interface_contracts::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::types::WorkflowGraph;
+use super::types::{GraphNode, WorkflowGraph};
 
 const NODE_TYPE_GENERIC_INFERENCE: &str = "llm-inference";
 const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
 const PORT_TASK_KIND: &str = "task_kind";
 const PORT_RUNTIME: &str = "runtime";
 const PORT_DEVICE: &str = "device";
+const NODE_TYPE_PUMA_LIB: &str = "puma-lib";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -47,6 +48,9 @@ pub struct InferenceInterfaceGraphResolutionDiagnostic {
 pub enum InferenceInterfaceGraphResolutionDiagnosticCode {
     MissingPumasModelRef,
     InvalidPumasModelRef,
+    DuplicatePumasModelRefBinding,
+    InvalidPumasModelRefBindingSource,
+    PumasModelRefBindingDisagreement,
     InvalidTaskKind,
     InvalidRuntimeConstraint,
     InvalidDeviceConstraint,
@@ -58,9 +62,9 @@ pub fn inference_interface_resolution_inputs_from_graph(
     let nodes_by_id = graph
         .nodes
         .iter()
-        .map(|node| (node.id.as_str(), &node.data))
+        .map(|node| (node.id.as_str(), node))
         .collect::<BTreeMap<_, _>>();
-    let incoming_model_refs = incoming_model_ref_sources(graph);
+    let incoming_model_refs = incoming_model_ref_bindings(graph);
     let mut requests = Vec::new();
     let mut diagnostics = Vec::new();
 
@@ -119,36 +123,125 @@ pub fn inference_interface_resolution_inputs_from_graph(
     }
 }
 
-fn incoming_model_ref_sources(graph: &WorkflowGraph) -> BTreeMap<&str, &str> {
-    graph
+fn incoming_model_ref_bindings(
+    graph: &WorkflowGraph,
+) -> BTreeMap<&str, Vec<ModelRefBindingSource<'_>>> {
+    let mut incoming = BTreeMap::<&str, Vec<ModelRefBindingSource<'_>>>::new();
+    for edge in graph
         .edges
         .iter()
         .filter(|edge| edge.target_handle == PORT_PUMAS_MODEL_REF)
-        .map(|edge| (edge.target.as_str(), edge.source.as_str()))
-        .collect()
+    {
+        incoming
+            .entry(edge.target.as_str())
+            .or_default()
+            .push(ModelRefBindingSource {
+                source_node_id: edge.source.as_str(),
+                source_handle: edge.source_handle.as_str(),
+            });
+    }
+    incoming
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ModelRefBindingSource<'a> {
+    source_node_id: &'a str,
+    source_handle: &'a str,
 }
 
 fn model_ref_for_inference_node(
     node_id: &str,
     node_data: &Value,
-    incoming_model_refs: &BTreeMap<&str, &str>,
-    nodes_by_id: &BTreeMap<&str, &Value>,
+    incoming_model_refs: &BTreeMap<&str, Vec<ModelRefBindingSource<'_>>>,
+    nodes_by_id: &BTreeMap<&str, &GraphNode>,
     diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 ) -> Option<PumasModelRef> {
-    if let Some(source_node_id) = incoming_model_refs.get(node_id) {
-        let Some(source_data) = nodes_by_id.get(source_node_id) else {
+    let inline_model_ref = if node_data.get(PORT_PUMAS_MODEL_REF).is_some() {
+        parse_model_ref(node_id, node_data.get(PORT_PUMAS_MODEL_REF), diagnostics)
+    } else {
+        None
+    };
+
+    if let Some(sources) = incoming_model_refs.get(node_id) {
+        if sources.len() > 1 {
             diagnostics.push(diagnostic(
                 node_id,
                 Some(PORT_PUMAS_MODEL_REF),
-                InferenceInterfaceGraphResolutionDiagnosticCode::MissingPumasModelRef,
+                InferenceInterfaceGraphResolutionDiagnosticCode::DuplicatePumasModelRefBinding,
+                "inference nodes accept exactly one incoming pumas_model_ref binding",
+            ));
+            return None;
+        }
+        let source = sources[0];
+        if source.source_handle != PORT_PUMAS_MODEL_REF {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(PORT_PUMAS_MODEL_REF),
+                InferenceInterfaceGraphResolutionDiagnosticCode::InvalidPumasModelRefBindingSource,
+                "incoming pumas_model_ref binding must originate from a pumas_model_ref output handle",
+            ));
+            return None;
+        }
+        let Some(source_node) = nodes_by_id.get(source.source_node_id) else {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(PORT_PUMAS_MODEL_REF),
+                InferenceInterfaceGraphResolutionDiagnosticCode::InvalidPumasModelRefBindingSource,
                 "connected pumas_model_ref source node is missing from the graph",
             ));
             return None;
         };
-        return parse_model_ref(node_id, source_data.get(PORT_PUMAS_MODEL_REF), diagnostics);
+        if source_node.node_type != NODE_TYPE_PUMA_LIB {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(PORT_PUMAS_MODEL_REF),
+                InferenceInterfaceGraphResolutionDiagnosticCode::InvalidPumasModelRefBindingSource,
+                "incoming pumas_model_ref binding must originate from a puma-lib node",
+            ));
+            return None;
+        }
+        if source_node.data.get(PORT_PUMAS_MODEL_REF).is_none() {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(PORT_PUMAS_MODEL_REF),
+                InferenceInterfaceGraphResolutionDiagnosticCode::MissingPumasModelRef,
+                "connected puma-lib node does not provide a canonical pumas_model_ref output",
+            ));
+            return None;
+        }
+        let connected_model_ref = parse_model_ref(
+            node_id,
+            source_node.data.get(PORT_PUMAS_MODEL_REF),
+            diagnostics,
+        )?;
+        if let Some(inline_model_ref) = inline_model_ref {
+            if inline_model_ref != connected_model_ref {
+                diagnostics.push(diagnostic(
+                    node_id,
+                    Some(PORT_PUMAS_MODEL_REF),
+                    InferenceInterfaceGraphResolutionDiagnosticCode::PumasModelRefBindingDisagreement,
+                    "inline pumas_model_ref disagrees with the connected pumas_model_ref binding",
+                ));
+                return None;
+            }
+        }
+        return Some(connected_model_ref);
     }
 
-    parse_model_ref(node_id, node_data.get(PORT_PUMAS_MODEL_REF), diagnostics)
+    match inline_model_ref {
+        Some(model_ref) => Some(model_ref),
+        None => {
+            if node_data.get(PORT_PUMAS_MODEL_REF).is_none() {
+                diagnostics.push(diagnostic(
+                    node_id,
+                    Some(PORT_PUMAS_MODEL_REF),
+                    InferenceInterfaceGraphResolutionDiagnosticCode::MissingPumasModelRef,
+                    "inference interface resolution requires a canonical pumas_model_ref input",
+                ));
+            }
+            None
+        }
+    }
 }
 
 fn parse_model_ref(
@@ -157,12 +250,6 @@ fn parse_model_ref(
     diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 ) -> Option<PumasModelRef> {
     let Some(value) = value else {
-        diagnostics.push(diagnostic(
-            node_id,
-            Some(PORT_PUMAS_MODEL_REF),
-            InferenceInterfaceGraphResolutionDiagnosticCode::MissingPumasModelRef,
-            "inference interface resolution requires a canonical pumas_model_ref input",
-        ));
         return None;
     };
 
@@ -196,7 +283,14 @@ fn optional_task_kind(
     data: &Value,
     diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 ) -> Option<Option<InferenceTaskKind>> {
-    let Some(value) = optional_string(data, PORT_TASK_KIND) else {
+    let value = optional_string(
+        node_id,
+        data,
+        PORT_TASK_KIND,
+        InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTaskKind,
+        diagnostics,
+    )?;
+    let Some(value) = value else {
         return Some(None);
     };
     match InferenceTaskKind::parse(value) {
@@ -219,7 +313,14 @@ fn optional_runtime_constraint(
     data: &Value,
     diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 ) -> Option<Option<RuntimeIntentId>> {
-    let Some(value) = optional_string(data, PORT_RUNTIME) else {
+    let value = optional_string(
+        node_id,
+        data,
+        PORT_RUNTIME,
+        InferenceInterfaceGraphResolutionDiagnosticCode::InvalidRuntimeConstraint,
+        diagnostics,
+    )?;
+    let Some(value) = value else {
         return Some(None);
     };
     match RuntimeIntentId::parse(value) {
@@ -242,7 +343,14 @@ fn optional_device_constraint(
     data: &Value,
     diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 ) -> Option<Option<DeviceIntentId>> {
-    let Some(value) = optional_string(data, PORT_DEVICE) else {
+    let value = optional_string(
+        node_id,
+        data,
+        PORT_DEVICE,
+        InferenceInterfaceGraphResolutionDiagnosticCode::InvalidDeviceConstraint,
+        diagnostics,
+    )?;
+    let Some(value) = value else {
         return Some(None);
     };
     match DeviceIntentId::parse(value) {
@@ -260,10 +368,26 @@ fn optional_device_constraint(
     }
 }
 
-fn optional_string<'a>(data: &'a Value, field: &str) -> Option<&'a str> {
+fn optional_string<'a>(
+    node_id: &str,
+    data: &'a Value,
+    field: &str,
+    code: InferenceInterfaceGraphResolutionDiagnosticCode,
+    diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
+) -> Option<Option<&'a str>> {
     match data.get(field) {
-        Some(Value::String(value)) if !value.trim().is_empty() => Some(value),
-        _ => None,
+        None | Some(Value::Null) => Some(None),
+        Some(Value::String(value)) if value.trim().is_empty() => Some(None),
+        Some(Value::String(value)) => Some(Some(value)),
+        Some(_) => {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(field),
+                code,
+                format!("{field} must be a string when provided"),
+            ));
+            None
+        }
     }
 }
 
@@ -299,7 +423,7 @@ fn diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     use crate::graph::{GraphEdge, GraphNode, Position};
 
@@ -367,6 +491,118 @@ mod tests {
                 == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidRuntimeConstraint
                 && diagnostic.port_id.as_deref() == Some(PORT_RUNTIME)
         }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_duplicate_model_ref_bindings() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes.push(GraphNode {
+            id: "model-2".to_string(),
+            node_type: NODE_TYPE_PUMA_LIB.to_string(),
+            position: Position { x: 0.0, y: 100.0 },
+            data: json!({
+                "pumas_model_ref": {
+                    "model_id": "image/example/other",
+                    "selected_artifact_id": "diffusers"
+                }
+            }),
+        });
+        graph.edges.push(GraphEdge {
+            id: "model-2-to-infer".to_string(),
+            source: "model-2".to_string(),
+            source_handle: PORT_PUMAS_MODEL_REF.to_string(),
+            target: "infer".to_string(),
+            target_handle: PORT_PUMAS_MODEL_REF.to_string(),
+        });
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::DuplicatePumasModelRefBinding
+                && diagnostic.port_id.as_deref() == Some(PORT_PUMAS_MODEL_REF)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_wrong_model_ref_source_handle() {
+        let mut graph = graph_with_connected_model();
+        graph.edges[0].source_handle = "model_id".to_string();
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidPumasModelRefBindingSource
+                && diagnostic.port_id.as_deref() == Some(PORT_PUMAS_MODEL_REF)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_wrong_model_ref_source_node_type() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[0].node_type = "text-input".to_string();
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidPumasModelRefBindingSource
+                && diagnostic.port_id.as_deref() == Some(PORT_PUMAS_MODEL_REF)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_inline_connected_model_ref_disagreement() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data["pumas_model_ref"] = json!({
+            "model_id": "image/example/different",
+            "selected_artifact_id": "diffusers"
+        });
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::PumasModelRefBindingDisagreement
+                && diagnostic.port_id.as_deref() == Some(PORT_PUMAS_MODEL_REF)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_wrong_type_optional_constraints() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data["runtime"] = json!({"id": "pytorch"});
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidRuntimeConstraint
+                && diagnostic.port_id.as_deref() == Some(PORT_RUNTIME)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_treat_null_and_blank_optional_constraints_as_absent() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data["task_kind"] = Value::Null;
+        graph.nodes[1].data["runtime"] = json!("   ");
+        graph.nodes[1].data["device"] = Value::Null;
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.requests.len(), 1);
+        let request = &result.requests[0].request;
+        assert!(request.task_kind.is_none());
+        assert!(request.runtime_constraint.is_none());
+        assert!(request.device_constraint.is_none());
     }
 
     fn graph_with_connected_model() -> WorkflowGraph {

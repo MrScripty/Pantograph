@@ -187,15 +187,29 @@ defining an image-only inference-node interface.
       Stage 1 must be shaped as the same internal publisher used by Stage 2 so
       event-driven validation can replace the transport without rewriting the
       validation core.
-- [ ] Add a strict model-ref binding resolver for inference request extraction.
+      Review tightening: Stage 1 is not complete if it only records an externally
+      supplied summary or emits descriptor fingerprints. It must use a
+      workflow-service publisher core that calls the existing descriptor
+      projection path, returns bounded per-node projection records containing the
+      current descriptor/authored-port data needed by the editor, and records
+      graph plus node validation state through the validation-state owner. Events
+      may stay lightweight, but descriptor rendering and dependency-action
+      derivation must not require Tauri/frontend code to resolve descriptors,
+      carry Pumas facts, or infer scheduler policy.
+- [x] Add a strict model-ref binding resolver for inference request extraction.
       It must reject duplicate incoming `pumas_model_ref` edges, verify the
       source handle and source node/type can provide a Pumas model ref, and
       report connected-versus-inline disagreement as typed diagnostics instead
-      of silently selecting one source.
-- [ ] Tighten optional explicit constraint parsing. Missing, null, and blank
+      of silently selecting one source. This is the first required code slice
+      before any synchronous or event-driven validation publisher consumes graph
+      requests, because the current extractor can silently collapse duplicate
+      edges or accept the wrong source handle.
+- [x] Tighten optional explicit constraint parsing. Missing, null, and blank
       strings are absent; wrong JSON types and nonblank unparsable strings are
       invalid diagnostics for `task_kind`, `runtime`, `device`, and later typed
-      trait inputs.
+      trait inputs. This belongs with the strict extraction slice so invalid
+      graph-authored constraints cannot be downgraded to "scheduler decides" by
+      accident.
 - [ ] Make descriptor task kind authoritative for scheduler materialization.
       Graph-authored `task_kind` remains an optional resolver constraint only;
       scheduler task projection/materialization consumes the resolved descriptor
@@ -268,6 +282,15 @@ defining an image-only inference-node interface.
       still current, must not hold graph-session locks across Pumas/inference
       resolution, and must return typed diagnostics for missing, pending,
       stale, unavailable, invalid, or mismatched validation.
+      Review tightening: the current owner shape must grow beyond
+      `validation_session_id + DraftGraphValidationSummary` before dependency
+      derivation or admission can be considered wired. Store bounded
+      node-scoped records keyed by `WorkflowNodeId`, including at minimum
+      descriptor fingerprint, resolved descriptor task kind, descriptor
+      availability/summary status, validated Pumas model ref identity, and
+      validated explicit runtime/device/trait constraints. Full Pumas package
+      facts, executable paths, runtime load targets, media payloads, and frontend
+      rendering state remain out of the owner.
       - Initial owner/freshness sub-slice completed on 2026-05-26:
         `graph/inference_validation_state.rs` now owns dependency-environment
         action freshness checks keyed by validated graph session id and
@@ -303,6 +326,20 @@ defining an image-only inference-node interface.
       pending. Tauri remains a transport layer and must not own validation
       freshness, descriptor resolution, enqueue policy, or dependency request
       derivation.
+      Review tightening: implement the synchronous publisher in workflow-service
+      first and expose it through transport only after backend tests prove lock
+      release before descriptor resolution, stale revision/session rejection,
+      bounded projection records, and current-state publication. Stage 2 may add
+      event delivery/cancellation, but it must reuse this publisher core rather
+      than adding a second validation path.
+- [ ] Add the workflow-service live validation lifecycle owner before event
+      delivery reaches the frontend. The owner must start, cancel, supersede, and
+      clean up validation sessions; use bounded event/state buffers with explicit
+      overflow/backpressure diagnostics; observe task errors and panics; cancel
+      or supersede in-flight work when graph revisions change; and stop accepting
+      validation work when a graph/session closes. Domain validation/projection
+      remains sync-core; async is limited to fact lookup, persistence, transport,
+      and event delivery boundaries.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply
@@ -320,12 +357,19 @@ defining an image-only inference-node interface.
       backend validation summary. The frontend submit button and backend queue
       admission must both fail closed while inference validation is pending,
       stale, unavailable, unresolved, or blocked; raw diagnostics must not be
-      the enqueue authority.
+      the enqueue authority. Backend admission must run before queue insertion,
+      queue-placement diagnostic event recording, and scheduler task graph
+      materialization so non-executable inference graphs never become queued
+      runs that are later canceled.
 - [ ] Update scheduler task graph projection and materialization so generic
       inference tasks store path-free model refs, task kind, typed constraints,
       descriptor fingerprint, and bindings only. Workflow-service must
       materialize final runtime-host inputs from upstream task results, graph
       literal values, and descriptor defaults after scheduler input readiness.
+      Projection must consume the current descriptor-backed validation state for
+      resolved task kind, descriptor fingerprint, and validated constraints; raw
+      graph `task_kind`, runtime, device, or trait JSON are resolver inputs only
+      and must not be parsed again as execution authority.
 - [ ] Align the runtime-host input contract with descriptor materialization.
       Runtime-host execution requests must include scheduler-selected handoff
       plus typed, path-free materialized inputs and artifact/result references;
@@ -353,6 +397,20 @@ defining an image-only inference-node interface.
       selection-input, and option-cache reuse versus a dedicated descriptor
       option renderer. The decision must preserve typed descriptor ownership
       and avoid duplicating backend semantics.
+- [ ] Add a contract-crate decomposition gate before adding more shared DTO
+      families. `pantograph-inference-interface-contracts/src/lib.rs` is already
+      large enough that validation publication records, node projection DTOs, or
+      additional dependency-action contracts must move into focused modules
+      unless the change is a small addition to an existing type. Update the crate
+      README and dependency-direction checks in the same slice.
+- [ ] Keep the legacy deletion searches as implementation gates, not cleanup
+      notes. The first acceptance slice must prove it does not invoke
+      `inference_settings`, `expand-settings`, static all-port inference
+      metadata, frontend `modelPath` dependency actions, `ModelDependencyRequest`,
+      `ModelRefV2`, or model-path-derived node-engine inference paths. Remaining
+      occurrences must be classified as unrelated non-workflow configuration,
+      test fixtures being rewritten, or deletion targets before the milestone can
+      claim no-legacy completion.
 
 **Verification:**
 
@@ -408,10 +466,18 @@ defining an image-only inference-node interface.
 - Live validation transport tests proving graph locks are not held while Pumas
   or inference fact resolution runs, and stale session/revision events are
   ignored.
+- Validation lifecycle tests proving event-driven sessions cancel or supersede
+  in-flight work on graph revision changes, clean up on graph/session close,
+  enforce bounded event/state capacity, emit typed overflow/backpressure
+  diagnostics when applicable, and observe task errors or panics at the owner.
 - Workflow save-validation tests proving invalid ports, missing required
   inputs, wrong upstream output types, and unsupported options fail closed.
 - Submit/admission tests proving frontend submit state and backend queue
   admission use the backend validation summary as authority.
+- Frontend validation-store tests proving session/revision/sequence/node-scoped
+  stale events cannot mutate current node state, graph display and editing remain
+  available while validation is pending, and event subscriptions or temporary
+  timers are cleaned up on graph/session changes.
 - Materialization tests proving defaults are applied only from the descriptor,
   connected upstream task results are type-checked, and runtime-host inputs
   are path-free typed values or typed artifact/result references.
@@ -433,6 +499,10 @@ defining an image-only inference-node interface.
 - `cargo fmt`, focused package tests, affected crate `cargo check` in default,
   no-default-features, and all-features modes, plus frontend type/test coverage
   for touched draft-validation UI.
+- Dependency ownership and feature checks for every new crate/package or feature
+  added by this milestone, proving dependencies are declared by the owning
+  crate/package, DTO crates keep minimal default features, and frontend workspace
+  commands do not rely on unrelated root-only dependencies.
 
 **Status:**
 
@@ -702,6 +772,33 @@ defining an image-only inference-node interface.
   - Remaining follow-up: feed extracted requests into the resolver/projection
     pipeline with Pumas/runtime capability facts and emit live validation events
     plus backend validation summaries for the graph editor and queue admission.
+- [x] 2026-05-26 strict inference request extraction slice completed:
+  - Smallest useful vertical slice: tightened
+    `graph/inference_interface_request.rs` so generic inference nodes accept
+    only one incoming `pumas_model_ref` binding, require that binding to come
+    from the `pumas_model_ref` handle on a `puma-lib` node, reject inline versus
+    connected model-ref disagreement, and treat wrong-type optional
+    `task_kind`/`runtime`/`device` values as invalid diagnostics.
+  - No-fallback/no-legacy confirmation: the extractor still accepts only the
+    canonical path-free `pumas_model_ref` contract. It does not read
+    `modelPath`, `model_path`, Pumas package facts, executable load targets,
+    `inference_settings`, `expand-settings`, static all-port metadata,
+    runtime-host payloads, or scheduler decisions as alternate request sources.
+  - Standards result: the slice keeps request extraction in the existing
+    workflow-service graph module, updates the graph README invariant, and
+    preserves parse-once boundary semantics with typed diagnostics instead of
+    silent selection.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service inference_interface_request
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: the workflow-service check commands continue to report the
+    pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: feed strict extracted requests into the synchronous
+    validation publisher so current descriptor projections and validation
+    summaries can be recorded without reintroducing frontend/Tauri policy.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

@@ -175,6 +175,11 @@ for existing graph-edit callers.
   Path-only `puma-lib` state is not a successful model-reference branch;
   schedulable inference must resolve through the canonical Pumas model-ref
   and scheduler-owned runtime handoff boundaries.
+- Inference-interface request extraction accepts only one canonical
+  `pumas_model_ref` source per inference node. Duplicate incoming bindings,
+  wrong source handles, wrong source node types, connected-versus-inline
+  disagreement, and wrong-type optional constraints are typed diagnostics, not
+  silent fallback or "scheduler decides" paths.
 - Dynamic `node.data.definition` overlays may add or override ports for a
   specific non-inference node instance through backend-owned effective
   contracts, but they must not invalidate the registry node type or silently
