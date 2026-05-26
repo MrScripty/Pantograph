@@ -1302,6 +1302,39 @@ defining an image-only inference-node interface.
   - Remaining follow-up: persist the compacted snapshot behind a service-level
     executable publish operation. Durable storage ownership remains the next
     boundary to resolve before queue admission can consume saved snapshots.
+- [x] 2026-05-26 executable validation snapshot persistence re-plan boundary:
+  - Discovered issue: the service can now build a typed executable validation
+    snapshot, but no durable store currently owns saved executable-validation
+    snapshots keyed by `WorkflowVersionId`. `pantograph-runtime-attribution`
+    owns workflow-version records and sqlite schema, while
+    `pantograph-workflow-service` owns the typed snapshot contract and scheduler
+    projection conversion. Adding publish persistence without deciding this
+    boundary would either create a second workflow-version persistence source or
+    force a dependency cycle from attribution into workflow-service contracts.
+  - Required design decision before the next implementation slice:
+    1. Add a workflow-service-local snapshot persistence subsystem keyed by
+       `WorkflowVersionId`. This is fastest but weakens the plan's attribution
+       boundary and makes replay/recovery reason across two durable stores.
+    2. Extend `pantograph-runtime-attribution` with an opaque executable
+       validation snapshot table keyed by `WorkflowVersionId`, storing compact
+       JSON plus typed metadata such as schema version, descriptor-contract
+       version, execution fingerprint, graph revision, validation session id,
+       and validation snapshot id. Workflow-service remains the typed DTO owner
+       and serializes/deserializes at the boundary. This keeps workflow-version
+       durability in attribution without a crate dependency cycle.
+    3. Move the executable validation snapshot DTOs into a lower shared
+       contract crate so attribution can store typed records directly. This is
+       clean long-term if multiple crates need to construct the snapshot, but
+       it widens the immediate blast radius and risks moving scheduler-facing
+       projection concerns out of workflow-service.
+  - Recommendation for the next slice: use option 2. Attribution owns durable
+    storage and idempotent lookup by `WorkflowVersionId`; workflow-service owns
+    typed snapshot construction, validation, serde, and projection. Do not use
+    a workflow-service sidecar store as a fallback, and do not make attribution
+    depend on workflow-service.
+  - No-fallback/no-legacy gate: queue admission must remain blocked until the
+    durable snapshot store exists and can fail closed for missing,
+    stale/mismatched, contract-incompatible, or store-unavailable snapshots.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

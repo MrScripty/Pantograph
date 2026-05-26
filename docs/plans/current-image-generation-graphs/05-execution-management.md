@@ -12567,6 +12567,26 @@ Worker rules:
   - Remaining follow-up: add service-level executable publish persistence for
     the compacted snapshot, then wire queue admission to consume saved
     snapshots before enqueue or scheduler task graph materialization.
+- 2026-05-26 Milestone 5d executable validation snapshot persistence re-plan
+  boundary:
+  - Discovered issue: workflow-service can now build typed executable
+    validation snapshots, but no durable store currently owns saved snapshots
+    keyed by `WorkflowVersionId`. Attribution owns workflow-version records and
+    sqlite schema; workflow-service owns the typed snapshot contract and
+    scheduler projection conversion.
+  - Options recorded in the Milestone 5d checklist: workflow-service-local
+    sidecar persistence; attribution-owned opaque JSON snapshot storage keyed
+    by `WorkflowVersionId`; or moving snapshot DTOs into a lower shared
+    contract crate so attribution can store typed records directly.
+  - Recommendation: extend `pantograph-runtime-attribution` with an opaque
+    executable validation snapshot table and repository methods keyed by
+    `WorkflowVersionId`. Workflow-service remains typed DTO/projection owner
+    and serializes/deserializes at the attribution boundary. This preserves the
+    version durability owner without creating a crate dependency cycle or a
+    workflow-service fallback store.
+  - Implementation must not continue into queue admission until durable
+    snapshot storage can fail closed for missing, stale/mismatched,
+    contract-incompatible, or store-unavailable snapshots.
 
 ### Traceability Links
 
