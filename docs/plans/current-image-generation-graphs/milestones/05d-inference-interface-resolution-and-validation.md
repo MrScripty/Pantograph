@@ -96,7 +96,7 @@ defining an image-only inference-node interface.
       descriptor, authored snapshot, drift, diagnostic, option, and validation
       summary DTOs there. `WorkflowGraphInferenceValidationEvent` is the only
       live validation event envelope and must remain graph/node scoped.
-- [ ] Replace `puma-lib` graph authoring with the model-ref-only intermediate
+- [x] Replace `puma-lib` graph authoring with the model-ref-only intermediate
       slice before live-validation UX wiring. Saved graph/node data and
       successful graph semantics carry `pumas_model_ref` plus display-only
       identity only; executable paths, `entry_path`, package facts, runtime

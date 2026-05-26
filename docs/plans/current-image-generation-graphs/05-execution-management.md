@@ -11846,6 +11846,30 @@ Worker rules:
     planning service boundary; then remove graph-authored paths/facts/settings;
     then update frontend mocks/templates and node-engine tests to prove only
     `pumas_model_ref` plus display identity remain graph-facing.
+- 2026-05-26 Milestone 5d `puma-lib` model-ref-only authoring slice completed:
+  - Smallest useful vertical slice: reduced the registered `puma-lib` node
+    descriptor and frontend mock descriptors to graph-facing
+    `pumas_model_ref` plus display `model_id`; removed successful
+    `model_path`, package facts, task/model facts, runtime hints, dependency
+    requirement, dependency binding, and `inference_settings` ports from that
+    authoring surface.
+  - No-fallback/no-legacy confirmation: graph authors can no longer connect
+    `puma-lib` outputs as executable paths, dependency snapshots, scheduler
+    hints, or inference settings. Dependency/environment hydration remains
+    fail-closed until the canonical path-free dependency-planning boundary is
+    wired.
+  - Verification passed: `cargo fmt`; `cargo test -p workflow-nodes puma_lib`;
+    `cargo test -p workflow-nodes
+    builtin_contracts_preserve_registered_port_options_provider_refs`; `npm
+    run typecheck`; `npm run test:frontend -- WorkflowService.commands.test.ts`;
+    `git diff --check`; and targeted source searches for retired `puma-lib`
+    descriptor/mock output ports.
+  - Remaining follow-up: the puma-lib selector option metadata still carries
+    display/debug selector facts for option presentation. The dependency
+    environment and inference-interface paths must continue to consume only
+    typed backend validation/dependency-planning descriptors, not selector
+    metadata, as the next boundary slices remove
+    `ModelDependencyRequest`/`model_path` hydration call sites.
 
 ### Traceability Links
 

@@ -126,11 +126,11 @@ assert_eq!(metadata.node_type, "model-provider");
   bounded selector row and empty inference settings.
 
 ## Structured Producer Contract
-- `puma-lib` emits `pumas_model_ref`, `model_id`, `model_type`,
-  `task_type_primary`, `recommended_backend`, `platform_context`,
-  `selected_binding_ids`, `dependency_bindings`,
-  `dependency_requirements_id`, `inference_settings`, and
-  `dependency_requirements`.
+- `puma-lib` emits only `pumas_model_ref` and display identity such as
+  `model_id`. Model type, task kind, runtime hints, dependency requirements,
+  inference settings, package facts, load targets, and executable paths are
+  resolved by backend validation, dependency planning, scheduler, and
+  runtime-host systems after graph authoring.
 - `puma-lib` option values are typed Pumas model-reference payloads. Option
   metadata may include display/debug paths, readiness state, storage kind,
   validation state, and package summary facts; those fields are not executable
