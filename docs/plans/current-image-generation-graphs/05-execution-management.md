@@ -12171,6 +12171,33 @@ Worker rules:
   - Remaining follow-up: publish executable descriptor validation summaries
     into the current validation-state owner and derive
     dependency-environment requests only from current executable summary state.
+- 2026-05-26 Milestone 5d current validation-summary recording slice
+  completed:
+  - Smallest vertical slice: added a graph-session checked
+    `record_inference_validation_session` entrypoint and taught
+    `CurrentInferenceValidationStateStore` to store the current validation
+    session id plus `DraftGraphValidationSummary` for a graph
+    session/revision.
+  - No-fallback/no-legacy confirmation: validation sessions are recorded only
+    when their typed `WorkflowGraphRevision` matches the current graph
+    fingerprint. Dependency actions with stale explicit validation-session ids,
+    missing summaries, or non-executable summaries return typed blocked
+    diagnostics and still do not build partial dependency-environment requests.
+  - Standards result: current validation summary ownership remains in
+    workflow-service; Tauri/frontend code still sends action intent only, and
+    future non-exhaustive summary states fail closed as unavailable until
+    deliberately mapped.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service inference_validation_state`; `cargo test -p
+    pantograph-workflow-service dependency_environment_action_intent`; `git
+    diff --check`.
+  - Discovered issue: the targeted tests continue to emit the pre-existing
+    scheduler dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: connect live descriptor validation publication to
+    `record_inference_validation_session`, carry node-scoped descriptor
+    metadata into the state owner, and derive dependency-environment requests
+    only after current executable dependency requirements exist.
 
 ### Traceability Links
 

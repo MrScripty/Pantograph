@@ -41,6 +41,8 @@ use super::{
 };
 #[path = "session_connection_api.rs"]
 mod session_connection_api;
+#[path = "session_inference_validation_api.rs"]
+mod session_inference_validation_api;
 #[path = "session_node_api.rs"]
 mod session_node_api;
 

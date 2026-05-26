@@ -265,6 +265,15 @@ defining an image-only inference-node interface.
         live-validation revision identity, publishing executable validation
         summaries into this owner, and deriving dependency-environment requests
         only from current executable summary state.
+      - Current-summary recording sub-slice completed on 2026-05-26:
+        `GraphSessionStore::record_inference_validation_session` now records a
+        live validation session only after validating the session and proving
+        its `WorkflowGraphRevision` still matches the current graph session.
+        The validation-state owner stores the current validation-session id and
+        summary for the graph session/revision, rejects stale explicit
+        validation-session ids, blocks non-executable summaries with typed
+        diagnostics, and still stops at `DependencyRequirementsMissing` until
+        dependency requirements are available.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

@@ -3,7 +3,7 @@ use super::*;
 use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
 use crate::graph::{
     WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphRemoveEdgesRequest,
+    WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgesRequest,
 };
 use crate::{
     WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
@@ -11,7 +11,8 @@ use crate::{
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
-    DependencyEnvironmentActionIntentStatus, InferenceDiagnosticCode,
+    DependencyEnvironmentActionIntentStatus, DraftGraphValidationStatus,
+    DraftGraphValidationSummary, InferenceDiagnosticCode, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 
 fn sample_graph() -> WorkflowGraph {
@@ -203,6 +204,47 @@ async fn dependency_environment_action_intent_fails_closed_without_validation_su
 }
 
 #[tokio::test]
+async fn dependency_environment_action_intent_consumes_current_validation_summary() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(sample_graph(), None).await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Pending,
+                false,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    let result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: Some(
+                "validation.session.1"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "text-input".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::GraphValidationPending
+    );
+}
+
+#[tokio::test]
 async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
     let store = GraphSessionStore::new();
     let session = store.create_session(sample_graph(), None).await;
@@ -227,6 +269,29 @@ async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
         result.diagnostics[0].code,
         InferenceDiagnosticCode::GraphRevisionMismatch
     );
+}
+
+fn validation_session(
+    graph_revision: &str,
+    status: DraftGraphValidationStatus,
+    executable: bool,
+) -> WorkflowGraphInferenceValidationSession {
+    WorkflowGraphInferenceValidationSession {
+        contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        validation_session_id: "validation.session.1"
+            .parse()
+            .expect("valid validation session id"),
+        graph_revision: graph_revision.parse().expect("valid graph revision"),
+        latest_sequence: 0,
+        summary: DraftGraphValidationSummary {
+            status,
+            executable,
+            enqueue_disabled_reasons: Vec::new(),
+            diagnostics_count: 0,
+            blocking_diagnostics_count: 0,
+        },
+        events: Vec::new(),
+    }
 }
 
 #[tokio::test]

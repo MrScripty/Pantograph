@@ -40,6 +40,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `session_types.rs` | Edit-session request/response DTOs and local undo/redo/session-kind types that are shared by the graph session boundary. |
 | `session.rs` | Edit-session store, undo/redo state, and graph mutation orchestration. |
 | `session_connection_api.rs` | Edit-session connection candidate, direct connect, node insert-connect, and edge-insert API methods. |
+| `session_inference_validation_api.rs` | Edit-session inference-validation publication API that records only current graph-revision validation summaries. |
 | `session_tests.rs` | Graph edit-session mutation, undo/redo, insertion, connection, stale cleanup, event projection, and memory-impact tests extracted from the production session module. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 
