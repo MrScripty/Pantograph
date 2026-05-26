@@ -8,6 +8,7 @@ use pantograph_diagnostics_ledger::{
     RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
     SchedulerEstimateProducedPayload, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
 };
+use pantograph_inference_interface_contracts::INFERENCE_INTERFACE_CONTRACT_VERSION;
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
     WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
@@ -38,14 +39,16 @@ use super::validation::{
 };
 use super::{
     project_scheduler_task_results_to_outputs, workflow_scheduler_task_graph,
-    workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
-    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary, WorkflowHost,
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeRequirements, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary,
-    WorkflowService, WorkflowServiceError,
+    workflow_scheduler_task_graph_with_inference_projections, workflow_scheduler_task_run_summary,
+    AttributionRepository, WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink,
+    WorkflowExecutableValidationSnapshotLookupRequest,
+    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeRequirements,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -195,6 +198,26 @@ impl WorkflowService {
                 )?);
             }
         };
+        let scheduler_task_graph = match self
+            .scheduler_task_graph_for_session_run(
+                host,
+                &session.workflow_id,
+                &workflow_run_id,
+                run_snapshot.as_ref(),
+            )
+            .await
+        {
+            Ok(task_graph) => task_graph,
+            Err(error) => {
+                return Err(self.record_scheduler_admission_failure_error(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &workflow_run_id,
+                    Some(&request.workflow_semantic_version),
+                    error,
+                )?);
+            }
+        };
         let queued_item = {
             let mut store = self.session_store_guard()?;
             store.enqueue_run_with_id(&session_id, &request, workflow_run_id.clone())?;
@@ -236,25 +259,6 @@ impl WorkflowService {
                 error,
             )?);
         }
-
-        let scheduler_task_graph = match self
-            .scheduler_task_graph_for_session_run(host, &session.workflow_id, &workflow_run_id)
-            .await
-        {
-            Ok(task_graph) => task_graph,
-            Err(error) => {
-                if let Ok(mut store) = self.session_store.lock() {
-                    let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
-                }
-                return Err(self.record_scheduler_admission_failure_error(
-                    &session,
-                    run_snapshot.as_ref(),
-                    &workflow_run_id,
-                    Some(&request.workflow_semantic_version),
-                    error,
-                )?);
-            }
-        };
         let initial_scheduler_task_records = match self
             .scheduler_task_orchestrator
             .initial_task_state_records(&scheduler_task_graph)
@@ -449,12 +453,43 @@ impl WorkflowService {
         host: &H,
         workflow_id: &str,
         workflow_run_id: &str,
+        run_snapshot: Option<&WorkflowRunSnapshotRecord>,
     ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
         let graph = host.workflow_graph(workflow_id).await?;
         validate_workflow_graph_submit_readiness(&graph)?;
         let workflow_id = WorkflowId::try_from(workflow_id.to_string())?;
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
-        workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)
+        if let Some(run_snapshot) = run_snapshot {
+            let snapshot = self.workflow_executable_validation_snapshot(
+                WorkflowExecutableValidationSnapshotLookupRequest {
+                    workflow_version_id: run_snapshot.workflow_version_id.clone(),
+                    workflow_execution_fingerprint: run_snapshot
+                        .workflow_execution_fingerprint
+                        .clone(),
+                    descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+                },
+            )?;
+            let projections = snapshot
+                .scheduler_inference_task_projections()
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+            return workflow_scheduler_task_graph_with_inference_projections(
+                &workflow_id,
+                &workflow_run_id,
+                &graph,
+                &projections,
+            );
+        }
+
+        let task_graph = workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)?;
+        if task_graph.tasks.iter().any(|task| {
+            task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+        }) {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "runtime inference queue admission requires a saved executable validation snapshot"
+                    .to_string(),
+            ));
+        }
+        Ok(task_graph)
     }
 
     fn set_scheduler_task_state_for_admitted_run(

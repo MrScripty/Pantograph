@@ -175,10 +175,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         .await
         .expect_err("runtime-containing scheduler run should fail closed");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
-    assert!(error
-        .message()
-        .contains("runtime scheduler dispatch is not wired"));
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }

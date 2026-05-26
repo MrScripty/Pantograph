@@ -1456,6 +1456,40 @@ defining an image-only inference-node interface.
   - Remaining follow-up: queue admission must require successful attribution
     snapshot lookup before queue insertion, queue-placement event recording, or
     scheduler task graph materialization.
+- [x] 2026-05-26 queue-admission executable snapshot consumption slice
+  completed:
+  - Smallest useful vertical slice: moved scheduler task graph preparation
+    ahead of queue insertion and queue-placement event recording, and changed
+    saved-run scheduler graph preparation to consume the saved executable
+    validation snapshot when attribution has a run snapshot. Runtime inference
+    graphs without saved snapshot authority now fail closed before enqueue.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this milestone file,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: runtime inference queue admission no
+    longer materializes scheduler intent from raw graph fields, whole-run host
+    launch, current validation caches, frontend/Tauri payloads, runtime
+    defaults, Pumas paths/facts, or queue-side mutation after enqueue. The
+    saved executable snapshot is the only source for inference scheduler
+    projections during saved-run admission.
+  - Focused test coverage updated for runtime inference admission failing
+    closed before legacy whole-run runtime launch when no saved executable
+    snapshot exists.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib`; `cargo test -p pantograph-workflow-service
+    executable_validation_snapshot --lib`; and `cargo check -p
+    pantograph-workflow-service`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: add an end-to-end publish -> saved snapshot -> queue
+    admission -> scheduler task graph acceptance test once the test host can
+    publish the same validation publication used by saved-run admission without
+    duplicating large inference descriptor fixtures.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

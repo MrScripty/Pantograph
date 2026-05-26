@@ -193,6 +193,11 @@ The executable publish facade validates that the backend validation publication
 matches the graph revision being published, resolves the immutable workflow
 version, compacts the publication into a snapshot, and persists it through the
 attribution bridge. Draft graph save remains separate from executable publish.
+Execution-session admission prepares the scheduler task graph before queue
+insertion. Runtime inference tasks require the saved executable validation
+snapshot before enqueue or scheduler graph materialization; non-runtime graphs
+may still run without snapshot authority because they do not consume inference
+descriptors.
 Workflow scheduler task orchestration is a service-owned composition boundary.
 `WorkflowService` owns a `WorkflowSchedulerTaskOrchestrator`, exposes an
 explicit runtime-host execution port configuration hook, and installs a

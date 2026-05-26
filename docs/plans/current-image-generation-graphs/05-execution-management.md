@@ -12670,6 +12670,29 @@ Worker rules:
     this slice.
   - Remaining follow-up: queue admission must require attribution snapshot
     lookup before queue insertion or scheduler graph materialization.
+- 2026-05-26 Milestone 5d queue-admission executable snapshot consumption
+  slice completed:
+  - Moved scheduler task graph preparation before queue insertion and
+    queue-placement event recording, and wired saved-run scheduler graph
+    preparation to load executable validation snapshot authority from
+    attribution when a run snapshot exists.
+  - No-fallback/no-legacy result: runtime inference admission now fails closed
+    before enqueue when no saved executable snapshot exists, and inference
+    scheduler projections come from the saved snapshot rather than raw graph
+    fields, current validation caches, frontend/Tauri payloads, runtime
+    defaults, Pumas paths/facts, whole-run host launch, or queue-side mutation
+    after enqueue.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo test -p pantograph-workflow-service
+    workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib`; `cargo test -p pantograph-workflow-service
+    executable_validation_snapshot --lib`; and `cargo check -p
+    pantograph-workflow-service`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: add an end-to-end publish-to-admission acceptance test
+    after a shared inference publication fixture is available for session hosts.
 
 ### Traceability Links
 
