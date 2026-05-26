@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use pantograph_dependency_planning::{DeviceIntentId, PumasModelRef, RuntimeIntentId};
+use pantograph_dependency_planning::{
+    DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId,
+};
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
     DependencyEnvironmentActionIntentStatus, DraftGraphValidationSessionId,
@@ -15,6 +17,12 @@ use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
 use super::InferenceInterfaceNodeProjectionRecord;
+use crate::workflow::{
+    WorkflowSchedulerBlockedInferenceTaskProjection,
+    WorkflowSchedulerBlockedInferenceTaskProjectionReason,
+    WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
+    WorkflowSchedulerReadyInferenceTaskProjection,
+};
 
 #[derive(Debug)]
 pub(crate) struct CurrentInferenceValidationStateStore {
@@ -155,6 +163,49 @@ impl CurrentInferenceValidationStateStore {
             Some("Resolve dependency requirements from the current validation state before checking or installing environments."),
         )
     }
+
+    pub(crate) async fn scheduler_inference_task_projections(
+        &self,
+        request: CurrentInferenceSchedulerProjectionRequest,
+    ) -> Result<WorkflowSchedulerInferenceTaskProjections, CurrentInferenceSchedulerProjectionError>
+    {
+        let summaries = self.summaries.read().await;
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id,
+            graph_revision: request.graph_revision,
+        };
+        let record = summaries
+            .get(&key)
+            .ok_or(CurrentInferenceSchedulerProjectionError::ValidationSummaryMissing)?;
+
+        if request
+            .validation_session_id
+            .as_ref()
+            .is_some_and(|validation_session_id| {
+                validation_session_id != &record.validation_session_id
+            })
+        {
+            return Err(CurrentInferenceSchedulerProjectionError::ValidationSessionMismatch);
+        }
+
+        if !record.summary.executable {
+            return Err(
+                CurrentInferenceSchedulerProjectionError::ValidationSummaryNotExecutable {
+                    status: record.summary.status,
+                },
+            );
+        }
+
+        let mut projections = Vec::with_capacity(record.nodes.len());
+        for node in record.nodes.values() {
+            projections.push(node.scheduler_inference_task_projection()?);
+        }
+        WorkflowSchedulerInferenceTaskProjections::from_records(projections).map_err(|error| {
+            CurrentInferenceSchedulerProjectionError::InvalidProjection {
+                message: error.to_string(),
+            }
+        })
+    }
 }
 
 fn diagnostic_code_for_summary_status(
@@ -179,6 +230,30 @@ pub(crate) struct DependencyEnvironmentActionIntentStateRequest {
     pub intent: ValidatedDependencyEnvironmentActionIntent,
     pub current_graph_revision: WorkflowGraphRevision,
     pub target_node_exists: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CurrentInferenceSchedulerProjectionRequest {
+    pub graph_session_id: pantograph_inference_interface_contracts::WorkflowGraphSessionId,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum CurrentInferenceSchedulerProjectionError {
+    #[error("inference validation summary is missing for the current graph revision")]
+    ValidationSummaryMissing,
+    #[error("inference validation session does not match the current graph validation state")]
+    ValidationSessionMismatch,
+    #[error("inference validation summary is not executable: {status:?}")]
+    ValidationSummaryNotExecutable { status: DraftGraphValidationStatus },
+    #[error("inference validation node state is incomplete for node {node_id}: {message}")]
+    IncompleteNodeState {
+        node_id: WorkflowNodeId,
+        message: String,
+    },
+    #[error("inference scheduler projection is invalid: {message}")]
+    InvalidProjection { message: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -256,6 +331,107 @@ impl CurrentInferenceValidationNodeRecord {
                 .map(|device| !device.as_str().is_empty())
                 .unwrap_or(true)
     }
+
+    fn scheduler_inference_task_projection(
+        &self,
+    ) -> Result<WorkflowSchedulerInferenceTaskProjection, CurrentInferenceSchedulerProjectionError>
+    {
+        if !self.has_dependency_basis() {
+            return Err(
+                CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                    node_id: self.node_id.clone(),
+                    message: "node record is missing descriptor, task, model, availability, or constraint data"
+                        .to_string(),
+                },
+            );
+        }
+
+        if self.validation_status == DraftGraphValidationStatus::Executable
+            && self.availability_status == InferenceAvailabilityStatus::Available
+        {
+            return Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
+                WorkflowSchedulerReadyInferenceTaskProjection {
+                    node_id: pantograph_scheduler::SchedulerNodeId::parse(self.node_id.as_str())
+                        .map_err(|error| {
+                            CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                                node_id: self.node_id.clone(),
+                                message: format!("scheduler node id is invalid: {error}"),
+                            }
+                        })?,
+                    descriptor_fingerprint: self.descriptor_fingerprint.clone(),
+                    task_type: DependencyTaskId::parse(self.task_kind.as_str()).map_err(
+                        |error| CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                            node_id: self.node_id.clone(),
+                            message: format!("scheduler task kind is invalid: {error}"),
+                        },
+                    )?,
+                    model_ref: self.pumas_model_ref.clone(),
+                    constraints: pantograph_scheduler::SchedulerRuntimeDeviceConstraints {
+                        requested_runtime_id: self.runtime_constraint.clone(),
+                        requested_device_id: self.device_constraint.clone(),
+                    },
+                    trait_settings: Vec::new(),
+                    estimate_hints: Vec::new(),
+                },
+            ));
+        }
+
+        Ok(WorkflowSchedulerInferenceTaskProjection::Blocked(
+            WorkflowSchedulerBlockedInferenceTaskProjection {
+                node_id: pantograph_scheduler::SchedulerNodeId::parse(self.node_id.as_str())
+                    .map_err(|error| {
+                        CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                            node_id: self.node_id.clone(),
+                            message: format!("scheduler node id is invalid: {error}"),
+                        }
+                    })?,
+                descriptor_fingerprint: Some(self.descriptor_fingerprint.clone()),
+                reason: blocked_projection_reason(self.validation_status, self.availability_status),
+                message: format!(
+                    "inference descriptor is not executable: validation={:?}, availability={:?}",
+                    self.validation_status, self.availability_status
+                ),
+            },
+        ))
+    }
+}
+
+fn blocked_projection_reason(
+    validation_status: DraftGraphValidationStatus,
+    availability_status: InferenceAvailabilityStatus,
+) -> WorkflowSchedulerBlockedInferenceTaskProjectionReason {
+    match validation_status {
+        DraftGraphValidationStatus::Stale => {
+            WorkflowSchedulerBlockedInferenceTaskProjectionReason::Stale
+        }
+        DraftGraphValidationStatus::Unavailable | DraftGraphValidationStatus::Unresolved => {
+            WorkflowSchedulerBlockedInferenceTaskProjectionReason::Unavailable
+        }
+        DraftGraphValidationStatus::Pending => {
+            WorkflowSchedulerBlockedInferenceTaskProjectionReason::Missing
+        }
+        DraftGraphValidationStatus::Blocked => {
+            WorkflowSchedulerBlockedInferenceTaskProjectionReason::Invalid
+        }
+        DraftGraphValidationStatus::Executable => match availability_status {
+            InferenceAvailabilityStatus::Available => {
+                WorkflowSchedulerBlockedInferenceTaskProjectionReason::Invalid
+            }
+            InferenceAvailabilityStatus::Pending => {
+                WorkflowSchedulerBlockedInferenceTaskProjectionReason::Missing
+            }
+            InferenceAvailabilityStatus::Stale => {
+                WorkflowSchedulerBlockedInferenceTaskProjectionReason::Stale
+            }
+            InferenceAvailabilityStatus::Unavailable
+            | InferenceAvailabilityStatus::Unsupported
+            | InferenceAvailabilityStatus::NotImplemented => {
+                WorkflowSchedulerBlockedInferenceTaskProjectionReason::Unavailable
+            }
+            _ => WorkflowSchedulerBlockedInferenceTaskProjectionReason::Invalid,
+        },
+        _ => WorkflowSchedulerBlockedInferenceTaskProjectionReason::Invalid,
+    }
 }
 
 fn blocked_dependency_environment_action_result(
@@ -285,7 +461,9 @@ fn blocked_dependency_environment_action_result(
 #[cfg(test)]
 mod tests {
     use pantograph_inference_interface_contracts::{
-        DependencyEnvironmentAction, DraftGraphValidationStatus, InferenceDiagnosticCode,
+        AuthoredInferenceInterfaceSnapshot, DependencyEnvironmentAction,
+        DraftGraphValidationStatus, InferenceAvailability, InferenceDiagnosticCode,
+        InferenceInterfaceDescriptor,
     };
 
     use super::*;
@@ -445,6 +623,136 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn scheduler_projection_state_requires_current_summary() {
+        let store = CurrentInferenceValidationStateStore::new();
+
+        let error = store
+            .scheduler_inference_task_projections(scheduler_projection_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                None,
+            ))
+            .await
+            .expect_err("missing summary");
+
+        assert!(matches!(
+            error,
+            CurrentInferenceSchedulerProjectionError::ValidationSummaryMissing
+        ));
+    }
+
+    #[tokio::test]
+    async fn scheduler_projection_state_rejects_stale_validation_session() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("record publication");
+
+        let error = store
+            .scheduler_inference_task_projections(scheduler_projection_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.old"),
+            ))
+            .await
+            .expect_err("stale validation session");
+
+        assert!(matches!(
+            error,
+            CurrentInferenceSchedulerProjectionError::ValidationSessionMismatch
+        ));
+    }
+
+    #[tokio::test]
+    async fn scheduler_projection_state_requires_executable_summary() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Unavailable,
+                    false,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Unavailable)],
+            )
+            .await
+            .expect("record publication");
+
+        let error = store
+            .scheduler_inference_task_projections(scheduler_projection_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .expect_err("non-executable summary");
+
+        assert!(matches!(
+            error,
+            CurrentInferenceSchedulerProjectionError::ValidationSummaryNotExecutable {
+                status: DraftGraphValidationStatus::Unavailable
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn scheduler_projection_state_projects_executable_node_records() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("record publication");
+
+        let projections = store
+            .scheduler_inference_task_projections(scheduler_projection_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .expect("scheduler projections");
+        let projection = projections
+            .get(&pantograph_scheduler::SchedulerNodeId::parse("infer").expect("node id"))
+            .expect("projection for inference node");
+
+        let WorkflowSchedulerInferenceTaskProjection::Ready(projection) = projection else {
+            panic!("expected ready projection");
+        };
+        assert_eq!(projection.node_id.as_str(), "infer");
+        assert_eq!(projection.task_type.as_str(), "image_generation");
+        assert_eq!(
+            projection.model_ref.model_id,
+            "image/example/tiny-diffusion"
+        );
+        assert_eq!(
+            projection
+                .constraints
+                .requested_runtime_id
+                .as_ref()
+                .map(|runtime| runtime.as_str()),
+            Some("pytorch")
+        );
+    }
+
     fn state_request(
         graph_session_id: &str,
         intent_revision: &str,
@@ -516,6 +824,62 @@ mod tests {
                 blocking_diagnostics_count: 0,
             },
             events: Vec::new(),
+        }
+    }
+
+    fn scheduler_projection_request(
+        graph_session_id: &str,
+        graph_revision: &str,
+        validation_session_id: Option<&str>,
+    ) -> CurrentInferenceSchedulerProjectionRequest {
+        CurrentInferenceSchedulerProjectionRequest {
+            graph_session_id: graph_session_id.parse().expect("valid graph session id"),
+            graph_revision: graph_revision.parse().expect("valid graph revision"),
+            validation_session_id: validation_session_id
+                .map(|value| value.parse().expect("valid validation session id")),
+        }
+    }
+
+    fn node_projection(
+        validation_status: DraftGraphValidationStatus,
+    ) -> InferenceInterfaceNodeProjectionRecord {
+        InferenceInterfaceNodeProjectionRecord {
+            node_id: "infer".parse().expect("valid node id"),
+            descriptor: InferenceInterfaceDescriptor {
+                contract_version:
+                    pantograph_inference_interface_contracts::INFERENCE_INTERFACE_CONTRACT_VERSION,
+                model_ref: PumasModelRef {
+                    model_id: "image/example/tiny-diffusion".to_string(),
+                    revision: Some("main".to_string()),
+                    selected_artifact_id: Some("diffusers-bundle".to_string()),
+                    selected_artifact_path: None,
+                    migration_diagnostics: Vec::new(),
+                },
+                task_kind: "image_generation".parse().expect("valid task kind"),
+                descriptor_fingerprint: "iface.scheduler.v1".parse().expect("fingerprint"),
+                runtime_conditions: Vec::new(),
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+                availability: InferenceAvailability::available(),
+                diagnostics: Vec::new(),
+            },
+            authored_snapshot: AuthoredInferenceInterfaceSnapshot {
+                contract_version:
+                    pantograph_inference_interface_contracts::INFERENCE_INTERFACE_CONTRACT_VERSION,
+                descriptor_fingerprint: "iface.scheduler.v1".parse().expect("fingerprint"),
+                task_kind: "image_generation".parse().expect("valid task kind"),
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+            },
+            validation_summary: DraftGraphValidationSummary {
+                status: validation_status,
+                executable: validation_status == DraftGraphValidationStatus::Executable,
+                enqueue_disabled_reasons: Vec::new(),
+                diagnostics_count: 0,
+                blocking_diagnostics_count: 0,
+            },
+            runtime_constraint: Some("pytorch".parse().expect("runtime id")),
+            device_constraint: Some("cuda.0".parse().expect("device id")),
         }
     }
 }

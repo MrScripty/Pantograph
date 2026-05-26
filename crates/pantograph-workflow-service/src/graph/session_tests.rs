@@ -10,8 +10,9 @@ use crate::graph::{
     WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgesRequest,
 };
 use crate::{
-    WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest,
 };
 use async_trait::async_trait;
 use pantograph_inference_interface_contracts::{
@@ -301,6 +302,26 @@ async fn publish_inference_validation_session_records_current_summary() {
         result.diagnostics[0].code,
         InferenceDiagnosticCode::DependencyRequirementsMissing
     );
+
+    let projections = store
+        .scheduler_inference_task_projections_for_session(
+            &session.session_id,
+            Some(
+                "validation.session.2"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+        )
+        .await
+        .expect("scheduler inference projections");
+    let projection = projections
+        .get(&pantograph_scheduler::SchedulerNodeId::parse("infer").expect("node id"))
+        .expect("projection");
+    let WorkflowSchedulerInferenceTaskProjection::Ready(projection) = projection else {
+        panic!("expected ready scheduler projection");
+    };
+    assert_eq!(projection.task_type.as_str(), "image_generation");
+    assert_eq!(projection.model_ref.model_id, "image/example/tiny");
 }
 
 #[tokio::test]
@@ -322,6 +343,19 @@ async fn publish_inference_validation_session_defaults_to_unavailable_facts() {
     );
     assert!(!publication.validation_session.summary.executable);
     assert_eq!(publication.node_projections.len(), 1);
+
+    let error = store
+        .scheduler_inference_task_projections_for_session(
+            &session.session_id,
+            Some(
+                "validation.session.3"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+        )
+        .await
+        .expect_err("non-executable validation should not project scheduler tasks");
+    assert!(error.message().contains("not executable"));
 }
 
 #[tokio::test]

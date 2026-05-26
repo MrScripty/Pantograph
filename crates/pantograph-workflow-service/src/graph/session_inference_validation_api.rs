@@ -2,6 +2,7 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
 };
 
+use crate::workflow::WorkflowSchedulerInferenceTaskProjections;
 use crate::workflow::WorkflowServiceError;
 
 use super::super::inference_interface_publication::{
@@ -9,9 +10,35 @@ use super::super::inference_interface_publication::{
 };
 use super::super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
+use super::super::inference_validation_state::CurrentInferenceSchedulerProjectionRequest;
 use super::GraphSessionStore;
 
 impl GraphSessionStore {
+    pub async fn scheduler_inference_task_projections_for_session(
+        &self,
+        session_id: &str,
+        validation_session_id: Option<DraftGraphValidationSessionId>,
+    ) -> Result<WorkflowSchedulerInferenceTaskProjections, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let graph_revision = WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        self.validation_state
+            .scheduler_inference_task_projections(CurrentInferenceSchedulerProjectionRequest {
+                graph_session_id,
+                graph_revision,
+                validation_session_id,
+            })
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
+    }
+
     pub async fn record_inference_validation_session(
         &self,
         session_id: &str,

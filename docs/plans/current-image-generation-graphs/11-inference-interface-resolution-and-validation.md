@@ -749,6 +749,12 @@ falling back to previously rendered ports.
       inference-node graph fields as scheduler authority. Remaining work is the
       queue-admission/session owner that supplies current validation records to
       that API before scheduler placement.
+    - Implementation update 2026-05-26: current inference-validation state now
+      exposes descriptor-backed scheduler projections through a graph-session
+      wrapper that checks the current canonical graph revision. Missing, stale,
+      or non-executable validation state fails closed before scheduler
+      placement. Remaining work is wiring queue admission/session orchestration
+      to call this wrapper for submitted inference workflows.
 12. Add queue-admission readiness validation that consumes the backend validation
     summary and fails closed before enqueue, queue-placement event recording, or
     scheduler task graph materialization when inference descriptors are pending,

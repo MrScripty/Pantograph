@@ -1027,6 +1027,36 @@ defining an image-only inference-node interface.
     projection API before scheduler placement. Until then, direct callers of
     `workflow_scheduler_task_graph` intentionally fail closed for runtime
     inference nodes that lack descriptor projections.
+- [x] 2026-05-26 current-validation scheduler projection state slice:
+  - Smallest useful vertical slice: expose the current inference-validation
+    state owner as the source of `WorkflowSchedulerInferenceTaskProjections`,
+    add a graph-session wrapper that computes the current canonical graph
+    revision, and make focused tests assert executable summaries project ready
+    scheduler intent while non-executable summaries fail closed.
+  - Allowed write set: `inference_validation_state.rs`,
+    `session_inference_validation_api.rs`, `session_tests.rs`,
+    `workflow/task_graph.rs`, and Milestone 5d/status plan notes.
+  - No-fallback/no-legacy confirmation: scheduler projection now requires a
+    current executable validation summary and rejects missing, stale, and
+    non-executable validation state. It does not synthesize runtime/device/task
+    intent from raw graph fields, frontend state, Tauri state, model paths, or
+    legacy package metadata.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_state --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; and `git diff --check`.
+  - Discovered issue: workflow-service still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning during `cargo check`.
+    This is outside the projection-state slice and remains part of the broader
+    Milestone 5c/5d session-execution cleanup.
+  - Remaining follow-up: queue admission/session orchestration must call the
+    graph-session projection API before scheduler placement and replace direct
+    task graph construction for submitted inference workflows. The known
+    broader `session_execution --lib` failures remain the validation-to-run
+    submission boundary and were not expanded into this projection-state slice.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

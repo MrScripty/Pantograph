@@ -50,7 +50,10 @@ impl WorkflowSchedulerInferenceTaskProjections {
         Ok(Self { by_node_id })
     }
 
-    fn get(&self, node_id: &SchedulerNodeId) -> Option<&WorkflowSchedulerInferenceTaskProjection> {
+    pub fn get(
+        &self,
+        node_id: &SchedulerNodeId,
+    ) -> Option<&WorkflowSchedulerInferenceTaskProjection> {
         self.by_node_id.get(node_id)
     }
 }

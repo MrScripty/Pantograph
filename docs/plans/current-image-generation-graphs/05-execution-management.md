@@ -12445,6 +12445,23 @@ Worker rules:
     workflow-service check modes. Broader `session_execution` tests still expose
     the remaining queue-admission/session orchestration boundary and are
     recorded in Milestone 5d.
+- 2026-05-26 Milestone 5d current-validation scheduler projection state slice:
+  - Exposed current inference-validation records as the production-shaped
+    `WorkflowSchedulerInferenceTaskProjections` source and added a graph-session
+    wrapper that computes the current canonical graph revision before reading
+    validation state.
+  - No-fallback/no-legacy result: missing, stale, and non-executable validation
+    summaries fail closed; scheduler intent is still supplied only by
+    descriptor-backed validation records, not raw graph fields, frontend state,
+    Tauri state, legacy package facts, or model paths.
+  - Verification passed for focused validation-state and publication tests,
+    workflow-service feature check modes, formatting, and diff hygiene. The
+    pre-existing `set_active_run_execution_plan` dead-code warning remains
+    outside this slice.
+  - Remaining follow-up: queue admission/session orchestration must consume the
+    graph-session projection API before scheduler placement. The broader
+    `session_execution --lib` failures remain the next validation-to-run
+    submission boundary.
 
 ### Traceability Links
 
