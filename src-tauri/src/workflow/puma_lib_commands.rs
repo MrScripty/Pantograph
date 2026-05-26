@@ -1,6 +1,5 @@
-use pantograph_runtime_identity::canonical_engine_backend_key;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::State;
 use workflow_nodes::setup::{PumasSelectedModelDetail, PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
@@ -48,7 +47,7 @@ async fn require_pumas_api(
 pub async fn hydrate_puma_lib_node(
     _registry: State<'_, SharedNodeRegistry>,
     extensions: State<'_, SharedExtensions>,
-    resolver: State<'_, SharedModelDependencyResolver>,
+    _resolver: State<'_, SharedModelDependencyResolver>,
     model_path: Option<String>,
     model_id: Option<String>,
     selected_binding_ids: Option<Vec<String>>,
@@ -76,11 +75,13 @@ pub async fn hydrate_puma_lib_node(
     )
     .await?;
 
-    let mut node_data =
-        build_hydrated_node_data(&option, selected_binding_ids.unwrap_or_default())?;
+    let node_data = build_hydrated_node_data(&option, selected_binding_ids.unwrap_or_default())?;
 
     if resolve_requirements.unwrap_or(false) {
-        hydrate_dependency_requirements(&resolver, &mut node_data).await?;
+        return Err(
+            "Puma-Lib dependency requirement hydration now requires the path-free dependency-environment contract"
+                .to_string(),
+        );
     }
 
     Ok(PumaLibNodeHydrationResponse { node_data })
@@ -385,55 +386,10 @@ async fn find_matching_model_option(
         .into_iter()
         .find(|item| item.model_id == model_id)
         .and_then(|item| item.result);
-    let inference_settings = api
-        .get_inference_settings_batch(vec![model_id.clone()])
-        .await
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|item| item.model_id == model_id)
-        .map(|item| {
-            serde_json::to_value(item.settings).unwrap_or_else(|_| Value::Array(Vec::new()))
-        })
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let entry_path = descriptor
-        .as_ref()
-        .map(|descriptor| descriptor.entry_path.trim())
-        .filter(|path| !path.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            format!("Puma-Lib model '{model_id}' does not have a ready executable entry path")
-        })?;
-    let package_facts_summary = summary_result.as_ref().and_then(|result| {
-        result
-            .summary
-            .as_ref()
-            .and_then(|summary| serde_json::to_value(summary).ok())
-    });
-    let package_facts_summary_status = summary_result.as_ref().and_then(|result| {
-        serde_json::to_value(result.status)
-            .ok()
-            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-    });
-    let dependency_bindings = descriptor
-        .as_ref()
-        .and_then(|descriptor| {
-            descriptor
-                .dependency_resolution
-                .as_ref()
-                .and_then(|resolution| resolution.get("bindings").cloned())
-        })
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let runtime_engine_hints = descriptor
-        .as_ref()
-        .map(|descriptor| {
-            serde_json::to_value(&descriptor.runtime_engine_hints)
-                .unwrap_or_else(|_| Value::Array(Vec::new()))
-        })
-        .unwrap_or_else(|| Value::Array(Vec::new()));
     let model_ref_value = serde_json::to_value(&model_ref).map_err(|error| error.to_string())?;
 
     Ok(node_engine::PortOption {
-        value: json!(entry_path),
+        value: model_ref_value.clone(),
         label: record.official_name,
         description: Some(format!(
             "{} | {}",
@@ -442,7 +398,7 @@ async fn find_matching_model_option(
         )),
         metadata: Some(json!({
             "id": model_id,
-            "model_ref": model_ref_value,
+            "model_ref": model_ref_value.clone(),
             "pumas_model_ref": model_ref_value,
             "model_type": record.model_type,
             "cleaned_name": record.cleaned_name,
@@ -458,40 +414,10 @@ async fn find_matching_model_option(
                             summary.task.task_type_primary.clone()
                         })
                     })
-                }),
+            }),
             "recommended_backend": descriptor
                 .as_ref()
                 .and_then(|descriptor| descriptor.recommended_backend.clone()),
-            "runtime_engine_hints": runtime_engine_hints,
-            "entry_path": entry_path,
-            "execution_contract_version": descriptor
-                .as_ref()
-                .map(|descriptor| descriptor.execution_contract_version),
-            "storage_kind": descriptor.as_ref().map(|descriptor| descriptor.storage_kind),
-            "validation_state": descriptor
-                .as_ref()
-                .map(|descriptor| descriptor.validation_state),
-            "dependency_resolution": descriptor
-                .as_ref()
-                .and_then(|descriptor| descriptor.dependency_resolution.clone()),
-            "requires_custom_code": summary_result
-                .as_ref()
-                .and_then(|result| result.summary.as_ref())
-                .map(|summary| summary.requires_custom_code)
-                .unwrap_or(false),
-            "custom_code_sources": Value::Array(Vec::new()),
-            "dependency_bindings": dependency_bindings,
-            "review_reasons": summary_result
-                .as_ref()
-                .and_then(|result| result.summary.as_ref())
-                .map(|summary| {
-                    serde_json::to_value(&summary.diagnostic_codes)
-                        .unwrap_or_else(|_| Value::Array(Vec::new()))
-                })
-                .unwrap_or_else(|| Value::Array(Vec::new())),
-            "inference_settings": inference_settings,
-            "package_facts_summary_status": package_facts_summary_status,
-            "package_facts_summary": package_facts_summary,
         })),
         disabled: false,
         unavailable_state: None,
@@ -518,17 +444,6 @@ fn build_selected_model_option_from_detail(
     let row = detail.selector_row.as_ref();
     let descriptor = detail.descriptor.as_ref();
     let summary_result = detail.package_summary_result.as_ref();
-    let entry_path = descriptor
-        .map(|descriptor| descriptor.entry_path.trim())
-        .filter(|path| !path.is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            row.and_then(|row| row.executable_entry_path())
-                .map(ToOwned::to_owned)
-        })
-        .ok_or_else(|| {
-            format!("Puma-Lib model '{model_id}' does not have a ready executable entry path")
-        })?;
     let model_ref = row.map(|row| row.model_ref.clone()).unwrap_or_else(|| {
         pumas_library::models::PumasModelRef {
             model_id: model_id.to_string(),
@@ -547,59 +462,10 @@ fn build_selected_model_option_from_detail(
         .map(|row| row.tags.clone())
         .unwrap_or_default()
         .join(", ");
-    let package_facts_summary = summary_result
-        .and_then(|result| {
-            result
-                .summary
-                .as_ref()
-                .and_then(|summary| serde_json::to_value(summary).ok())
-        })
-        .or_else(|| {
-            row.and_then(|row| {
-                row.package_facts_summary
-                    .as_ref()
-                    .and_then(|summary| serde_json::to_value(summary).ok())
-            })
-        });
-    let package_facts_summary_status = summary_result
-        .and_then(|result| {
-            serde_json::to_value(result.status)
-                .ok()
-                .and_then(|value| value.as_str().map(ToOwned::to_owned))
-        })
-        .or_else(|| {
-            row.and_then(|row| {
-                serde_json::to_value(row.package_facts_summary_status)
-                    .ok()
-                    .and_then(|value| value.as_str().map(ToOwned::to_owned))
-            })
-        });
-    let dependency_bindings = descriptor
-        .and_then(|descriptor| {
-            descriptor
-                .dependency_resolution
-                .as_ref()
-                .and_then(|resolution| resolution.get("bindings").cloned())
-        })
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let runtime_engine_hints = descriptor
-        .map(|descriptor| {
-            serde_json::to_value(&descriptor.runtime_engine_hints)
-                .unwrap_or_else(|_| Value::Array(Vec::new()))
-        })
-        .or_else(|| {
-            row.map(|row| {
-                serde_json::to_value(&row.runtime_engine_hints)
-                    .unwrap_or_else(|_| Value::Array(Vec::new()))
-            })
-        })
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let inference_settings = serde_json::to_value(detail.inference_settings)
-        .unwrap_or_else(|_| Value::Array(Vec::new()));
     let model_ref_value = serde_json::to_value(&model_ref).map_err(|error| error.to_string())?;
 
     Ok(node_engine::PortOption {
-        value: json!(entry_path),
+        value: model_ref_value.clone(),
         label: display_name.clone(),
         description: Some(if tags.is_empty() {
             model_type.clone()
@@ -608,7 +474,7 @@ fn build_selected_model_option_from_detail(
         }),
         metadata: Some(json!({
             "id": model_ref.model_id,
-            "model_ref": model_ref_value,
+            "model_ref": model_ref_value.clone(),
             "pumas_model_ref": model_ref_value,
             "model_type": model_type,
             "cleaned_name": display_name,
@@ -630,36 +496,6 @@ fn build_selected_model_option_from_detail(
             "recommended_backend": descriptor
                 .and_then(|descriptor| descriptor.recommended_backend.clone())
                 .or_else(|| row.and_then(|row| row.recommended_backend.clone())),
-            "runtime_engine_hints": runtime_engine_hints,
-            "entry_path": entry_path,
-            "execution_contract_version": descriptor
-                .map(|descriptor| descriptor.execution_contract_version),
-            "storage_kind": descriptor
-                .map(|descriptor| descriptor.storage_kind)
-                .or_else(|| row.and_then(|row| row.storage_kind)),
-            "validation_state": descriptor
-                .map(|descriptor| descriptor.validation_state)
-                .or_else(|| row.and_then(|row| row.validation_state)),
-            "dependency_resolution": descriptor
-                .and_then(|descriptor| descriptor.dependency_resolution.clone()),
-            "requires_custom_code": summary_result
-                .and_then(|result| result.summary.as_ref())
-                .or_else(|| row.and_then(|row| row.package_facts_summary.as_ref()))
-                .map(|summary| summary.requires_custom_code)
-                .unwrap_or(false),
-            "custom_code_sources": Value::Array(Vec::new()),
-            "dependency_bindings": dependency_bindings,
-            "review_reasons": summary_result
-                .and_then(|result| result.summary.as_ref())
-                .or_else(|| row.and_then(|row| row.package_facts_summary.as_ref()))
-                .map(|summary| {
-                    serde_json::to_value(&summary.diagnostic_codes)
-                        .unwrap_or_else(|_| Value::Array(Vec::new()))
-                })
-                .unwrap_or_else(|| Value::Array(Vec::new())),
-            "inference_settings": inference_settings,
-            "package_facts_summary_status": package_facts_summary_status,
-            "package_facts_summary": package_facts_summary,
         })),
         disabled: false,
         unavailable_state: None,
@@ -672,140 +508,35 @@ fn build_hydrated_node_data(
     option: &node_engine::PortOption,
     selected_binding_ids: Vec<String>,
 ) -> Result<Value, String> {
-    let model_path = option_value_string(option)
-        .ok_or_else(|| "Puma-Lib option is missing a string model path".to_string())?;
     let metadata = option
         .metadata
         .as_ref()
         .and_then(Value::as_object)
         .ok_or_else(|| "Puma-Lib option metadata is missing".to_string())?;
-
-    let task_type_primary = metadata_string(
-        metadata,
-        &[
-            "task_type_primary",
-            "taskTypePrimary",
-            "task_type",
-            "taskType",
-        ],
-    );
-    let recommended_backend = normalize_backend_key(
-        metadata_string(metadata, &["recommended_backend", "recommendedBackend"]).as_deref(),
-    );
-    let dependency_bindings = metadata
-        .get("dependency_bindings")
+    let pumas_model_ref = metadata
+        .get("pumas_model_ref")
+        .or_else(|| metadata.get("model_ref"))
         .cloned()
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let backend_key = backend_key_for_pumas_option(
-        metadata,
-        &dependency_bindings,
-        recommended_backend.as_deref(),
-        task_type_primary.as_deref(),
-    );
+        .filter(|value| !value.is_null())
+        .ok_or_else(|| "Puma-Lib option is missing pumas_model_ref".to_string())?;
+    let model_id = pumas_model_ref
+        .get("model_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| metadata.get("id").and_then(Value::as_str).map(str::trim))
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Puma-Lib option is missing pumas_model_ref.model_id".to_string())?
+        .to_string();
 
     let node_data = json!({
-        "modelPath": model_path,
         "modelName": option.label,
-        "model_id": metadata_string(metadata, &["id"]),
-        "pumas_model_ref": metadata.get("pumas_model_ref").or_else(|| metadata.get("model_ref")).cloned().unwrap_or(Value::Null),
-        "model_type": metadata_string(metadata, &["model_type", "modelType"]),
-        "task_type_primary": task_type_primary,
-        "backend_key": backend_key,
-        "recommended_backend": recommended_backend,
-        "runtime_engine_hints": metadata.get("runtime_engine_hints").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
-        "requires_custom_code": metadata.get("requires_custom_code").cloned().unwrap_or(Value::Bool(false)),
-        "custom_code_sources": metadata.get("custom_code_sources").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
-        "platform_context": current_platform_context(),
-        "dependency_bindings": dependency_bindings,
-        "review_reasons": metadata.get("review_reasons").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
+        "model_id": model_id,
+        "pumas_model_ref": pumas_model_ref,
         "selected_binding_ids": sanitize_selected_binding_ids(selected_binding_ids),
-        "inference_settings": metadata.get("inference_settings").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
-        "dependency_requirements_id": Value::Null,
-        "dependency_requirements": Value::Null,
     });
 
     Ok(node_data)
-}
-
-async fn hydrate_dependency_requirements(
-    resolver: &State<'_, SharedModelDependencyResolver>,
-    node_data: &mut Value,
-) -> Result<(), String> {
-    let model_path = node_data
-        .get("modelPath")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "Hydrated Puma-Lib node is missing modelPath".to_string())?;
-    let model_id = node_data
-        .get("model_id")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let model_type = node_data
-        .get("model_type")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let task_type_primary = node_data
-        .get("task_type_primary")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let backend_key = node_data
-        .get("backend_key")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let platform_context = node_data.get("platform_context").cloned();
-    let mut selected_binding_ids = node_data
-        .get("selected_binding_ids")
-        .and_then(Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(Value::as_str)
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let node_type = infer_runtime_node_type(task_type_primary.as_deref(), backend_key.as_deref());
-
-    let mut requirements = resolver
-        .resolve_requirements_request(node_engine::ModelDependencyRequest {
-            node_type,
-            model_path: model_path.to_string(),
-            model_id,
-            model_type,
-            task_type_primary,
-            backend_key,
-            platform_context,
-            selected_binding_ids: selected_binding_ids.clone(),
-            dependency_override_patches: Vec::new(),
-        })
-        .await?;
-
-    if selected_binding_ids.is_empty() && requirements.selected_binding_ids.is_empty() {
-        selected_binding_ids = requirements
-            .bindings
-            .iter()
-            .map(|binding| binding.binding_id.clone())
-            .collect();
-        requirements.selected_binding_ids = selected_binding_ids.clone();
-    } else if !requirements.selected_binding_ids.is_empty() {
-        selected_binding_ids = requirements.selected_binding_ids.clone();
-    }
-
-    let object = node_data
-        .as_object_mut()
-        .ok_or_else(|| "Hydrated Puma-Lib node data must be an object".to_string())?;
-    object.insert(
-        "dependency_requirements_id".to_string(),
-        Value::String(requirements.model_id.clone()),
-    );
-    object.insert(
-        "dependency_requirements".to_string(),
-        serde_json::to_value(&requirements).map_err(|error| error.to_string())?,
-    );
-    object.insert(
-        "selected_binding_ids".to_string(),
-        json!(sanitize_selected_binding_ids(selected_binding_ids)),
-    );
-    Ok(())
 }
 
 fn clean_optional(value: Option<String>) -> Option<String> {
@@ -935,138 +666,6 @@ fn validate_hf_repo_id_for_audit(repo_id: &str) -> Result<&str, String> {
     Ok(trimmed)
 }
 
-fn option_value_string(option: &node_engine::PortOption) -> Option<&str> {
-    option.value.as_str()
-}
-
-fn metadata_string(metadata: &Map<String, Value>, keys: &[&str]) -> Option<String> {
-    keys.iter().find_map(|key| {
-        metadata
-            .get(*key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-    })
-}
-
-fn normalize_backend_key(value: Option<&str>) -> Option<String> {
-    canonical_engine_backend_key(value)
-}
-
-fn unique_binding_backend(bindings: &Value) -> Option<String> {
-    let unique = bindings
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|binding| {
-            binding
-                .as_object()
-                .and_then(|value| value.get("backend_key"))
-                .and_then(Value::as_str)
-                .and_then(|value| normalize_backend_key(Some(value)))
-        })
-        .collect::<std::collections::BTreeSet<_>>();
-
-    if unique.len() == 1 {
-        unique.into_iter().next()
-    } else {
-        None
-    }
-}
-
-fn backend_key_for_pumas_option(
-    metadata: &Map<String, Value>,
-    dependency_bindings: &Value,
-    recommended_backend: Option<&str>,
-    task_type_primary: Option<&str>,
-) -> Option<String> {
-    if metadata_indicates_gguf(metadata) {
-        return Some("llamacpp".to_string());
-    }
-
-    unique_binding_backend(dependency_bindings)
-        .or_else(|| normalize_backend_key(recommended_backend))
-        .or_else(|| infer_backend_key_from_task(task_type_primary))
-}
-
-fn metadata_indicates_gguf(metadata: &Map<String, Value>) -> bool {
-    metadata
-        .get("package_facts_summary")
-        .and_then(|summary| {
-            summary
-                .get("artifact_kind")
-                .or_else(|| summary.get("artifactKind"))
-        })
-        .and_then(Value::as_str)
-        .is_some_and(|artifact| artifact.eq_ignore_ascii_case("gguf"))
-        || metadata
-            .get("tags")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .any(|tag| {
-                tag.as_str()
-                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case("gguf"))
-            })
-        || metadata_path_fields(metadata).any(path_has_gguf_extension)
-}
-
-fn metadata_path_fields<'a>(metadata: &'a Map<String, Value>) -> impl Iterator<Item = &'a str> {
-    [
-        "modelPath",
-        "model_path",
-        "entry_path",
-        "entryPath",
-        "selected_artifact_path",
-        "selectedArtifactPath",
-    ]
-    .into_iter()
-    .filter_map(|key| metadata.get(key).and_then(Value::as_str))
-}
-
-fn path_has_gguf_extension(path: &str) -> bool {
-    std::path::Path::new(path)
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
-}
-
-fn infer_backend_key_from_task(task_type_primary: Option<&str>) -> Option<String> {
-    let task = task_type_primary?.trim().to_ascii_lowercase();
-    if task.is_empty() {
-        return None;
-    }
-
-    match task.as_str() {
-        "text-to-audio" => Some("stable_audio".to_string()),
-        "audio-to-text" | "text-to-image" | "image-to-image" => Some("pytorch".to_string()),
-        _ => Some("pytorch".to_string()),
-    }
-}
-
-fn infer_runtime_node_type(task_type_primary: Option<&str>, backend_key: Option<&str>) -> String {
-    let task = task_type_primary
-        .map(|value| value.trim().to_ascii_lowercase())
-        .unwrap_or_default();
-    if normalize_backend_key(backend_key).as_deref() == Some("onnx-runtime") {
-        return "onnx-inference".to_string();
-    }
-
-    if task == "text-to-audio" {
-        return "audio-generation".to_string();
-    }
-
-    "llm-inference".to_string()
-}
-
-fn current_platform_context() -> Value {
-    json!({
-        "os": std::env::consts::OS,
-        "arch": std::env::consts::ARCH,
-    })
-}
-
 fn sanitize_selected_binding_ids(selected_binding_ids: Vec<String>) -> Vec<String> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -1136,6 +735,9 @@ mod tests {
             description: None,
             metadata: Some(json!({
                 "id": "diffusion/cc-nms/tiny-sd-turbo",
+                "pumas_model_ref": {
+                    "model_id": "diffusion/cc-nms/tiny-sd-turbo"
+                },
                 "model_type": "diffusion",
                 "task_type_primary": "text-to-image",
                 "recommended_backend": "diffusers",
@@ -1163,49 +765,20 @@ mod tests {
         let node_data = build_hydrated_node_data(&sample_option(), vec![" binding-a ".to_string()])
             .expect("node data");
 
-        assert_eq!(node_data["modelPath"], json!("/models/tiny-sd-turbo"));
         assert_eq!(node_data["modelName"], json!("Tiny SD Turbo"));
         assert_eq!(
             node_data["model_id"],
             json!("diffusion/cc-nms/tiny-sd-turbo")
         );
-        assert_eq!(node_data["backend_key"], json!("onnx-runtime"));
-        assert_eq!(node_data["recommended_backend"], json!("diffusers"));
+        assert_eq!(
+            node_data["pumas_model_ref"],
+            json!({ "model_id": "diffusion/cc-nms/tiny-sd-turbo" })
+        );
         assert_eq!(node_data["selected_binding_ids"], json!(["binding-a"]));
-        assert_eq!(node_data["inference_settings"], json!([{ "key": "steps" }]));
-        assert!(node_data["dependency_requirements"].is_null());
-    }
-
-    #[test]
-    fn build_hydrated_node_data_routes_gguf_to_llamacpp() {
-        let option = node_engine::PortOption {
-            value: json!("/models/tiny/model.gguf"),
-            label: "Tiny GGUF".to_string(),
-            description: None,
-            metadata: Some(json!({
-                "id": "llm/imported/tiny",
-                "model_type": "llm",
-                "task_type_primary": "text-generation",
-                "recommended_backend": "candle",
-                "tags": ["gguf"],
-                "selected_artifact_path": "llm/imported/tiny/model.gguf",
-                "dependency_bindings": [
-                    {
-                        "binding_id": "stale-candle",
-                        "backend_key": "candle"
-                    }
-                ]
-            })),
-            disabled: false,
-            unavailable_state: None,
-            unavailable_reason_code: None,
-            unavailable_reason: None,
-        };
-
-        let node_data = build_hydrated_node_data(&option, Vec::new()).expect("node data");
-
-        assert_eq!(node_data["backend_key"], json!("llamacpp"));
-        assert_eq!(node_data["recommended_backend"], json!("candle"));
+        assert!(node_data.get("modelPath").is_none());
+        assert!(node_data.get("entry_path").is_none());
+        assert!(node_data.get("inference_settings").is_none());
+        assert!(node_data.get("dependency_requirements").is_none());
     }
 
     #[tokio::test]
@@ -1216,7 +789,7 @@ mod tests {
             .path()
             .join("shared-resources/models")
             .join(model_id);
-        let model_file = write_library_owned_file_model(&model_dir, model_id);
+        write_library_owned_file_model(&model_dir, model_id);
         let api = Arc::new(
             pumas_library::PumasApi::builder(temp_dir.path())
                 .build()
@@ -1229,7 +802,7 @@ mod tests {
         let option = find_matching_model_option_from_selector_access(&selector_access, model_id)
             .await
             .expect("selected model option should hydrate");
-        assert_eq!(option.value, json!(model_file.display().to_string()));
+        assert_eq!(option.value["model_id"], json!(model_id));
         let metadata = option
             .metadata
             .as_ref()
@@ -1237,15 +810,12 @@ mod tests {
             .expect("selected option metadata should be an object");
         assert_eq!(metadata["id"], json!(model_id));
         assert_eq!(
-            metadata["entry_path"],
-            json!(model_file.display().to_string())
-        );
-        assert_eq!(
             metadata["pumas_model_ref"]["model_id"],
             serde_json::json!(model_id)
         );
-        assert!(metadata["execution_contract_version"].is_number());
-        assert!(metadata["inference_settings"].is_array());
+        assert!(metadata.get("entry_path").is_none());
+        assert!(metadata.get("execution_contract_version").is_none());
+        assert!(metadata.get("inference_settings").is_none());
     }
 
     #[tokio::test]
@@ -1256,7 +826,7 @@ mod tests {
             .path()
             .join("shared-resources/models")
             .join(model_id);
-        let model_file = write_library_owned_file_model(&model_dir, model_id);
+        write_library_owned_file_model(&model_dir, model_id);
         let api = pumas_library::PumasApi::builder(temp_dir.path())
             .build()
             .await
@@ -1272,7 +842,7 @@ mod tests {
             .await
             .expect("read-only selector row should hydrate enough selected model data");
 
-        assert_eq!(option.value, json!(model_file.display().to_string()));
+        assert_eq!(option.value["model_id"], json!(model_id));
         let metadata = option
             .metadata
             .as_ref()
@@ -1284,10 +854,8 @@ mod tests {
             serde_json::json!(model_id)
         );
         assert_eq!(metadata["recommended_backend"], json!("llamacpp"));
-        assert!(metadata["inference_settings"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(metadata.get("entry_path").is_none());
+        assert!(metadata.get("inference_settings").is_none());
     }
 
     #[tokio::test]
@@ -1428,38 +996,6 @@ mod tests {
             .expect("read-only selector summary should resolve");
 
         assert_eq!(summary.model_id, model_id);
-    }
-
-    #[test]
-    fn infer_runtime_node_type_matches_puma_lib_task_shape() {
-        assert_eq!(
-            infer_runtime_node_type(Some("text-to-image"), Some("pytorch")),
-            "llm-inference"
-        );
-        assert_eq!(
-            infer_runtime_node_type(Some("image-to-image"), Some("diffusers")),
-            "llm-inference"
-        );
-        assert_eq!(
-            infer_runtime_node_type(Some("text-generation"), Some("onnxruntime")),
-            "onnx-inference"
-        );
-        assert_eq!(
-            infer_runtime_node_type(Some("text-to-audio"), Some("stable_audio")),
-            "audio-generation"
-        );
-        assert_eq!(
-            infer_runtime_node_type(Some("text-generation"), Some("pytorch")),
-            "llm-inference"
-        );
-    }
-
-    #[test]
-    fn normalize_backend_key_accepts_llama_cpp_alias() {
-        assert_eq!(
-            normalize_backend_key(Some("llama_cpp")),
-            Some("llamacpp".to_string())
-        );
     }
 
     #[test]

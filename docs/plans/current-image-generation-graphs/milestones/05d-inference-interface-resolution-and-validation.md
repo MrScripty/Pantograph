@@ -694,3 +694,34 @@ defining an image-only inference-node interface.
     targets, and `inference_settings`; then update frontend mocks/templates and
     node-engine tests to prove only `pumas_model_ref` plus display identity
     remain graph-facing.
+- [x] 2026-05-25 `puma-lib` Tauri hydration graph-data cleanup slice:
+  - Smallest useful vertical slice: update
+    `src-tauri/src/workflow/puma_lib_commands.rs` so selected-model hydration
+    returns graph node data with only `modelName`, `model_id`,
+    `pumas_model_ref`, and sanitized `selected_binding_ids`. The slice removed
+    successful graph-data emission of `modelPath`, `entry_path`, package facts,
+    runtime hints, dependency bindings, load-target facts, dependency
+    requirements, and `inference_settings`.
+  - No-fallback/no-legacy confirmation: `resolve_requirements=true` now fails
+    closed with a typed-boundary message instead of adapting the selected model
+    back into `node_engine::ModelDependencyRequest` or synthesizing a hidden
+    path. The Tauri command still accepts the legacy `model_path` lookup input
+    only as an unresolved command API cleanup target; it is no longer emitted
+    into hydrated graph node data.
+  - Focused tests updated: puma-lib hydration tests now assert option values
+    and hydrated node data are keyed by `pumas_model_ref`, and assert retired
+    path/settings fields are absent from successful hydration outputs.
+  - Verification passed: `cargo fmt`; `git diff --check`; targeted source
+    search of `src-tauri/src/workflow/puma_lib_commands.rs` confirmed no
+    successful hydrated node output path remains for `modelPath`,
+    `entry_path`, `dependency_requirements`, or `inference_settings`.
+  - Verification blocked: `cargo test -p pantograph puma_lib_commands` did not
+    reach this module because the `pantograph` test binary currently fails to
+    compile in `src-tauri/src/app_setup.rs` with missing
+    `WorkflowService::set_media_conversion_executor`. Record this as a
+    discovered unrelated compile blocker before relying on app-crate tests for
+    future slices.
+  - Remaining follow-up: replace the Tauri command input/API and frontend call
+    sites so selected-model hydration receives `pumas_model_ref` only, then
+    implement the canonical path-free dependency-environment hydration service
+    boundary and remove the legacy `ModelDependencyRequest` dependency path.

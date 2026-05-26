@@ -686,6 +686,19 @@ falling back to previously rendered ports.
   No adapter may translate the canonical request back into
   `node_engine::ModelDependencyRequest`, `ModelRefV2`, `modelPath`, or
   `model_path`.
+- 2026-05-25: Implemented the first `puma-lib` hydration cleanup slice in the
+  Tauri command module. Successful selected-model hydration now writes only
+  model-ref/display node data (`modelName`, `model_id`, `pumas_model_ref`, and
+  sanitized `selected_binding_ids`) and no longer emits graph-authored
+  `modelPath`, executable entry paths, package facts, runtime hints,
+  dependency bindings, dependency requirements, load-target facts, or
+  `inference_settings`. `resolve_requirements=true` fails closed until the
+  canonical path-free dependency-environment service boundary replaces the
+  retired request. Verification passed: `cargo fmt`, `git diff --check`, and
+  targeted source search. Verification blocked: `cargo test -p pantograph
+  puma_lib_commands` is currently stopped by the unrelated
+  `WorkflowService::set_media_conversion_executor` compile error in
+  `src-tauri/src/app_setup.rs`.
 
 ## Open Design Decisions
 
