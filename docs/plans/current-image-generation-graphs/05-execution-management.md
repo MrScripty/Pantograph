@@ -12198,6 +12198,34 @@ Worker rules:
     `record_inference_validation_session`, carry node-scoped descriptor
     metadata into the state owner, and derive dependency-environment requests
     only after current executable dependency requirements exist.
+- 2026-05-26 Milestone 5d validation publication re-plan decision:
+  - Decision: implement option 2 followed by option 3. Option 2 is the next
+    implementation bridge: a synchronous workflow-service validation method
+    snapshots the draft graph under lock, releases the lock, resolves
+    descriptor facts, builds typed validation events/summary, records the
+    current summary through the validation-state owner, and returns the
+    validation session. Option 3 is the required end state: event-driven
+    backend validation starts after relevant graph edits or explicit validation
+    requests, publishes node-scoped and graph-scoped validation events, and
+    never blocks graph display or editing while validation runs.
+  - Architectural constraint: the option 2 implementation must be shaped as
+    the same internal validation publisher used by option 3. The later
+    event-driven path changes scheduling/transport, not descriptor resolution,
+    summary ownership, freshness checks, or dependency action policy.
+  - No-fallback/no-legacy confirmation: Tauri and frontend remain
+    transport/presentation layers. They must not resolve descriptors, infer
+    freshness, construct dependency requests, translate retired numeric
+    revisions, or revive model-path/`inference_settings`/`expand-settings`
+    validation paths.
+  - UX constraint: the graph editor renders saved/authored ports immediately,
+    overlays pending/stale/unavailable/invalid backend state as validation
+    events arrive, disables submit/enqueue from the latest backend summary, and
+    remains editable while validation is pending.
+  - Next implementation slice: add the synchronous workflow-service validation
+    method and focused tests proving it snapshots current graph revision,
+    releases the graph lock before descriptor resolution, records only current
+    validation summaries, and returns typed events/summary without touching
+    Tauri/frontend policy.
 
 ### Traceability Links
 

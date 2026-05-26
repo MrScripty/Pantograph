@@ -171,6 +171,22 @@ defining an image-only inference-node interface.
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
       gates submit/enqueue from the backend summary.
+      Re-plan decision: implement this in two stages. Stage 1 is the
+      synchronous workflow-service validation path: a backend-owned graph
+      session method snapshots the draft graph under lock, releases the lock,
+      resolves descriptor facts, builds typed validation events and summary,
+      records the current summary through the validation-state owner, and
+      returns the validation session to the caller. This is the smallest
+      shippable path for proving model-ref -> descriptor -> authored ports ->
+      validation summary -> submit/admission gate without giving Tauri or the
+      frontend validation policy. Stage 2 is the event-driven validation path:
+      graph mutations or explicit validation requests start backend validation
+      without blocking graph editing; stale validation sessions are discarded by
+      graph revision/session id; current events are published to the editor as
+      descriptor, drift, diagnostic, update-proposal, and graph-summary events.
+      Stage 1 must be shaped as the same internal publisher used by Stage 2 so
+      event-driven validation can replace the transport without rewriting the
+      validation core.
 - [ ] Add a strict model-ref binding resolver for inference request extraction.
       It must reject duplicate incoming `pumas_model_ref` edges, verify the
       source handle and source node/type can provide a Pumas model ref, and
@@ -279,6 +295,14 @@ defining an image-only inference-node interface.
       Workflow-service must snapshot draft graph state under lock, release the
       lock before Pumas/inference fact resolution, and publish events only for
       the current validation session id and graph revision.
+      The event-driven implementation is required for graph-editor UX. It must
+      never block displaying or editing the graph while validation runs. The
+      graph editor renders saved/authored ports immediately, overlays backend
+      validation state as it arrives, disables submit/enqueue from the latest
+      backend summary, and keeps editing available even while validation is
+      pending. Tauri remains a transport layer and must not own validation
+      freshness, descriptor resolution, enqueue policy, or dependency request
+      derivation.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply
