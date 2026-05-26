@@ -1238,6 +1238,44 @@ defining an image-only inference-node interface.
     affected source README or add an ADR covering API consumer contract,
     structured producer contract, lifecycle/transaction rules, error semantics,
     compatibility/replay behavior for saved workflows, and revisit triggers.
+- [x] 2026-05-26 saved executable validation snapshot contract/owner slice
+  completed:
+  - Smallest useful vertical slice: added the workflow-service executable
+    validation snapshot DTOs, validated snapshot id, validated record wrapper,
+    in-memory fail-closed snapshot store, lookup request, typed diagnostics,
+    bounded content validation, and conversion into
+    `WorkflowSchedulerInferenceTaskProjections`.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this milestone file,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the snapshot contract stores only
+    typed executable authority keyed by `WorkflowVersionId`; it does not store
+    local model paths, Pumas package facts, frontend presentation state, media
+    payloads, Tauri state, queue placement, scheduler policy decisions, or
+    legacy whole-run runtime inputs. Lookup fails closed when the store is
+    unavailable, the snapshot is missing, the descriptor contract version is
+    incompatible, or the workflow fingerprint mismatches.
+  - Focused tests added for validating/projecting an executable snapshot,
+    rejecting non-executable summaries, rejecting oversized node contents,
+    store-unavailable lookup, missing-snapshot lookup, and fingerprint mismatch.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo fmt
+    -p pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; `cargo
+    check -p pantograph-workflow-service`; and `git diff --check`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Deviation recorded: the broader publish -> saved snapshot -> queue
+    admission acceptance path is not executable until the next two planned
+    slices add executable publish and queue-admission consumption. This slice
+    covers the replacement contract/owner and fail-closed lookup core only; it
+    does not add a compatibility shim or runnable alternate path.
+  - Remaining follow-up: wire the service-level executable publish boundary to
+    produce this snapshot, then require queue admission to consume the saved
+    snapshot before queue insertion or scheduler task graph materialization.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and

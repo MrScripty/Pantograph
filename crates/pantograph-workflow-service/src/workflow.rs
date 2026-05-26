@@ -25,6 +25,7 @@ mod contracts;
 #[allow(dead_code)]
 mod diagnostic_errors;
 mod diagnostics_api;
+mod executable_validation_snapshot;
 mod execution_plan;
 mod execution_plan_model_ref;
 mod execution_plan_selected_facts;
@@ -84,6 +85,21 @@ pub use self::diagnostics_api::{
     WorkflowSchedulerEstimateQueryRequest, WorkflowSchedulerEstimateQueryResponse,
     WorkflowSchedulerEstimateRecord, WorkflowSchedulerTimelineQueryRequest,
     WorkflowSchedulerTimelineQueryResponse,
+};
+pub use self::executable_validation_snapshot::{
+    InMemoryWorkflowExecutableValidationSnapshotStore,
+    ValidatedWorkflowExecutableValidationSnapshotRecord,
+    WorkflowExecutableValidationSnapshotDiagnostic,
+    WorkflowExecutableValidationSnapshotDiagnosticCode,
+    WorkflowExecutableValidationSnapshotDiagnosticSeverity,
+    WorkflowExecutableValidationSnapshotError, WorkflowExecutableValidationSnapshotId,
+    WorkflowExecutableValidationSnapshotLookupRequest, WorkflowExecutableValidationSnapshotNode,
+    WorkflowExecutableValidationSnapshotRecord,
+    WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_DIAGNOSTICS_PER_NODE,
+    WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_ESTIMATE_HINTS_PER_NODE,
+    WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_NODES,
+    WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_TRAIT_SETTINGS_PER_NODE,
+    WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION,
 };
 pub use self::execution_plan::{
     WorkflowExecutionPlan, WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,

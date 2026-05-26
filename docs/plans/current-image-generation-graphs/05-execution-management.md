@@ -12516,6 +12516,33 @@ Worker rules:
     cross-binding serialization tests for public wire shapes; no frontend or
     Tauri ownership of executable state; isolated sqlite/temp workflow roots in
     tests; and README or ADR updates for the snapshot owner.
+- 2026-05-26 Milestone 5d saved executable validation snapshot contract/owner
+  slice completed:
+  - Added the workflow-service executable validation snapshot module with typed
+    DTOs, a validated snapshot id, validated record wrapper, in-memory
+    fail-closed snapshot store, lookup request, typed diagnostics, bounded
+    validation, and conversion into scheduler inference task projections.
+  - No-fallback/no-legacy result: saved-run executable authority now has a
+    path-free contract keyed by `WorkflowVersionId`; it stores typed Pumas model
+    refs, descriptor fingerprints, task kind, explicit runtime/device
+    constraints, trait settings, estimate hints, availability, and diagnostics
+    only. It does not store local paths, Pumas package facts, frontend state,
+    media payloads, Tauri state, scheduler placement, or legacy whole-run
+    runtime inputs.
+  - Focused tests cover executable snapshot projection, non-executable summary
+    rejection, bounded node content rejection, store-unavailable lookup,
+    missing-snapshot lookup, and fingerprint mismatch.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo fmt
+    -p pantograph-workflow-service -- --check`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; `cargo
+    check -p pantograph-workflow-service`; and `git diff --check`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
+  - Remaining follow-up: service-level executable publish must produce this
+    snapshot, and queue admission must consume it before queue insertion or
+    scheduler task graph materialization. The full publish-to-admission
+    acceptance path is deferred until those boundaries exist.
 
 ### Traceability Links
 

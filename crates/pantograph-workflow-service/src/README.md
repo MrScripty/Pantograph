@@ -175,6 +175,15 @@ contracts. It preserves graph dependency bindings and canonical scheduler
 identifier parsing, emits typed projection diagnostics for missing canonical
 inference facts, and never treats legacy `model_path` or `model_ref` fields as
 runtime identity.
+Executable validation snapshots now live in `workflow/executable_validation_snapshot.rs`.
+They are the path-free, version-keyed service contract that will let executable
+publish persist validated inference authority and queue admission fail closed
+before scheduler graph materialization. The snapshot stores only bounded typed
+execution facts such as workflow version, graph revision, descriptor
+fingerprints, task kind, Pumas model ref, explicit runtime/device constraints,
+trait settings, estimate hints, availability status, and diagnostics; it does
+not store local model paths, full Pumas package facts, frontend presentation
+state, media payloads, or scheduler placement decisions.
 Workflow scheduler task orchestration is a service-owned composition boundary.
 `WorkflowService` owns a `WorkflowSchedulerTaskOrchestrator`, exposes an
 explicit runtime-host execution port configuration hook, and installs a
