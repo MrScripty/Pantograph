@@ -1,7 +1,7 @@
 //! Tool Loop Task
 //!
-//! Declares the composed tool-loop authoring contract. Runtime execution is
-//! owned by the composed primitive graph, not this descriptor task.
+//! Declares the tool-loop authoring contract. Runtime execution is owned by
+//! future scheduler-managed agent loop orchestration, not this descriptor task.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -34,8 +34,8 @@ pub struct ToolCall {
 
 /// Tool loop authoring descriptor.
 ///
-/// Composed contract metadata maps this stable external node onto canonical
-/// `llm-inference`, `tool-executor`, and turn-state primitives.
+/// Scheduler-owned agent loop orchestration maps this stable external node
+/// onto canonical inference, tool execution, and turn-state work.
 ///
 /// # Inputs (from context)
 /// - `{task_id}.input.prompt` (required) - The initial user prompt
@@ -94,7 +94,9 @@ impl TaskDescriptor for ToolLoopTask {
             node_type: "tool-loop".to_string(),
             category: NodeCategory::Control,
             label: "Tool Loop".to_string(),
-            description: "Composed tool-loop authoring contract backed by canonical inference and tool primitives".to_string(),
+            description:
+                "Tool-loop authoring contract for scheduler-owned agent loop orchestration"
+                    .to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::optional(
@@ -126,7 +128,7 @@ impl Task for ToolLoopTask {
 
     async fn run(&self, _context: Context) -> graph_flow::Result<TaskResult> {
         Err(GraphError::TaskExecutionFailed(
-            "tool-loop requires composed execution through canonical llm-inference and tool-executor primitives".into(),
+            "tool-loop requires scheduler-owned agent loop orchestration".into(),
         ))
     }
 }
@@ -174,15 +176,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_run_requires_composed_execution() {
+    async fn test_run_requires_scheduler_agent_loop_orchestration() {
         let task = ToolLoopTask::new("test_loop");
         let result = task.run(Context::new()).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("composed execution"),
-            "error should point callers at composed execution, got: {err}"
+            err.contains("scheduler-owned agent loop"),
+            "error should point callers at scheduler-owned orchestration, got: {err}"
         );
     }
 }

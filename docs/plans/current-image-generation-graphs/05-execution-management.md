@@ -11494,6 +11494,31 @@ Worker rules:
     authoring contract. Then implement scheduler-owned agent-loop expansion
     after descriptor-backed generic inference can execute one materialized
     inference turn.
+- 2026-05-25 Milestone 5d tool-loop composed-contract dependency removal
+  slice completed:
+  - Smallest useful vertical slice: removed
+    `workflow_nodes::builtin_composed_node_contracts`, deleted the built-in
+    `tool-loop` internal graph mapping over static `llm-inference` and
+    `tool-executor`, updated workflow-nodes README/control documentation, and
+    updated ADR-009 so architecture traceability matches the new owner
+    boundary.
+  - No-fallback/no-legacy confirmation: the slice removes the hidden static
+    all-port inference fallback before `llm-inference` is shrunk to
+    bootstrap/control ports. `tool-loop` remains a stable authoring
+    descriptor, but direct execution fails closed with a scheduler-owned
+    agent-loop diagnostic until canonical scheduler loop orchestration exists.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo
+    test -p workflow-nodes --lib contracts`; `cargo test -p workflow-nodes
+    --features model-library --lib contracts`; `cargo test -p workflow-nodes
+    --lib tool_loop`; `cargo check -p workflow-nodes`; `cargo check -p
+    workflow-nodes --no-default-features`; `cargo check -p workflow-nodes
+    --all-features`; retired composed-contract source search; and `git diff
+    --check`.
+  - Remaining follow-up: implement descriptor/authored-snapshot projection and
+    then retire graph-visible task/model-specific static `llm-inference` ports.
+    Scheduler-owned agent-loop expansion remains later work and must consume
+    descriptor-backed materialized inference turns instead of restoring the
+    static composed mapping.
 
 ### Traceability Links
 

@@ -61,7 +61,8 @@ non-Pumas consumers can still inspect and execute dependency-light nodes.
 
 ## Revisit Triggers
 - A second product wants a different built-in node catalog.
-- Disabled tool execution is replaced by a real backend tool contract.
+- Disabled tool execution is replaced by scheduler-owned agent-loop/tool
+  runtime orchestration.
 - Node registration moves from link-time inventory to generated descriptors.
 
 ## Dependencies
@@ -96,14 +97,12 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 ## Structured Producer Contract
 - Stable fields: node ids, categories, ports, labels, task metadata, and output
   shapes are consumed by workflow service, UI projections, and saved graphs.
-- The `puma-lib` descriptor exposes `pumas_model_ref` and
-  `resolved_model_package_facts` as optional JSON outputs so canonical
-  inference nodes can receive Pumas identity and package facts through graph
-  dataflow rather than scraping model-list option metadata.
-- The canonical `llm-inference` descriptor accepts `resolved_model_package_facts`
-  as an optional JSON input alongside `pumas_model_ref` and
-  `resolved_model_source`; this keeps package-fact compatibility evidence on
-  the normal graph edge contract.
+- The `puma-lib` descriptor exposes `pumas_model_ref` as the path-free model
+  identity output used by canonical inference planning. Derived package facts
+  and runtime load targets must not become graph-authored inference inputs.
+- The current broad `llm-inference` descriptor is being replaced by
+  descriptor-backed generic inference interfaces. New code must not use its
+  static task/model ports or `inference_settings` as a successful fallback.
 - Defaults: optional metadata must have documented default behavior.
 - Enums and labels: node categories and port data types carry execution
   semantics.

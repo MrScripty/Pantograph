@@ -64,6 +64,11 @@ defining an image-only inference-node interface.
       constraints, and diagnostics. All task/model-specific prompt, image,
       mask, sampler, result, and runtime-condition ports must come from the
       descriptor/authored snapshot.
+- [x] Remove the built-in composed `tool-loop` registration that depended on
+      static all-port `llm-inference` ports. `tool-loop` remains a stable
+      authoring descriptor and direct execution must fail closed until
+      scheduler-owned agent-loop orchestration is implemented from descriptor
+      backed inference turns.
 - [x] Define authored-versus-current drift report contracts in
       `pantograph-inference-interface-contracts`. Drift reports must identify
       added/removed ports, type changes, requirement/default/option changes,
@@ -260,3 +265,28 @@ defining an image-only inference-node interface.
   - Remaining follow-up: implement the first cross-layer descriptor resolution
     and validation acceptance slice before broad frontend, scheduler,
     runtime-host, or legacy-deletion work.
+- [x] 2026-05-25 tool-loop composed-contract dependency removal slice
+      completed:
+  - Smallest useful vertical slice: removed
+    `workflow_nodes::builtin_composed_node_contracts`, deleted the built-in
+    `tool-loop` internal graph mapping over `llm-inference` and
+    `tool-executor`, updated workflow-nodes README/control docs, and updated
+    ADR-009 so the recorded architecture no longer claims a static
+    `tool-loop` composed registration exists.
+  - No-fallback/no-legacy confirmation: this removes the hidden static
+    all-port inference fallback before the generic inference descriptor is
+    shrunk. `tool-loop` is still authorable, but direct runtime execution fails
+    closed with a scheduler-owned agent-loop diagnostic until the canonical
+    scheduler orchestration path exists.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo
+    test -p workflow-nodes --lib contracts`; `cargo test -p workflow-nodes
+    --features model-library --lib contracts`; `cargo test -p workflow-nodes
+    --lib tool_loop`; `cargo check -p workflow-nodes`; `cargo check -p
+    workflow-nodes --no-default-features`; `cargo check -p workflow-nodes
+    --all-features`; retired composed-contract source search; and `git diff
+    --check`.
+  - Remaining follow-up: implement descriptor/authored-snapshot projection and
+    then shrink graph-visible `llm-inference` to bootstrap/control ports. Later
+    scheduler-owned agent-loop expansion must build on descriptor-backed
+    materialized inference turns rather than restoring a composed static
+    inference contract.

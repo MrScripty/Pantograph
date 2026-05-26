@@ -28,15 +28,18 @@ mappings, external-to-internal port mappings, primitive trace policy, contract
 upgrade records, upgrade outcomes, changed node/port records, diagnostics
 lineage policy, and typed rejection diagnostics.
 
-`workflow-nodes` owns concrete built-in primitive and composed node
-registrations. Primitive descriptors continue to project into
-`NodeTypeContract` without serialization changes. Built-in composed authoring
-surfaces are exposed through `builtin_composed_node_contracts()`.
+`workflow-nodes` owns concrete built-in primitive node registrations.
+Primitive descriptors continue to project into `NodeTypeContract` without
+serialization changes.
 
-The existing `tool-loop` authoring surface is represented as a composed
-contract over primitive `llm-inference`, `tool-executor`, and turn-state
-control nodes. This preserves the stable external `tool-loop` ports while
-making the primitive trace policy explicit.
+The existing `tool-loop` authoring surface is not represented as a static
+composed contract over `llm-inference`, `tool-executor`, and turn-state
+control nodes. That static composed mapping is retired because it would keep
+the broad `llm-inference` descriptor alive as an executable compatibility
+path. `tool-loop` remains a stable authoring descriptor, but runtime behavior
+must be implemented through scheduler-owned agent loop orchestration once the
+generic inference descriptor and task-level scheduler contracts can materialize
+one inference turn.
 
 `pantograph-embedded-runtime` owns runtime composed-parent lineage projection.
 Runtime-created primitive execution contexts use `NodeLineageContext` helpers
@@ -55,7 +58,11 @@ Stage 05 does not implement host bindings or GUI redesign.
 
 ## Consequences
 
-- Composed nodes improve authoring without erasing primitive execution facts.
+- Composed-node DTOs remain available for future authoring surfaces where a
+  static internal graph is the canonical design, but `workflow-nodes` does not
+  currently expose a built-in composed `tool-loop` registration.
+- Scheduler-owned `tool-loop` orchestration must preserve primitive execution
+  facts without routing through a static all-port `llm-inference` fallback.
 - Model/license usage records continue to point at primitive model execution
   and can include composed-parent lineage.
 - Saved-workflow upgrades have explicit records for changed node/port ids and
