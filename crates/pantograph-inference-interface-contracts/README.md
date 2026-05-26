@@ -21,6 +21,8 @@ facts, executable paths, scheduler choices, or frontend-only metadata.
 - Model references are Pumas-owned references, not local paths.
 - Inference interface ports, defaults, option sets, availability, drift, and
   validation summaries are typed and bounded.
+- Live validation event/session envelopes are workflow-service owned. This
+  crate intentionally does not export graph validation event or stream DTOs.
 - Authored snapshots preserve graph shape and drift context only. They must not
   contain Pumas package facts, runtime load targets, executable paths,
   scheduler decisions, full runtime API schemas, or media payloads.
@@ -51,3 +53,6 @@ model names, paths, runtime-specific blobs, or package-fact metadata bags.
 - Runtime/device capability reporting needs richer typed advisory alternatives.
 - Graph patch operation ownership moves; those operations should stay with
   graph mutation code, not this DTO crate.
+- A consumer needs shared live validation event transport; that should first be
+  evaluated against the workflow-service ownership boundary instead of adding
+  unscoped event DTOs here.

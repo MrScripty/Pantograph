@@ -52,10 +52,13 @@ Out of scope:
 - **`pantograph-inference-interface-contracts`:** owns the shared DTO-only
   contract for resolved descriptors, authored snapshots, value categories,
   availability, diagnostics, drift reports, and typed validation summaries. It
-  must not import workflow-service, scheduler, runtime-host, Pumas lookup,
-  inference execution, or frontend rendering policy. It may depend on stable,
-  path-free model-reference DTOs only when that dependency does not pull in
-  lifecycle, storage lookup, or runtime wiring behavior.
+  does not own the live graph validation event envelope or event-stream state,
+  because graph/node routing, update proposals, graph revisions, and session
+  staleness are workflow-service behavior. It must not import workflow-service,
+  scheduler, runtime-host, Pumas lookup, inference execution, or frontend
+  rendering policy. It may depend on stable, path-free model-reference DTOs only
+  when that dependency does not pull in lifecycle, storage lookup, or runtime
+  wiring behavior.
 - **Pumas:** owns model identity, selected artifact identity, package facts,
   artifact readiness, storage kind, validation state, and local/external
   storage approval. Pumas does not own Pantograph support policy or scheduler
@@ -69,7 +72,9 @@ Out of scope:
   availability into a typed `InferenceInterfaceDescriptor`. It also owns draft
   graph validation, save validation, execution-time revalidation, and
   materialization of graph literals/defaults/upstream task results into typed
-  runtime-host inputs.
+  runtime-host inputs. Workflow-service is the only owner for live validation
+  event/session envelopes, graph/node event scope, stale-session filtering, and
+  update-proposal transport.
 - **Scheduler:** owns runtime/device/reservation/batch selection. It receives
   validated task intent and explicit user constraints, but it does not own
   prompt/image/mask/settings values, graph port discovery, or model-path
@@ -113,6 +118,11 @@ Out of scope:
 - The first implementation pass must be a validated vertical slice before broad
   horizontal expansion: model ref input -> descriptor resolution -> authored
   port projection -> validation summary -> submit/admission gate.
+- API-breaking cleanup is expected for retired graph/runtime/interface paths.
+  Do not keep aliases, compatibility shims, or alternate successful routes for
+  `modelPath`, executable entry paths, unscoped validation events,
+  `inference_settings`, `expand-settings`, static all-port inference metadata, or
+  semantic `node.data.definition` inference overlays.
 
 ## Resolved Design Decisions
 
@@ -144,12 +154,20 @@ Out of scope:
 - Keep descriptor/drift contracts in `pantograph-inference-interface-contracts`.
   Keep graph patch/update proposal contracts in workflow graph/service
   contracts because they mutate persisted graph structure.
+- Keep validation summary DTOs in `pantograph-inference-interface-contracts`
+  because they are generic descriptor-validation results. Remove or retire
+  shared unscoped validation event/stream DTOs from that crate; the live scoped
+  event stream is workflow-service owned.
 - Use typed graph patch operations at the API layer. The GUI renders those
   operations visually through graph nodes, ports, edges, and validation
   overlays.
 - Use live validation sessions as the target UX. Graphs render immediately
   from saved authored snapshots while backend validation streams descriptor,
   drift, diagnostics, update-proposal, and graph-summary events.
+- Live validation events are workflow-service DTOs with an explicit scope:
+  graph-scoped for summary events and node-scoped for descriptor, drift,
+  diagnostic, and update-proposal events. Do not use shared unscoped validation
+  events as a transport or compatibility path.
 - Correlate live validation with a backend-issued validation session id plus a
   monotonic client graph revision. Frontend must ignore stale events for old
   sessions or revisions.
@@ -159,6 +177,14 @@ Out of scope:
 - Runtime/device constraints narrow interface validation but do not make the
   resolver choose the final runtime/device. Explicit invalid constraints block
   enqueue; typed alternatives are advisory repair suggestions only.
+- Optional explicit constraints use strict boundary semantics: missing, null, or
+  blank-string values are absent; wrong JSON types and nonblank unparsable
+  strings are invalid diagnostics. Apply this to `task_kind`, `runtime`,
+  `device`, and future typed trait inputs.
+- Descriptor task kind is authoritative for scheduler materialization.
+  Graph-authored `task_kind` is an optional resolver constraint only; if the
+  explicit task kind cannot be satisfied, validation blocks before enqueue
+  rather than letting scheduler projection reinterpret raw node data.
 - Runtime/device alternatives are included only when needed to explain or
   repair an explicit invalid constraint. Full runtime support summaries are a
   future advanced inspector, not the first implementation.
@@ -178,6 +204,17 @@ Out of scope:
   frontend-owned dynamic port sync are legacy inference-interface paths. They
   must be deleted or rewritten to consume backend descriptors as presentation
   plumbing only; they must not remain a successful alternate interface source.
+- Retire `puma-lib` authoring in two validated stages. First, make `puma-lib`
+  graph authoring model-ref-only: saved graph/node data and successful node
+  semantics carry `pumas_model_ref` plus display-only identity, not executable
+  paths, `entry_path`, package facts, runtime hints, load targets, or
+  `inference_settings`. Then wire live validation so selecting or changing a
+  Pumas model starts descriptor validation and overlays pending/stale/
+  unavailable/invalid state in the editor.
+- Model-ref binding extraction must be strict. Reject duplicate incoming
+  `pumas_model_ref` bindings, verify the source handle and source node/type can
+  provide a Pumas model ref, and report connected-versus-inline disagreement as
+  a typed diagnostic instead of silently choosing a winner.
 - Existing `PortOptionsProvider`, selection-input, and option-cache plumbing may
   be reused only to render backend-projected option rows. Typed option identity,
   availability, diagnostics, and defaults remain owned by
@@ -364,16 +401,28 @@ graph/service contracts. The frontend renders the proposal visually, shows
 affected ports/edges/literals, and applies it only after user confirmation.
 The frontend must not compute semantic graph mutation itself.
 
-Live validation event planning shape:
+Live validation event planning shape. This DTO lives in workflow-service, not in
+`pantograph-inference-interface-contracts`:
 
 ```rust
-pub struct DraftGraphValidationEvent {
+pub struct WorkflowGraphInferenceValidationEvent {
     pub session_id: DraftGraphValidationSessionId,
     pub graph_revision: DraftGraphRevision,
     pub sequence: ValidationEventSequence,
-    pub payload: DraftGraphValidationEventPayload,
+    pub scope: WorkflowGraphInferenceValidationEventScope,
+    pub payload: WorkflowGraphInferenceValidationEventPayload,
+}
+
+pub enum WorkflowGraphInferenceValidationEventScope {
+    Graph,
+    Node { node_id: WorkflowNodeId },
 }
 ```
+
+Summary payloads must be graph-scoped. Descriptor, drift, diagnostic, and
+update-proposal payloads must be node-scoped. The shared contract crate may own
+the payload DTOs that are not graph-mutation-specific, but it must not expose an
+alternate unscoped event stream.
 
 Graph-level enqueue gating planning shape:
 
@@ -426,7 +475,8 @@ falling back to previously rendered ports.
   inputs, outputs, constraints, and defaults accepted by the current descriptor
   contract.
 - **Task graph projection:** stores only path-free model refs, typed
-  constraints, task kind, and bindings needed for scheduler task orchestration.
+  constraints, resolved descriptor task kind, descriptor fingerprint, and
+  bindings needed for scheduler task orchestration.
 - **Input materialization:** combines connected upstream task results, graph
   literal values, and descriptor defaults into typed runtime-host execution
   inputs.
@@ -452,9 +502,10 @@ falling back to previously rendered ports.
 - **Risk:** The new descriptor system becomes a second dynamic-port system next
   to `node.data.definition` and `inference_settings`.
   **Mitigation:** Treat authored snapshots as the only persisted inference
-  interface source, project them into old rendering paths only as a staged
-  compatibility mechanism, and delete/rewrite the old paths before the
-  milestone is complete.
+  interface source, project them into old rendering paths only as a temporary
+  generated view for current rendering/validation code, and delete/rewrite the
+  old paths before the milestone is complete. The projection must not be an
+  executable fallback or compatibility route.
 - **Risk:** Frontend draft validation drifts from backend save/submit
   validation.
   **Mitigation:** The backend validation summary is the only enqueue authority;
@@ -479,32 +530,49 @@ falling back to previously rendered ports.
 1. Add the descriptor DTOs and validation errors in the canonical backend
    contract owner with serde fixtures, dependency-direction review,
    source-directory README updates, and default/no-default/all-features checks.
-2. Add the thinnest cross-layer acceptance slice proving model ref input can
+2. Retire the shared unscoped validation event/stream DTOs. Keep shared
+   descriptor, authored snapshot, drift, diagnostic, option, and validation
+   summary DTOs in `pantograph-inference-interface-contracts`; keep the scoped
+   live event/session envelope in workflow-service. Update README/serde fixtures
+   and source-search verification in the same slice.
+3. Replace `puma-lib` graph authoring with a model-ref-only intermediate slice.
+   Saved graph/node semantics and successful node outputs carry
+   `pumas_model_ref` and display identity only; executable paths, `entry_path`,
+   package facts, runtime hints, load targets, and `inference_settings` are
+   removed from graph semantics before live validation UX is added.
+4. Tighten request extraction before it feeds live validation: use one
+   workflow-service model-ref binding resolver, reject duplicate incoming
+   bindings, validate source handle/type, report connected-versus-inline
+   disagreement, and treat wrong-type or unparsable explicit constraints as
+   invalid diagnostics rather than absent values.
+5. Add the thinnest cross-layer acceptance slice proving model ref input can
    resolve a descriptor, project authored ports, produce a validation summary,
    and gate submit/admission without invoking legacy inference settings.
-3. Add a generated projection from authored/current descriptors into the
+6. Add a generated projection from authored/current descriptors into the
    existing effective node definition path only where needed for staged
    rendering and graph validation. For inference nodes, this projection must
    be derived from the authored snapshot or current descriptor, not from
    frontend-authored `node.data.definition`.
-4. Add a resolver service boundary in workflow-service that can return typed
+7. Add a resolver service boundary in workflow-service that can return typed
    unavailable/not-implemented diagnostics when Pumas facts or inference
    capability facts are not sufficient.
-5. Wire graph editor draft validation to render descriptor ports and disabled
+8. Wire graph editor draft validation to render descriptor ports and disabled
    reasons without frontend-inferred family logic.
-6. Wire workflow save validation to consume the same descriptor contract and
+9. Wire workflow save validation to consume the same descriptor contract and
    reject stale or invalid ports.
-7. Wire scheduler task materialization and runtime-host input assembly to
-   consume descriptor defaults and typed upstream values.
-8. Add queue-admission readiness validation that consumes the backend validation
+10. Wire scheduler task projection/materialization and runtime-host input
+    assembly to consume the resolved descriptor task kind, descriptor defaults,
+    typed constraints, and typed upstream values. Raw graph `task_kind` remains
+    only an optional resolver constraint.
+11. Add queue-admission readiness validation that consumes the backend validation
    summary and fails closed before enqueue when inference descriptors are
    pending, stale, unavailable, unresolved, or blocked.
-9. Add pre-dispatch descriptor fingerprint revalidation before runtime-host
+12. Add pre-dispatch descriptor fingerprint revalidation before runtime-host
    dispatch selection.
-10. Delete or rewrite any remaining retired inference-node port tables,
-   model-path-derived support checks, or planned-inference validation branches
-   replaced by this resolver.
-11. Delete or rewrite `inference_settings` JSON canonicalization and
+13. Delete or rewrite any remaining retired inference-node port tables,
+    model-path-derived support checks, or planned-inference validation branches
+    replaced by this resolver.
+14. Delete or rewrite `inference_settings` JSON canonicalization and
     `expand-settings` dynamic inference-interface paths once the descriptor
     projection owns graph-visible inference ports.
 
@@ -528,7 +596,11 @@ falling back to previously rendered ports.
   targeted source search proving the new crate does not import
   workflow-service, scheduler, runtime-host contracts, Pumas library/runtime
   lookup, inference execution, or frontend policy.
-- Remaining next slice: implement the thinnest cross-layer resolver/validation
+- Remaining next slices: first retire shared unscoped validation event/stream
+  DTOs and update contract-crate verification; then replace `puma-lib` graph
+  authoring with model-ref-only semantics; then tighten request extraction for
+  strict model-ref binding and explicit constraint diagnostics. After those
+  boundary slices pass, implement the thinnest cross-layer resolver/validation
   acceptance path: model ref input resolves a descriptor, projects authored
   ports, produces a backend validation summary, and gates submit/admission
   without invoking retired `inference_settings`, `expand-settings`, static
@@ -561,6 +633,29 @@ falling back to previously rendered ports.
   path fail closed with typed diagnostics. Then add the scheduler-owned
   agent-loop task graph expansion after descriptor-backed generic inference
   can materialize one real inference turn.
+- 2026-05-25: Completed staged implementation step 2 as a validated vertical
+  slice. Removed the shared unscoped `DraftGraphValidationEvent`,
+  `DraftGraphValidationEventPayload`, and `DraftGraphValidationStreamState`
+  DTOs from `pantograph-inference-interface-contracts`; kept shared descriptor,
+  authored snapshot, drift, diagnostic, option, and validation summary DTOs
+  intact; and documented that live validation event/session envelopes are
+  workflow-service owned. No compatibility alias, shim, or alternate unscoped
+  transport remains in the shared crate.
+- Verification passed: `cargo fmt -p pantograph-inference-interface-contracts
+  -- --check`; `cargo test -p pantograph-inference-interface-contracts`;
+  `cargo check -p pantograph-inference-interface-contracts`; `cargo check -p
+  pantograph-inference-interface-contracts --no-default-features`; `cargo
+  check -p pantograph-inference-interface-contracts --all-features`; `cargo
+  check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; `cargo check -p
+  pantograph-workflow-service --all-features`; targeted source search in
+  `crates/` for retired unscoped validation event/stream DTO names; and `git
+  diff --check`. Workflow-service checks still report only the known
+  `set_active_run_execution_plan` dead-code warning.
+- Remaining next slices: replace `puma-lib` graph authoring with model-ref-only
+  semantics, then tighten request extraction for strict model-ref binding and
+  explicit constraint diagnostics. After those boundary slices pass, implement
+  the thinnest cross-layer resolver/validation acceptance path.
 
 ## Open Design Decisions
 
@@ -574,7 +669,9 @@ falling back to previously rendered ports.
 - Decide the concrete graph patch operation owner and API shape for unsaved
   draft graphs versus persisted workflow files.
 - Decide the live validation transport over the current app shell after
-  inspecting existing frontend/Tauri subscription patterns.
+  inspecting existing frontend/Tauri subscription patterns. The event envelope
+  ownership and graph/node scope are no longer open; only the delivery mechanism,
+  cleanup/cancellation behavior, and frontend store integration remain to choose.
 - Align `RuntimeHostExecutionInput` with the value categories here without
   coupling runtime-host to graph-editor-specific drift or patch contracts.
 
@@ -591,6 +688,21 @@ falling back to previously rendered ports.
   boundaries.
 - First vertical-slice acceptance test proving model ref -> descriptor ->
   authored port projection -> validation summary -> submit/admission gate.
+- Contract-crate deletion tests/source search proving shared unscoped
+  validation event/stream DTOs are not exported or used as transport, while
+  shared validation summary serde fixtures still round trip.
+- Model-ref-only `puma-lib` tests proving saved graph/node data, node metadata,
+  Tauri option hydration, frontend mocks/templates, and node-engine successful
+  semantics no longer expose executable paths, `entry_path`, package facts,
+  runtime hints, load targets, or `inference_settings` as inference-interface
+  inputs.
+- Strict request-extraction tests for duplicate incoming `pumas_model_ref`
+  bindings, invalid source handle/type, connected-versus-inline disagreement,
+  missing/null/blank optional constraints, wrong-type explicit constraints, and
+  nonblank unparsable constraint values.
+- Scheduler projection/materialization tests proving resolved descriptor task
+  kind is authoritative, graph-authored `task_kind` only narrows resolver
+  selection, and unsatisfied explicit task constraints block before enqueue.
 - Resolver tests for ready, unavailable, unsupported, unimplemented,
   ambiguous, stale, and missing selected-artifact states.
 - Draft graph validation tests proving graph editor-visible ports come from
@@ -628,6 +740,9 @@ falling back to previously rendered ports.
 - Retired static all-port, `inference_settings`, `expand-settings`, model-path,
   planned-inference, and `node.data.definition` semantic inference paths have
   been removed or rewritten with no successful fallback behavior.
+- `puma-lib` graph authoring is model-ref-only, and shared unscoped
+  validation event/stream DTOs are removed or retired so workflow-service is the
+  only scoped validation event owner.
 - Affected READMEs/ADRs, tests, fixture round trips, feature checks, frontend
   validation tests, and deletion searches pass.
 

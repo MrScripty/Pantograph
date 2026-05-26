@@ -11749,6 +11749,73 @@ Worker rules:
     test -p pantograph-workflow-service inference_interface_validation --lib`.
   - Remaining follow-up: wire graph request extraction, resolver, projection,
     and scoped validation events into a single validation service boundary.
+- 2026-05-25 Milestone 5d codebase review decisions recorded:
+  - Decision: workflow-service owns the only live validation event/session
+    envelope. `pantograph-inference-interface-contracts` keeps shared
+    descriptor, authored snapshot, drift, diagnostic, option, and validation
+    summary DTOs; shared unscoped validation event/stream DTOs are retired.
+  - Decision: `puma-lib` authoring moves through a model-ref-only intermediate
+    slice before live-validation UX. Saved graph/node semantics must carry
+    `pumas_model_ref` and display identity only, not executable paths,
+    `entry_path`, package facts, runtime hints, load targets, or
+    `inference_settings`.
+  - Decision: after model-ref-only authoring is validated, the graph editor
+    consumes workflow-service live validation events for descriptor resolution,
+    authored/current drift, pending/stale/unavailable/invalid overlays, update
+    proposals, and backend-summary submit/enqueue gating.
+  - Decision: inference request extraction must use strict model-ref binding
+    diagnostics for duplicates, invalid source handle/type, and connected versus
+    inline disagreement. Optional explicit `task_kind`, `runtime`, `device`, and
+    future trait inputs treat missing/null/blank values as absent and wrong-type
+    or unparsable values as invalid.
+  - Decision: scheduler inference task materialization consumes the resolved
+    descriptor task kind. Graph-authored `task_kind` is only an optional resolver
+    constraint; unsatisfied explicit constraints block validation and enqueue
+    before scheduler projection.
+  - No-fallback/no-legacy confirmation: stale `puma-lib` path/readiness outputs,
+    shared unscoped validation events, `inference_settings`, and
+    `expand-settings` must be deleted or rewritten, not kept as compatibility
+    paths.
+- 2026-05-25 Milestone 5d standards iteration completed:
+  - Standards reviewed: plan sequencing/worktree hygiene, backend-owned data,
+    single owner for stateful flows, typed Rust API boundaries, serde wire-format
+    alignment, vertical-slice verification, persisted dynamic artifact
+    validation, frontend event-driven synchronization, and no compatibility
+    code retention.
+  - Plan changes: the design section now orders unscoped validation event DTO
+    retirement, model-ref-only `puma-lib` authoring, and strict request
+    extraction before the cross-layer descriptor-validation acceptance slice.
+    It also clarifies that descriptor task kind is scheduler-materialization
+    authority and that generated projections are temporary rendering views, not
+    executable compatibility routes.
+  - Verification additions: contract-crate deletion/source searches,
+    model-ref-only `puma-lib` artifact tests, strict model-ref/constraint
+    extraction tests, and scheduler projection/materialization tests for
+    descriptor-owned task kind.
+- 2026-05-25 Milestone 5d shared unscoped validation event retirement slice
+  completed:
+  - Smallest useful vertical slice: removed `DraftGraphValidationEvent`,
+    `DraftGraphValidationEventPayload`, and `DraftGraphValidationStreamState`
+    from `pantograph-inference-interface-contracts`; kept descriptor, authored
+    snapshot, drift, diagnostic, option, and validation summary DTOs shared; and
+    documented workflow-service ownership of live validation event/session
+    envelopes.
+  - No-fallback/no-legacy confirmation: the shared crate no longer offers an
+    unscoped validation event or stream transport, so workflow-service scoped
+    events remain the only live validation event boundary.
+  - Verification passed: `cargo fmt -p pantograph-inference-interface-contracts
+    -- --check`; `cargo test -p pantograph-inference-interface-contracts`;
+    `cargo check -p pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts --no-default-features`; `cargo
+    check -p pantograph-inference-interface-contracts --all-features`; `cargo
+    check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-workflow-service --all-features`; targeted source search in
+    `crates/` for retired unscoped validation event/stream DTO names; and `git
+    diff --check`. Workflow-service checks still report only the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: replace `puma-lib` graph authoring with the
+    model-ref-only intermediate slice before live-validation UX wiring.
 
 ### Traceability Links
 

@@ -2,8 +2,9 @@
 //!
 //! This crate owns path-free DTOs for resolving model-specific inference-node
 //! ports, authored graph snapshots, drift reports, and validation summaries. It
-//! does not own Pumas lookup, scheduler policy, runtime-host execution,
-//! workflow mutation, node-engine execution, or frontend rendering behavior.
+//! does not own live validation event streams, Pumas lookup, scheduler policy,
+//! runtime-host execution, workflow mutation, node-engine execution, or frontend
+//! rendering behavior.
 
 use std::fmt;
 use std::str::FromStr;
@@ -24,7 +25,6 @@ const MAX_DIAGNOSTICS: usize = 128;
 const MAX_REASONS: usize = 32;
 const MAX_CHANGES: usize = 256;
 const MAX_BINDINGS: usize = 256;
-const MAX_EVENTS: usize = 512;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -735,46 +735,6 @@ pub struct InferenceSelectedOption {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct DraftGraphValidationEvent {
-    pub validation_session_id: DraftGraphValidationSessionId,
-    pub client_graph_revision: u64,
-    pub sequence: u64,
-    pub payload: DraftGraphValidationEventPayload,
-}
-
-impl DraftGraphValidationEvent {
-    pub fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
-        self.payload.validate()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(
-    tag = "kind",
-    content = "value",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub enum DraftGraphValidationEventPayload {
-    DescriptorResolved(InferenceInterfaceFingerprint),
-    DriftReported(InferenceInterfaceDriftReport),
-    Diagnostic(InferenceInterfaceDiagnostic),
-    Summary(DraftGraphValidationSummary),
-}
-
-impl DraftGraphValidationEventPayload {
-    fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
-        match self {
-            Self::DescriptorResolved(_) => Ok(()),
-            Self::DriftReported(report) => report.validate(),
-            Self::Diagnostic(diagnostic) => diagnostic.validate(),
-            Self::Summary(summary) => summary.validate(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct DraftGraphValidationSummary {
     pub status: DraftGraphValidationStatus,
     pub executable: bool,
@@ -827,35 +787,6 @@ pub enum DraftGraphEnqueueDisabledReason {
     InvalidRuntimeConstraint,
     InvalidDeviceConstraint,
     DriftRequiresReview,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct DraftGraphValidationStreamState {
-    pub validation_session_id: DraftGraphValidationSessionId,
-    pub client_graph_revision: u64,
-    pub last_sequence: u64,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub events: Vec<DraftGraphValidationEvent>,
-    pub summary: DraftGraphValidationSummary,
-}
-
-impl DraftGraphValidationStreamState {
-    pub fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
-        validate_collection_len("validation_stream.events", self.events.len(), MAX_EVENTS)?;
-        for event in &self.events {
-            if event.validation_session_id != self.validation_session_id
-                || event.client_graph_revision != self.client_graph_revision
-            {
-                return Err(InferenceInterfaceContractError::InvalidField {
-                    field: "validation_stream.events",
-                    reason: "events must match stream session and graph revision",
-                });
-            }
-            event.validate()?;
-        }
-        self.summary.validate()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
