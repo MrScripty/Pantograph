@@ -1,14 +1,18 @@
-use pantograph_dependency_planning::PumasModelRef;
+use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef, RuntimeIntentId};
+use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
+use pantograph_scheduler::{SchedulerNodeId, SchedulerRuntimeDeviceConstraints};
 use serde_json::json;
 
 use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
 use crate::workflow::{
-    workflow_scheduler_resolve_task_intent, workflow_scheduler_task_graph,
-    WorkflowSchedulerTaskBindingDiagnosticCode, WorkflowSchedulerTaskBindingResolutionStatus,
-    WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultOutput,
-    WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue,
-    WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+    workflow_scheduler_resolve_task_intent,
+    workflow_scheduler_task_graph_with_inference_projections,
+    WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
+    WorkflowSchedulerReadyInferenceTaskProjection, WorkflowSchedulerTaskBindingDiagnosticCode,
+    WorkflowSchedulerTaskBindingResolutionStatus, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
+    WorkflowSchedulerTaskResultValue, WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
 };
 
 fn workflow_id() -> WorkflowId {
@@ -17,6 +21,29 @@ fn workflow_id() -> WorkflowId {
 
 fn workflow_run_id() -> WorkflowRunId {
     WorkflowRunId::try_from("run-task-binding".to_string()).expect("workflow run id")
+}
+
+fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
+    WorkflowSchedulerInferenceTaskProjections::from_records(vec![
+        WorkflowSchedulerInferenceTaskProjection::Ready(
+            WorkflowSchedulerReadyInferenceTaskProjection {
+                node_id: SchedulerNodeId::parse("infer").expect("node id"),
+                descriptor_fingerprint: InferenceInterfaceFingerprint::parse("iface.binding.v1")
+                    .expect("fingerprint"),
+                task_type: DependencyTaskId::parse("image_generation").expect("task kind"),
+                model_ref: pumas_model_ref(),
+                constraints: SchedulerRuntimeDeviceConstraints {
+                    requested_runtime_id: Some(
+                        RuntimeIntentId::parse("pytorch").expect("runtime id"),
+                    ),
+                    requested_device_id: None,
+                },
+                trait_settings: Vec::new(),
+                estimate_hints: Vec::new(),
+            },
+        ),
+    ])
+    .expect("projection")
 }
 
 fn graph_with_bound_model_ref() -> WorkflowGraph {
@@ -114,21 +141,26 @@ fn materialized_prompt_result(
 }
 
 fn pumas_model_ref_value() -> WorkflowSchedulerTaskResultValue {
-    WorkflowSchedulerTaskResultValue::PumasModelRef(PumasModelRef {
+    WorkflowSchedulerTaskResultValue::PumasModelRef(pumas_model_ref())
+}
+
+fn pumas_model_ref() -> PumasModelRef {
+    PumasModelRef {
         model_id: "image/example/tiny-diffusion".to_string(),
         revision: Some("main".to_string()),
         selected_artifact_id: Some("diffusers-bundle".to_string()),
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
-    })
+    }
 }
 
 #[test]
-fn binding_resolution_materializes_model_ref_into_schedulable_intent() {
-    let graph = workflow_scheduler_task_graph(
+fn binding_resolution_readies_descriptor_intent_after_upstream_model_ref_materializes() {
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
         &workflow_run_id(),
         &graph_with_bound_model_ref(),
+        &inference_projection(),
     )
     .expect("scheduler task graph");
     let inference_task = graph
@@ -137,7 +169,7 @@ fn binding_resolution_materializes_model_ref_into_schedulable_intent() {
         .find(|task| task.task_id.as_str() == "infer")
         .expect("inference task");
 
-    assert!(inference_task.schedulable_intent.is_none());
+    assert!(inference_task.schedulable_intent.is_some());
     assert!(inference_task.schedulable_intent_template.is_some());
     assert!(inference_task.diagnostics.is_empty());
 
@@ -171,10 +203,11 @@ fn binding_resolution_materializes_model_ref_into_schedulable_intent() {
 
 #[test]
 fn binding_resolution_blocks_until_materialized_model_ref_exists() {
-    let graph = workflow_scheduler_task_graph(
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
         &workflow_run_id(),
         &graph_with_bound_model_ref(),
+        &inference_projection(),
     )
     .expect("scheduler task graph");
     let inference_task = graph
@@ -197,11 +230,12 @@ fn binding_resolution_blocks_until_materialized_model_ref_exists() {
 }
 
 #[test]
-fn binding_resolution_rejects_wrong_materialized_value_type() {
-    let graph = workflow_scheduler_task_graph(
+fn binding_resolution_uses_descriptor_model_ref_not_materialized_model_ref_value() {
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
         &workflow_run_id(),
         &graph_with_bound_model_ref(),
+        &inference_projection(),
     )
     .expect("scheduler task graph");
     let inference_task = graph
@@ -214,27 +248,31 @@ fn binding_resolution_rejects_wrong_materialized_value_type() {
         inference_task,
         &[materialized_model_ref_result(
             graph.workflow_run_id.as_str(),
-            WorkflowSchedulerTaskResultValue::String("not-a-model-ref".to_string()),
+            WorkflowSchedulerTaskResultValue::String("completed-upstream-node".to_string()),
         )],
     );
 
     assert_eq!(
         resolution.status,
-        WorkflowSchedulerTaskBindingResolutionStatus::Invalid
+        WorkflowSchedulerTaskBindingResolutionStatus::Ready
     );
     assert_eq!(
-        resolution.diagnostics[0].code,
-        WorkflowSchedulerTaskBindingDiagnosticCode::WrongMaterializedValueType
+        resolution
+            .schedulable_intent
+            .expect("intent")
+            .model_ref
+            .model_id,
+        "image/example/tiny-diffusion"
     );
-    assert!(resolution.schedulable_intent.is_none());
 }
 
 #[test]
 fn binding_resolution_blocks_until_every_connected_input_is_materialized() {
-    let graph = workflow_scheduler_task_graph(
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
         &workflow_run_id(),
         &graph_with_bound_model_ref_and_prompt(),
+        &inference_projection(),
     )
     .expect("scheduler task graph");
     let inference_task = graph
@@ -265,10 +303,11 @@ fn binding_resolution_blocks_until_every_connected_input_is_materialized() {
 
 #[test]
 fn binding_resolution_readies_after_every_connected_input_materializes() {
-    let graph = workflow_scheduler_task_graph(
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
         &workflow_run_id(),
         &graph_with_bound_model_ref_and_prompt(),
+        &inference_projection(),
     )
     .expect("scheduler task graph");
     let inference_task = graph
@@ -298,10 +337,11 @@ fn binding_resolution_readies_after_every_connected_input_materializes() {
 
 #[test]
 fn binding_resolution_propagates_unavailable_connected_input() {
-    let graph = workflow_scheduler_task_graph(
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
         &workflow_run_id(),
         &graph_with_bound_model_ref_and_prompt(),
+        &inference_projection(),
     )
     .expect("scheduler task graph");
     let inference_task = graph

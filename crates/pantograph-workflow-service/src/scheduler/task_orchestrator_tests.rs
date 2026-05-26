@@ -253,6 +253,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
         }),
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -285,6 +286,7 @@ fn orchestrator_initializes_source_input_state_as_awaiting_inputs() {
         source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
             port_id: "text".to_string(),
         }),
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -314,6 +316,7 @@ fn orchestrator_rejects_non_runtime_task_without_typed_template() {
         schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -349,6 +352,7 @@ fn orchestrator_initializes_awaiting_inputs_for_dependent_non_runtime_task() {
         schedulable_intent_template: None,
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -378,6 +382,7 @@ fn orchestrator_initializes_invalid_state_for_unsupported_task_class() {
         schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -411,6 +416,7 @@ fn orchestrator_initializes_pumas_materialization_as_awaiting_inputs() {
         schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -444,6 +450,7 @@ fn orchestrator_marks_unhandled_task_classes_terminal_failed() {
         schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -483,12 +490,13 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: vec![WorkflowSchedulerTaskProjectionDiagnostic {
             severity: WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error,
-            code: WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
+            code: WorkflowSchedulerTaskProjectionDiagnosticCode::MissingInferenceDescriptor,
             node_id: SchedulerNodeId::parse("image-task").expect("node id"),
-            port_id: Some("pumas_model_ref".to_string()),
-            message: "inference scheduler tasks require canonical pumas_model_ref input"
+            port_id: None,
+            message: "inference scheduler tasks require a current validated inference descriptor"
                 .to_string(),
         }],
     }]);
@@ -510,10 +518,8 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         SchedulerTaskStateDiagnosticCode::InvalidTask
     );
     assert!(diagnostics[0]
-        .hint
-        .as_deref()
-        .expect("diagnostic hint")
-        .contains("pumas_model_ref"));
+        .message
+        .contains("current validated inference descriptor"));
 }
 
 #[test]
@@ -538,6 +544,7 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
         }),
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -774,6 +781,7 @@ async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result(
         schedulable_intent_template: None,
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -1120,6 +1128,7 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }
 }
@@ -1140,6 +1149,7 @@ fn text_input_task(task_id: &str, _value: &str) -> WorkflowSchedulerTask {
         source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
             port_id: "text".to_string(),
         }),
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }
 }
@@ -1158,6 +1168,7 @@ fn text_output_task() -> WorkflowSchedulerTask {
         schedulable_intent_template: None,
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
     }
 }

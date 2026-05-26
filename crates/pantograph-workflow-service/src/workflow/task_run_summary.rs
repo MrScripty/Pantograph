@@ -153,6 +153,7 @@ mod tests {
                     schedulable_intent_template: None,
                     non_runtime_task_template: None,
                     source_input_task_template: None,
+                    inference_descriptor_fingerprint: None,
                     diagnostics: Vec::new(),
                 })
                 .collect(),

@@ -1,16 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use pantograph_dependency_planning::{
-    DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId,
-};
+use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
+use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_node_contracts::NodeTypeContract;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerNodeId,
-    SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitId, SchedulerTraitSetting,
-    SchedulerTraitValue, SchedulerWorkflowId, SchedulerWorkflowRunId,
+    SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitSetting, SchedulerWorkflowId,
+    SchedulerWorkflowRunId,
 };
-use serde_json::Value;
 
 use super::task_execution_classification::classify_workflow_scheduler_task;
 use super::task_graph_contracts::{
@@ -24,31 +22,104 @@ use super::task_graph_contracts::{
 use super::WorkflowServiceError;
 use crate::graph::{workflow_executable_topology, WorkflowGraph};
 
-const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
-const PORT_TASK_KIND: &str = "task_kind";
-const PORT_RUNTIME: &str = "runtime";
-const PORT_DEVICE: &str = "device";
-const PORT_DENOISING_SCHEDULER: &str = "denoising_scheduler";
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
 const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkflowSchedulerInferenceTaskProjections {
+    by_node_id: BTreeMap<SchedulerNodeId, WorkflowSchedulerInferenceTaskProjection>,
+}
+
+impl WorkflowSchedulerInferenceTaskProjections {
+    pub fn from_records(
+        records: Vec<WorkflowSchedulerInferenceTaskProjection>,
+    ) -> Result<Self, WorkflowServiceError> {
+        let mut by_node_id = BTreeMap::new();
+        for record in records {
+            let node_id = record.node_id().clone();
+            if by_node_id.insert(node_id.clone(), record).is_some() {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "duplicate inference task projection for node '{}'",
+                    node_id.as_str()
+                )));
+            }
+        }
+        Ok(Self { by_node_id })
+    }
+
+    fn get(&self, node_id: &SchedulerNodeId) -> Option<&WorkflowSchedulerInferenceTaskProjection> {
+        self.by_node_id.get(node_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkflowSchedulerInferenceTaskProjection {
+    Ready(WorkflowSchedulerReadyInferenceTaskProjection),
+    Blocked(WorkflowSchedulerBlockedInferenceTaskProjection),
+}
+
+impl WorkflowSchedulerInferenceTaskProjection {
+    fn node_id(&self) -> &SchedulerNodeId {
+        match self {
+            Self::Ready(record) => &record.node_id,
+            Self::Blocked(record) => &record.node_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSchedulerReadyInferenceTaskProjection {
+    pub node_id: SchedulerNodeId,
+    pub descriptor_fingerprint: InferenceInterfaceFingerprint,
+    pub task_type: DependencyTaskId,
+    pub model_ref: PumasModelRef,
+    pub constraints: SchedulerRuntimeDeviceConstraints,
+    pub trait_settings: Vec<SchedulerTraitSetting>,
+    pub estimate_hints: Vec<SchedulerEstimateHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSchedulerBlockedInferenceTaskProjection {
+    pub node_id: SchedulerNodeId,
+    pub descriptor_fingerprint: Option<InferenceInterfaceFingerprint>,
+    pub reason: WorkflowSchedulerBlockedInferenceTaskProjectionReason,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowSchedulerBlockedInferenceTaskProjectionReason {
+    Missing,
+    Stale,
+    Unavailable,
+    Invalid,
+}
+
 pub fn workflow_scheduler_task_graph(
     workflow_id: &WorkflowId,
     workflow_run_id: &WorkflowRunId,
     graph: &WorkflowGraph,
 ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
+    workflow_scheduler_task_graph_with_inference_projections(
+        workflow_id,
+        workflow_run_id,
+        graph,
+        &WorkflowSchedulerInferenceTaskProjections::default(),
+    )
+}
+
+pub fn workflow_scheduler_task_graph_with_inference_projections(
+    workflow_id: &WorkflowId,
+    workflow_run_id: &WorkflowRunId,
+    graph: &WorkflowGraph,
+    inference_task_projections: &WorkflowSchedulerInferenceTaskProjections,
+) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
     let workflow_id = scheduler_workflow_id(workflow_id)?;
     let workflow_run_id = scheduler_workflow_run_id(workflow_run_id)?;
     let topology = workflow_executable_topology(graph)?;
     let node_contracts = builtin_contracts_by_node_type()?;
-    let node_data_by_id = graph
-        .nodes
-        .iter()
-        .map(|node| (node.id.as_str(), &node.data))
-        .collect::<BTreeMap<_, _>>();
 
     let mut incoming_edges = BTreeMap::<&str, Vec<_>>::new();
     for edge in &topology.edges {
@@ -64,21 +135,23 @@ pub fn workflow_scheduler_task_graph(
         let task_id = scheduler_task_id(&node.node_id)?;
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
         let dependency_task_ids = dependency_task_ids(&input_bindings);
-        let data = node_data_by_id.get(node.node_id.as_str()).copied();
         let execution_class = classify_workflow_scheduler_task(
             &node.node_type,
             node_contracts.get(node.node_type.as_str()),
         );
-        let (schedulable_intent, schedulable_intent_template, diagnostics) =
-            schedulable_intent_for_node(
-                &workflow_id,
-                &workflow_run_id,
-                &node_id,
-                &task_id,
-                execution_class,
-                data,
-                &input_bindings,
-            );
+        let (
+            schedulable_intent,
+            schedulable_intent_template,
+            inference_descriptor_fingerprint,
+            diagnostics,
+        ) = schedulable_intent_for_node(
+            &workflow_id,
+            &workflow_run_id,
+            &node_id,
+            &task_id,
+            execution_class,
+            inference_task_projections.get(&node_id),
+        );
         let (non_runtime_task_template, non_runtime_diagnostics) =
             non_runtime_task_template_for_node(
                 &node_id,
@@ -105,6 +178,7 @@ pub fn workflow_scheduler_task_graph(
             schedulable_intent_template,
             non_runtime_task_template,
             source_input_task_template,
+            inference_descriptor_fingerprint,
             diagnostics,
         });
     }
@@ -174,67 +248,41 @@ fn schedulable_intent_for_node(
     node_id: &SchedulerNodeId,
     task_id: &SchedulerTaskId,
     execution_class: WorkflowSchedulerTaskExecutionClass,
-    data: Option<&Value>,
-    input_bindings: &[WorkflowSchedulerTaskInputBinding],
+    inference_task_projection: Option<&WorkflowSchedulerInferenceTaskProjection>,
 ) -> (
     Option<SchedulableTaskIntent>,
     Option<WorkflowSchedulerTaskIntentTemplate>,
+    Option<InferenceInterfaceFingerprint>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 ) {
     if execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
-        return (None, None, Vec::new());
+        return (None, None, None, Vec::new());
     }
 
-    let Some(data) = data else {
+    let Some(inference_task_projection) = inference_task_projection else {
         return (
             None,
             None,
-            vec![
-                diagnostic(
-                    node_id,
-                    Some(PORT_PUMAS_MODEL_REF),
-                    WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
-                    "inference scheduler tasks require canonical pumas_model_ref input",
-                ),
-                diagnostic(
-                    node_id,
-                    Some(PORT_TASK_KIND),
-                    WorkflowSchedulerTaskProjectionDiagnosticCode::MissingTaskKind,
-                    "inference scheduler tasks require explicit task_kind input",
-                ),
-            ],
+            None,
+            vec![diagnostic(
+                node_id,
+                None,
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingInferenceDescriptor,
+                "inference scheduler tasks require a current validated inference descriptor",
+            )],
         );
     };
 
-    let mut diagnostics = Vec::new();
-    let model_ref =
-        optional_materializable_model_ref(node_id, data, input_bindings, &mut diagnostics);
-    let task_type = required_task_type(node_id, data, &mut diagnostics);
-    let constraints = runtime_device_constraints(node_id, data, &mut diagnostics);
-    let trait_settings = trait_settings(node_id, data, &mut diagnostics);
-    let estimate_hints = Vec::<SchedulerEstimateHint>::new();
-
-    let schedulable_intent_template = if diagnostics.is_empty() {
-        if let (Some(task_type), Some(constraints), Some(trait_settings)) =
-            (task_type, constraints, trait_settings)
-        {
-            Some(WorkflowSchedulerTaskIntentTemplate {
-                task_type,
-                constraints,
-                trait_settings,
+    match inference_task_projection {
+        WorkflowSchedulerInferenceTaskProjection::Ready(projection) => {
+            let template = WorkflowSchedulerTaskIntentTemplate {
+                task_type: projection.task_type.clone(),
+                constraints: projection.constraints.clone(),
+                trait_settings: projection.trait_settings.clone(),
                 dependency_override_patches: Vec::new(),
-                estimate_hints,
-            })
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    if let (Some(model_ref), Some(template)) = (model_ref, schedulable_intent_template.as_ref()) {
-        if diagnostics.is_empty() {
-            return (
+                estimate_hints: projection.estimate_hints.clone(),
+            };
+            (
                 Some(SchedulableTaskIntent {
                     contract_version:
                         pantograph_scheduler::SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
@@ -244,19 +292,29 @@ fn schedulable_intent_for_node(
                     task_id: task_id.clone(),
                     fairness_key: None,
                     task_type: template.task_type.clone(),
-                    model_ref,
+                    model_ref: projection.model_ref.clone(),
                     constraints: template.constraints.clone(),
                     trait_settings: template.trait_settings.clone(),
                     dependency_override_patches: template.dependency_override_patches.clone(),
                     estimate_hints: template.estimate_hints.clone(),
                 }),
-                schedulable_intent_template,
-                diagnostics,
-            );
+                Some(template),
+                Some(projection.descriptor_fingerprint.clone()),
+                Vec::new(),
+            )
         }
+        WorkflowSchedulerInferenceTaskProjection::Blocked(projection) => (
+            None,
+            None,
+            projection.descriptor_fingerprint.clone(),
+            vec![diagnostic(
+                node_id,
+                None,
+                diagnostic_code_for_blocked_inference_projection(projection.reason),
+                projection.message.clone(),
+            )],
+        ),
     }
-
-    (None, schedulable_intent_template, diagnostics)
 }
 
 fn non_runtime_task_template_for_node(
@@ -351,214 +409,22 @@ fn text_output_template(
     }
 }
 
-fn optional_materializable_model_ref(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    input_bindings: &[WorkflowSchedulerTaskInputBinding],
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<PumasModelRef> {
-    let Some(value) = data.get(PORT_PUMAS_MODEL_REF) else {
-        if !input_bindings
-            .iter()
-            .any(|binding| binding.target_port_id == PORT_PUMAS_MODEL_REF)
-        {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(PORT_PUMAS_MODEL_REF),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingPumasModelRef,
-                "inference scheduler tasks require canonical pumas_model_ref input",
-            ));
+fn diagnostic_code_for_blocked_inference_projection(
+    reason: WorkflowSchedulerBlockedInferenceTaskProjectionReason,
+) -> WorkflowSchedulerTaskProjectionDiagnosticCode {
+    match reason {
+        WorkflowSchedulerBlockedInferenceTaskProjectionReason::Missing => {
+            WorkflowSchedulerTaskProjectionDiagnosticCode::MissingInferenceDescriptor
         }
-        return None;
-    };
-    match serde_json::from_value::<PumasModelRef>(value.clone()) {
-        Ok(model_ref) => {
-            if let Err(error) = model_ref.validate() {
-                diagnostics.push(diagnostic(
-                    node_id,
-                    Some(PORT_PUMAS_MODEL_REF),
-                    WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidPumasModelRef,
-                    format!("pumas_model_ref is invalid: {error}"),
-                ));
-                None
-            } else {
-                Some(model_ref)
-            }
+        WorkflowSchedulerBlockedInferenceTaskProjectionReason::Stale => {
+            WorkflowSchedulerTaskProjectionDiagnosticCode::StaleInferenceDescriptor
         }
-        Err(error) => {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(PORT_PUMAS_MODEL_REF),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidPumasModelRef,
-                format!("pumas_model_ref must match the scheduler PumasModelRef contract: {error}"),
-            ));
-            None
+        WorkflowSchedulerBlockedInferenceTaskProjectionReason::Unavailable => {
+            WorkflowSchedulerTaskProjectionDiagnosticCode::UnavailableInferenceDescriptor
         }
-    }
-}
-
-fn required_task_type(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<DependencyTaskId> {
-    let Some(value) = data.get(PORT_TASK_KIND).and_then(Value::as_str) else {
-        diagnostics.push(diagnostic(
-            node_id,
-            Some(PORT_TASK_KIND),
-            WorkflowSchedulerTaskProjectionDiagnosticCode::MissingTaskKind,
-            "inference scheduler tasks require explicit task_kind input",
-        ));
-        return None;
-    };
-    match DependencyTaskId::parse(value) {
-        Ok(task_type) => Some(task_type),
-        Err(error) => {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(PORT_TASK_KIND),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidTaskKind,
-                format!("task_kind is invalid: {error}"),
-            ));
-            None
+        WorkflowSchedulerBlockedInferenceTaskProjectionReason::Invalid => {
+            WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidInferenceDescriptor
         }
-    }
-}
-
-fn runtime_device_constraints(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<SchedulerRuntimeDeviceConstraints> {
-    let requested_runtime_id = optional_runtime_id(node_id, data, diagnostics)?;
-    let requested_device_id = optional_device_id(node_id, data, diagnostics)?;
-    Some(SchedulerRuntimeDeviceConstraints {
-        requested_runtime_id,
-        requested_device_id,
-    })
-}
-
-fn optional_runtime_id(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<Option<RuntimeIntentId>> {
-    let Some(value) = data.get(PORT_RUNTIME) else {
-        return Some(None);
-    };
-    let Some(value) = value.as_str().filter(|value| !value.trim().is_empty()) else {
-        return Some(None);
-    };
-    match RuntimeIntentId::parse(value) {
-        Ok(runtime_id) => Some(Some(runtime_id)),
-        Err(error) => {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(PORT_RUNTIME),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidRuntimeRequirement,
-                format!("runtime must be a valid scheduler runtime requirement: {error}"),
-            ));
-            None
-        }
-    }
-}
-
-fn optional_device_id(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<Option<DeviceIntentId>> {
-    let Some(value) = data.get(PORT_DEVICE) else {
-        return Some(None);
-    };
-    let Some(value) = value.as_str().filter(|value| !value.trim().is_empty()) else {
-        return Some(None);
-    };
-    match DeviceIntentId::parse(value) {
-        Ok(device_id) => Some(Some(device_id)),
-        Err(error) => {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(PORT_DEVICE),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidDeviceRequirement,
-                format!("device must be a valid scheduler device requirement: {error}"),
-            ));
-            None
-        }
-    }
-}
-
-fn trait_settings(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<Vec<SchedulerTraitSetting>> {
-    let mut settings = Vec::new();
-    push_optional_trait_setting(
-        node_id,
-        data,
-        PORT_DENOISING_SCHEDULER,
-        &mut settings,
-        diagnostics,
-    )?;
-    Some(settings)
-}
-
-fn push_optional_trait_setting(
-    node_id: &SchedulerNodeId,
-    data: &Value,
-    key: &'static str,
-    settings: &mut Vec<SchedulerTraitSetting>,
-    diagnostics: &mut Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) -> Option<()> {
-    let Some(value) = data.get(key) else {
-        return Some(());
-    };
-    if value.is_null() {
-        return Some(());
-    }
-    let trait_id = match SchedulerTraitId::parse(key) {
-        Ok(trait_id) => trait_id,
-        Err(error) => {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(key),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidTraitSetting,
-                format!("trait id is invalid: {error}"),
-            ));
-            return None;
-        }
-    };
-    let value = match scheduler_trait_value(value) {
-        Ok(value) => value,
-        Err(message) => {
-            diagnostics.push(diagnostic(
-                node_id,
-                Some(key),
-                WorkflowSchedulerTaskProjectionDiagnosticCode::UnsupportedTraitValue,
-                message,
-            ));
-            return None;
-        }
-    };
-    settings.push(SchedulerTraitSetting { trait_id, value });
-    Some(())
-}
-
-fn scheduler_trait_value(value: &Value) -> Result<SchedulerTraitValue, String> {
-    match value {
-        Value::String(value) => Ok(SchedulerTraitValue::String(value.clone())),
-        Value::Bool(value) => Ok(SchedulerTraitValue::Bool(*value)),
-        Value::Number(number) => {
-            if let Some(value) = number.as_u64() {
-                Ok(SchedulerTraitValue::U64(value))
-            } else if let Some(value) = number.as_i64() {
-                Ok(SchedulerTraitValue::I64(value))
-            } else {
-                Err("scheduler trait values do not yet support floating-point numbers".to_string())
-            }
-        }
-        _ => Err("scheduler trait values must be string, boolean, or integer values".to_string()),
     }
 }
 

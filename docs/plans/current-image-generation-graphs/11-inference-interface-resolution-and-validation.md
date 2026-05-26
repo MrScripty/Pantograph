@@ -744,6 +744,11 @@ falling back to previously rendered ports.
       stale, unavailable, or invalid descriptors typed blocking diagnostics.
       Queue admission/session orchestration remains the later owner of
       validation-state lookup and will call this projection API once ready.
+    - Implementation update 2026-05-26: workflow-service now has a
+      descriptor-backed scheduler task projection API and no longer parses raw
+      inference-node graph fields as scheduler authority. Remaining work is the
+      queue-admission/session owner that supplies current validation records to
+      that API before scheduler placement.
 12. Add queue-admission readiness validation that consumes the backend validation
     summary and fails closed before enqueue, queue-placement event recording, or
     scheduler task graph materialization when inference descriptors are pending,

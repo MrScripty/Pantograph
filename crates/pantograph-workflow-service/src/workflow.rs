@@ -120,7 +120,13 @@ pub use self::task_binding_resolution::{
     WorkflowSchedulerTaskBindingDiagnosticCode, WorkflowSchedulerTaskBindingDiagnosticSeverity,
     WorkflowSchedulerTaskBindingResolution, WorkflowSchedulerTaskBindingResolutionStatus,
 };
-pub use self::task_graph::workflow_scheduler_task_graph;
+pub use self::task_graph::{
+    workflow_scheduler_task_graph, workflow_scheduler_task_graph_with_inference_projections,
+    WorkflowSchedulerBlockedInferenceTaskProjection,
+    WorkflowSchedulerBlockedInferenceTaskProjectionReason,
+    WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
+    WorkflowSchedulerReadyInferenceTaskProjection,
+};
 pub use self::task_graph_contracts::{
     WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
     WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,

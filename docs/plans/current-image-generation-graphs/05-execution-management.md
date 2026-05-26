@@ -12432,6 +12432,19 @@ Worker rules:
   - Later boundary: queue admission or graph session orchestration becomes the
     production owner that looks up current validation state and calls this
     projection API before scheduler placement.
+- 2026-05-26 Milestone 5d descriptor-backed scheduler projection slice:
+  - Completed the descriptor-backed workflow-service task graph projection API.
+    Runtime inference tasks now materialize scheduler intent from resolved
+    descriptor records instead of raw graph `task_kind`, runtime, device,
+    model-ref, or trait fields.
+  - No-fallback/no-legacy result: the retired raw graph-field scheduler
+    authority path was removed from `task_graph.rs`; direct callers without
+    descriptor projections fail closed with typed descriptor diagnostics.
+  - Verification passed for focused task graph, task binding, scheduler
+    orchestrator, scheduler store result, external-input materialization, and
+    workflow-service check modes. Broader `session_execution` tests still expose
+    the remaining queue-admission/session orchestration boundary and are
+    recorded in Milestone 5d.
 
 ### Traceability Links
 

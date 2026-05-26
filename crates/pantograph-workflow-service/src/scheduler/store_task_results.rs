@@ -525,6 +525,7 @@ mod tests {
                 schedulable_intent_template: None,
                 non_runtime_task_template: None,
                 source_input_task_template: None,
+                inference_descriptor_fingerprint: None,
                 diagnostics: Vec::new(),
             }],
         }
@@ -552,6 +553,7 @@ mod tests {
                 source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
                     port_id: "text".to_string(),
                 }),
+                inference_descriptor_fingerprint: None,
                 diagnostics: Vec::new(),
             }],
         }

@@ -1,4 +1,5 @@
 use pantograph_dependency_planning::DependencyOverridePatchV1;
+use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerNodeId,
     SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitSetting, SchedulerWorkflowId,
@@ -6,7 +7,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 4;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -39,6 +40,8 @@ pub struct WorkflowSchedulerTask {
     pub non_runtime_task_template: Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_input_task_template: Option<WorkflowSchedulerSourceInputTemplate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference_descriptor_fingerprint: Option<InferenceInterfaceFingerprint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 }
@@ -113,14 +116,10 @@ pub enum WorkflowSchedulerTaskProjectionDiagnosticSeverity {
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowSchedulerTaskProjectionDiagnosticCode {
     InvalidNodeId,
-    MissingPumasModelRef,
-    InvalidPumasModelRef,
-    MissingTaskKind,
-    InvalidTaskKind,
-    InvalidRuntimeRequirement,
-    InvalidDeviceRequirement,
-    InvalidTraitSetting,
-    UnsupportedTraitValue,
+    MissingInferenceDescriptor,
+    StaleInferenceDescriptor,
+    UnavailableInferenceDescriptor,
+    InvalidInferenceDescriptor,
     MissingNonRuntimeTemplateValue,
     InvalidNonRuntimeTemplateValue,
     UnsupportedNonRuntimeTaskTemplate,

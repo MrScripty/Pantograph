@@ -1,14 +1,10 @@
-use pantograph_dependency_planning::PumasModelRef;
 use pantograph_scheduler::SchedulableTaskIntent;
 use serde::{Deserialize, Serialize};
 
 use super::{
     WorkflowSchedulerTask, WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
-    WorkflowSchedulerTaskResultValue,
 };
-
-const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -80,96 +76,26 @@ pub fn workflow_scheduler_resolve_task_intent(
     }
 
     if let Some(intent) = task.schedulable_intent.clone() {
+        if let Some(diagnostic) = first_unready_materialized_input(task, task_results) {
+            return resolution(
+                status_for_materialized_input_diagnostic(diagnostic.code),
+                None,
+                diagnostic,
+            );
+        }
         return validated_intent_resolution(task, intent);
     }
 
-    let Some(template) = task.schedulable_intent_template.as_ref() else {
-        return resolution(
-            WorkflowSchedulerTaskBindingResolutionStatus::Invalid,
+    resolution(
+        WorkflowSchedulerTaskBindingResolutionStatus::Invalid,
+        None,
+        diagnostic(
+            task,
             None,
-            diagnostic(
-                task,
-                None,
-                WorkflowSchedulerTaskBindingDiagnosticCode::MissingIntentTemplate,
-                "scheduler task has no complete intent or materializable intent template",
-            ),
-        );
-    };
-
-    let Some(model_ref_binding) = task
-        .input_bindings
-        .iter()
-        .find(|binding| binding.target_port_id == PORT_PUMAS_MODEL_REF)
-    else {
-        return resolution(
-            WorkflowSchedulerTaskBindingResolutionStatus::Invalid,
-            None,
-            diagnostic(
-                task,
-                Some(PORT_PUMAS_MODEL_REF),
-                WorkflowSchedulerTaskBindingDiagnosticCode::MissingMaterializedInput,
-                "scheduler task cannot materialize pumas_model_ref without an input binding",
-            ),
-        );
-    };
-
-    if let Some(diagnostic) = first_unready_materialized_input(task, task_results) {
-        return resolution(
-            status_for_materialized_input_diagnostic(diagnostic.code),
-            None,
-            diagnostic,
-        );
-    }
-
-    let model_ref = match materialized_model_ref(task, task_results, model_ref_binding) {
-        MaterializedModelRefResolution::Ready(model_ref) => model_ref,
-        MaterializedModelRefResolution::Blocked(diagnostic) => {
-            return resolution(
-                WorkflowSchedulerTaskBindingResolutionStatus::Blocked,
-                None,
-                diagnostic,
-            );
-        }
-        MaterializedModelRefResolution::Unavailable(diagnostic) => {
-            return resolution(
-                WorkflowSchedulerTaskBindingResolutionStatus::Unavailable,
-                None,
-                diagnostic,
-            );
-        }
-        MaterializedModelRefResolution::Invalid(diagnostic) => {
-            return resolution(
-                WorkflowSchedulerTaskBindingResolutionStatus::Invalid,
-                None,
-                diagnostic,
-            );
-        }
-    };
-
-    validated_intent_resolution(
-        task,
-        SchedulableTaskIntent {
-            contract_version: pantograph_scheduler::SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
-            workflow_id: task.workflow_id.clone(),
-            workflow_run_id: task.workflow_run_id.clone(),
-            node_id: task.node_id.clone(),
-            task_id: task.task_id.clone(),
-            fairness_key: None,
-            task_type: template.task_type.clone(),
-            model_ref,
-            constraints: template.constraints.clone(),
-            trait_settings: template.trait_settings.clone(),
-            dependency_override_patches: template.dependency_override_patches.clone(),
-            estimate_hints: template.estimate_hints.clone(),
-        },
+            WorkflowSchedulerTaskBindingDiagnosticCode::MissingIntentTemplate,
+            "scheduler task has no descriptor-backed schedulable intent",
+        ),
     )
-}
-
-enum MaterializedModelRefResolution {
-    Ready(PumasModelRef),
-    Blocked(WorkflowSchedulerTaskBindingDiagnostic),
-    Invalid(WorkflowSchedulerTaskBindingDiagnostic),
-    Unavailable(WorkflowSchedulerTaskBindingDiagnostic),
 }
 
 fn first_unready_materialized_input(
@@ -198,44 +124,6 @@ fn status_for_materialized_input_diagnostic(
         | WorkflowSchedulerTaskBindingDiagnosticCode::InvalidMaterializedIntent => {
             WorkflowSchedulerTaskBindingResolutionStatus::Invalid
         }
-    }
-}
-
-fn materialized_model_ref(
-    task: &WorkflowSchedulerTask,
-    task_results: &[WorkflowSchedulerTaskResult],
-    binding: &WorkflowSchedulerTaskInputBinding,
-) -> MaterializedModelRefResolution {
-    let output = match materialized_output(task, task_results, binding) {
-        Ok(output) => output,
-        Err(diagnostic) => {
-            return match status_for_materialized_input_diagnostic(diagnostic.code) {
-                WorkflowSchedulerTaskBindingResolutionStatus::Blocked => {
-                    MaterializedModelRefResolution::Blocked(diagnostic)
-                }
-                WorkflowSchedulerTaskBindingResolutionStatus::Unavailable => {
-                    MaterializedModelRefResolution::Unavailable(diagnostic)
-                }
-                WorkflowSchedulerTaskBindingResolutionStatus::Invalid
-                | WorkflowSchedulerTaskBindingResolutionStatus::Ready => {
-                    MaterializedModelRefResolution::Invalid(diagnostic)
-                }
-            };
-        }
-    };
-    match &output.value {
-        WorkflowSchedulerTaskResultValue::PumasModelRef(model_ref) => {
-            MaterializedModelRefResolution::Ready(model_ref.clone())
-        }
-        _ => MaterializedModelRefResolution::Invalid(diagnostic(
-            task,
-            Some(PORT_PUMAS_MODEL_REF),
-            WorkflowSchedulerTaskBindingDiagnosticCode::WrongMaterializedValueType,
-            format!(
-                "materialized output '{}' is not a PumasModelRef",
-                output.port_id
-            ),
-        )),
     }
 }
 

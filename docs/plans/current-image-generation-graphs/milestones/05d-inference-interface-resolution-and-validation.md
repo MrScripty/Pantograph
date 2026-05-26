@@ -225,7 +225,7 @@ defining an image-only inference-node interface.
       trait inputs. This belongs with the strict extraction slice so invalid
       graph-authored constraints cannot be downgraded to "scheduler decides" by
       accident.
-- [ ] Make descriptor task kind authoritative for scheduler materialization.
+- [x] Make descriptor task kind authoritative for scheduler materialization.
       Graph-authored `task_kind` remains an optional resolver constraint only;
       scheduler task projection/materialization consumes the resolved descriptor
       task kind and fails closed when explicit graph constraints cannot be
@@ -989,6 +989,44 @@ defining an image-only inference-node interface.
     readiness ownership into queue admission or graph session orchestration.
     That owner must call the option 2 projection API instead of creating a
     second scheduler materialization path.
+- [x] 2026-05-26 descriptor-backed scheduler task projection slice completed:
+  - Smallest useful vertical slice: added
+    `WorkflowSchedulerInferenceTaskProjections` and the
+    `workflow_scheduler_task_graph_with_inference_projections` builder so
+    workflow-service task graph projection receives current descriptor-backed
+    inference task records keyed by node id. Runtime inference tasks now build
+    `SchedulableTaskIntent` from resolved descriptor task kind, descriptor
+    fingerprint, validated path-free Pumas model ref, runtime/device
+    constraints, trait settings, and estimate hints supplied by that input.
+  - No-fallback/no-legacy confirmation: removed scheduler-authority parsing of
+    raw inference-node `node.data.task_kind`, `runtime`, `device`,
+    `pumas_model_ref`, and `denoising_scheduler` from `task_graph.rs`.
+    Graph-authored values remain resolver/extractor inputs only. Missing,
+    stale, unavailable, and invalid descriptor states now surface as typed
+    scheduler projection diagnostics instead of falling back to graph data.
+  - Binding behavior: descriptor-backed schedulable intent is authoritative,
+    while connected upstream node results still gate readiness so inference
+    nodes do not execute before graph inputs have materialized.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service task_graph --lib`;
+    `cargo test -p pantograph-workflow-service task_binding_resolution --lib`;
+    `cargo test -p pantograph-workflow-service task_orchestrator --lib`;
+    `cargo test -p pantograph-workflow-service store_task_results --lib`;
+    `cargo test -p pantograph-workflow-service external_input_materialization
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; and `cargo check -p
+    pantograph-workflow-service --all-features`.
+  - Discovered issue: `cargo test -p pantograph-workflow-service
+    session_execution --lib` still fails in broader session orchestration tests
+    around source-input materialization and runtime-session expectations. This
+    was not expanded into the descriptor projection slice because the planned
+    queue-admission/session owner is the next boundary that should connect
+    current validation state to workflow submission.
+  - Remaining follow-up: implement the queue-admission or graph-session owner
+    that looks up current validation state and calls the descriptor-backed task
+    projection API before scheduler placement. Until then, direct callers of
+    `workflow_scheduler_task_graph` intentionally fail closed for runtime
+    inference nodes that lack descriptor projections.
 - [x] 2026-05-25 live validation event node-identity re-plan boundary:
   - Discovered issue: the current live validation event payloads can carry
     descriptor fingerprints, drift reports, diagnostics, update proposals, and
