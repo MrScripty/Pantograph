@@ -12833,6 +12833,34 @@ Worker rules:
     planning preflight/readiness proof into scheduler dispatch and runtime
     handoff; embedded-runtime/node-engine `environment_ref` input gates are
     retirement targets once scheduler readiness proof is wired.
+- 2026-05-26 Milestone 5d dependency-environment standards iteration:
+  - Standards reviewed: layered ownership, backend-owned data, typed contracts,
+    correct-by-construction Rust APIs, no magic strings, README traceability,
+    and vertical-slice acceptance coverage from the Coding-Standards repository
+    at `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`.
+  - Plan tightening: the sidecar association must use shared
+    `dependency_environment_sidecar` constants and a first-class
+    `DependencyEnvironmentSidecar`/`dependency_environment_sidecar` port value
+    type across node-engine, node contracts, workflow-service graph DTOs,
+    workflow-node conversion, and frontend port typing. Generic JSON/component/
+    any ports, raw string conventions, and frontend path inference are not
+    allowed.
+  - Ownership tightening: `dependency-environment` becomes a control/manual
+    descriptor. It owns authored sidecar choices only; backend-issued
+    requirements, status, environment references, and activity are display or
+    history projections and are never request authority.
+  - Scheduler/runtime tightening: typed sidecar edges are workflow-service
+    subject-resolution inputs only. They must not become node-engine task input
+    bindings or runtime data dependencies. Scheduler admission receives
+    dependency readiness through the dependency preflight/readiness-proof and
+    dispatch handoff path, and runtime executors receive environment identity
+    only from that scheduler handoff.
+  - Test/docs requirements: add exact sidecar diagnostics, conversion/type
+    tests, descriptor retirement tests, workflow-service subject resolver
+    tests, task-graph projection tests, frontend no-path-inference tests,
+    cross-layer action-intent acceptance coverage, and README/ADR updates in
+    every production slice that changes these contracts.
+  - Verification: `git diff --check` passed for the three updated plan files.
 
 ### Traceability Links
 

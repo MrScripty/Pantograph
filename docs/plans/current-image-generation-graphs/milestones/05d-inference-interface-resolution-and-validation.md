@@ -178,14 +178,21 @@ defining an image-only inference-node interface.
       port pair instead of adding an edge-kind system now: the
       `dependency-environment` descriptor exposes one association output and
       the canonical `llm-inference` bootstrap descriptor exposes one optional
-      association input with matching port ids. Workflow-service interprets
-      only that edge as the sidecar association; node-engine must not treat it
-      as runtime data, and scheduler admission must consume the resulting
-      dependency readiness proof rather than raw graph inputs. The first
-      resolver slice must reject missing association edges, duplicate
-      associations, wrong target/source node types, wrong handles, stale
-      validation sessions, and unavailable/invalid associated inference
-      descriptors with dedicated typed diagnostics.
+      association input. Use shared constants for both handles:
+      `dependency_environment_sidecar`, and add a first-class
+      `DependencyEnvironmentSidecar`/`dependency_environment_sidecar` port value
+      type across `node-engine`, `pantograph-node-contracts`, workflow-service
+      graph DTOs, and frontend port typing. Do not model the association as
+      `json`, `component`, `any`, or an untyped string convention. Workflow-
+      service interprets only that typed edge as the sidecar association;
+      node-engine must not materialize it into task input data, scheduler task
+      graph projection must not treat it as a runtime input dependency, and
+      scheduler admission must consume the resulting dependency readiness proof
+      rather than raw graph inputs. The first resolver slice must reject
+      missing association edges, duplicate associations, wrong target/source
+      node types, wrong handles, stale validation sessions, and unavailable/
+      invalid associated inference descriptors with dedicated typed
+      diagnostics.
       Descriptor cleanup resolution: rewrite the graph-facing
       `dependency-environment` descriptor to remove model/task/backend/platform
       authority fields (`pumas_model_ref`, `model_id`, `model_type`,
@@ -198,13 +205,25 @@ defining an image-only inference-node interface.
       treated as stale unless it matches the current graph revision,
       validation session, descriptor fingerprint, and dependency planning
       identity; workflow-service must never use it as request authority.
+      Reclassify `dependency-environment` as a control/manual descriptor rather
+      than a processing/batch node. Its `Task::run` must continue to fail closed
+      until retired entirely from node-engine execution paths, and the
+      workflow-service action endpoint remains the only active resolve/check/
+      install path.
       Frontend cleanup resolution: retire `dependencyEnvironmentSources.ts`
       path-era subject inference and tests that prove successful
       `modelPath`/`model_path`, `backend_key`, package-fact, or
       `platform_context` dependency action flows. Frontend dependency UI may
       display backend validation/action state and maintain transient form
       inputs, but it must not synthesize dependency subjects, requirements, or
-      platform context from graph edges.
+      platform context from graph edges. Selected binding ids and manual
+      override patches are authored graph inputs; dependency status,
+      requirements snapshots, environment references, and action activity are
+      backend-issued display projections. Frontend code must not update those
+      backend-owned fields optimistically or use them as action authority. If
+      activity is kept in node data for UX continuity, it is presentation-only
+      history and must never affect validation, scheduler admission, dependency
+      planning, or runtime handoff.
       Scheduler/runtime boundary resolution: canonical dependency readiness
       flows through dependency planning preflight/readiness proof into scheduler
       dispatch and runtime handoff. Retire node-engine/embedded-runtime
@@ -212,6 +231,14 @@ defining an image-only inference-node interface.
       scheduler proof path is wired. Runtime executors may receive the selected
       environment identity only from scheduler handoff, not from graph-authored
       dependency-environment node output data.
+      Documentation/traceability resolution: each production slice touching
+      these contracts must update the relevant source README in the same commit
+      (`crates/workflow-nodes/src/processing/README.md`,
+      `crates/pantograph-node-contracts/src/README.md` if the port value type
+      is added there, `crates/pantograph-workflow-service/src/graph/README.md`,
+      frontend node/service READMEs, and scheduler/runtime READMEs when the
+      readiness-proof handoff is wired) or add an ADR explaining why a README
+      update is insufficient.
       Standards iteration update: the next implementation slice must not add
       more validation-state logic to `graph/session.rs` because that module is
       already over the decomposition review threshold. Create a focused
@@ -385,11 +412,28 @@ defining an image-only inference-node interface.
       1. Extend shared diagnostics with sidecar-specific codes for wrong target
          type, missing association, duplicate association, invalid association
          handle/type, stale associated inference descriptor, and unavailable or
-         invalid associated inference descriptor.
-      2. Add the explicit association/control port pair to
-         `dependency-environment` and `llm-inference` descriptors, with tests
-         proving the ports are association-only and retired model/path/backend/
-         platform ports are absent from dependency-environment.
+         invalid associated inference descriptor. The first implementation
+         must name these in the shared contract surface rather than returning
+         stringly typed messages: `DependencySidecarTargetWrongType`,
+         `DependencySidecarAssociationMissing`,
+         `DependencySidecarAssociationDuplicate`,
+         `DependencySidecarAssociationInvalid`,
+         `DependencySidecarDescriptorStale`,
+         `DependencySidecarDescriptorUnavailable`, and
+         `DependencySidecarDescriptorInvalid`.
+      2. Add the explicit typed association/control port pair to
+         `dependency-environment` and `llm-inference` descriptors, including
+         the `dependency_environment_sidecar` constants and first-class
+         `DependencyEnvironmentSidecar`/`dependency_environment_sidecar` port
+         value type in `crates/node-engine/src/types.rs`,
+         `crates/pantograph-node-contracts/src/lib.rs`,
+         `crates/pantograph-workflow-service/src/graph/types.rs`, frontend port
+         typing, and workflow-node contract conversion code. Tests must prove
+         the ports are association-only, exact typed compatibility rejects
+         generic JSON/component/any shortcuts where possible, scheduler
+         task-graph projection does not materialize the association as a
+         runtime input binding, and retired model/path/backend/platform ports
+         are absent from dependency-environment.
       3. Add a focused workflow-service dependency action subject resolver
          module that snapshots the graph under lock, releases the lock, proves
          the single associated inference node from the typed association edge,
@@ -402,6 +446,16 @@ defining an image-only inference-node interface.
       5. Remove frontend path-era dependency subject inference and embedded
          runtime/node-engine `environment_ref` gates as active dependency
          admission paths once scheduler readiness proof is wired.
+      6. Add a cross-layer acceptance test before broadening the feature:
+         create a draft graph with `puma-lib -> llm-inference` plus a
+         `dependency-environment` sidecar association, publish/record current
+         descriptor validation, send `DependencyEnvironmentActionIntent` for the
+         dependency node, and assert the resolver reaches the associated
+         inference subject or returns the expected typed missing-requirements
+         diagnostic without frontend/Tauri model/path data. Adjacent negative
+         tests must cover missing association, duplicate association, wrong
+         handle/type, wrong target node type, stale validation session, and
+         unavailable/invalid associated inference descriptor.
       - Contract sub-slice completed on 2026-05-26:
         `pantograph-inference-interface-contracts` now owns
         `DependencyEnvironmentActionIntent`,
