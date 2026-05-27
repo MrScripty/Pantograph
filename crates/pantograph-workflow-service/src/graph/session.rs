@@ -13,6 +13,7 @@ use crate::workflow::{
     scheduler_snapshot_workflow_run_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
 };
 
+use super::dependency_environment_subject::resolve_dependency_environment_action_subject;
 use super::group_mutation::{
     create_node_group_graph, ungroup_node_graph, update_group_ports_graph,
 };
@@ -216,11 +217,10 @@ impl GraphSessionStore {
         let current_revision = state.graph.compute_fingerprint();
         let current_graph_revision = WorkflowGraphRevision::parse(&current_revision)
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let target_node_exists = state
-            .graph
-            .nodes
-            .iter()
-            .any(|node| node.id == intent.as_intent().target_node_id.as_str());
+        let subject = resolve_dependency_environment_action_subject(
+            &state.graph,
+            &intent.as_intent().target_node_id,
+        );
         drop(state);
 
         Ok(self
@@ -229,7 +229,7 @@ impl GraphSessionStore {
                 DependencyEnvironmentActionIntentStateRequest {
                     intent,
                     current_graph_revision,
-                    target_node_exists,
+                    subject,
                 },
             )
             .await)

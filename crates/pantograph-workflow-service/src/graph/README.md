@@ -34,6 +34,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_request.rs` | Draft-graph extraction of path-free inference-interface resolver requests from connected `puma-lib` model references and explicit inference-node constraints. |
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
+| `dependency_environment_subject.rs` | Workflow-service-owned dependency-environment action subject resolver for typed sidecar associations between dependency-environment control nodes and inference nodes. |
 | `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks and dependency-environment action diagnostics. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |

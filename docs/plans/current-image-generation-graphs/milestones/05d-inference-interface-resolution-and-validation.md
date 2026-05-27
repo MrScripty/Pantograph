@@ -515,6 +515,23 @@ defining an image-only inference-node interface.
         older dynamic `llm-inference` mock ports. They must be cleaned up in
         the frontend no-legacy/mock cleanup slice rather than treated as
         canonical descriptor facts.
+      - Workflow-service sidecar subject resolver sub-slice completed on
+        2026-05-26: `dependency_environment_subject.rs` now validates
+        dependency-environment action targets through the exact
+        `dependency_environment_sidecar` association edge before dependency
+        request derivation. It accepts only a `dependency-environment` target
+        associated to exactly one canonical `llm-inference` node, rejects
+        missing/duplicate/wrong-handle/wrong-type associations with typed
+        `DependencySidecar*` diagnostics, and joins dependency action state to
+        the associated inference node's current validation record rather than
+        the sidecar node id. Verification passed: `cargo fmt`; `cargo test -p
+        pantograph-workflow-service dependency_environment_subject`; `cargo
+        test -p pantograph-workflow-service
+        dependency_environment_action_intent`; `cargo test -p
+        pantograph-workflow-service
+        action_intent_state_accepts_executable_summary_until_requirements_derivation`;
+        `cargo test -p pantograph-workflow-service
+        publish_inference_validation_session_records_current_summary`.
       - Workflow-service fail-closed builder sub-slice completed on
         2026-05-26: `GraphSessionStore` and `WorkflowService` now accept
         `DependencyEnvironmentActionIntent`, validate it against the current
@@ -592,6 +609,18 @@ defining an image-only inference-node interface.
         validation-session ids, blocks non-executable summaries with typed
         diagnostics, and still stops at `DependencyRequirementsMissing` until
         dependency requirements are available.
+      - Sidecar subject join sub-slice completed on 2026-05-26:
+        dependency-environment action freshness checks now consume a typed
+        `DependencyEnvironmentActionSubjectResolution` from workflow-service
+        graph structure. The validation-state owner uses the resolved inference
+        node id when checking current node-scoped validation records, and returns
+        typed sidecar descriptor diagnostics for missing, unavailable, or
+        invalid associated descriptors. Remaining follow-up: derive the
+        canonical `DependencyEnvironmentRequest` only after the current
+        inference descriptor record carries a bounded dependency-requirements
+        identity/proof; add task-graph projection coverage proving the sidecar
+        edge is not materialized as runtime input data; clean frontend mock
+        descriptor data that still reflects retired static inference ports.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

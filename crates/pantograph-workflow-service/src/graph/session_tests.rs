@@ -187,7 +187,9 @@ async fn scheduler_snapshot_tracks_running_edit_session_queue_item() {
 #[tokio::test]
 async fn dependency_environment_action_intent_fails_closed_without_validation_summary() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph(), None).await;
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
 
     let result = store
         .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
@@ -198,7 +200,7 @@ async fn dependency_environment_action_intent_fails_closed_without_validation_su
                 .parse()
                 .expect("valid graph revision"),
             validation_session_id: None,
-            target_node_id: "text-input".parse().expect("valid target node id"),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
             action: DependencyEnvironmentAction::Resolve,
         })
         .await
@@ -217,7 +219,9 @@ async fn dependency_environment_action_intent_fails_closed_without_validation_su
 #[tokio::test]
 async fn dependency_environment_action_intent_consumes_current_validation_summary() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph(), None).await;
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
     store
         .record_inference_validation_session(
             &session.session_id,
@@ -243,7 +247,7 @@ async fn dependency_environment_action_intent_consumes_current_validation_summar
                     .parse()
                     .expect("valid validation session id"),
             ),
-            target_node_id: "text-input".parse().expect("valid target node id"),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
             action: DependencyEnvironmentAction::Resolve,
         })
         .await
@@ -262,7 +266,9 @@ async fn publish_inference_validation_session_records_current_summary() {
             facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
         },
     ));
-    let session = store.create_session(inference_graph(), None).await;
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
     let publication = store
         .publish_inference_validation_session(
             &session.session_id,
@@ -292,7 +298,7 @@ async fn publish_inference_validation_session_records_current_summary() {
                     .parse()
                     .expect("valid validation session id"),
             ),
-            target_node_id: "infer".parse().expect("valid target node id"),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
             action: DependencyEnvironmentAction::Resolve,
         })
         .await
@@ -418,6 +424,26 @@ fn inference_graph() -> WorkflowGraph {
         }],
         derived_graph: None,
     }
+}
+
+fn dependency_inference_graph() -> WorkflowGraph {
+    let mut graph = inference_graph();
+    graph.nodes.push(GraphNode {
+        id: "dep-env".to_string(),
+        node_type: "dependency-environment".to_string(),
+        position: Position { x: 400.0, y: 0.0 },
+        data: serde_json::json!({
+            "mode": "manual"
+        }),
+    });
+    graph.edges.push(GraphEdge {
+        id: "dep-env-to-infer".to_string(),
+        source: "dep-env".to_string(),
+        source_handle: "dependency_environment_sidecar".to_string(),
+        target: "infer".to_string(),
+        target_handle: "dependency_environment_sidecar".to_string(),
+    });
+    graph
 }
 
 #[derive(Debug)]

@@ -13,6 +13,7 @@ use pantograph_inference_interface_contracts::{
 };
 use tokio::sync::RwLock;
 
+use super::dependency_environment_subject::DependencyEnvironmentActionSubjectResolution;
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
@@ -96,14 +97,16 @@ impl CurrentInferenceValidationStateStore {
             );
         }
 
-        if !request.target_node_exists {
-            return blocked_dependency_environment_action_result(
-                &intent,
-                InferenceDiagnosticCode::TargetNodeMissing,
-                "Dependency environment action target node does not exist in the current graph.",
-                None,
-            );
-        }
+        let inference_node_id = match request.subject {
+            DependencyEnvironmentActionSubjectResolution::Resolved { inference_node_id } => {
+                inference_node_id
+            }
+            DependencyEnvironmentActionSubjectResolution::Blocked {
+                code,
+                message,
+                hint,
+            } => return blocked_dependency_environment_action_result(&intent, code, message, hint),
+        };
 
         let key = CurrentInferenceValidationStateKey {
             graph_session_id: intent.graph_session_id.clone(),
@@ -145,12 +148,21 @@ impl CurrentInferenceValidationStateStore {
             );
         }
 
-        if let Some(node_record) = record.nodes.get(&intent.target_node_id) {
+        if !record.nodes.contains_key(&inference_node_id) {
+            return blocked_dependency_environment_action_result(
+                &intent,
+                InferenceDiagnosticCode::DependencySidecarDescriptorUnavailable,
+                "Associated inference node is missing current descriptor validation state.",
+                Some("Refresh descriptor validation before resolving dependency environments."),
+            );
+        }
+
+        if let Some(node_record) = record.nodes.get(&inference_node_id) {
             if !node_record.has_dependency_basis() {
                 return blocked_dependency_environment_action_result(
                     &intent,
-                    InferenceDiagnosticCode::DescriptorUnavailable,
-                    "Inference validation node state is incomplete for dependency derivation.",
+                    InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
+                    "Associated inference validation state is incomplete for dependency derivation.",
                     Some("Refresh descriptor validation before resolving dependency environments."),
                 );
             }
@@ -229,7 +241,7 @@ fn diagnostic_code_for_summary_status(
 pub(crate) struct DependencyEnvironmentActionIntentStateRequest {
     pub intent: ValidatedDependencyEnvironmentActionIntent,
     pub current_graph_revision: WorkflowGraphRevision,
-    pub target_node_exists: bool,
+    pub subject: DependencyEnvironmentActionSubjectResolution,
 }
 
 #[derive(Debug, Clone)]
@@ -595,13 +607,14 @@ mod tests {
     async fn action_intent_state_accepts_executable_summary_until_requirements_derivation() {
         let store = CurrentInferenceValidationStateStore::new();
         store
-            .record_validation_session(
+            .record_validation_publication(
                 "graph-session-1".parse().expect("valid graph session id"),
                 validation_session(
                     "aaaaaaaaaaaaaaaa",
                     DraftGraphValidationStatus::Executable,
                     true,
                 ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
             )
             .await
             .expect("valid validation session");
@@ -773,7 +786,18 @@ mod tests {
             )
             .expect("valid action intent"),
             current_graph_revision: current_revision.parse().expect("valid current revision"),
-            target_node_exists,
+            subject: if target_node_exists {
+                DependencyEnvironmentActionSubjectResolution::resolved(
+                    "infer".parse().expect("valid inference node id"),
+                )
+            } else {
+                DependencyEnvironmentActionSubjectResolution::Blocked {
+                    code: InferenceDiagnosticCode::TargetNodeMissing,
+                    message:
+                        "Dependency environment action target node does not exist in the current graph.",
+                    hint: None,
+                }
+            },
         }
     }
 

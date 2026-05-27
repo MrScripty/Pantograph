@@ -12933,6 +12933,42 @@ Worker rules:
   - Remaining follow-up: implement the workflow-service dependency action
     subject resolver that validates the typed sidecar edge and joins the
     associated inference node to current validation state.
+- 2026-05-26 Milestone 5d workflow-service dependency sidecar subject resolver
+  slice:
+  - Smallest useful vertical slice: add only the workflow-service resolver and
+    validation-state join needed to interpret the typed
+    `dependency_environment_sidecar` association for dependency-environment
+    action intents.
+  - Allowed files: `crates/pantograph-workflow-service/src/graph/dependency_environment_subject.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the graph
+    README, and Milestone 5d plan/status docs.
+  - No-fallback/no-legacy result: workflow-service now accepts only an exact
+    typed sidecar association from a `dependency-environment` node to one
+    canonical `llm-inference` node. It does not inspect model paths, package
+    facts, platform context, scheduler data, frontend state, or arbitrary graph
+    edges when resolving the dependency action subject.
+  - Behavior: missing target nodes, wrong action target type, missing sidecar
+    association, duplicate associations, wrong handles, wrong target node type,
+    stale validation sessions, missing node-scoped descriptor records, and
+    unavailable/invalid associated descriptors return typed diagnostics. Current
+    validation-state checks use the associated inference node id, not the
+    dependency-environment sidecar node id.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service dependency_environment_subject`; `cargo test -p
+    pantograph-workflow-service dependency_environment_action_intent`; `cargo
+    test -p pantograph-workflow-service
+    action_intent_state_accepts_executable_summary_until_requirements_derivation`;
+    `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_records_current_summary`.
+  - Remaining follow-up: derive the canonical
+    `DependencyEnvironmentRequest` only after the current inference descriptor
+    validation record carries bounded dependency-requirements identity/proof;
+    add task-graph projection coverage proving sidecar edges are not
+    materialized as runtime task inputs; clean retired static inference mock
+    ports from app/reusable graph mocks.
 
 ### Traceability Links
 
