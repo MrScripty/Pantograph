@@ -1062,6 +1062,39 @@ defining an image-only inference-node interface.
         `ModelDependencyRequest` dependency preflight/model-ref path used by
         Python-backed runtime nodes, then remove Tauri model-dependency command
         usage where it is no longer a backend-owned transport concern.
+      - Tauri model-dependency command deletion slice completed on 2026-05-26:
+        removed the direct Tauri command registrations and wrappers for
+        `resolve_model_dependency_requirements`, `check_model_dependencies`,
+        `install_model_dependencies`, `get_model_dependency_status`, and
+        `audit_dependency_pin_compliance`, deleted the retired
+        `workflow::model_dependency_commands` module, and updated the Tauri
+        workflow README to require dependency-environment actions to cross
+        Tauri only as workflow-service action intents.
+      - Files touched by the slice: `src-tauri/src/app_setup.rs`,
+        `src-tauri/src/workflow/commands.rs`, `src-tauri/src/workflow/mod.rs`,
+        deleted `src-tauri/src/workflow/model_dependency_commands.rs`,
+        `src-tauri/src/workflow/README.md`, and this plan.
+      - No-fallback/no-legacy result: the graph editor/frontend path already
+        invokes `resolve_dependency_environment_action_intent`, and Tauri no
+        longer exposes direct `ModelDependencyRequest` dependency
+        resolve/check/install/status commands as compatibility entrypoints.
+        The embedded-runtime resolver object remains managed only because the
+        still-active Python-backed dependency preflight path depends on it and
+        is tracked as the next separate replacement/deletion slice.
+      - Verification passed: `cargo fmt`; `git diff --check` for touched files;
+        targeted source-search proving direct model-dependency Tauri commands,
+        registrations, and the `model_dependency_commands` module are absent
+        from `src-tauri/src/workflow`, `src-tauri/src/app_setup.rs`, and
+        frontend dependency-environment action paths.
+      - Verification blocker: `cargo check -p pantograph` currently fails on an
+        existing unrelated app setup error,
+        `Arc<WorkflowService>::set_media_conversion_executor` missing at
+        `src-tauri/src/app_setup.rs:96`. This slice did not touch that
+        composition-root call.
+      - Remaining follow-up: replace or delete the broader
+        embedded-runtime/node-engine `ModelDependencyRequest` dependency
+        preflight/model-ref path, then remove the managed resolver object from
+        Tauri app setup once no active runtime path depends on it.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

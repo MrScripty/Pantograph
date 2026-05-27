@@ -565,11 +565,6 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::model_package_facts_summary_snapshot,
             crate::workflow::commands::resolve_model_package_facts_summary,
             crate::workflow::commands::list_model_library_updates_since,
-            crate::workflow::commands::resolve_model_dependency_requirements,
-            crate::workflow::commands::check_model_dependencies,
-            crate::workflow::commands::install_model_dependencies,
-            crate::workflow::commands::get_model_dependency_status,
-            crate::workflow::commands::audit_dependency_pin_compliance,
             // Node group commands
             crate::workflow::groups::create_node_group,
             crate::workflow::groups::expand_node_group,

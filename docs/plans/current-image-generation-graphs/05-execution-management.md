@@ -13427,6 +13427,37 @@ Worker rules:
     `ModelDependencyRequest` dependency preflight/model-ref path used by
     Python-backed runtime nodes, then remove Tauri model-dependency command
     usage where it is no longer backend-owned transport.
+- 2026-05-26 Milestone 5d Tauri model-dependency command deletion slice:
+  - Smallest useful vertical slice: remove the direct Tauri
+    `ModelDependencyRequest` command surface now that dependency-environment
+    actions use workflow-service action intents.
+  - Allowed write set: `src-tauri/src/app_setup.rs`,
+    `src-tauri/src/workflow/commands.rs`, `src-tauri/src/workflow/mod.rs`,
+    deleted `src-tauri/src/workflow/model_dependency_commands.rs`,
+    `src-tauri/src/workflow/README.md`, and this plan.
+  - No-fallback/no-legacy result: Tauri no longer registers or exposes
+    resolve/check/install/status model-dependency commands, and the frontend
+    dependency-environment action path remains the workflow-service
+    `resolve_dependency_environment_action_intent` command. No compatibility
+    no-op command or request adapter was left behind.
+  - Implementation completed: removed command registrations, removed wrappers
+    from `workflow::commands`, deleted the `workflow::model_dependency_commands`
+    module and its tests, and updated the workflow README to require action
+    intents instead of direct `ModelDependencyRequest` calls.
+  - Verification passed: `cargo fmt`; `git diff --check` for touched files;
+    targeted source-search for retired command names, command registrations,
+    and the deleted module in `src-tauri/src/workflow`,
+    `src-tauri/src/app_setup.rs`, and frontend dependency-environment action
+    paths.
+  - Verification blocker: `cargo check -p pantograph` currently fails on an
+    existing unrelated app setup error,
+    `Arc<WorkflowService>::set_media_conversion_executor` missing at
+    `src-tauri/src/app_setup.rs:96`; this slice did not touch that
+    composition-root call.
+  - Remaining follow-up: replace or delete the broader
+    embedded-runtime/node-engine `ModelDependencyRequest` dependency
+    preflight/model-ref path, then remove the managed resolver object from
+    Tauri app setup once no active runtime path depends on it.
 
 ### Traceability Links
 

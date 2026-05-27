@@ -398,9 +398,10 @@ let snapshot = workflow_service
 - Workflow helper lint cleanup should remove needless adapter allocations while
   leaving model dependency, runtime shutdown, and diagnostics contracts owned by
   backend services or their existing command DTOs.
-- Model dependency commands accept the backend-owned
-  `ModelDependencyRequest` DTO as one request envelope and sanitize it at the
-  helper boundary, rather than keeping parallel Tauri-only argument lists.
+- Dependency-environment actions cross Tauri only as workflow-service action
+  intents. This directory must not expose direct `ModelDependencyRequest`
+  resolve/check/install/status commands or own dependency-environment request
+  construction.
 - Runtime, scheduler, and diagnostics snapshot events use named backend-owned
   input structs and boxed large internals so event constructors stay stable
   without changing the frontend event JSON shape.
