@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use pantograph_dependency_planning::{
+    DependencyEnvironmentReadinessState, DependencyPreflightResult, DependencyReadinessPolicy,
+};
 use pantograph_runtime_host_contracts::{
     RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
@@ -208,6 +211,108 @@ fn orchestrator_initializes_runtime_task_waiting_for_dependency_readiness() {
     assert!(matches!(
         records[0].state,
         SchedulerTaskState::WaitingDependencyReadiness { .. }
+    ));
+}
+
+#[test]
+fn orchestrator_admits_runtime_task_after_ready_dependency_proof() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = WorkflowExecutionSessionStore::new(4, 2);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+
+    let record = orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+            Some(ready_preflight_result()),
+        )
+        .expect("ready dependency proof should admit runtime task");
+
+    assert_eq!(record.state_version, 2);
+    assert!(matches!(record.state, SchedulerTaskState::Ready { .. }));
+}
+
+#[test]
+fn orchestrator_defers_runtime_task_when_dependency_proof_is_missing() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = WorkflowExecutionSessionStore::new(4, 2);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+
+    let record = orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+            None,
+        )
+        .expect("missing dependency proof should defer runtime task");
+
+    let SchedulerTaskState::PausedDeferred { diagnostics, .. } = record.state else {
+        panic!("missing proof should leave runtime task deferred");
+    };
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == SchedulerTaskStateDiagnosticCode::TaskDeferred
+            && diagnostic.severity == SchedulerTaskStateDiagnosticSeverity::Warning
+    }));
+}
+
+#[test]
+fn orchestrator_defers_non_ready_dependency_proof_without_legacy_bridge() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = WorkflowExecutionSessionStore::new(4, 2);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let mut preflight = ready_preflight_result();
+    preflight.readiness_state = DependencyEnvironmentReadinessState::Missing;
+
+    let record = orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+            Some(preflight),
+        )
+        .expect("non-ready dependency proof should fail through scheduler policy");
+
+    assert!(matches!(
+        record.state,
+        SchedulerTaskState::PausedDeferred { .. }
     ));
 }
 
@@ -712,7 +817,7 @@ async fn orchestrator_rejects_runtime_task_before_non_runtime_adapter() {
         .expect("stored task state");
     assert_eq!(
         records[0].state.kind(),
-        pantograph_scheduler::SchedulerTaskStateKind::Ready
+        pantograph_scheduler::SchedulerTaskStateKind::WaitingDependencyReadiness
     );
     assert!(store
         .active_run_scheduler_task_results(&session_id, &workflow_run_id)
@@ -1078,6 +1183,13 @@ fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
     ))
     .expect("runtime host request fixture")
+}
+
+fn ready_preflight_result() -> DependencyPreflightResult {
+    runtime_host_request_fixture()
+        .handoff
+        .readiness_proof
+        .preflight_result
 }
 
 fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {

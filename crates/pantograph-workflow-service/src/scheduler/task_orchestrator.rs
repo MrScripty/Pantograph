@@ -1,14 +1,18 @@
+use pantograph_dependency_planning::{DependencyPreflightResult, DependencyReadinessPolicy};
 use pantograph_runtime_host_contracts::{RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher};
 use pantograph_scheduler::{
-    select_scheduler_dispatch, SchedulerContractError, SchedulerDispatchSelectionDecision,
-    SchedulerDispatchSelectionState, SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
-    SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState, SchedulerSourceInputTaskIntent,
-    SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent, SchedulerTaskState,
-    SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
-    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
-    SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
-    ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
-    SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+    plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
+    SchedulerDispatchSelectionDecision, SchedulerDispatchSelectionState,
+    SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
+    SchedulerReadinessAdmissionDecision, SchedulerReadinessAdmissionDiagnostic,
+    SchedulerReadinessAdmissionDiagnosticCode, SchedulerReadinessAdmissionRequest,
+    SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState, SchedulerRuntimeHandoff,
+    SchedulerRuntimeHandoffState, SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind,
+    SchedulerTaskExecutionIntent, SchedulerTaskState, SchedulerTaskStateDiagnostic,
+    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
+    SchedulerTaskStateRecord, SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
+    ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+    SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 use thiserror::Error;
 
@@ -409,6 +413,104 @@ impl WorkflowSchedulerTaskOrchestrator {
                     .map(Some)
             }
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn apply_runtime_dependency_readiness_admission(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+        policy: DependencyReadinessPolicy,
+        preflight_result: Option<DependencyPreflightResult>,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    )),
+                )
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a runtime inference task",
+                    task_id
+                )),
+            ));
+        }
+        let record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no active task-state record",
+                        task_id
+                    )),
+                )
+            })?;
+        if record.state.kind() != SchedulerTaskStateKind::WaitingDependencyReadiness {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' must be waiting for dependency readiness before readiness admission",
+                    task_id
+                )),
+            ));
+        }
+        let Some(execution_intent) = record.state.execution_intent().cloned() else {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no runtime execution intent",
+                    task_id
+                )),
+            ));
+        };
+        let Some(task_intent) = execution_intent.runtime_task_intent().cloned() else {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' does not carry runtime task intent",
+                    task_id
+                )),
+            ));
+        };
+
+        let request = SchedulerReadinessAdmissionRequest {
+            contract_version: SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+            task_intent,
+            policy,
+        };
+        let decision = plan_scheduler_readiness_admission(
+            request
+                .try_into()
+                .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?,
+            preflight_result,
+        )
+        .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
+        .into_inner();
+        let transition =
+            readiness_admission_transition_from_waiting(record, execution_intent, decision)?;
+        store
+            .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
     }
 
     pub(crate) fn fail_runtime_dispatch_not_wired_for_active_run(
@@ -854,6 +956,104 @@ fn invalid_transition_from_awaiting_inputs(
             diagnostics: vec![diagnostic],
         },
     )
+}
+
+fn readiness_admission_transition_from_waiting(
+    record: &SchedulerTaskStateRecord,
+    execution_intent: SchedulerTaskExecutionIntent,
+    decision: SchedulerReadinessAdmissionDecision,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    let next_state = match decision.state {
+        SchedulerReadinessAdmissionState::Ready => SchedulerTaskState::Ready { execution_intent },
+        SchedulerReadinessAdmissionState::Deferred => SchedulerTaskState::PausedDeferred {
+            execution_intent,
+            diagnostics: readiness_admission_diagnostics(
+                SchedulerReadinessAdmissionState::Deferred,
+                decision.diagnostics,
+            ),
+        },
+        SchedulerReadinessAdmissionState::RetryableFailed => SchedulerTaskState::RetryableFailed {
+            execution_intent,
+            diagnostics: readiness_admission_diagnostics(
+                SchedulerReadinessAdmissionState::RetryableFailed,
+                decision.diagnostics,
+            ),
+        },
+        SchedulerReadinessAdmissionState::TerminalFailed => SchedulerTaskState::TerminalFailed {
+            diagnostics: readiness_admission_diagnostics(
+                SchedulerReadinessAdmissionState::TerminalFailed,
+                decision.diagnostics,
+            ),
+        },
+        _ => SchedulerTaskState::TerminalFailed {
+            diagnostics: vec![SchedulerTaskStateDiagnostic {
+                severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+                message: "scheduler readiness admission returned an unsupported state"
+                    .to_string(),
+                hint: Some(
+                    "Update workflow-service readiness admission mapping before executing runtime tasks."
+                        .to_string(),
+                ),
+            }],
+        },
+    };
+    task_state_transition(
+        record,
+        "dependency-readiness",
+        SchedulerTaskStateKind::WaitingDependencyReadiness,
+        next_state,
+    )
+}
+
+fn readiness_admission_diagnostics(
+    state: SchedulerReadinessAdmissionState,
+    diagnostics: Vec<SchedulerReadinessAdmissionDiagnostic>,
+) -> Vec<SchedulerTaskStateDiagnostic> {
+    diagnostics
+        .into_iter()
+        .map(|diagnostic| readiness_admission_diagnostic(&state, diagnostic))
+        .collect()
+}
+
+fn readiness_admission_diagnostic(
+    state: &SchedulerReadinessAdmissionState,
+    diagnostic: SchedulerReadinessAdmissionDiagnostic,
+) -> SchedulerTaskStateDiagnostic {
+    SchedulerTaskStateDiagnostic {
+        severity: match diagnostic.severity {
+            SchedulerReadinessAdmissionSeverity::Info => SchedulerTaskStateDiagnosticSeverity::Info,
+            SchedulerReadinessAdmissionSeverity::Warning => {
+                SchedulerTaskStateDiagnosticSeverity::Warning
+            }
+            SchedulerReadinessAdmissionSeverity::Error => {
+                SchedulerTaskStateDiagnosticSeverity::Error
+            }
+            _ => SchedulerTaskStateDiagnosticSeverity::Error,
+        },
+        code: match diagnostic.code {
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyNotReady
+            | SchedulerReadinessAdmissionDiagnosticCode::DependencyPolicyRejected
+            | SchedulerReadinessAdmissionDiagnosticCode::MissingReadinessProof
+            | SchedulerReadinessAdmissionDiagnosticCode::StaleReadinessProof => {
+                SchedulerTaskStateDiagnosticCode::TaskDeferred
+            }
+            SchedulerReadinessAdmissionDiagnosticCode::DependencyUnavailable => {
+                if *state == SchedulerReadinessAdmissionState::RetryableFailed {
+                    SchedulerTaskStateDiagnosticCode::RetryableFailure
+                } else {
+                    SchedulerTaskStateDiagnosticCode::TerminalFailure
+                }
+            }
+            SchedulerReadinessAdmissionDiagnosticCode::InvalidReadinessProof
+            | SchedulerReadinessAdmissionDiagnosticCode::SchedulerPolicyError => {
+                SchedulerTaskStateDiagnosticCode::SchedulerPolicyError
+            }
+            _ => SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+        },
+        message: diagnostic.message,
+        hint: diagnostic.hint,
+    }
 }
 
 fn task_state_transition(

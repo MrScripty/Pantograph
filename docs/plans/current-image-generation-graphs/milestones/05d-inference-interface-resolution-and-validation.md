@@ -387,6 +387,35 @@ defining an image-only inference-node interface.
     admission path that consumes backend validation summary plus dependency
     readiness proof and transitions runtime inference from
     `WaitingDependencyReadiness` to dispatch selection.
+- [x] 2026-05-26 workflow-service runtime readiness admission bridge slice
+      completed:
+  - Smallest useful vertical slice: add the workflow-service scheduler
+    orchestrator bridge that consumes a path-free `DependencyPreflightResult`,
+    invokes `pantograph-scheduler` readiness admission policy, and persists the
+    validated active-run task-state transition for runtime inference tasks that
+    are waiting on dependency readiness.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the bridge accepts only
+    scheduler/dependency-planning contracts. It does not call
+    `ModelDependencyRequest`, build `ModelRefV2`, read graph `modelPath` or
+    `model_path`, synthesize local load targets, or adapt the new proof path
+    back into legacy dependency preflight.
+  - Focused tests added: ready dependency proof transitions runtime inference
+    from `WaitingDependencyReadiness` to `Ready`; missing proof defers with
+    typed diagnostics; non-ready proof defers without a legacy bridge.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service orchestrator_ -- --nocapture`; `git diff
+    --check`; and targeted source search of touched workflow-service scheduler
+    files for retired path-shaped terms.
+  - Remaining follow-up: wire a production caller that derives the
+    `DependencyPreflightResult` from backend validation/dependency readiness
+    ownership, then build dispatch candidates from the ready task state and
+    scheduler facts without introducing load-target paths into workflow-service
+    graph data.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

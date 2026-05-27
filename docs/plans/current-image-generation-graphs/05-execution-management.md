@@ -13563,6 +13563,26 @@ Worker rules:
     backend validation summary plus dependency readiness proof can transition
     runtime inference from `WaitingDependencyReadiness` into dispatch
     selection.
+- 2026-05-26 Milestone 5d workflow-service runtime readiness admission bridge:
+  - Added a focused workflow-service scheduler orchestrator bridge that
+    consumes path-free `DependencyPreflightResult`, invokes scheduler readiness
+    admission policy, and applies the validated active-run task-state
+    transition for runtime inference tasks waiting on dependency readiness.
+  - The bridge maps ready proofs to `Ready`, missing/non-ready proofs to typed
+    deferred/failure task states, and unsupported future scheduler readiness
+    states to typed scheduler-policy failure diagnostics.
+  - No-fallback/no-legacy confirmation: the bridge does not call
+    `ModelDependencyRequest`, build `ModelRefV2`, read graph `modelPath` or
+    `model_path`, synthesize local load targets, or adapt scheduler readiness
+    back into legacy dependency preflight.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service orchestrator_ -- --nocapture`; `git diff
+    --check`; and targeted source search of touched workflow-service scheduler
+    files for retired path-shaped terms.
+  - Remaining follow-up: add the production caller that obtains the
+    `DependencyPreflightResult` from backend validation/dependency readiness
+    ownership and then feeds ready runtime tasks into scheduler dispatch
+    selection.
 
 ### Traceability Links
 

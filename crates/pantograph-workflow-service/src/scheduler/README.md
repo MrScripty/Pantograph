@@ -108,6 +108,12 @@ build a dispatch-selected `SchedulerRuntimeHandoff`, and dispatch through the
 shared runtime-host port. It does not create dispatch candidates, rank runtime
 policy, inspect model paths, or call Pumas; candidate assembly remains a
 separate provider/session concern.
+The scheduler task orchestrator also owns the workflow-service bridge from
+`WaitingDependencyReadiness` into scheduler readiness admission. It consumes
+only a path-free `DependencyPreflightResult`, applies
+`pantograph-scheduler` readiness policy, and persists the resulting validated
+task-state transition; it must not resolve dependencies through node-engine,
+legacy preflight, Tauri, or graph-authored paths.
 Runtime inference tasks that depend on upstream task outputs initialize as
 `AwaitingInputs` even when their schedulable intent is otherwise complete.
 They may become dispatch candidates only after scheduler-owned input-readiness
@@ -186,6 +192,11 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   `WaitingDependencyReadiness` until scheduler admission consumes the canonical
   dependency readiness proof and can produce a dispatch-selected runtime
   handoff.
+- Dependency readiness admission for runtime tasks must consume
+  `DependencyPreflightResult` through `pantograph-scheduler` and persist only
+  scheduler task-state transitions. It must not call
+  `ModelDependencyRequest`, build `ModelRefV2`, read graph `modelPath`, or
+  synthesize executable load targets.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable
