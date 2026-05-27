@@ -14,4 +14,6 @@ validation state; graph editor and Tauri callers must not send paths, Pumas
 facts, platform context, identity keys, dependency planning requests, or
 environment requests. `DependencyEnvironmentActionIntentResult` is the
 fail-closed response envelope used before a canonical environment request can
-be derived; blocked results must carry typed diagnostics.
+be derived; blocked results must carry typed diagnostics. Sidecar association
+failures use explicit `DependencySidecar*` diagnostic codes so callers do not
+parse messages or infer legacy path-based subjects.

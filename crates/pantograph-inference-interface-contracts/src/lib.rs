@@ -563,6 +563,13 @@ pub enum InferenceDiagnosticCode {
     TargetNodeMissing,
     ValidationSummaryMissing,
     DependencyRequirementsMissing,
+    DependencySidecarTargetWrongType,
+    DependencySidecarAssociationMissing,
+    DependencySidecarAssociationDuplicate,
+    DependencySidecarAssociationInvalid,
+    DependencySidecarDescriptorStale,
+    DependencySidecarDescriptorUnavailable,
+    DependencySidecarDescriptorInvalid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

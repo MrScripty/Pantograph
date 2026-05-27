@@ -12861,6 +12861,25 @@ Worker rules:
     cross-layer action-intent acceptance coverage, and README/ADR updates in
     every production slice that changes these contracts.
   - Verification: `git diff --check` passed for the three updated plan files.
+- 2026-05-26 Milestone 5d dependency sidecar diagnostic contract slice:
+  - Smallest useful vertical slice: add only the shared typed diagnostics needed
+    before the workflow-service sidecar subject resolver can be implemented.
+    Allowed files were `crates/pantograph-inference-interface-contracts/src/lib.rs`,
+    the crate README files, focused contract tests, and Milestone 5d plan/status
+    docs.
+  - No-fallback/no-legacy result: the contract now names sidecar failures as
+    `DependencySidecar*` `InferenceDiagnosticCode` variants instead of relying
+    on strings, frontend path inference, partial dependency requests, or legacy
+    graph data.
+  - Focused tests: `dependency_environment_sidecar_diagnostics_are_typed_contract_codes`
+    proves all new sidecar diagnostic codes serialize and deserialize using the
+    expected snake_case wire names.
+  - Verification passed: `cargo fmt --package
+    pantograph-inference-interface-contracts`; `cargo test -p
+    pantograph-inference-interface-contracts`.
+  - Remaining follow-up: implement the typed
+    `dependency_environment_sidecar` port/value contract and then the
+    workflow-service subject resolver that consumes these diagnostics.
 
 ### Traceability Links
 

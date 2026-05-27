@@ -263,3 +263,46 @@ fn dependency_environment_action_intent_result_preserves_typed_diagnostics() {
         InferenceDiagnosticCode::ValidationSummaryMissing
     );
 }
+
+#[test]
+fn dependency_environment_sidecar_diagnostics_are_typed_contract_codes() {
+    let expected = [
+        (
+            InferenceDiagnosticCode::DependencySidecarTargetWrongType,
+            "dependency_sidecar_target_wrong_type",
+        ),
+        (
+            InferenceDiagnosticCode::DependencySidecarAssociationMissing,
+            "dependency_sidecar_association_missing",
+        ),
+        (
+            InferenceDiagnosticCode::DependencySidecarAssociationDuplicate,
+            "dependency_sidecar_association_duplicate",
+        ),
+        (
+            InferenceDiagnosticCode::DependencySidecarAssociationInvalid,
+            "dependency_sidecar_association_invalid",
+        ),
+        (
+            InferenceDiagnosticCode::DependencySidecarDescriptorStale,
+            "dependency_sidecar_descriptor_stale",
+        ),
+        (
+            InferenceDiagnosticCode::DependencySidecarDescriptorUnavailable,
+            "dependency_sidecar_descriptor_unavailable",
+        ),
+        (
+            InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
+            "dependency_sidecar_descriptor_invalid",
+        ),
+    ];
+
+    for (code, wire_name) in expected {
+        let encoded = serde_json::to_value(code).expect("diagnostic code should encode");
+        assert_eq!(encoded, serde_json::json!(wire_name));
+
+        let decoded: InferenceDiagnosticCode =
+            serde_json::from_value(encoded).expect("diagnostic code should decode");
+        assert_eq!(decoded, code);
+    }
+}

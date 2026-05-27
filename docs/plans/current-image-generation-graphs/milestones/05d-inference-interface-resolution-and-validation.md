@@ -469,6 +469,17 @@ defining an image-only inference-node interface.
         builder that validates the current descriptor summary and derives
         `DependencyEnvironmentRequest` without moving policy into Tauri or the
         frontend.
+      - Sidecar diagnostic contract sub-slice completed on 2026-05-26:
+        `pantograph-inference-interface-contracts` now exposes typed
+        `DependencySidecar*` diagnostic codes for wrong target type, missing
+        association, duplicate association, invalid association, stale
+        descriptor, unavailable descriptor, and invalid descriptor. Contract
+        tests prove the snake_case wire names round-trip through serde so later
+        workflow-service resolvers can return typed diagnostics without message
+        parsing, frontend path inference, or partial dependency requests.
+        Verification passed: `cargo fmt --package
+        pantograph-inference-interface-contracts`; `cargo test -p
+        pantograph-inference-interface-contracts`.
       - Workflow-service fail-closed builder sub-slice completed on
         2026-05-26: `GraphSessionStore` and `WorkflowService` now accept
         `DependencyEnvironmentActionIntent`, validate it against the current

@@ -49,7 +49,10 @@ validation session, then derives the canonical dependency-environment request
 from backend-owned descriptor and dependency-planning state.
 If that derivation cannot happen, workflow-service returns
 `DependencyEnvironmentActionIntentResult` with typed diagnostics instead of
-constructing a partial dependency-environment request.
+constructing a partial dependency-environment request. Sidecar target and
+association failures are represented by the typed `DependencySidecar*`
+diagnostic codes, not by message parsing, frontend path inference, or partial
+request construction.
 
 ## Structured Producer Contract
 
