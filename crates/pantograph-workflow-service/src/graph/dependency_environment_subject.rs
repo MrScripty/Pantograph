@@ -1,10 +1,10 @@
 use pantograph_inference_interface_contracts::{InferenceDiagnosticCode, WorkflowNodeId};
+use workflow_nodes::processing::DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID;
 
 use super::types::WorkflowGraph;
 
 pub(crate) const DEPENDENCY_ENVIRONMENT_NODE_TYPE: &str = "dependency-environment";
 pub(crate) const INFERENCE_NODE_TYPE: &str = "llm-inference";
-pub(crate) const DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID: &str = "dependency_environment_sidecar";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DependencyEnvironmentActionSubjectResolution {

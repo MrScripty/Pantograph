@@ -100,6 +100,24 @@ fn graph_with_bound_model_ref_and_prompt() -> WorkflowGraph {
     graph
 }
 
+fn graph_with_bound_model_ref_prompt_and_dependency_sidecar() -> WorkflowGraph {
+    let mut graph = graph_with_bound_model_ref_and_prompt();
+    graph.nodes.push(GraphNode {
+        id: "dep-env".to_string(),
+        node_type: "dependency-environment".to_string(),
+        position: Position { x: 400.0, y: 0.0 },
+        data: json!({ "mode": "manual" }),
+    });
+    graph.edges.push(GraphEdge {
+        id: "edge-dep-env-infer".to_string(),
+        source: "dep-env".to_string(),
+        source_handle: "dependency_environment_sidecar".to_string(),
+        target: "infer".to_string(),
+        target_handle: "dependency_environment_sidecar".to_string(),
+    });
+    graph
+}
+
 fn materialized_model_ref_result(
     workflow_run_id: &str,
     value: WorkflowSchedulerTaskResultValue,
@@ -315,6 +333,49 @@ fn binding_resolution_readies_after_every_connected_input_materializes() {
         .iter()
         .find(|task| task.task_id.as_str() == "infer")
         .expect("inference task");
+
+    let resolution = workflow_scheduler_resolve_task_intent(
+        inference_task,
+        &[
+            materialized_model_ref_result(graph.workflow_run_id.as_str(), pumas_model_ref_value()),
+            materialized_prompt_result(
+                graph.workflow_run_id.as_str(),
+                WorkflowSchedulerTaskResultStatus::Completed,
+            ),
+        ],
+    );
+
+    assert_eq!(
+        resolution.status,
+        WorkflowSchedulerTaskBindingResolutionStatus::Ready
+    );
+    assert!(resolution.schedulable_intent.is_some());
+    assert!(resolution.diagnostics.is_empty());
+}
+
+#[test]
+fn sidecar_association_is_not_materialized_as_scheduler_input() {
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph_with_bound_model_ref_prompt_and_dependency_sidecar(),
+        &inference_projection(),
+    )
+    .expect("scheduler task graph");
+    let inference_task = graph
+        .tasks
+        .iter()
+        .find(|task| task.task_id.as_str() == "infer")
+        .expect("inference task");
+
+    assert!(!inference_task
+        .dependency_task_ids
+        .iter()
+        .any(|task_id| task_id.as_str() == "dep-env"));
+    assert!(!inference_task.input_bindings.iter().any(|binding| {
+        binding.source_port_id == "dependency_environment_sidecar"
+            || binding.target_port_id == "dependency_environment_sidecar"
+    }));
 
     let resolution = workflow_scheduler_resolve_task_intent(
         inference_task,

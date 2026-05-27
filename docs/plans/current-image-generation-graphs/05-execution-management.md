@@ -12966,9 +12966,28 @@ Worker rules:
   - Remaining follow-up: derive the canonical
     `DependencyEnvironmentRequest` only after the current inference descriptor
     validation record carries bounded dependency-requirements identity/proof;
-    add task-graph projection coverage proving sidecar edges are not
-    materialized as runtime task inputs; clean retired static inference mock
-    ports from app/reusable graph mocks.
+    clean retired static inference mock ports from app/reusable graph mocks.
+- 2026-05-26 Milestone 5d scheduler task-graph sidecar exclusion slice:
+  - Smallest useful vertical slice: prove and enforce that the typed
+    `dependency_environment_sidecar` graph edge remains workflow-service
+    control structure and is not projected into scheduler runtime input
+    bindings.
+  - Allowed files: `crates/pantograph-workflow-service/src/workflow/task_graph.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/task_binding_resolution.rs`,
+    workflow README, graph sidecar resolver constant import cleanup, and
+    Milestone 5d plan/status docs.
+  - No-fallback/no-legacy result: scheduler task graph projection now excludes
+    sidecar control-association edges by the shared
+    `workflow_nodes::processing::DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID`
+    constant. It does not wait for dependency-environment task output,
+    synthesize an environment input, or materialize frontend dependency state.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service
+    sidecar_association_is_not_materialized_as_scheduler_input`; `cargo test
+    -p pantograph-workflow-service task_binding_resolution`.
+  - Remaining follow-up: dependency readiness still needs the canonical
+    dependency-requirements identity/proof before `DependencyEnvironmentRequest`
+    derivation and scheduler admission can consume readiness facts.
 
 ### Traceability Links
 

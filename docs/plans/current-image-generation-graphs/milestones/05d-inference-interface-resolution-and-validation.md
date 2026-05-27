@@ -618,9 +618,17 @@ defining an image-only inference-node interface.
         invalid associated descriptors. Remaining follow-up: derive the
         canonical `DependencyEnvironmentRequest` only after the current
         inference descriptor record carries a bounded dependency-requirements
-        identity/proof; add task-graph projection coverage proving the sidecar
-        edge is not materialized as runtime input data; clean frontend mock
-        descriptor data that still reflects retired static inference ports.
+        identity/proof; clean frontend mock descriptor data that still reflects
+        retired static inference ports.
+      - Scheduler task-graph sidecar exclusion sub-slice completed on
+        2026-05-26: workflow-service task graph projection now treats
+        `dependency_environment_sidecar` as a control-association edge, not as
+        a scheduler materialized input binding or dependency task id. The
+        projection imports the shared port id from `workflow-nodes` instead of
+        adding a new string convention. Verification passed: `cargo fmt`;
+        `cargo test -p pantograph-workflow-service
+        sidecar_association_is_not_materialized_as_scheduler_input`; `cargo
+        test -p pantograph-workflow-service task_binding_resolution`.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

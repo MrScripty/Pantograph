@@ -9,6 +9,7 @@ use pantograph_scheduler::{
     SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTraitSetting, SchedulerWorkflowId,
     SchedulerWorkflowRunId,
 };
+use workflow_nodes::processing::DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID;
 
 use super::task_execution_classification::classify_workflow_scheduler_task;
 use super::task_graph_contracts::{
@@ -217,6 +218,9 @@ fn input_bindings(
     let mut bindings = Vec::new();
     if let Some(edges) = incoming_edges.get(node_id) {
         for edge in edges {
+            if is_control_association_edge(edge) {
+                continue;
+            }
             bindings.push(WorkflowSchedulerTaskInputBinding {
                 source_node_id: scheduler_node_id(&edge.source_node_id)?,
                 source_task_id: scheduler_task_id(&edge.source_node_id)?,
@@ -232,6 +236,11 @@ fn input_bindings(
             .then_with(|| left.target_port_id.cmp(&right.target_port_id))
     });
     Ok(bindings)
+}
+
+fn is_control_association_edge(edge: &crate::graph::WorkflowExecutableTopologyEdge) -> bool {
+    edge.source_port_id == DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID
+        || edge.target_port_id == DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID
 }
 
 fn dependency_task_ids(bindings: &[WorkflowSchedulerTaskInputBinding]) -> Vec<SchedulerTaskId> {

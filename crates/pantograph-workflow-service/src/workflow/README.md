@@ -110,6 +110,10 @@ facade test module.
   or wrong-type upstream values must produce typed binding diagnostics instead
   of reading graph-local paths, reduced execution plans, node-engine demand
   state, runtime handoff, or Pumas load targets.
+- Scheduler task graph projection excludes graph control-association edges such
+  as `dependency_environment_sidecar` from runtime input bindings and
+  dependency task ids. Those edges are interpreted by workflow-service
+  validation/action owners, not by scheduler materialization.
 - Scheduler task execution class is projected by
   `task_execution_classification.rs` from immutable node type plus canonical
   node-contract facts. Runtime inference, request-provided source inputs,
