@@ -219,7 +219,13 @@ only owner that may interpret it for dependency actions.
   snapshots graph state under the session lock, runs descriptor projection after
   the graph lock is released, emits node-scoped descriptor events plus a
   graph-scoped summary event, and records current graph/node validation state
-  for later dependency-environment and scheduler admission decisions.
+  for later dependency actions and scheduler admission.
+- Current inference-validation state may store a bounded, path-free dependency
+  requirements proof keyed to the associated inference node, graph revision,
+  validation session, descriptor fingerprint, model ref, task kind, and
+  validated constraints. The proof must not store executable paths, Pumas
+  package facts, runtime load targets, scheduler dispatch decisions, frontend
+  display state, media payloads, metadata bags, or arbitrary JSON.
 - Inference-interface facts are supplied through a workflow-service provider
   boundary. Frontend and transport adapters may request validation by identity
   and graph revision, but must not provide raw Pumas facts, runtime facts,

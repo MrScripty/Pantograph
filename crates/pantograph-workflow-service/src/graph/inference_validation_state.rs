@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use pantograph_dependency_planning::{
-    DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId,
+    DependencyRequirementsId, DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId,
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
@@ -11,6 +11,8 @@ use pantograph_inference_interface_contracts::{
     InferenceInterfaceFingerprint, InferenceTaskKind, ValidatedDependencyEnvironmentActionIntent,
     WorkflowGraphRevision, WorkflowNodeId,
 };
+use pantograph_scheduler::SchedulerTraitSetting;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::dependency_environment_subject::DependencyEnvironmentActionSubjectResolution;
@@ -24,6 +26,9 @@ use crate::workflow::{
     WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
     WorkflowSchedulerReadyInferenceTaskProjection,
 };
+
+#[allow(dead_code)]
+pub const CURRENT_DEPENDENCY_REQUIREMENTS_PROOF_MAX_DIAGNOSTICS: usize = 16;
 
 #[derive(Debug)]
 pub(crate) struct CurrentInferenceValidationStateStore {
@@ -79,6 +84,79 @@ impl CurrentInferenceValidationStateStore {
         };
         self.summaries.write().await.insert(key, record);
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub async fn record_dependency_requirements_proof(
+        &self,
+        request: CurrentDependencyRequirementsProofRequest,
+    ) -> Result<CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofError> {
+        if request.diagnostics.len() > CURRENT_DEPENDENCY_REQUIREMENTS_PROOF_MAX_DIAGNOSTICS {
+            return Err(
+                CurrentDependencyRequirementsProofError::TooManyDiagnostics {
+                    count: request.diagnostics.len(),
+                    max: CURRENT_DEPENDENCY_REQUIREMENTS_PROOF_MAX_DIAGNOSTICS,
+                },
+            );
+        }
+        for diagnostic in &request.diagnostics {
+            diagnostic.validate().map_err(|error| {
+                CurrentDependencyRequirementsProofError::InvalidDiagnostic {
+                    message: error.to_string(),
+                }
+            })?;
+        }
+
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id,
+            graph_revision: request.graph_revision.clone(),
+        };
+        let mut summaries = self.summaries.write().await;
+        let record = summaries
+            .get_mut(&key)
+            .ok_or(CurrentDependencyRequirementsProofError::ValidationSummaryMissing)?;
+
+        if record.validation_session_id != request.validation_session_id {
+            return Err(CurrentDependencyRequirementsProofError::ValidationSessionMismatch);
+        }
+
+        if !record.summary.executable {
+            return Err(
+                CurrentDependencyRequirementsProofError::ValidationSummaryNotExecutable {
+                    status: record.summary.status,
+                },
+            );
+        }
+
+        let node = record.nodes.get_mut(&request.inference_node_id).ok_or(
+            CurrentDependencyRequirementsProofError::InferenceNodeMissing {
+                node_id: request.inference_node_id.clone(),
+            },
+        )?;
+        if !node.has_dependency_basis() {
+            return Err(CurrentDependencyRequirementsProofError::IncompleteNodeState {
+                node_id: node.node_id.clone(),
+                message: "node record is missing descriptor, task, model, availability, or constraint data"
+                    .to_string(),
+            });
+        }
+
+        let proof = CurrentDependencyRequirementsProof {
+            inference_node_id: node.node_id.clone(),
+            graph_revision: request.graph_revision,
+            validation_session_id: request.validation_session_id,
+            descriptor_fingerprint: node.descriptor_fingerprint.clone(),
+            pumas_model_ref: path_free_model_ref(&node.pumas_model_ref),
+            task_kind: node.task_kind.clone(),
+            runtime_constraint: node.runtime_constraint.clone(),
+            device_constraint: node.device_constraint.clone(),
+            trait_constraints: Vec::new(),
+            dependency_requirements_id: request.dependency_requirements_id,
+            status: request.status,
+            diagnostics: request.diagnostics,
+        };
+        node.dependency_requirements_proof = Some(proof.clone());
+        Ok(proof)
     }
 
     pub(crate) async fn resolve_dependency_environment_action_intent(
@@ -166,6 +244,44 @@ impl CurrentInferenceValidationStateStore {
                     Some("Refresh descriptor validation before resolving dependency environments."),
                 );
             }
+            match node_record.current_dependency_requirements_proof(
+                &intent.graph_revision,
+                &record.validation_session_id,
+            ) {
+                Ok(_proof) => return request_ready_dependency_environment_action_result(&intent),
+                Err(CurrentDependencyRequirementsProofStateError::Missing) => {
+                    return blocked_dependency_environment_action_result(
+                        &intent,
+                        InferenceDiagnosticCode::DependencyRequirementsMissing,
+                        "Dependency environment request derivation requires dependency requirements for this graph revision.",
+                        Some("Resolve dependency requirements from the current validation state before checking or installing environments."),
+                    );
+                }
+                Err(CurrentDependencyRequirementsProofStateError::Stale) => {
+                    return blocked_dependency_environment_action_result(
+                        &intent,
+                        InferenceDiagnosticCode::DescriptorStale,
+                        "Dependency requirements proof is stale for this graph revision or validation session.",
+                        Some("Refresh descriptor validation and dependency requirements before resolving environments."),
+                    );
+                }
+                Err(CurrentDependencyRequirementsProofStateError::Unavailable) => {
+                    return blocked_dependency_environment_action_result(
+                        &intent,
+                        InferenceDiagnosticCode::DependencySidecarDescriptorUnavailable,
+                        "Dependency requirements proof is unavailable for this graph revision.",
+                        Some("Resolve dependency requirements before checking or installing environments."),
+                    );
+                }
+                Err(CurrentDependencyRequirementsProofStateError::Invalid) => {
+                    return blocked_dependency_environment_action_result(
+                        &intent,
+                        InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
+                        "Dependency requirements proof is invalid for dependency request derivation.",
+                        Some("Refresh descriptor validation and dependency requirements before resolving environments."),
+                    );
+                }
+            }
         }
 
         blocked_dependency_environment_action_result(
@@ -251,6 +367,70 @@ pub(crate) struct CurrentInferenceSchedulerProjectionRequest {
     pub validation_session_id: Option<DraftGraphValidationSessionId>,
 }
 
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct CurrentDependencyRequirementsProofRequest {
+    pub graph_session_id: pantograph_inference_interface_contracts::WorkflowGraphSessionId,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: DraftGraphValidationSessionId,
+    pub inference_node_id: WorkflowNodeId,
+    pub dependency_requirements_id: DependencyRequirementsId,
+    pub status: CurrentDependencyRequirementsProofStatus,
+    pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct CurrentDependencyRequirementsProof {
+    pub inference_node_id: WorkflowNodeId,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: DraftGraphValidationSessionId,
+    pub descriptor_fingerprint: InferenceInterfaceFingerprint,
+    pub pumas_model_ref: PumasModelRef,
+    pub task_kind: InferenceTaskKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_constraint: Option<RuntimeIntentId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_constraint: Option<DeviceIntentId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trait_constraints: Vec<SchedulerTraitSetting>,
+    pub dependency_requirements_id: DependencyRequirementsId,
+    pub status: CurrentDependencyRequirementsProofStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CurrentDependencyRequirementsProofStatus {
+    Current,
+    Stale,
+    Unavailable,
+    Invalid,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
+pub enum CurrentDependencyRequirementsProofError {
+    #[error("inference validation summary is missing for the current graph revision")]
+    ValidationSummaryMissing,
+    #[error("inference validation session does not match the current graph validation state")]
+    ValidationSessionMismatch,
+    #[error("inference validation summary is not executable: {status:?}")]
+    ValidationSummaryNotExecutable { status: DraftGraphValidationStatus },
+    #[error("associated inference node is missing from current validation state: {node_id}")]
+    InferenceNodeMissing { node_id: WorkflowNodeId },
+    #[error("inference validation node state is incomplete for node {node_id}: {message}")]
+    IncompleteNodeState {
+        node_id: WorkflowNodeId,
+        message: String,
+    },
+    #[error("dependency requirements proof has too many diagnostics: {count} > {max}")]
+    TooManyDiagnostics { count: usize, max: usize },
+    #[error("dependency requirements proof diagnostic is invalid: {message}")]
+    InvalidDiagnostic { message: String },
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CurrentInferenceSchedulerProjectionError {
     #[error("inference validation summary is missing for the current graph revision")]
@@ -291,6 +471,7 @@ pub(crate) struct CurrentInferenceValidationNodeRecord {
     pub pumas_model_ref: PumasModelRef,
     pub runtime_constraint: Option<RuntimeIntentId>,
     pub device_constraint: Option<DeviceIntentId>,
+    pub dependency_requirements_proof: Option<CurrentDependencyRequirementsProof>,
 }
 
 impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidationNodeRecord {
@@ -304,8 +485,17 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
             pumas_model_ref: record.descriptor.model_ref,
             runtime_constraint: record.runtime_constraint,
             device_constraint: record.device_constraint,
+            dependency_requirements_proof: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CurrentDependencyRequirementsProofStateError {
+    Missing,
+    Stale,
+    Unavailable,
+    Invalid,
 }
 
 impl CurrentInferenceValidationNodeRecord {
@@ -406,6 +596,46 @@ impl CurrentInferenceValidationNodeRecord {
             },
         ))
     }
+
+    fn current_dependency_requirements_proof(
+        &self,
+        graph_revision: &WorkflowGraphRevision,
+        validation_session_id: &DraftGraphValidationSessionId,
+    ) -> Result<&CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofStateError>
+    {
+        let Some(proof) = &self.dependency_requirements_proof else {
+            return Err(CurrentDependencyRequirementsProofStateError::Missing);
+        };
+        if proof.graph_revision != *graph_revision
+            || proof.validation_session_id != *validation_session_id
+            || proof.inference_node_id != self.node_id
+            || proof.descriptor_fingerprint != self.descriptor_fingerprint
+            || proof.task_kind != self.task_kind
+            || proof.pumas_model_ref != path_free_model_ref(&self.pumas_model_ref)
+            || proof.runtime_constraint != self.runtime_constraint
+            || proof.device_constraint != self.device_constraint
+        {
+            return Err(CurrentDependencyRequirementsProofStateError::Stale);
+        }
+        match proof.status {
+            CurrentDependencyRequirementsProofStatus::Current => Ok(proof),
+            CurrentDependencyRequirementsProofStatus::Stale => {
+                Err(CurrentDependencyRequirementsProofStateError::Stale)
+            }
+            CurrentDependencyRequirementsProofStatus::Unavailable => {
+                Err(CurrentDependencyRequirementsProofStateError::Unavailable)
+            }
+            CurrentDependencyRequirementsProofStatus::Invalid => {
+                Err(CurrentDependencyRequirementsProofStateError::Invalid)
+            }
+        }
+    }
+}
+
+fn path_free_model_ref(model_ref: &PumasModelRef) -> PumasModelRef {
+    let mut model_ref = model_ref.clone();
+    model_ref.selected_artifact_path = None;
+    model_ref
 }
 
 fn blocked_projection_reason(
@@ -467,6 +697,21 @@ fn blocked_dependency_environment_action_result(
             hint: hint.map(str::to_string),
             port_id: None,
         }],
+    }
+}
+
+fn request_ready_dependency_environment_action_result(
+    intent: &DependencyEnvironmentActionIntent,
+) -> DependencyEnvironmentActionIntentResult {
+    DependencyEnvironmentActionIntentResult {
+        contract_version: intent.contract_version,
+        graph_session_id: intent.graph_session_id.clone(),
+        graph_revision: intent.graph_revision.clone(),
+        validation_session_id: intent.validation_session_id.clone(),
+        target_node_id: intent.target_node_id.clone(),
+        action: intent.action,
+        status: DependencyEnvironmentActionIntentStatus::RequestReady,
+        diagnostics: Vec::new(),
     }
 }
 
@@ -625,6 +870,245 @@ mod tests {
                 "aaaaaaaaaaaaaaaa",
                 "aaaaaaaaaaaaaaaa",
                 "validation.session.1",
+                "dependency-node-1",
+                true,
+            ))
+            .await;
+
+        assert_eq!(
+            result.diagnostics[0].code,
+            InferenceDiagnosticCode::DependencyRequirementsMissing
+        );
+    }
+
+    #[tokio::test]
+    async fn dependency_requirements_proof_recording_creates_path_free_bounded_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        let mut projection = node_projection(DraftGraphValidationStatus::Executable);
+        projection.descriptor.model_ref.selected_artifact_path =
+            Some("/tmp/legacy-selected-artifact".to_string());
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![projection],
+            )
+            .await
+            .expect("valid validation session");
+
+        let proof = store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Current,
+            ))
+            .await
+            .expect("record proof");
+
+        assert_eq!(proof.inference_node_id.as_str(), "infer");
+        assert_eq!(
+            proof.dependency_requirements_id.as_str(),
+            "requirements.image_generation.cuda0"
+        );
+        assert_eq!(
+            proof.status,
+            CurrentDependencyRequirementsProofStatus::Current
+        );
+        assert_eq!(proof.pumas_model_ref.selected_artifact_path, None);
+        let encoded = serde_json::to_string(&proof).expect("encode proof");
+        assert!(!encoded.contains("selected_artifact_path"));
+        assert!(!encoded.contains("model_path"));
+        assert!(!encoded.contains("package_facts"));
+        assert!(!encoded.contains("runtime_load_target"));
+        assert!(!encoded.contains("/tmp/legacy-selected-artifact"));
+    }
+
+    #[tokio::test]
+    async fn action_intent_state_returns_ready_with_current_dependency_requirements_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("valid validation session");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Current,
+            ))
+            .await
+            .expect("record proof");
+
+        let result = store
+            .resolve_dependency_environment_action_intent(state_request_with_validation_session(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "dependency-node-1",
+                true,
+            ))
+            .await;
+
+        assert_eq!(
+            result.status,
+            DependencyEnvironmentActionIntentStatus::RequestReady
+        );
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[tokio::test]
+    async fn check_and_install_actions_fail_closed_without_current_dependency_requirements_proof() {
+        for action in [
+            DependencyEnvironmentAction::Check,
+            DependencyEnvironmentAction::Install,
+        ] {
+            let store = CurrentInferenceValidationStateStore::new();
+            store
+                .record_validation_publication(
+                    "graph-session-1".parse().expect("valid graph session id"),
+                    validation_session(
+                        "aaaaaaaaaaaaaaaa",
+                        DraftGraphValidationStatus::Executable,
+                        true,
+                    ),
+                    vec![node_projection(DraftGraphValidationStatus::Executable)],
+                )
+                .await
+                .expect("valid validation session");
+
+            let result = store
+                .resolve_dependency_environment_action_intent(
+                    state_request_with_validation_session_and_action(
+                        "graph-session-1",
+                        "aaaaaaaaaaaaaaaa",
+                        "aaaaaaaaaaaaaaaa",
+                        "validation.session.1",
+                        "dependency-node-1",
+                        true,
+                        action,
+                    ),
+                )
+                .await;
+
+            assert_eq!(
+                result.diagnostics[0].code,
+                InferenceDiagnosticCode::DependencyRequirementsMissing
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn action_intent_state_rejects_stale_dependency_requirements_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("valid validation session");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Stale,
+            ))
+            .await
+            .expect("record proof");
+
+        let result = store
+            .resolve_dependency_environment_action_intent(state_request_with_validation_session(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "dependency-node-1",
+                true,
+            ))
+            .await;
+
+        assert_eq!(
+            result.diagnostics[0].code,
+            InferenceDiagnosticCode::DescriptorStale
+        );
+    }
+
+    #[tokio::test]
+    async fn validation_publication_refresh_clears_dependency_requirements_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("valid validation session");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Current,
+            ))
+            .await
+            .expect("record proof");
+        let mut refreshed_session = validation_session(
+            "aaaaaaaaaaaaaaaa",
+            DraftGraphValidationStatus::Executable,
+            true,
+        );
+        refreshed_session.validation_session_id = "validation.session.2"
+            .parse()
+            .expect("valid validation session id");
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                refreshed_session,
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("refresh validation session");
+
+        let result = store
+            .resolve_dependency_environment_action_intent(state_request_with_validation_session(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.2",
                 "dependency-node-1",
                 true,
             ))
@@ -825,6 +1309,53 @@ mod tests {
         request.intent = ValidatedDependencyEnvironmentActionIntent::try_from(intent)
             .expect("valid action intent");
         request
+    }
+
+    fn state_request_with_validation_session_and_action(
+        graph_session_id: &str,
+        intent_revision: &str,
+        current_revision: &str,
+        validation_session_id: &str,
+        target_node_id: &str,
+        target_node_exists: bool,
+        action: DependencyEnvironmentAction,
+    ) -> DependencyEnvironmentActionIntentStateRequest {
+        let mut request = state_request_with_validation_session(
+            graph_session_id,
+            intent_revision,
+            current_revision,
+            validation_session_id,
+            target_node_id,
+            target_node_exists,
+        );
+        let mut intent = request.intent.into_inner();
+        intent.action = action;
+        request.intent = ValidatedDependencyEnvironmentActionIntent::try_from(intent)
+            .expect("valid action intent");
+        request
+    }
+
+    fn proof_request(
+        graph_session_id: &str,
+        graph_revision: &str,
+        validation_session_id: &str,
+        inference_node_id: &str,
+        dependency_requirements_id: &str,
+        status: CurrentDependencyRequirementsProofStatus,
+    ) -> CurrentDependencyRequirementsProofRequest {
+        CurrentDependencyRequirementsProofRequest {
+            graph_session_id: graph_session_id.parse().expect("valid graph session id"),
+            graph_revision: graph_revision.parse().expect("valid graph revision"),
+            validation_session_id: validation_session_id
+                .parse()
+                .expect("valid validation session id"),
+            inference_node_id: inference_node_id.parse().expect("valid inference node id"),
+            dependency_requirements_id: dependency_requirements_id
+                .parse()
+                .expect("valid dependency requirements id"),
+            status,
+            diagnostics: Vec::new(),
+        }
     }
 
     fn validation_session(

@@ -654,6 +654,20 @@ defining an image-only inference-node interface.
         fail closed without a current proof, stale graph revision/session/
         descriptor mismatches block request derivation, and no path/package/
         frontend/runtime-load fields appear in the proof or request boundary.
+      - Dependency requirements proof record sub-slice completed on 2026-05-26:
+        `graph/inference_validation_state.rs` now stores a bounded
+        `CurrentDependencyRequirementsProof` on the associated inference node
+        record. The proof is keyed to graph revision, validation session,
+        descriptor fingerprint, validated path-free `PumasModelRef`, task kind,
+        runtime/device constraints, and dependency requirements id. Current
+        proofs make dependency action intent resolution return `RequestReady`;
+        missing, stale, unavailable, or invalid proofs return typed blocking
+        diagnostics. Validation publication refresh clears existing proofs so
+        descriptor/session changes cannot silently reuse stale requirements.
+        The forward-facing proof owner API is temporarily marked
+        `allow(dead_code)` until the dependency-planning producer slice calls
+        it. Verification passed: `cargo fmt`; `cargo test -p
+        pantograph-workflow-service inference_validation_state`.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

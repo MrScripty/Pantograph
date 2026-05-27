@@ -13011,6 +13011,30 @@ Worker rules:
     check/install fail-closed behavior, stale revision/session/descriptor
     rejection, bounded serialization, and absence of path/package/runtime-load
     fields.
+- 2026-05-26 Milestone 5d dependency requirements proof record slice:
+  - Smallest useful vertical slice: add the workflow-service current
+    validation-state proof record and owner API before wiring a dependency-
+    planning producer or deriving full `DependencyEnvironmentRequest` payloads.
+  - Allowed files: `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    graph README, and Milestone 5d plan/status docs.
+  - No-fallback/no-legacy result: dependency action readiness now requires a
+    current proof keyed to the associated inference node, graph revision,
+    validation session, descriptor fingerprint, path-free validated
+    `PumasModelRef`, task kind, runtime/device constraints, and dependency
+    requirements id. The proof excludes executable paths, Pumas package facts,
+    runtime load targets, scheduler dispatch decisions, frontend display state,
+    media payloads, metadata bags, and arbitrary JSON.
+  - Behavior: current proof returns `RequestReady`; missing proof still returns
+    `DependencyRequirementsMissing`; stale, unavailable, and invalid proofs map
+    to typed blocking diagnostics; new validation publication clears prior
+    proofs. The proof owner API is temporarily marked `allow(dead_code)` because
+    the dependency-planning producer is the next slice.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service inference_validation_state`.
+  - Remaining follow-up: wire the backend dependency-planning producer that
+    creates or refreshes this proof for `Resolve`, then derive the canonical
+    `DependencyEnvironmentRequest` from the proof and associated current
+    descriptor state.
 
 ### Traceability Links
 
