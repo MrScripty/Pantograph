@@ -13202,6 +13202,128 @@ Worker rules:
     dependency-environment execution, define how it talks to Pumas/dependency
     planning, and sequence deletion or replacement of the retired
     `ModelDependencyRequest` dependency-environment execution path.
+- 2026-05-26 Milestone 5d dependency-environment service owner decision:
+  - Decision: use option 2. Add a dedicated backend dependency-environment
+    service crate, suggested name `pantograph-dependency-environment-service`,
+    as the canonical owner of
+    `ValidatedDependencyEnvironmentRequest -> DependencyEnvironmentResult`.
+  - Ownership: workflow-service derives and validates the canonical request
+    from current graph/descriptor/dependency-planning state, calls the service,
+    and projects typed results into action responses or backend-owned display
+    state. Tauri remains transport-only, graph editor callers continue to send
+    action intents only, and node-engine/embedded-runtime do not execute
+    dependency-environment actions.
+  - Service constraints: consume canonical dependency-planning DTOs and
+    Pumas-approved dependency/environment APIs only. Do not accept
+    `ModelDependencyRequest`, `model_path`, local paths, package-fact blobs,
+    frontend platform context, or graph display metadata. Missing Pumas support
+    must return typed unavailable/not-implemented
+    `DependencyEnvironmentResult` diagnostics rather than falling back to the
+    retired resolver path.
+  - Planned thin slices:
+    1. Add the dedicated crate and public service API around validated request
+       and result DTOs, including the validated result wrapper or service-owned
+       constructors.
+    2. Add a no-I/O/null implementation or fake provider for contract tests
+       proving validation, result invariants, diagnostics, no path-shaped
+       fields, and no dependency on legacy resolver crates.
+    3. Wire workflow-service dependency action handling to call the service
+       from a lock-free snapshot after canonical request derivation, rejecting
+       stale graph revisions/session ids before publishing result state.
+    4. Delete or replace active dependency-environment execution through
+       node-engine/embedded-runtime `ModelDependencyRequest`; do not add a
+       compatibility adapter.
+    5. Remove Tauri model-dependency command usage from the
+       dependency-environment action path and verify the frontend sends only
+       descriptor action intents.
+    6. Feed scheduler dependency readiness/admission from canonical dependency
+       results rather than graph-authored dependency-environment outputs.
+- 2026-05-26 Milestone 5d dependency-environment service owner blast-radius
+  tightening:
+  - Findings accepted: the service-owner plan is directionally correct, but
+    implementation needs explicit standards gates for lock handling, result
+    validation, crate dependencies, legacy deletion, scheduler admission shape,
+    and lifecycle ownership.
+  - Service API rule: `pantograph-dependency-environment-service` must expose a
+    narrow boundary over `pantograph-dependency-planning` DTOs and provider
+    traits only. It must not depend on workflow-service, node-engine,
+    embedded-runtime, Tauri, frontend DTOs, or graph display state. Keep pure
+    validation/projection synchronous; async is allowed only at concrete
+    provider methods that perform Pumas calls, installs, file inspection,
+    process spawning, or other I/O.
+  - Result contract rule: add a validated dependency-environment result
+    boundary before production callers trust service output. This may be a
+    `ValidatedDependencyEnvironmentResult` wrapper or service-owned
+    constructors, but it must enforce ready identity/proof fields,
+    operation/status compatibility, unique selected binding identifiers,
+    explicit unavailable/not-implemented diagnostics, and absence of
+    path-shaped values.
+  - Workflow-service rule: dependency-environment action handling must snapshot
+    graph/session state under lock, derive the validated request from that
+    snapshot, release locks before service/provider work, then reacquire only
+    to publish the result when the graph revision/session id still matches. Do
+    not await Pumas, install, file, or service work while holding validation or
+    session locks.
+  - Legacy deletion rule: retire frontend request-building helpers that gather
+    `modelPath`, backend keys, platform context, package facts, or
+    graph-authored requirements for dependency-environment actions. Remove
+    dependency-environment execution through embedded-runtime/node-engine
+    `ModelDependencyRequest` rather than wrapping it, and verify no
+    dependency-environment action path calls Tauri model-dependency commands.
+  - Scheduler/lifecycle rule: scheduler readiness must consume a canonical
+    dependency readiness/admission proof derived from validated dependency
+    results, not graph node outputs or frontend display state. Dependency
+    resolve/check/install lifecycle state, status caches, operation
+    de-duplication, and install locks belong to the service or its concrete
+    provider; Tauri remains transport-only.
+  - Composition-root rule: feature/domain modules may depend on the service
+    facade and provider traits, but they must not create concrete Pumas,
+    process, filesystem, runtime, or install-provider infrastructure ad hoc.
+    Concrete providers are selected and wired at the backend composition
+    boundary, with fake/null providers swapped there for tests.
+- 2026-05-26 Milestone 5d dependency-environment service owner standards
+  iteration:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `DOCUMENTATION-STANDARDS.md`,
+    `TESTING-STANDARDS.md`, `DEPENDENCY-STANDARDS.md`,
+    `CONCURRENCY-STANDARDS.md`, `languages/rust/RUST-API-STANDARDS.md`,
+    `languages/rust/RUST-ASYNC-STANDARDS.md`, and
+    `languages/rust/RUST-DEPENDENCY-STANDARDS.md`.
+  - Rust API gate added: public service APIs must use typed request/result,
+    operation, status, diagnostic, and identity contracts instead of raw
+    strings or path-shaped primitives. Public fallible library APIs must return
+    structured error enums, not `Result<T, String>` or `anyhow`, and must avoid
+    `unwrap`/`expect` in request, lifecycle, and provider paths. Extensible
+    public enums/structs should be `#[non_exhaustive]`; validated values and
+    builders should be `#[must_use]`; validation-required constructors stay
+    private.
+  - Dependency gate added: new dependencies require Cargo tree inspection,
+    narrow owner declaration in the crate that directly uses them, `std` or
+    existing workspace dependency reuse for small behavior, and feature gates or
+    written justification for heavy/platform-specific provider dependencies.
+    The service crate must not pull in broad runtime/framework dependencies to
+    expose the core contract.
+  - Documentation gate added: the new crate needs crate-level Rust docs and
+    README/module README coverage for every new `src/` directory, including
+    purpose, invariants, API consumer contract, lifecycle/error semantics,
+    rejected alternatives, and revisit triggers. Existing source directories
+    touched by the slice must update their README or record ADR/plan
+    traceability.
+  - Verification gate added: slices need public-API tests for validated
+    request/result construction and typed diagnostics, plus a thin vertical
+    slice proving workflow-service derives the request, calls the fake/null
+    service without holding graph/session locks, rejects stale graph
+    revisions/session ids, and publishes only backend-owned display/status
+    state. Tests touching caches, install locks, temp files, or process-global
+    state must isolate durable resources or serialize with a documented guard.
+    Source-search checks must prove retired path-shaped fields and commands are
+    absent from the dependency-environment action path.
+  - Background-work gate added: the service crate must not create a global
+    async runtime or spawn detached tasks. Future provider installs, polling,
+    retries, or subprocess supervision require an explicit lifecycle owner with
+    cancellation, tracked task handles, shutdown behavior, idempotency/overlap
+    rules, and lifecycle-owner tracing.
 
 ### Traceability Links
 
