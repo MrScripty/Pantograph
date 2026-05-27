@@ -2,9 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use pantograph_dependency_planning::{DependencyBindingId, DependencyOverridePatchV1};
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
-    ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
+    InferenceDiagnosticCode, InferenceDiagnosticSeverity, InferenceInterfaceDiagnostic,
+    InferencePortId, ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
 };
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -221,6 +223,10 @@ impl GraphSessionStore {
             &state.graph,
             &intent.as_intent().target_node_id,
         );
+        let sidecar_choices = dependency_environment_sidecar_choices(
+            &state.graph,
+            intent.as_intent().target_node_id.as_str(),
+        );
         drop(state);
 
         Ok(self
@@ -230,6 +236,9 @@ impl GraphSessionStore {
                     intent,
                     current_graph_revision,
                     subject,
+                    selected_binding_ids: sidecar_choices.selected_binding_ids,
+                    dependency_override_patches: sidecar_choices.dependency_override_patches,
+                    sidecar_diagnostic: sidecar_choices.diagnostic,
                 },
             )
             .await)
@@ -514,6 +523,83 @@ impl GraphSessionStore {
         }
         count
     }
+}
+
+#[derive(Debug, Default)]
+struct DependencyEnvironmentSidecarChoices {
+    selected_binding_ids: Vec<DependencyBindingId>,
+    dependency_override_patches: Vec<DependencyOverridePatchV1>,
+    diagnostic: Option<InferenceInterfaceDiagnostic>,
+}
+
+fn dependency_environment_sidecar_choices(
+    graph: &WorkflowGraph,
+    target_node_id: &str,
+) -> DependencyEnvironmentSidecarChoices {
+    let Some(node) = graph.nodes.iter().find(|node| node.id == target_node_id) else {
+        return DependencyEnvironmentSidecarChoices::default();
+    };
+
+    let selected_binding_ids = match parse_optional_sidecar_field::<Vec<DependencyBindingId>>(
+        &node.data,
+        "selected_binding_ids",
+    ) {
+        Ok(value) => value.unwrap_or_default(),
+        Err(diagnostic) => {
+            return DependencyEnvironmentSidecarChoices {
+                diagnostic: Some(diagnostic),
+                ..Default::default()
+            };
+        }
+    };
+    let dependency_override_patches = match parse_optional_sidecar_field::<
+        Vec<DependencyOverridePatchV1>,
+    >(&node.data, "manual_overrides")
+    {
+        Ok(value) => value.unwrap_or_default(),
+        Err(diagnostic) => {
+            return DependencyEnvironmentSidecarChoices {
+                selected_binding_ids,
+                diagnostic: Some(diagnostic),
+                ..Default::default()
+            };
+        }
+    };
+
+    DependencyEnvironmentSidecarChoices {
+        selected_binding_ids,
+        dependency_override_patches,
+        diagnostic: None,
+    }
+}
+
+fn parse_optional_sidecar_field<T>(
+    data: &serde_json::Value,
+    field: &'static str,
+) -> Result<Option<T>, InferenceInterfaceDiagnostic>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let Some(value) = data.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value(value.clone())
+        .map(Some)
+        .map_err(|error| {
+            InferenceInterfaceDiagnostic {
+                severity: InferenceDiagnosticSeverity::Error,
+                code: InferenceDiagnosticCode::InvalidOption,
+                message: format!("Dependency environment field `{field}` is invalid: {error}"),
+                hint: Some(
+                    "Use the dependency-environment node's typed sidecar fields for dependency choices."
+                        .to_string(),
+                ),
+                port_id: InferencePortId::parse(field).ok(),
+            }
+        })
 }
 
 #[cfg(test)]

@@ -777,6 +777,29 @@ defining an image-only inference-node interface.
         producer, parse sidecar JSON once into typed dependency-planning values,
         recheck graph revision/session before storing the proof, and keep
         `Check`/`Install` fail-closed until a current proof exists.
+      - Workflow-service `Resolve` producer wiring slice completed on
+        2026-05-26: dependency-environment action intent resolution now
+        snapshots the target sidecar node under the graph lock, parses
+        `selected_binding_ids` and `manual_overrides` once into
+        dependency-planning typed values, releases graph state, and lets the
+        current validation-state owner call the dependency-planning producer to
+        create the proof for `Resolve`. `Check` and `Install` remain
+        fail-closed until a current proof exists; after `Resolve` stores the
+        proof, `Check` can become request-ready for the same graph revision and
+        validation session. Malformed sidecar choices return typed
+        `InvalidOption` diagnostics instead of transport errors or fallback
+        defaults. The stored proof now preserves
+        `DependencyPlanningDiagnostic` rows, keeping conversion to
+        `InferenceInterfaceDiagnostic` at graph/action response boundaries.
+        Verification passed: `cargo fmt`; `cargo test -p
+        pantograph-workflow-service dependency_environment_action_intent`;
+        `cargo test -p pantograph-workflow-service inference_validation_state`;
+        `cargo check -p pantograph-workflow-service`. Existing warning:
+        `set_active_run_execution_plan` remains unused and unrelated to this
+        slice. Remaining follow-up: derive the canonical
+        `DependencyEnvironmentRequest` only after the producer proof, current
+        executable descriptor summary, sidecar-authored choices, and
+        dependency-planning identity agree.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

@@ -285,7 +285,31 @@ async fn publish_inference_validation_session_records_current_summary() {
     );
     assert!(publication.validation_session.summary.executable);
 
-    let result = store
+    let missing_check = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: Some(
+                "validation.session.2"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Check,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        missing_check.diagnostics[0].code,
+        InferenceDiagnosticCode::DependencyRequirementsMissing
+    );
+
+    let resolved = store
         .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
             contract_version: 1,
             graph_session_id: session.session_id.parse().expect("valid graph session id"),
@@ -305,8 +329,32 @@ async fn publish_inference_validation_session_records_current_summary() {
         .expect("intent resolution should return typed result");
 
     assert_eq!(
-        result.diagnostics[0].code,
-        InferenceDiagnosticCode::DependencyRequirementsMissing
+        resolved.status,
+        DependencyEnvironmentActionIntentStatus::RequestReady
+    );
+
+    let ready_check = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: Some(
+                "validation.session.2"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Check,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        ready_check.status,
+        DependencyEnvironmentActionIntentStatus::RequestReady
     );
 
     let projections = store
@@ -388,6 +436,68 @@ async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
     assert_eq!(
         result.diagnostics[0].code,
         InferenceDiagnosticCode::GraphRevisionMismatch
+    );
+}
+
+#[tokio::test]
+async fn dependency_environment_action_intent_blocks_invalid_sidecar_choices() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let mut graph = dependency_inference_graph();
+    graph
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "dep-env")
+        .expect("dependency environment node exists")
+        .data = serde_json::json!({
+        "selected_binding_ids": "binding-a"
+    });
+    let session = store.create_session(graph, None).await;
+    store
+        .publish_inference_validation_session(
+            &session.session_id,
+            DraftGraphValidationSessionId::parse("validation.session.2")
+                .expect("valid validation session id"),
+        )
+        .await
+        .expect("publish inference validation session");
+
+    let result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: Some(
+                "validation.session.2"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::InvalidOption
+    );
+    assert_eq!(
+        result.diagnostics[0]
+            .port_id
+            .as_ref()
+            .map(|port_id| port_id.as_str()),
+        Some("selected_binding_ids")
     );
 }
 

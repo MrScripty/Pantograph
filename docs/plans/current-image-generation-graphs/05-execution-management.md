@@ -13134,6 +13134,32 @@ Worker rules:
     proof, map diagnostics only at response boundaries, and recheck graph
     revision plus validation session before storing the proof. `Check` and
     `Install` remain fail-closed until that current proof exists.
+- 2026-05-26 Milestone 5d workflow-service Resolve proof wiring slice:
+  - Slice: connect dependency-environment `Resolve` action intent handling to
+    the dependency-planning producer while keeping dependency-environment
+    `Check` and `Install` fail-closed until a current proof exists.
+  - Allowed write set used: workflow-service graph session/state/tests/README
+    plus plan ledger files.
+  - No-fallback/no-legacy result: workflow-service snapshots sidecar-authored
+    selected bindings and manual override patches, parses them once into
+    dependency-planning typed values, and delegates requirements identity to
+    `pantograph-dependency-planning`. It does not synthesize requirements ids,
+    call Pumas, inspect files, pass raw JSON through the producer boundary, use
+    frontend/Tauri state as authority, or route through scheduler DTOs.
+  - Behavior: `Resolve` can create the current proof for the associated
+    inference node and returns `RequestReady`; `Check` remains blocked before
+    proof creation and becomes `RequestReady` after the proof exists for the
+    same graph revision/validation session. Malformed sidecar choices return
+    typed `InvalidOption` diagnostics.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service dependency_environment_action_intent`; `cargo
+    test -p pantograph-workflow-service inference_validation_state`; `cargo
+    check -p pantograph-workflow-service`.
+  - Existing unrelated warning: `set_active_run_execution_plan` remains unused
+    in `pantograph-workflow-service`.
+  - Remaining follow-up: derive canonical `DependencyEnvironmentRequest` after
+    producer proof, current executable descriptor summary, sidecar-authored
+    choices, and dependency-planning identity agree.
 
 ### Traceability Links
 
