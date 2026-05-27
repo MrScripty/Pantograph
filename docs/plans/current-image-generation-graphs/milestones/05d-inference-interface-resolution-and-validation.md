@@ -443,6 +443,107 @@ defining an image-only inference-node interface.
     `WorkflowTechnicalFitDependencyReadinessFact`, reduced execution-plan
     dependency readiness, graph node data, or Tauri/frontend payloads into a
     fake `DependencyPreflightResult`.
+- [x] 2026-05-26 production readiness-proof caller design selected:
+  - Decision: use option 3 as the authoritative execution design: a
+    scheduler-owned dependency-readiness lifecycle after queue admission. Queue
+    admission creates runtime inference tasks in `WaitingDependencyReadiness`
+    and records the task correlation needed by the lifecycle; it does not treat
+    editor validation, executable validation publication, technical-fit facts,
+    or reduced execution-plan facts as execution proof.
+  - Backend ownership: workflow-service owns the lifecycle that builds typed
+    readiness requests, invokes the dependency-readiness provider, and applies
+    the resulting proof to scheduler task state. Tauri, frontend graph editor,
+    node-engine execution, runtime adapters, and runtime hosts must not own this
+    proof-producing path.
+  - Required request shape: introduce or extend a path-free
+    `DependencyReadinessRequest` built from `PumasModelRef`, task kind or
+    `DependencyTaskId`, selected binding ids, scheduler intent
+    (runtime/device hard constraints, trait settings, and override patches),
+    current validation snapshot/session identity, graph revision, workflow
+    run/session/task ids, scheduler task id, correlation id, and environment
+    identity. Do not include graph-authored local paths or load targets.
+  - Required response handling: the lifecycle consumes
+    `DependencyPreflightResult` and calls the existing
+    `apply_runtime_dependency_readiness_admission` bridge. Ready proof moves the
+    task to `Ready` and makes it eligible for dispatch selection. Deferred,
+    retryable-failed, and terminal-failed proof states remain typed scheduler
+    task states with diagnostics; they must not be converted into fallback
+    runtime attempts.
+  - Freshness and idempotency: reject stale proof when graph revision,
+    validation session/snapshot, workflow run id, scheduler task id, model ref,
+    task kind, selected bindings, scheduler intent, dependency requirements,
+    dependency environment, or dependency-planning identity do not match the
+    admitted task. The lifecycle must be idempotent for retries and restarts,
+    and concurrent users/runs are isolated by run/session/task identity.
+  - Projection separation: `WorkflowTechnicalFitDependencyReadinessFact` and
+    `WorkflowExecutionPlanNodeDecision.dependency_readiness` remain
+    diagnostic/inspection/UX preview projections only. They may explain why a
+    graph is likely valid or invalid, but they cannot be synthesized into
+    `DependencyPreflightResult` or used to bypass the readiness lifecycle.
+  - Implementation sequence: first add the workflow-service readiness lifecycle
+    contract and focused tests with stubbed dependency-readiness provider output;
+    next build the request from admitted scheduler task graph plus validation
+    summary identity; then persist or correlate the proof with active task
+    state; then use ready scheduler tasks as the only source for runtime-host
+    dispatch candidates.
+  - Later objective: option 4 remains the graph-editor UX target for live
+    preview/readiness display, but it is additive. Preview validation can run
+    before queue admission without blocking editing; authoritative execution
+    readiness proof is still produced only by this scheduler-owned lifecycle.
+- [x] 2026-05-26 production readiness lifecycle standards iteration:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`,
+    `CODING-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+    `CONCURRENCY-STANDARDS.md`, `TESTING-STANDARDS.md`,
+    `DOCUMENTATION-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-ASYNC-STANDARDS.md`.
+  - Lifecycle tightening: the first implementation slice must introduce a named
+    workflow-service readiness lifecycle owner with explicit start/stop,
+    cancellation, retry, restart, and cleanup behavior. If the lifecycle
+    spawns work, it must track task handles, propagate cancellation, await or
+    abort on shutdown, log panics/cancellation at the owner, and prevent
+    overlapping runs from applying stale proof. Do not create global Tokio
+    runtimes, detached tasks, blocking async paths, or locks held across
+    `.await`.
+  - Contract placement tightening: `DependencyReadinessRequest`,
+    readiness-proof ids, task/run/session/correlation ids, readiness policies,
+    and proof-state enums must live in `pantograph-dependency-planning` or an
+    existing dedicated shared contract crate when they cross crate boundaries.
+    Workflow-service may own orchestration and lifecycle state, but it must not
+    become the shared DTO owner. Raw graph/IPC/store values must parse once into
+    validated newtypes/enums with specific error types; public APIs must not use
+    raw strings, unbranded numeric revisions, `serde_json::Value`, path-shaped
+    primitives, boolean mode flags, or `Result<T, String>` for this boundary.
+  - Sync-core/async-shell tightening: readiness policy, freshness comparison,
+    task-state transition selection, and proof validation should be synchronous
+    pure code with focused unit tests. Async is limited to provider I/O,
+    durable store access, runtime-host dispatch selection, and lifecycle
+    orchestration, with cancellation and tracing spans carrying run/session/task
+    correlation.
+  - Verification tightening: before runtime-host dispatch is wired, add the
+    thinnest cross-layer acceptance test that starts from an admitted runtime
+    inference task, builds the typed readiness request, receives a provider
+    `DependencyPreflightResult`, applies scheduler readiness admission, and
+    exposes only `Ready` scheduler tasks as dispatch candidates. Add focused
+    tests for stale graph revision, stale validation session, mismatched
+    scheduler task id, mismatched model ref, duplicate/replayed proof,
+    concurrent workflow runs, deferred proof, retryable failure, and terminal
+    failure. Tests touching durable stores, temp roots, runtime registries, or
+    dependency caches must isolate state per test or document a serialization
+    guard.
+  - Documentation/deletion gate: every source slice must update the touched
+    source README or a linked ADR with the lifecycle owner, API consumer
+    contract, error/retry/idempotency behavior, rejected alternatives, and
+    revisit triggers. A slice that replaces a legacy readiness or preflight
+    success path must delete or fail-close that old path in the same commit;
+    do not leave compatibility shims, successful path-shaped fixtures, or
+    adapter branches for later cleanup.
+  - Blast-radius result: with the lifecycle, contract-placement, verification,
+    and documentation gates above, option 3 stays standards-compliant and
+    preserves the intended separation: graph editor and node-engine can display
+    or validate preview facts, scheduler/workflow-service owns execution
+    readiness, and runtime hosts receive only scheduler-approved handoff facts.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

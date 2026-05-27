@@ -13601,6 +13601,69 @@ Worker rules:
     `DependencyPreflightResult` from technical-fit facts, reduced execution
     plans, graph node data, Tauri/frontend payloads, `ModelDependencyRequest`,
     `ModelRefV2`, or local paths.
+- 2026-05-26 Milestone 5d production readiness-proof caller design selected:
+  - Decision: use option 3 as the authoritative execution design: a
+    scheduler-owned dependency-readiness lifecycle after queue admission. Queue
+    admission creates runtime inference tasks in `WaitingDependencyReadiness`
+    and records correlation/freshness identity, but editor validation,
+    executable validation publication, technical-fit facts, and reduced
+    execution-plan facts are not execution proof.
+  - Workflow-service owns the backend lifecycle that builds a typed, path-free
+    `DependencyReadinessRequest` from `PumasModelRef`, task kind or
+    `DependencyTaskId`, selected binding ids, scheduler intent, validation
+    snapshot/session identity, graph revision, workflow run/session/task ids,
+    scheduler task id, correlation id, and environment identity. Tauri,
+    frontend graph editor, node-engine execution, runtime adapters, and runtime
+    hosts do not own proof production.
+  - The lifecycle consumes `DependencyPreflightResult`, applies
+    `apply_runtime_dependency_readiness_admission`, and lets only `Ready`
+    scheduler tasks enter runtime-host dispatch selection. Deferred,
+    retryable-failed, and terminal-failed dependency states remain typed
+    scheduler task states with diagnostics and never trigger fallback runtime
+    attempts.
+  - Freshness and idempotency are mandatory: stale proof is rejected when graph
+    revision, validation snapshot/session, workflow run id, scheduler task id,
+    model ref, task kind, selected bindings, scheduler intent, dependency
+    requirements, dependency environment, or dependency-planning identity does
+    not match the admitted task. Retries/restarts reuse the same identity model,
+    and concurrent users/runs stay isolated by run/session/task identity.
+  - Technical-fit and execution-plan dependency-readiness fields remain
+    diagnostic/inspection/UX preview projections only. Option 4 remains the
+    later graph-editor preview target, but the production execution path must
+    still obtain proof from the scheduler-owned readiness lifecycle.
+  - Next implementation slices: add the workflow-service readiness lifecycle
+    contract with provider-stub tests; build the request from admitted scheduler
+    task graph plus validation summary identity; correlate or persist proof on
+    active task state; then feed only ready scheduler tasks to runtime-host
+    dispatch candidates.
+- 2026-05-26 Milestone 5d production readiness lifecycle standards iteration:
+  - Standards reviewed: plan, coding, architecture, concurrency, testing,
+    documentation, Rust API, and Rust async standards from
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`.
+  - Plan update completed: the selected option 3 lifecycle now requires a named
+    workflow-service owner with explicit start/stop, cancellation, retry,
+    restart, cleanup, tracked spawned tasks when any exist, no global Tokio
+    runtime, no detached tasks, no blocking async paths, and no locks held
+    across `.await`.
+  - Contract boundary tightened: shared readiness request/proof ids, policies,
+    states, and validated identity fields must live in
+    `pantograph-dependency-planning` or another dedicated shared contract crate
+    when they cross crates. Workflow-service owns orchestration, not shared DTO
+    authority. Boundary parsing must use validated newtypes/enums and specific
+    errors, not raw strings, unbranded revisions, JSON maps, path-shaped
+    primitives, boolean mode flags, or `Result<T, String>`.
+  - Verification tightened: the next production slice needs a full-path
+    acceptance test from admitted runtime inference task to typed readiness
+    request, provider `DependencyPreflightResult`, scheduler readiness
+    admission, and ready-only runtime-host dispatch candidate exposure. Focused
+    tests must cover stale graph/validation/task/model identity, replayed
+    proof, concurrent runs, deferred proof, retryable failure, and terminal
+    failure, with durable test resources isolated per test or deliberately
+    serialized.
+  - Documentation/deletion gate: source slices must update touched READMEs or a
+    linked ADR with lifecycle/API/error/idempotency behavior and must delete or
+    fail-close replaced legacy readiness/preflight success paths in the same
+    commit instead of leaving compatibility shims.
 
 ### Traceability Links
 
