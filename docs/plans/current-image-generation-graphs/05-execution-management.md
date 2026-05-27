@@ -13355,6 +13355,43 @@ Worker rules:
     call the service from a lock-free workflow-service snapshot, reject stale
     graph revisions/session ids before publishing, and keep the action response
     as an intent response while full dependency results stay backend-owned.
+- 2026-05-26 Milestone 5d workflow-service dependency-environment service
+  wiring slice:
+  - Smallest useful vertical slice: wire graph-session dependency-environment
+    action handling to the canonical dependency-environment service with a
+    no-I/O provider, while keeping graph/session state snapshotting separate
+    from service/provider calls.
+  - Allowed write set: `crates/pantograph-workflow-service/Cargo.toml`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    provider sharing support in `pantograph-dependency-environment-service`,
+    and this plan.
+  - No-fallback/no-legacy result: workflow-service now calls the canonical
+    dependency-environment service after validated request derivation and does
+    not route action handling through Tauri model-dependency commands,
+    node-engine dependency execution, embedded-runtime dependency execution,
+    `ModelDependencyRequest`, model paths, or local load paths.
+  - Implementation completed: added an injectable dependency-environment
+    service to `GraphSessionStore`, split validation-state action handling into
+    a request-returning handoff, called the service after the validation-state
+    method returns, mapped invalid provider output to typed blocked diagnostics,
+    made the old result-returning validation helper test-only, documented the
+    lock-free service boundary in the graph README, and added an invalid
+    provider test.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    dependency_environment_action_intent`; `cargo test -p
+    pantograph-dependency-environment-service`; `cargo fmt`; `git diff
+    --check` for touched implementation files; targeted source-search for
+    retired path-shaped fields and dependency command names in the touched
+    workflow-service action path.
+  - Existing unrelated warning: `set_active_run_execution_plan` remains unused
+    in workflow-service scheduler store.
+  - Remaining follow-up: add backend-owned dependency result projection if the
+    editor needs service result display state, then delete or replace active
+    dependency-environment execution through node-engine/embedded-runtime
+    `ModelDependencyRequest`.
 
 ### Traceability Links
 

@@ -7574,6 +7574,7 @@ dependencies = [
  "blake3",
  "chrono",
  "node-engine",
+ "pantograph-dependency-environment-service",
  "pantograph-dependency-planning",
  "pantograph-diagnostics-ledger",
  "pantograph-inference-interface-contracts",

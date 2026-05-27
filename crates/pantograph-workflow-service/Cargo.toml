@@ -33,6 +33,7 @@ pantograph-timing-contracts = { path = "../pantograph-timing-contracts" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
 pantograph-inference-interface-contracts = { path = "../pantograph-inference-interface-contracts" }
 pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
+pantograph-dependency-environment-service = { path = "../pantograph-dependency-environment-service" }
 pantograph-scheduler = { path = "../pantograph-scheduler" }
 pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }

@@ -15,6 +15,12 @@ use crate::{
     WorkflowGraphUpdateNodePositionRequest,
 };
 use async_trait::async_trait;
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentProvider, NotImplementedDependencyEnvironmentProvider,
+};
+use pantograph_dependency_planning::{
+    DependencyEnvironmentResult, ValidatedDependencyEnvironmentRequest,
+};
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
     DependencyEnvironmentActionIntentStatus, DraftGraphValidationSessionId,
@@ -376,6 +382,56 @@ async fn publish_inference_validation_session_records_current_summary() {
     };
     assert_eq!(projection.task_type.as_str(), "image_generation");
     assert_eq!(projection.model_ref.model_id, "image/example/tiny");
+}
+
+#[tokio::test]
+async fn dependency_environment_action_intent_blocks_invalid_service_output() {
+    let store = GraphSessionStore::with_timeout_and_providers(
+        std::time::Duration::from_secs(5 * 60),
+        Arc::new(StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        }),
+        Arc::new(InvalidDependencyEnvironmentProvider),
+    );
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .publish_inference_validation_session(
+            &session.session_id,
+            DraftGraphValidationSessionId::parse("validation.session.invalid.provider")
+                .expect("valid validation session id"),
+        )
+        .await
+        .expect("publish inference validation session");
+
+    let result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: Some(
+                "validation.session.invalid.provider"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::DependencySidecarDescriptorInvalid
+    );
 }
 
 #[tokio::test]
@@ -1114,4 +1170,32 @@ async fn connect_canonicalizes_llm_stream_drop_to_text_output_response_edge() {
             && edge.target == "output"
             && edge.target_handle == "stream"
     }));
+}
+
+#[derive(Debug, Clone, Copy)]
+struct InvalidDependencyEnvironmentProvider;
+
+impl DependencyEnvironmentProvider for InvalidDependencyEnvironmentProvider {
+    fn resolve(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        let mut result = NotImplementedDependencyEnvironmentProvider.resolve(request);
+        result.diagnostics.clear();
+        result
+    }
+
+    fn check(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        self.resolve(request)
+    }
+
+    fn install(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        self.resolve(request)
+    }
 }

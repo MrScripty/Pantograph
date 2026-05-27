@@ -5,6 +5,8 @@
 //! It does not inspect files, call Pumas directly, create runtimes, spawn
 //! background tasks, or adapt retired `ModelDependencyRequest` payloads.
 
+use std::sync::Arc;
+
 use pantograph_dependency_planning::{
     DependencyEnvironmentAction, DependencyEnvironmentFailureState,
     DependencyEnvironmentInstallState, DependencyEnvironmentOperation,
@@ -31,7 +33,7 @@ pub enum DependencyEnvironmentServiceError {
 /// validated canonical request. Concrete providers are wired by the backend
 /// composition root; this trait must not be implemented by graph editor,
 /// Tauri, node-engine, or embedded-runtime compatibility adapters.
-pub trait DependencyEnvironmentProvider {
+pub trait DependencyEnvironmentProvider: Send + Sync {
     fn resolve(
         &self,
         request: &ValidatedDependencyEnvironmentRequest,
@@ -45,6 +47,36 @@ pub trait DependencyEnvironmentProvider {
         request: &ValidatedDependencyEnvironmentRequest,
     ) -> DependencyEnvironmentResult;
 }
+
+impl<T> DependencyEnvironmentProvider for Arc<T>
+where
+    T: DependencyEnvironmentProvider + ?Sized,
+{
+    fn resolve(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        (**self).resolve(request)
+    }
+
+    fn check(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        (**self).check(request)
+    }
+
+    fn install(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        (**self).install(request)
+    }
+}
+
+pub type SharedDependencyEnvironmentProvider = Arc<dyn DependencyEnvironmentProvider>;
+pub type SharedDependencyEnvironmentService =
+    DependencyEnvironmentService<SharedDependencyEnvironmentProvider>;
 
 /// Canonical dependency-environment service facade.
 #[derive(Debug, Clone)]

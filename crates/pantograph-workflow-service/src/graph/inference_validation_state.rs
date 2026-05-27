@@ -165,13 +165,29 @@ impl CurrentInferenceValidationStateStore {
         Ok(proof)
     }
 
+    #[cfg(test)]
     pub(crate) async fn resolve_dependency_environment_action_intent(
         &self,
         request: DependencyEnvironmentActionIntentStateRequest,
     ) -> DependencyEnvironmentActionIntentResult {
+        match self
+            .resolve_dependency_environment_action_request(request)
+            .await
+        {
+            DependencyEnvironmentActionIntentStateResolution::Blocked(result) => result,
+            DependencyEnvironmentActionIntentStateResolution::RequestReady { intent, .. } => {
+                request_ready_dependency_environment_action_result(&intent)
+            }
+        }
+    }
+
+    pub(crate) async fn resolve_dependency_environment_action_request(
+        &self,
+        request: DependencyEnvironmentActionIntentStateRequest,
+    ) -> DependencyEnvironmentActionIntentStateResolution {
         let intent = request.intent.into_inner();
         if request.current_graph_revision != intent.graph_revision {
-            return blocked_dependency_environment_action_result(
+            return blocked_dependency_environment_action_resolution(
                 &intent,
                 InferenceDiagnosticCode::GraphRevisionMismatch,
                 "Dependency environment action was requested for a stale graph revision.",
@@ -181,7 +197,7 @@ impl CurrentInferenceValidationStateStore {
             );
         }
         if let Some(diagnostic) = request.sidecar_diagnostic {
-            return blocked_dependency_environment_action_result_from_diagnostic(
+            return blocked_dependency_environment_action_resolution_from_diagnostic(
                 &intent, diagnostic,
             );
         }
@@ -194,7 +210,11 @@ impl CurrentInferenceValidationStateStore {
                 code,
                 message,
                 hint,
-            } => return blocked_dependency_environment_action_result(&intent, code, message, hint),
+            } => {
+                return blocked_dependency_environment_action_resolution(
+                    &intent, code, message, hint,
+                );
+            }
         };
 
         let key = CurrentInferenceValidationStateKey {
@@ -203,7 +223,7 @@ impl CurrentInferenceValidationStateStore {
         };
         let mut summaries = self.summaries.write().await;
         let Some(record) = summaries.get_mut(&key) else {
-            return blocked_dependency_environment_action_result(
+            return blocked_dependency_environment_action_resolution(
                 &intent,
                 InferenceDiagnosticCode::ValidationSummaryMissing,
                 "Inference validation has not completed for this graph revision.",
@@ -218,7 +238,7 @@ impl CurrentInferenceValidationStateStore {
                 validation_session_id != &record.validation_session_id
             })
         {
-            return blocked_dependency_environment_action_result(
+            return blocked_dependency_environment_action_resolution(
                 &intent,
                 InferenceDiagnosticCode::DescriptorStale,
                 "Dependency environment action was requested for a stale validation session.",
@@ -229,7 +249,7 @@ impl CurrentInferenceValidationStateStore {
         }
 
         if !record.summary.executable {
-            return blocked_dependency_environment_action_result(
+            return blocked_dependency_environment_action_resolution(
                 &intent,
                 diagnostic_code_for_summary_status(record.summary.status),
                 "Inference validation summary is not executable for this graph revision.",
@@ -238,7 +258,7 @@ impl CurrentInferenceValidationStateStore {
         }
 
         if !record.nodes.contains_key(&inference_node_id) {
-            return blocked_dependency_environment_action_result(
+            return blocked_dependency_environment_action_resolution(
                 &intent,
                 InferenceDiagnosticCode::DependencySidecarDescriptorUnavailable,
                 "Associated inference node is missing current descriptor validation state.",
@@ -248,7 +268,7 @@ impl CurrentInferenceValidationStateStore {
 
         if let Some(node_record) = record.nodes.get_mut(&inference_node_id) {
             if !node_record.has_dependency_basis() {
-                return blocked_dependency_environment_action_result(
+                return blocked_dependency_environment_action_resolution(
                     &intent,
                     InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
                     "Associated inference validation state is incomplete for dependency derivation.",
@@ -270,10 +290,13 @@ impl CurrentInferenceValidationStateStore {
                         request.dependency_override_patches,
                         current_dependency_requirements_id,
                     ) {
-                        Ok(_environment_request) => {
-                            request_ready_dependency_environment_action_result(&intent)
+                        Ok(environment_request) => {
+                            request_ready_dependency_environment_action_resolution(
+                                intent,
+                                environment_request,
+                            )
                         }
-                        Err(error) => blocked_dependency_environment_action_result(
+                        Err(error) => blocked_dependency_environment_action_resolution(
                             &intent,
                             error.diagnostic_code(),
                             error.message(),
@@ -292,10 +315,13 @@ impl CurrentInferenceValidationStateStore {
                         request.dependency_override_patches,
                         None,
                     ) {
-                        Ok(_environment_request) => {
-                            request_ready_dependency_environment_action_result(&intent)
+                        Ok(environment_request) => {
+                            request_ready_dependency_environment_action_resolution(
+                                intent,
+                                environment_request,
+                            )
                         }
-                        Err(error) => blocked_dependency_environment_action_result(
+                        Err(error) => blocked_dependency_environment_action_resolution(
                             &intent,
                             error.diagnostic_code(),
                             error.message(),
@@ -304,7 +330,7 @@ impl CurrentInferenceValidationStateStore {
                     };
                 }
                 Err(CurrentDependencyRequirementsProofStateError::Missing) => {
-                    return blocked_dependency_environment_action_result(
+                    return blocked_dependency_environment_action_resolution(
                         &intent,
                         InferenceDiagnosticCode::DependencyRequirementsMissing,
                         "Dependency environment request derivation requires dependency requirements for this graph revision.",
@@ -312,7 +338,7 @@ impl CurrentInferenceValidationStateStore {
                     );
                 }
                 Err(CurrentDependencyRequirementsProofStateError::Stale) => {
-                    return blocked_dependency_environment_action_result(
+                    return blocked_dependency_environment_action_resolution(
                         &intent,
                         InferenceDiagnosticCode::DescriptorStale,
                         "Dependency requirements proof is stale for this graph revision or validation session.",
@@ -320,7 +346,7 @@ impl CurrentInferenceValidationStateStore {
                     );
                 }
                 Err(CurrentDependencyRequirementsProofStateError::Unavailable) => {
-                    return blocked_dependency_environment_action_result(
+                    return blocked_dependency_environment_action_resolution(
                         &intent,
                         InferenceDiagnosticCode::DependencySidecarDescriptorUnavailable,
                         "Dependency requirements proof is unavailable for this graph revision.",
@@ -328,7 +354,7 @@ impl CurrentInferenceValidationStateStore {
                     );
                 }
                 Err(CurrentDependencyRequirementsProofStateError::Invalid) => {
-                    return blocked_dependency_environment_action_result(
+                    return blocked_dependency_environment_action_resolution(
                         &intent,
                         InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
                         "Dependency requirements proof is invalid for dependency request derivation.",
@@ -338,7 +364,7 @@ impl CurrentInferenceValidationStateStore {
             }
         }
 
-        blocked_dependency_environment_action_result(
+        blocked_dependency_environment_action_resolution(
             &intent,
             InferenceDiagnosticCode::DependencyRequirementsMissing,
             "Dependency environment request derivation requires dependency requirements for this graph revision.",
@@ -415,6 +441,15 @@ pub(crate) struct DependencyEnvironmentActionIntentStateRequest {
     pub selected_binding_ids: Vec<DependencyBindingId>,
     pub dependency_override_patches: Vec<DependencyOverridePatchV1>,
     pub sidecar_diagnostic: Option<InferenceInterfaceDiagnostic>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum DependencyEnvironmentActionIntentStateResolution {
+    Blocked(DependencyEnvironmentActionIntentResult),
+    RequestReady {
+        intent: DependencyEnvironmentActionIntent,
+        environment_request: ValidatedDependencyEnvironmentRequest,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -971,6 +1006,37 @@ fn blocked_dependency_environment_action_result_from_diagnostic(
     }
 }
 
+fn blocked_dependency_environment_action_resolution(
+    intent: &DependencyEnvironmentActionIntent,
+    code: InferenceDiagnosticCode,
+    message: &str,
+    hint: Option<&str>,
+) -> DependencyEnvironmentActionIntentStateResolution {
+    DependencyEnvironmentActionIntentStateResolution::Blocked(
+        blocked_dependency_environment_action_result(intent, code, message, hint),
+    )
+}
+
+fn blocked_dependency_environment_action_resolution_from_diagnostic(
+    intent: &DependencyEnvironmentActionIntent,
+    diagnostic: InferenceInterfaceDiagnostic,
+) -> DependencyEnvironmentActionIntentStateResolution {
+    DependencyEnvironmentActionIntentStateResolution::Blocked(
+        blocked_dependency_environment_action_result_from_diagnostic(intent, diagnostic),
+    )
+}
+
+fn request_ready_dependency_environment_action_resolution(
+    intent: DependencyEnvironmentActionIntent,
+    environment_request: ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentActionIntentStateResolution {
+    DependencyEnvironmentActionIntentStateResolution::RequestReady {
+        intent,
+        environment_request,
+    }
+}
+
+#[cfg(test)]
 fn request_ready_dependency_environment_action_result(
     intent: &DependencyEnvironmentActionIntent,
 ) -> DependencyEnvironmentActionIntentResult {

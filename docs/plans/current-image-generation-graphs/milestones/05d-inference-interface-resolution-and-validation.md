@@ -990,6 +990,39 @@ defining an image-only inference-node interface.
         service. That remains the next vertical slice so lock-free snapshotting,
         stale revision/session rejection, and backend-owned display projection
         can be tested at the workflow-service boundary.
+      - Workflow-service dependency-environment service wiring slice completed
+        on 2026-05-26: `GraphSessionStore` now owns an injectable canonical
+        dependency-environment service facade, derives the validated
+        dependency-environment request from current validation state, releases
+        graph/session and validation-state locks, then calls the service and
+        returns an action-intent result. Invalid provider output is mapped to a
+        typed blocked diagnostic; valid service output keeps the action response
+        as `RequestReady` while full dependency-environment result ownership
+        remains backend-side.
+      - Files touched by the slice:
+        `crates/pantograph-workflow-service/Cargo.toml`,
+        `crates/pantograph-workflow-service/src/graph/session.rs`,
+        `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+        `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+        `crates/pantograph-workflow-service/src/graph/README.md`, and the
+        service crate provider trait to support shared injected providers.
+      - No-fallback/no-legacy result: workflow-service calls the canonical
+        service only after request derivation and does not call Tauri
+        model-dependency commands, node-engine dependency execution, embedded
+        runtime dependency execution, `ModelDependencyRequest`, model paths, or
+        local load paths.
+      - Verification passed: `cargo test -p pantograph-workflow-service
+        dependency_environment_action_intent`; `cargo test -p
+        pantograph-dependency-environment-service`; `cargo fmt`; `git diff
+        --check` for touched implementation files; targeted source-search for
+        retired path-shaped fields and dependency command names in the touched
+        workflow-service action path. Existing unrelated warning remains:
+        `set_active_run_execution_plan` is unused in workflow-service scheduler
+        store.
+      - Remaining follow-up: persist/project backend-owned dependency result
+        display/status state if the graph editor needs to show more than action
+        intent readiness, then delete or replace active dependency-environment
+        execution through node-engine/embedded-runtime `ModelDependencyRequest`.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

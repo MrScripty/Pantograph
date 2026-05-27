@@ -82,7 +82,10 @@ Dependency-environment action handling derives and validates the canonical
 `DependencyEnvironmentRequest` from current backend validation state before it
 reports `RequestReady`. The derived request is not supplied by frontend or
 Tauri callers; `Check` and `Install` also require the current sidecar choices
-to match the stored dependency requirements proof.
+to match the stored dependency requirements proof. Workflow-service then passes
+the validated request to the canonical dependency-environment service outside
+the graph/session lock; the graph action response remains an intent response
+while full dependency-environment results stay backend-owned.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.
@@ -218,6 +221,9 @@ to match the stored dependency requirements proof.
 - Inference-interface projection is also workflow-service owned. Minimal
   authored snapshots are projected from validated descriptors, and draft
   validation summaries are derived from descriptor availability and diagnostics.
+- Dependency-environment service calls happen after graph/session state has
+  been snapshotted and released. Provider output is accepted only after the
+  canonical dependency-environment service validates the result contract.
   Frontend submit state and backend admission must consume the typed summary
   instead of inferring enqueue permission from raw diagnostics.
 - Synchronous inference-validation publication is workflow-service owned. It

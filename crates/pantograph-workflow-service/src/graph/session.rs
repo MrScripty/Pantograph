@@ -2,11 +2,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentService, NotImplementedDependencyEnvironmentProvider,
+    SharedDependencyEnvironmentProvider, SharedDependencyEnvironmentService,
+};
 use pantograph_dependency_planning::{DependencyBindingId, DependencyOverridePatchV1};
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
-    InferenceDiagnosticCode, InferenceDiagnosticSeverity, InferenceInterfaceDiagnostic,
-    InferencePortId, ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
+    DependencyEnvironmentActionIntentStatus, InferenceDiagnosticCode, InferenceDiagnosticSeverity,
+    InferenceInterfaceDiagnostic, InferencePortId, ValidatedDependencyEnvironmentActionIntent,
+    WorkflowGraphRevision,
 };
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -24,6 +29,7 @@ use super::inference_interface_facts::{
 };
 use super::inference_validation_state::{
     CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
+    DependencyEnvironmentActionIntentStateResolution,
 };
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::session_contract::WorkflowGraphEditSessionGraphResponse;
@@ -63,11 +69,11 @@ fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]
         .collect()
 }
 
-#[derive(Debug)]
 pub struct GraphSessionStore {
     sessions: RwLock<HashMap<String, GraphSessionHandle>>,
     validation_state: CurrentInferenceValidationStateStore,
     inference_interface_facts_provider: Arc<dyn InferenceInterfaceFactsProvider>,
+    dependency_environment_service: SharedDependencyEnvironmentService,
     stale_timeout: Duration,
 }
 
@@ -98,14 +104,35 @@ impl GraphSessionStore {
         )
     }
 
+    pub fn with_dependency_environment_provider(
+        provider: SharedDependencyEnvironmentProvider,
+    ) -> Self {
+        Self::with_timeout_and_providers(
+            Duration::from_secs(5 * 60),
+            Arc::new(UnavailableInferenceInterfaceFactsProvider),
+            provider,
+        )
+    }
+
     pub fn with_timeout_and_inference_interface_facts_provider(
         timeout: Duration,
         provider: Arc<dyn InferenceInterfaceFactsProvider>,
     ) -> Self {
+        let dependency_provider: SharedDependencyEnvironmentProvider =
+            Arc::new(NotImplementedDependencyEnvironmentProvider);
+        Self::with_timeout_and_providers(timeout, provider, dependency_provider)
+    }
+
+    pub fn with_timeout_and_providers(
+        timeout: Duration,
+        inference_provider: Arc<dyn InferenceInterfaceFactsProvider>,
+        dependency_provider: SharedDependencyEnvironmentProvider,
+    ) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
             validation_state: CurrentInferenceValidationStateStore::new(),
-            inference_interface_facts_provider: provider,
+            inference_interface_facts_provider: inference_provider,
+            dependency_environment_service: DependencyEnvironmentService::new(dependency_provider),
             stale_timeout: timeout,
         }
     }
@@ -229,9 +256,9 @@ impl GraphSessionStore {
         );
         drop(state);
 
-        Ok(self
+        let resolution = self
             .validation_state
-            .resolve_dependency_environment_action_intent(
+            .resolve_dependency_environment_action_request(
                 DependencyEnvironmentActionIntentStateRequest {
                     intent,
                     current_graph_revision,
@@ -241,7 +268,28 @@ impl GraphSessionStore {
                     sidecar_diagnostic: sidecar_choices.diagnostic,
                 },
             )
-            .await)
+            .await;
+
+        let (intent, environment_request) = match resolution {
+            DependencyEnvironmentActionIntentStateResolution::Blocked(result) => return Ok(result),
+            DependencyEnvironmentActionIntentStateResolution::RequestReady {
+                intent,
+                environment_request,
+            } => (intent, environment_request),
+        };
+
+        match self
+            .dependency_environment_service
+            .handle(&environment_request)
+        {
+            Ok(_result) => Ok(request_ready_dependency_environment_action_result(&intent)),
+            Err(error) => Ok(blocked_dependency_environment_action_result(
+                &intent,
+                InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
+                "Dependency environment service rejected provider output.",
+                Some(error.to_string()),
+            )),
+        }
     }
 
     pub async fn mark_running(
@@ -530,6 +578,45 @@ struct DependencyEnvironmentSidecarChoices {
     selected_binding_ids: Vec<DependencyBindingId>,
     dependency_override_patches: Vec<DependencyOverridePatchV1>,
     diagnostic: Option<InferenceInterfaceDiagnostic>,
+}
+
+fn request_ready_dependency_environment_action_result(
+    intent: &DependencyEnvironmentActionIntent,
+) -> DependencyEnvironmentActionIntentResult {
+    DependencyEnvironmentActionIntentResult {
+        contract_version: intent.contract_version,
+        graph_session_id: intent.graph_session_id.clone(),
+        graph_revision: intent.graph_revision.clone(),
+        validation_session_id: intent.validation_session_id.clone(),
+        target_node_id: intent.target_node_id.clone(),
+        action: intent.action,
+        status: DependencyEnvironmentActionIntentStatus::RequestReady,
+        diagnostics: Vec::new(),
+    }
+}
+
+fn blocked_dependency_environment_action_result(
+    intent: &DependencyEnvironmentActionIntent,
+    code: InferenceDiagnosticCode,
+    message: &str,
+    hint: Option<String>,
+) -> DependencyEnvironmentActionIntentResult {
+    DependencyEnvironmentActionIntentResult {
+        contract_version: intent.contract_version,
+        graph_session_id: intent.graph_session_id.clone(),
+        graph_revision: intent.graph_revision.clone(),
+        validation_session_id: intent.validation_session_id.clone(),
+        target_node_id: intent.target_node_id.clone(),
+        action: intent.action,
+        status: DependencyEnvironmentActionIntentStatus::Blocked,
+        diagnostics: vec![InferenceInterfaceDiagnostic {
+            severity: InferenceDiagnosticSeverity::Error,
+            code,
+            message: message.to_string(),
+            hint,
+            port_id: None,
+        }],
+    }
 }
 
 fn dependency_environment_sidecar_choices(
