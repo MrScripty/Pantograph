@@ -39,6 +39,7 @@ pub(crate) fn build_dependency_planning_request(
         platform_context,
         selected_binding_ids,
         dependency_override_patches: Vec::new(),
+        trait_intents: Vec::new(),
         caller_context,
     };
     request.validate().map_err(|error| error.to_string())?;

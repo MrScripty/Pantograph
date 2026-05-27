@@ -706,23 +706,52 @@ falling back to previously rendered ports.
    node-engine task input bindings, and once the scheduler proof path is wired,
    retire node-engine/embedded-runtime `environment_ref` input gates as
    dependency-admission authority.
-3d. Add a narrow backend-owned dependency requirements proof before deriving
-   `DependencyEnvironmentRequest`. This is option 2 now with option 3
-   discipline: the first implementation may store the proof in workflow-
-   service current validation state, but the contract shape must be suitable
-   for `pantograph-dependency-planning` to become the producer later without
-   rewriting frontend, Tauri, scheduler, or node-engine callers. The proof is
-   bounded and path-free: associated inference node id, graph revision,
-   validation session id, descriptor fingerprint, validated Pumas model ref,
-   task kind, validated runtime/device/trait constraints, dependency
-   requirements id or fingerprint, proof status, and typed diagnostics. It must
-   not contain executable paths, package facts, frontend display state, runtime
-   load targets, media payloads, or scheduler dispatch decisions. `Resolve`
-   may create or refresh the current proof through the backend dependency
-   planning boundary; `Check` and `Install` must require an existing current
-   proof and fail closed with typed diagnostics when it is missing, stale, or
-   invalid. The graph editor and Tauri transport continue to send action
-   intent only.
+3d. Add a backend-owned dependency requirements proof before deriving
+   `DependencyEnvironmentRequest`. Updated 2026-05-26: the selected design is
+   the dependency-planning producer option. `pantograph-dependency-planning`
+   owns the producer API that derives the dependency requirements id/fingerprint,
+   proof status, and typed diagnostics from a validated, path-free
+   `DependencyPlanningRequest`. Workflow-service may store the current proof in
+   live validation state and may call the producer for `Resolve`, but it must
+   not synthesize requirements ids, derive dependency-planning policy, or build
+   compatibility DTOs. The producer is a pure contract/domain producer unless
+   the caller supplies typed dependency availability facts; it must not call
+   Pumas, inspect files, select runtime/device policy, or infer package
+   readiness from missing local state. The proof is bounded and path-free:
+   associated inference node id, graph revision, validation session id,
+   descriptor fingerprint, validated Pumas model ref, task kind, validated
+   runtime/device constraints, dependency-planning-local trait intents,
+   selected binding ids, dependency override fingerprint, platform key,
+   dependency requirements id or fingerprint, proof status, and
+   `DependencyPlanningDiagnostic` rows. The requirements id must be derived from
+   canonical typed fields with a stable hash, not by concatenating user/model
+   strings that may violate the validated identifier grammar. It must not
+   contain executable paths, package facts, frontend display state, runtime load
+   targets, media payloads, scheduler trait-setting DTOs, or scheduler dispatch
+   decisions. Workflow-service must snapshot and validate sidecar-authored
+   selected binding ids and manual override patches before releasing graph
+   state and before calling the producer; it must store dependency-planning
+   diagnostics in the proof and map them to `InferenceInterfaceDiagnostic` only
+   at graph/action response boundaries. `Resolve` may create or refresh the
+   current proof through the dependency-planning producer; `Check` and `Install`
+   must require an existing current proof and fail closed with typed diagnostics
+   when it is missing, stale, unavailable, or invalid. The graph editor and
+   Tauri transport continue to send action intent only.
+   Standards constraints for this producer slice: new producer DTOs, status
+   enums, diagnostics, and errors must be public contract types re-exported
+   from `pantograph-dependency-planning::lib`, use typed constructors or
+   `TryFrom` validation at the boundary, return a crate-specific error enum,
+   and mark extension-prone public enums/structs `#[non_exhaustive]`. Do not
+   add `Result<T, String>`, `anyhow`, raw metadata maps, or async APIs for pure
+   producer logic. Workflow-service must parse sidecar JSON ports once into
+   validated dependency-planning types before producer calls and must never
+   pass raw JSON through the producer boundary. If the requirements id stable
+   hash uses `blake3`, first normalize `blake3` as a workspace dependency and
+   convert direct member declarations to `{ workspace = true }` in the same
+   dependency-hygiene sub-slice; no new hashing crate is allowed without a
+   written dependency evaluation. Workflow-service must snapshot graph state
+   under lock, release it before producer/fact work, then record the proof only
+   after graph revision and validation session still match current state.
 4. Tighten request extraction before it feeds live validation. This is a hard
    prerequisite for the synchronous validation publisher and the later
    event-driven path: use one

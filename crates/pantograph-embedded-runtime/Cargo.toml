@@ -50,7 +50,7 @@ futures-util.workspace = true
 reqwest.workspace = true
 which.workspace = true
 uuid.workspace = true
-blake3 = "1.8.3"
+blake3.workspace = true
 once_cell.workspace = true
 pumas-library.workspace = true
 

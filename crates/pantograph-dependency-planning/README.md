@@ -15,6 +15,7 @@ actions, persisted fixtures, and backend handoff boundaries.
 | `src/environment/` | Dependency-environment child modules for result payload rows and row-level validation helpers. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
 | `src/preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
+| `src/producer.rs` | Pure dependency requirements proof producer that derives path-free requirements ids, override fingerprints, status, and diagnostics from validated planning requests plus optional typed availability facts. |
 | `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `src/result.rs` | Typed dependency-planning result states and diagnostics. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
@@ -70,6 +71,10 @@ Pumas I/O remains outside this crate.
   through node-engine.
 - Source node type is bounded caller context for diagnostics, not a runtime
   routing selector.
+- Dependency requirements proof production is pure domain logic. It derives
+  stable ids from validated typed request fields and optional typed
+  availability facts; it does not call Pumas, inspect files, select
+  runtime/device policy, or query scheduler state.
 - Path-free preflight identity is separate from host/planner load-target
   results. `DependencyPreflightRequest`, `DependencyPreflightResult`, and
   `DependencyPlanningIdentityKey` must never contain `PumasArtifactLoadTarget`,
@@ -95,6 +100,9 @@ Pumas I/O remains outside this crate.
 - Missing, stale, invalid, unavailable, ambiguous, needs-detail, and
   not-implemented states remain distinct typed result states.
 - Diagnostics use typed codes and severities rather than string parsing.
+- Dependency requirements ids and override fingerprints are stable `blake3`
+  hashes over canonical typed identity fields. Caller context and migration
+  diagnostics do not influence requirements identity.
 
 ## Revisit Triggers
 - Pumas publishes generated schemas or a stable shared Rust contract crate that
@@ -106,7 +114,8 @@ Pumas I/O remains outside this crate.
 ## Dependencies
 **Internal:** None.
 
-**External:** `serde`, `serde_json`, and `thiserror`.
+**External:** `serde`, `serde_json`, `thiserror`, and `blake3`. `blake3` is
+used only for stable dependency requirements ids and override fingerprints.
 
 ## Related ADRs
 - None identified as of 2026-05-20.
@@ -120,7 +129,8 @@ Pumas I/O remains outside this crate.
 use pantograph_dependency_planning::{
     DependencyEnvironmentAction, DependencyEnvironmentRequest, DependencyNodeTypeId,
     DependencyPlanningCallerContext, DependencyPlanningIdentityKey,
-    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyTaskId, PumasModelRef,
+    produce_dependency_requirements_proof, DependencyPlanningPlatformContext,
+    DependencyPlanningRequest, DependencyTaskId, PumasModelRef,
     ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 
@@ -144,6 +154,7 @@ let request = DependencyPlanningRequest {
     )?),
     selected_binding_ids: Vec::new(),
     dependency_override_patches: Vec::new(),
+    trait_intents: Vec::new(),
     caller_context: DependencyPlanningCallerContext {
         source_node_type: Some(DependencyNodeTypeId::parse("dependency-environment")?),
         ..Default::default()
@@ -190,6 +201,7 @@ let planning_request = DependencyPlanningRequest {
     )?),
     selected_binding_ids: Vec::new(),
     dependency_override_patches: Vec::new(),
+    trait_intents: Vec::new(),
     caller_context: DependencyPlanningCallerContext {
         source_node_type: Some(DependencyNodeTypeId::parse("llm-inference")?),
         ..Default::default()
@@ -197,6 +209,7 @@ let planning_request = DependencyPlanningRequest {
 };
 
 let _validated = ValidatedDependencyPlanningRequest::try_from(planning_request)?;
+let _proof = produce_dependency_requirements_proof(&_validated, None)?;
 # Ok::<(), pantograph_dependency_planning::DependencyPlanningContractError>(())
 ```
 
@@ -210,6 +223,11 @@ let _validated = ValidatedDependencyPlanningRequest::try_from(planning_request)?
 - Errors: boundary validation returns `DependencyPlanningContractError`; planning
   and dependency-environment failures are represented as typed result states and
   diagnostics.
+- Dependency requirements producer: callers pass a validated
+  `DependencyPlanningRequest` and optional typed
+  `DependencyRequirementsAvailabilityFacts`. The producer returns a path-free
+  `DependencyRequirementsProof` with requirements id, override fingerprint,
+  status, and dependency-planning diagnostics. It never performs I/O.
 - Compatibility: fields and enum meanings are machine-consumed by Rust,
   frontend, persisted fixtures, and worker-adjacent code. Breaking wire-shape
   changes require a coordinated migration.
@@ -229,6 +247,12 @@ let _validated = ValidatedDependencyPlanningRequest::try_from(planning_request)?
   readiness/install/validation/failure states are distinct because scheduler,
   activity, and UI decisions depend on those differences.
 - Ordering: selected binding ids and diagnostics preserve producer order.
+- Requirements identity: canonical requirements ids include model identity,
+  task, artifact kind, scheduler intent, platform key, selected bindings,
+  dependency override fingerprint, and dependency-planning-local trait intents.
+  Caller context, local paths, Pumas load targets, package facts, runtime load
+  targets, scheduler dispatch decisions, and frontend display state are
+  excluded.
 - Validation: operation timestamps must be non-zero and completion must not
   precede start; selected binding ids must be unique; validation field paths are
   contract paths, not filesystem paths.

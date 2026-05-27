@@ -85,8 +85,13 @@ validated_id!(RuntimeIntentId, "runtime_id");
 validated_id!(DeviceIntentId, "device_id");
 validated_id!(DependencyBindingId, "dependency_binding_id");
 validated_id!(DependencyRequirementsId, "dependency_requirements_id");
+validated_id!(
+    DependencyOverrideFingerprint,
+    "dependency_override_fingerprint"
+);
 validated_id!(DependencyNodeTypeId, "node_type");
 validated_id!(DependencyPlatformKey, "platform_key");
+validated_id!(DependencyTraitIntentId, "dependency_trait_intent_id");
 
 /// Scheduler-facing intent supplied by a graph or caller.
 ///
@@ -257,6 +262,42 @@ fn default_dependency_override_contract_version() -> u32 {
     1
 }
 
+/// Typed dependency-planning trait intent supplied by graph or host callers.
+///
+/// These intents are local to dependency planning identity. Scheduler runtime
+/// policy stays in scheduler-owned contracts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct DependencyTraitIntent {
+    pub trait_id: DependencyTraitIntentId,
+    pub value: DependencyTraitIntentValue,
+}
+
+impl DependencyTraitIntent {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        self.value.validate()
+    }
+}
+
+/// Bounded value for dependency-planning-local trait intent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+#[non_exhaustive]
+pub enum DependencyTraitIntentValue {
+    Boolean(bool),
+    Integer(i64),
+    Text(String),
+}
+
+impl DependencyTraitIntentValue {
+    fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        if let Self::Text(value) = self {
+            validate_optional_context("dependency_trait_intent.value", Some(value))?;
+        }
+        Ok(())
+    }
+}
+
 /// Typed dependency planning request crossing graph, host, and scheduler seams.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -275,6 +316,8 @@ pub struct DependencyPlanningRequest {
     pub selected_binding_ids: Vec<DependencyBindingId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependency_override_patches: Vec<DependencyOverridePatchV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trait_intents: Vec<DependencyTraitIntent>,
     #[serde(
         default,
         skip_serializing_if = "DependencyPlanningCallerContext::is_empty"
@@ -288,6 +331,9 @@ impl DependencyPlanningRequest {
         self.caller_context.validate()?;
         for patch in &self.dependency_override_patches {
             patch.validate()?;
+        }
+        for intent in &self.trait_intents {
+            intent.validate()?;
         }
         Ok(())
     }

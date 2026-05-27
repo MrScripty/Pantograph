@@ -13043,17 +13043,97 @@ Worker rules:
     validated planning request. Continuing directly in workflow-service would
     move dependency-planning policy into the wrong crate or synthesize hidden
     ids.
-  - Options:
-    1. Add the producer API in `pantograph-dependency-planning` now, then have
-       workflow-service call it for `Resolve` and store the returned proof.
-    2. Add only a workflow-service adapter for externally supplied
-       dependency-planning results, keeping proof production for a later
-       dependency-planning slice.
-    3. Keep dependency actions fail-closed until the full scheduler readiness
-       proof is designed.
-  - Recommendation: choose option 1 to keep moving toward real dependency
-    actions while preserving ownership; choose option 2 only if the producer API
-    needs a separate cross-crate proposal/review first.
+  - Decision: choose option 1. Add the producer API in
+    `pantograph-dependency-planning` now, then have workflow-service call it for
+    `Resolve` and store the returned proof through the current validation-state
+    proof API.
+  - Ownership: `pantograph-dependency-planning` owns requirements identity,
+    proof status, and dependency-planning diagnostics. Workflow-service owns
+    graph/session freshness and stores the current proof; it must not synthesize
+    hidden ids or derive dependency-planning policy.
+  - Slice plan:
+    1. Add the dependency-planning producer contract and tests in
+       `pantograph-dependency-planning`. The producer is pure contract/domain
+       logic unless supplied typed availability facts: it derives a stable
+       path-free requirements id/proof from validated request identity,
+       platform key, selected binding ids, dependency override fingerprint,
+       runtime/device constraints, dependency-planning-local trait intents, and
+       optional typed availability facts. It must not call Pumas, inspect
+       files, select runtime/device policy, infer package readiness from
+       ambient local state, or depend on scheduler DTOs.
+    2. Use canonical typed input plus a stable hash for
+       `DependencyRequirementsId`; do not concatenate raw model/user strings or
+       rely on local filesystem/path material.
+    3. Wire workflow-service `Resolve` to snapshot the graph, resolve the
+       sidecar subject, extract and validate sidecar-authored selected binding
+       ids and manual override patches, release graph state, call the producer,
+       and store the returned proof. `Check` and `Install` remain fail-closed
+       unless a current proof exists.
+    4. Store dependency-planning diagnostics in the proof and map them to
+       `InferenceInterfaceDiagnostic` only at graph/action response boundaries.
+    5. Derive canonical `DependencyEnvironmentRequest` only after the producer
+       proof and current executable descriptor summary agree.
+  - Standards gates added on 2026-05-26: producer DTOs/status/diagnostics/errors
+    must be public dependency-planning contract types re-exported from `lib.rs`,
+    validated through typed constructors or `TryFrom`, and extension-ready
+    where future runtimes, model families, or availability states are expected.
+    Pure producer logic stays synchronous and does not use `Result<T, String>`,
+    `anyhow`, raw metadata maps, or async APIs without an I/O justification.
+    Workflow-service must parse sidecar JSON ports once into validated
+    dependency-planning types, release graph locks before producer/fact work,
+    and recheck graph revision plus validation session before recording a
+    proof. Stable hashing must follow dependency standards: if `blake3` is used
+    by the producer, first centralize the existing workspace `blake3`
+    declarations under `[workspace.dependencies]` and switch member crates to
+    `{ workspace = true }` in the same atomic dependency-hygiene slice.
+    Implementation must update relevant READMEs for new producer/module
+    contracts and include contract, workflow-service, diagnostic mapping, stale
+    proof, and cross-layer acceptance tests.
+  - No-fallback/no-legacy confirmation: the proof remains path-free and may not
+    carry executable paths, package facts, runtime load targets, frontend
+    display state, media payloads, scheduler trait-setting DTOs, or scheduler
+    dispatch decisions. Retired dependency action payload builders and path-era
+    dependency ownership remain deletion targets, not compatibility layers.
+  - Re-plan triggers: stop if producing the proof requires Pumas path
+    resolution, runtime-host load targets, scheduler queue state, frontend/Tauri
+    authority changes, workflow-service-local requirements id synthesis,
+    dependency availability discovery without typed availability facts, or
+    scheduler DTOs entering `pantograph-dependency-planning`.
+- 2026-05-26 Milestone 5d dependency-planning producer contract slice:
+  - Slice: add the pure backend dependency requirements proof producer in
+    `pantograph-dependency-planning` and keep workflow-service proof production
+    deferred to the next slice.
+  - Allowed write set used: workspace and member Cargo manifests/lockfile for
+    `blake3` dependency hygiene; `pantograph-dependency-planning` source, tests,
+    and READMEs; node-engine request construction for the new typed trait
+    intent field; plan ledger files.
+  - No-fallback/no-legacy result: the producer derives requirements identity
+    from canonical typed fields and rejects path-carrying Pumas refs. It does
+    not call Pumas, inspect files, infer package readiness from local state,
+    select runtime/device policy, accept scheduler DTOs, or use frontend/Tauri
+    display state.
+  - Behavior: `DependencyRequirementsProof` now carries a path-free identity
+    key, stable requirements id, stable override fingerprint, typed trait
+    intents, proof status, and dependency-planning diagnostics. Optional typed
+    availability facts map `DependencyPlanningState` to proof status; absent
+    facts produce a current proof for a validated path-free request.
+  - Dependency hygiene: `blake3` was centralized in root
+    `[workspace.dependencies]`; existing member declarations now use
+    `{ workspace = true }`; `pantograph-dependency-planning` declares direct
+    ownership because it now hashes requirements identity.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-dependency-planning`; `cargo check -p
+    pantograph-dependency-planning -p node-engine`.
+  - Deviation/discovery: the existing dependency planning request fixture still
+    carries a migration-era `selected_artifact_path`; producer tests clear it
+    for path-free production and include an explicit rejection test for
+    path-carrying identity.
+  - Remaining follow-up: wire workflow-service `Resolve` to call the producer,
+    parse sidecar selected bindings and manual overrides once into typed
+    dependency-planning values, preserve dependency-planning diagnostics in the
+    proof, map diagnostics only at response boundaries, and recheck graph
+    revision plus validation session before storing the proof. `Check` and
+    `Install` remain fail-closed until that current proof exists.
 
 ### Traceability Links
 

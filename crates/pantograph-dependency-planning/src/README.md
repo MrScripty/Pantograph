@@ -15,6 +15,7 @@ frontend state, and scheduler policy.
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
 | `preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
+| `producer.rs` | Pure dependency requirements proof producer that derives path-free requirements ids, override fingerprints, proof status, and diagnostics. |
 | `readiness.rs` | Path-free host readiness input contract and typed readiness policy for producing preflight proof without leaking executable handoff facts. |
 | `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `result.rs` | Dependency-planning state, diagnostic, and result DTOs. |
@@ -65,6 +66,9 @@ is the only public facade.
 - Dependency readiness input is a host request, not readiness proof; it carries
   typed policy and path-free planning identity while the host produces
   `DependencyPreflightResult`.
+- Dependency requirements proof production stays in this crate as pure domain
+  logic. It can consume optional typed availability facts, but it cannot call
+  Pumas, inspect files, select runtime/device policy, or query scheduler state.
 
 ## Revisit Triggers
 - The crate exceeds the decomposition thresholds.
@@ -75,7 +79,9 @@ is the only public facade.
 ## Dependencies
 **Internal:** None.
 
-**External:** `serde`, `serde_json`, and `thiserror`.
+**External:** `serde`, `serde_json`, `thiserror`, and `blake3`. `blake3` is
+used only to derive stable requirements ids and override fingerprints from
+canonical typed identity payloads.
 
 ## Related ADRs
 - None identified as of 2026-05-20.
@@ -104,6 +110,9 @@ assert_eq!(task_id.as_str(), "image_generation");
   host checks only or prepares missing dependencies, but they do not carry
   requirements ids, environment refs, Pumas package facts, local paths, or
   executable worker handoff data.
+- Dependency requirements proof producer APIs accept validated planning
+  requests plus optional typed availability facts and return path-free proof
+  records. They are synchronous because the producer performs no I/O.
 
 ## Structured Producer Contract
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
@@ -115,3 +124,9 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Readiness request fixtures use typed `policy` enum values and reject unknown,
   path-shaped, and executable handoff fields before host wiring can consume
   them.
+- Requirements ids include only canonical typed identity fields: model ref,
+  task, artifact kind, scheduler intent, platform key, selected bindings,
+  dependency override fingerprint, and dependency-planning-local trait intents.
+  Caller context, migration diagnostics, paths, package facts, runtime load
+  targets, scheduler dispatch decisions, and frontend display state are
+  excluded.

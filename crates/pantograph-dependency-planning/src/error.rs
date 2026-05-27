@@ -15,6 +15,8 @@ pub enum DependencyPlanningContractError {
     ReadyResultMissingLoadTarget,
     #[error("dependency planning result state is {state}, but a load target was provided")]
     NonReadyResultHasLoadTarget { state: &'static str },
+    #[error("failed to serialize {field} for canonical dependency planning identity")]
+    CanonicalSerializationFailed { field: &'static str },
     #[error("{field} is invalid: {reason}")]
     InvalidField {
         field: &'static str,
