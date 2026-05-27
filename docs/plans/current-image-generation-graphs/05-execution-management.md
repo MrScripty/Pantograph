@@ -13872,6 +13872,24 @@ Worker rules:
   - Remaining follow-up: thread the retained proof freshness fields into
     workflow-service scheduler projections and executable validation snapshots
     before queue admission constructs dependency readiness execution contexts.
+- 2026-05-27 Milestone 5d executable snapshot dependency proof promotion
+  re-plan boundary:
+  - Discovered issue: queue admission consumes saved executable validation
+    snapshots, but snapshot records are built from
+    `WorkflowGraphInferenceValidationPublication`, which does not include the
+    current dependency requirements proof, selected binding ids, or dependency
+    override fingerprint retained by current validation state.
+  - Why implementation stops: dependency readiness execution contexts cannot be
+    built standards-compliantly from queue admission until those proof
+    freshness fields have a durable owner. Reaching back into draft graph state,
+    frontend/Tauri state, or live validation side tables from queue admission
+    would violate the no-fallback/no-legacy boundary.
+  - Required decision: choose the canonical promotion path. Options recorded in
+    Milestone 5d are adding `graph_session_id` to publish as a thin bridge,
+    replacing caller-supplied publication with a backend-owned graph-session
+    publish command, or persisting dependency readiness freshness as a separate
+    validation-snapshot-linked artifact. Recommendation to evaluate: the
+    backend-owned graph-session publish command is the clean long-term owner.
 
 ### Traceability Links
 

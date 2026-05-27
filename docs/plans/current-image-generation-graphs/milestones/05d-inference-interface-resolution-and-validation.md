@@ -895,6 +895,45 @@ defining an image-only inference-node interface.
     workflow-service scheduler inference projections and executable validation
     snapshots so queue admission can build
     `DependencyReadinessExecutionContext` without re-reading draft graph state.
+- [x] 2026-05-27 executable snapshot dependency proof promotion re-plan
+      boundary recorded:
+  - Discovered issue: queue admission builds scheduler task graphs from saved
+    `WorkflowExecutableValidationSnapshotRecord`, but executable validation
+    snapshots are currently built from `WorkflowGraphInferenceValidationPublication`
+    only. The publication contains descriptor, authored-port, validation,
+    runtime/device, and model-ref facts, but it does not carry the current
+    dependency requirements proof, selected binding ids, or dependency override
+    fingerprint retained by `CurrentInferenceValidationStateStore`.
+  - Why implementation stops: wiring dependency readiness execution contexts
+    from queue admission now would either produce incomplete envelopes or force
+    queue admission to reach back into live draft graph/session state. That
+    would violate the no-fallback/no-legacy rule and the source-of-truth
+    boundary: saved workflow execution must use durable executable validation
+    snapshot state, not frontend state, draft graph node data, or live
+    validation-session side tables.
+  - Required re-plan: choose the canonical promotion path that moves current
+    dependency requirements proof freshness from the draft validation owner into
+    the durable executable validation snapshot or an explicitly linked durable
+    owner before queue admission consumes it.
+  - Options to decide before the next code slice:
+    1. Add `graph_session_id` to executable snapshot publish and have
+       workflow-service read current validation-state dependency proofs during
+       publish. This is the smallest bridge, but it couples publish to a live
+       graph session and needs strict stale-session diagnostics.
+    2. Replace caller-supplied executable publication with a backend-owned
+       publish command on the graph session that snapshots the graph, validates
+       descriptor state, dependency proof state, and durable workflow version in
+       one lifecycle-owned operation. This is cleaner and easier to reason
+       about long term, but larger than a narrow field-threading slice.
+    3. Persist dependency readiness freshness as a separate durable artifact
+       keyed by validation snapshot id and node id, then have queue admission
+       load snapshot plus freshness artifact. This avoids live-session coupling
+       but adds another durable artifact and join invariant.
+  - Recommendation to evaluate: option 2 best matches long-term ownership and
+    simplicity because workflow-service would own the entire executable publish
+    lifecycle and reject stale dependency proof before snapshot persistence.
+    Option 1 may be viable as a thinner intermediate only if it is explicitly
+    replaced by option 2 and does not become a compatibility path.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
