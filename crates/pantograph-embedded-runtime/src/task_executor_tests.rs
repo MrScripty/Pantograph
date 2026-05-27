@@ -15,19 +15,6 @@ fn canonical_backend_key_accepts_llama_cpp_alias() {
     );
 }
 
-#[test]
-fn explicit_backend_key_ignores_legacy_runtime_hint() {
-    let inputs = HashMap::from([
-        ("backend_key".to_string(), serde_json::json!("pytorch")),
-        ("runtime_hint".to_string(), serde_json::json!("llamacpp")),
-    ]);
-
-    assert_eq!(
-        TauriTaskExecutor::explicit_backend_key(&inputs),
-        Some("pytorch".to_string())
-    );
-}
-
 #[tokio::test]
 async fn canonical_llm_inference_falls_through_to_core_executor() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
@@ -58,6 +45,44 @@ async fn canonical_llm_inference_falls_through_to_core_executor() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
+    assert!(requests.lock().expect("recording lock").is_empty());
+}
+
+#[tokio::test]
+async fn dependency_environment_execution_is_retired_from_embedded_runtime() {
+    let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+    let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+        requests: requests.clone(),
+        response: HashMap::new(),
+    });
+    let resolver = Arc::new(CountingDependencyResolver::new());
+    let (executor, mut extensions) = test_executor(adapter, resolver.clone());
+    extensions.set(
+        extension_keys::MODEL_DEPENDENCY_RESOLVER,
+        resolver.clone() as Arc<dyn ModelDependencyResolver>,
+    );
+
+    let error = executor
+        .execute_task(
+            "dependency-environment-1",
+            HashMap::from([(
+                "_data".to_string(),
+                serde_json::json!({"node_type": "dependency-environment"}),
+            )]),
+            &Context::new(),
+            &extensions,
+        )
+        .await
+        .expect_err("dependency-environment must not execute in embedded runtime");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("workflow-service dependency environment service"));
+            assert!(!message.contains("requires host-specific executor"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert_eq!(resolver.call_count(), 0);
     assert!(requests.lock().expect("recording lock").is_empty());
 }
 
@@ -151,6 +176,62 @@ impl PythonRuntimeAdapter for RecordingPythonAdapter {
     ) -> std::result::Result<HashMap<String, serde_json::Value>, String> {
         self.requests.lock().expect("recording lock").push(request);
         Ok(self.response.clone())
+    }
+}
+
+struct CountingDependencyResolver {
+    calls: Mutex<usize>,
+}
+
+impl CountingDependencyResolver {
+    fn new() -> Self {
+        Self {
+            calls: Mutex::new(0),
+        }
+    }
+
+    fn call_count(&self) -> usize {
+        *self.calls.lock().expect("resolver call lock")
+    }
+
+    fn record_call(&self) {
+        *self.calls.lock().expect("resolver call lock") += 1;
+    }
+}
+
+#[async_trait]
+impl ModelDependencyResolver for CountingDependencyResolver {
+    async fn resolve_model_dependency_requirements(
+        &self,
+        _request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyRequirements, String> {
+        self.record_call();
+        Err("unexpected resolve".to_string())
+    }
+
+    async fn check_dependencies(
+        &self,
+        _request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyStatus, String> {
+        self.record_call();
+        Err("unexpected check".to_string())
+    }
+
+    async fn install_dependencies(
+        &self,
+        _request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyInstallResult, String> {
+        self.record_call();
+        Err("unexpected install".to_string())
+    }
+
+    async fn resolve_model_ref(
+        &self,
+        _request: ModelDependencyRequest,
+        _requirements: Option<ModelDependencyRequirements>,
+    ) -> std::result::Result<Option<ModelRefV2>, String> {
+        self.record_call();
+        Err("unexpected model ref".to_string())
     }
 }
 

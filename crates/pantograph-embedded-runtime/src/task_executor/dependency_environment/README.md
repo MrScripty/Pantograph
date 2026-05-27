@@ -1,11 +1,11 @@
 # dependency_environment
 
-This directory contains helper modules for the embedded runtime dependency
-environment task executor.
+This directory contains helper modules for embedded runtime dependency
+preflight gates.
 
-`helpers.rs` owns the current input projection, mode parsing, environment-ref
-manifest emission, and stable key helper functions used by the legacy
-dependency-environment execution path. It is not the shared dependency
-environment contract owner. Migration slices must move successful execution to
-`pantograph-dependency-planning` contracts and remove these legacy helpers
-instead of wrapping them as compatibility behavior.
+`helpers.rs` owns input projection for Python-backed dependency preflight and
+stable runtime environment key helpers used by Python runtime metadata.
+Dependency-environment actions are resolved by workflow-service through the
+dependency environment service; this module must not rebuild
+`DependencyEnvironmentRequest`, emit `environment_ref`, or execute check/install
+actions.

@@ -5,16 +5,14 @@
 //! handled by `CoreTaskExecutor` via `CompositeTaskExecutor`.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::Utc;
 use node_engine::{
     core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
-    ExecutorExtensions, ModelDependencyRequest, ModelDependencyResolver, ModelDependencyStatus,
-    NodeEngineError, Result, TaskExecutor, WorkflowEvent,
+    ExecutorExtensions, ModelDependencyRequest, ModelDependencyResolver, NodeEngineError, Result,
+    TaskExecutor, WorkflowEvent,
 };
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
@@ -104,10 +102,10 @@ impl TaskExecutor for TauriTaskExecutor {
         match node_type.as_str() {
             "rag-search" => self.execute_rag_search(&inputs).await,
             "puma-lib" => self.execute_puma_lib(&inputs, extensions).await,
-            "dependency-environment" => {
-                self.execute_dependency_environment(&inputs, extensions)
-                    .await
-            }
+            "dependency-environment" => Err(NodeEngineError::ExecutionFailed(
+                "dependency-environment actions are resolved by workflow-service dependency environment service; embedded-runtime node execution is retired"
+                    .to_string(),
+            )),
             "audio-generation" | "onnx-inference" => {
                 self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await

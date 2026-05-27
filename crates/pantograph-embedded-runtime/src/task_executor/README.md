@@ -11,8 +11,8 @@ hold execution families that need host resources.
 
 | File | Description |
 | ---- | ----------- |
-| `dependency_environment.rs` | Dependency requirement input parsing, explicit dependency environment emission, dependency preflight, and model-ref resolution. |
-| `dependency_environment/` | Helper modules for dependency-environment input projection, environment-ref manifest emission, and legacy execution support during shared-contract migration. |
+| `dependency_environment.rs` | Dependency preflight gates for Python-backed runtime nodes and model-ref resolution. |
+| `dependency_environment/` | Helper modules for dependency preflight input projection and stable runtime environment keys. |
 | `puma_lib.rs` | Puma-Lib selected-model lookup through explicit selector-access roles, selected-detail inference-settings refresh, optional owner full-package-facts enrichment, execution descriptor projection, metadata normalization, and model-path output preparation. |
 | `python_execution.rs` | Python runtime input normalization, runtime instance metadata, adapter invocation, failure health recording, and stream replay. |
 | `rag_search.rs` | RAG search execution against the host-provided RAG backend. |
@@ -58,15 +58,14 @@ same behavior without exposing helper paths outside this module boundary.
   `diffusion-inference` into Python sidecar execution. Canonical image
   generation enters through inference task metadata, not this host Python
   bridge.
-- Dependency environment helpers may emit environment references and model
-  refs, but they must not invoke Python runtime execution directly.
+- Dependency environment actions are not executable tasks in embedded-runtime.
+  Workflow-service owns action intent validation and calls the dependency
+  environment service with canonical dependency-planning DTOs.
 - Dependency preflight request construction may carry Pumas model/task
   evidence, but canonical Python-backed execution must not derive executable
   backend selection from explicit `backend_key` fields, package hints,
-  dependency requirements, or node-type defaults. Only the explicit
-  `dependency-environment` tooling node may pass through an authored
-  `backend_key`; runtime selection for canonical inference belongs to the
-  scheduler/admission path.
+  dependency requirements, or node-type defaults. Runtime selection for
+  canonical inference belongs to the scheduler/admission path.
 - Python runtime execution strips legacy backend-key inputs before adapter
   dispatch and derives lifecycle runtime identity from the resolved model ref
   or node family, not graph-authored backend hints.

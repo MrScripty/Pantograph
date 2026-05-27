@@ -13392,6 +13392,41 @@ Worker rules:
     editor needs service result display state, then delete or replace active
     dependency-environment execution through node-engine/embedded-runtime
     `ModelDependencyRequest`.
+- 2026-05-26 Milestone 5d embedded-runtime dependency-environment execution
+  deletion slice:
+  - Smallest useful vertical slice: remove the embedded-runtime executable
+    `dependency-environment` action path while leaving active Python-backed
+    dependency preflight unchanged for a later replacement/deletion slice.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/input_helpers.rs`,
+    embedded-runtime task-executor READMEs, and this plan.
+  - No-fallback/no-legacy result: `dependency-environment` tasks now fail in
+    embedded-runtime with workflow-service/service ownership named explicitly,
+    do not fall through to core execution, do not call `ModelDependencyResolver`,
+    do not emit `environment_ref` manifests, and no longer pass authored
+    dependency-environment `backend_key` into `ModelDependencyRequest`.
+  - Implementation completed: removed `execute_dependency_environment`, deleted
+    mode parsing, dependency-environment request backend projection,
+    environment-ref manifest helpers, and focused tests that asserted the
+    retired executable behavior. Added a direct retirement test and updated the
+    task-executor READMEs to separate dependency-environment actions from
+    dependency preflight.
+  - Verification passed: `cargo test -p pantograph-embedded-runtime
+    dependency_environment_execution_is_retired_from_embedded_runtime`; `cargo
+    test -p pantograph-embedded-runtime input_helpers`; `cargo test -p
+    pantograph-embedded-runtime dependency_preflight`; `cargo fmt`; `git diff
+    --check` for touched files; targeted source-search for retired execution
+    and manifest-emission terms.
+  - Existing unrelated warning: `set_active_run_execution_plan` remains unused
+    in workflow-service scheduler store.
+  - Remaining follow-up: replace or delete the broader
+    `ModelDependencyRequest` dependency preflight/model-ref path used by
+    Python-backed runtime nodes, then remove Tauri model-dependency command
+    usage where it is no longer backend-owned transport.
 
 ### Traceability Links
 

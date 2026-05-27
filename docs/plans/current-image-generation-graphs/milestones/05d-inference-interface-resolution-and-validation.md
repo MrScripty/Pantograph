@@ -1023,6 +1023,45 @@ defining an image-only inference-node interface.
         display/status state if the graph editor needs to show more than action
         intent readiness, then delete or replace active dependency-environment
         execution through node-engine/embedded-runtime `ModelDependencyRequest`.
+      - Embedded-runtime dependency-environment execution deletion slice
+        completed on 2026-05-26: `TauriTaskExecutor` now rejects
+        `dependency-environment` task execution with a typed execution error
+        that names workflow-service dependency-environment service ownership,
+        does not fall through to core execution, and does not call
+        `ModelDependencyResolver`. The slice removed the old
+        `execute_dependency_environment` action path, deleted manifest-emitting
+        `environment_ref` helper code, removed dependency-environment
+        `backend_key` request projection, and updated embedded-runtime task
+        executor READMEs to make dependency preflight separate from
+        dependency-environment actions.
+      - Files touched by the slice:
+        `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+        `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+        `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/helpers.rs`,
+        `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+        `crates/pantograph-embedded-runtime/src/task_executor_tests/input_helpers.rs`,
+        `crates/pantograph-embedded-runtime/src/task_executor/README.md`,
+        `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/README.md`,
+        and this plan.
+      - No-fallback/no-legacy result: embedded-runtime no longer executes
+        dependency-environment resolve/check/install actions, emits no
+        graph-authored `environment_ref` manifests, and does not treat
+        dependency-environment `backend_key` input as runtime-selection
+        authority. Python-backed dependency preflight remains in place only for
+        the still-active runtime gate path and remains a separate later
+        replacement/deletion target.
+      - Verification passed: `cargo test -p pantograph-embedded-runtime
+        dependency_environment_execution_is_retired_from_embedded_runtime`;
+        `cargo test -p pantograph-embedded-runtime input_helpers`; `cargo test
+        -p pantograph-embedded-runtime dependency_preflight`; `cargo fmt`; `git
+        diff --check` for touched files; targeted source-search proving the old
+        embedded-runtime dependency-environment execution, `environment_ref`
+        manifest emission, and dependency-environment `backend_key` projection
+        strings are absent from the touched task-executor path.
+      - Remaining follow-up: replace or delete the broader
+        `ModelDependencyRequest` dependency preflight/model-ref path used by
+        Python-backed runtime nodes, then remove Tauri model-dependency command
+        usage where it is no longer a backend-owned transport concern.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

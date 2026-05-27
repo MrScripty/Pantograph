@@ -104,26 +104,12 @@ impl TauriTaskExecutor {
         }
     }
 
-    pub(in crate::task_executor) fn explicit_backend_key(
-        inputs: &HashMap<String, serde_json::Value>,
-    ) -> Option<String> {
-        Self::canonical_backend_key(
-            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-                .as_deref(),
-        )
-    }
-
     pub(in crate::task_executor) fn build_model_dependency_request(
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
         let requirements = Self::parse_dependency_requirements_input(inputs);
         let package_facts = Self::read_resolved_model_package_facts_for_preflight(inputs);
-        let backend_key = if node_type == "dependency-environment" {
-            Self::explicit_backend_key(inputs)
-        } else {
-            None
-        };
 
         let task_type_primary = Self::read_optional_input_string_aliases(
             inputs,
@@ -160,7 +146,7 @@ impl TauriTaskExecutor {
                 &["model_type", "modelType"],
             ),
             task_type_primary: Some(task_type_primary),
-            backend_key,
+            backend_key: None,
             platform_context,
             selected_binding_ids,
             dependency_override_patches: Self::read_input_dependency_override_patches(inputs),
@@ -214,39 +200,6 @@ impl TauriTaskExecutor {
         }
     }
 
-    pub(in crate::task_executor) fn dependency_mode(
-        inputs: &HashMap<String, serde_json::Value>,
-    ) -> String {
-        Self::read_optional_input_string_aliases(inputs, &["mode"])
-            .map(|mode| mode.trim().to_lowercase())
-            .filter(|mode| mode == "auto" || mode == "manual")
-            .unwrap_or_else(|| "auto".to_string())
-    }
-
-    pub(in crate::task_executor) fn canonical_requirement_fingerprint(
-        requirements: &node_engine::ModelDependencyRequirements,
-    ) -> String {
-        let mut rows = Vec::new();
-        let selected = requirements
-            .selected_binding_ids
-            .iter()
-            .cloned()
-            .collect::<std::collections::HashSet<_>>();
-        for binding in &requirements.bindings {
-            if !selected.is_empty() && !selected.contains(&binding.binding_id) {
-                continue;
-            }
-            for req in &binding.requirements {
-                rows.push(format!(
-                    "{}|{}|{}|{}",
-                    binding.binding_id, req.kind, req.name, req.exact_pin
-                ));
-            }
-        }
-        rows.sort();
-        rows.join(";")
-    }
-
     pub(in crate::task_executor) fn sanitize_key_component(raw: &str) -> String {
         raw.chars()
             .map(|ch| {
@@ -259,13 +212,6 @@ impl TauriTaskExecutor {
             .collect::<String>()
     }
 
-    pub(in crate::task_executor) fn dependency_env_store_root() -> PathBuf {
-        let base = dirs::data_local_dir()
-            .or_else(dirs::home_dir)
-            .unwrap_or_else(std::env::temp_dir);
-        base.join("pantograph").join("dependency_envs")
-    }
-
     pub(in crate::task_executor) fn stable_hash_hex(value: &str) -> String {
         let mut digest = Self::FNV64_OFFSET_BASIS;
         for byte in value.as_bytes() {
@@ -273,143 +219,5 @@ impl TauriTaskExecutor {
             digest = digest.wrapping_mul(Self::FNV64_PRIME);
         }
         format!("{:016x}", digest)
-    }
-
-    pub(in crate::task_executor) fn resolve_environment_ref(
-        status: &ModelDependencyStatus,
-    ) -> std::result::Result<serde_json::Value, String> {
-        let requirements = &status.requirements;
-        let selected = if requirements.selected_binding_ids.is_empty() {
-            requirements
-                .bindings
-                .iter()
-                .map(|b| b.binding_id.clone())
-                .collect::<Vec<_>>()
-        } else {
-            requirements.selected_binding_ids.clone()
-        };
-
-        let env_ids = status
-            .bindings
-            .iter()
-            .filter_map(|row| row.env_id.clone())
-            .map(|id| id.trim().to_string())
-            .filter(|id| !id.is_empty())
-            .collect::<Vec<_>>();
-        let primary_env_id = env_ids.first().cloned();
-
-        let mut selected_bindings = requirements
-            .bindings
-            .iter()
-            .filter(|binding| selected.contains(&binding.binding_id))
-            .collect::<Vec<_>>();
-        if selected_bindings.is_empty() {
-            selected_bindings = requirements.bindings.iter().collect::<Vec<_>>();
-        }
-
-        let environment_kind = selected_bindings
-            .iter()
-            .find_map(|binding| binding.environment_kind.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        let python_override = selected_bindings
-            .iter()
-            .find_map(|binding| binding.python_executable_override.clone());
-
-        let state_value = serde_json::to_value(&status.state).map_err(|err| {
-            format!(
-                "Failed to serialize dependency status state for environment_ref: {}",
-                err
-            )
-        })?;
-        let state = state_value
-            .as_str()
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "unresolved".to_string());
-
-        let python_executable = if let Some(override_path) = python_override {
-            Some(override_path)
-        } else if !env_ids.is_empty()
-            && (environment_kind == "python" || environment_kind == "python-venv")
-        {
-            crate::python_runtime::resolve_python_executable_for_env_ids(&env_ids)
-                .ok()
-                .map(|path| path.to_string_lossy().to_string())
-        } else {
-            None
-        };
-
-        let backend_key = requirements
-            .backend_key
-            .clone()
-            .unwrap_or_else(|| "any".to_string());
-        let requirements_fingerprint = Self::canonical_requirement_fingerprint(requirements);
-        let key_material = format!(
-            "{}|{}|{}|{}",
-            primary_env_id.clone().unwrap_or_else(|| "none".to_string()),
-            requirements.platform_key,
-            backend_key,
-            requirements_fingerprint
-        );
-        let environment_key =
-            Self::sanitize_key_component(&format!("v1:{}", Self::stable_hash_hex(&key_material)));
-
-        let manifest_dir = Self::dependency_env_store_root()
-            .join(environment_kind.replace(':', "_"))
-            .join(&environment_key);
-        std::fs::create_dir_all(&manifest_dir).map_err(|err| {
-            format!(
-                "Failed to create dependency environment manifest directory '{}': {}",
-                manifest_dir.display(),
-                err
-            )
-        })?;
-        let manifest_path = manifest_dir.join("manifest.json");
-        let manifest = serde_json::json!({
-            "contract_version": 1,
-            "generated_at": Utc::now().to_rfc3339(),
-            "environment_key": environment_key,
-            "environment_kind": environment_kind,
-            "env_id": primary_env_id,
-            "env_ids": env_ids,
-            "python_executable": python_executable,
-            "state": state,
-            "requirements_fingerprint": requirements_fingerprint,
-            "platform_key": requirements.platform_key,
-            "backend_key": requirements.backend_key,
-            "selected_binding_ids": requirements.selected_binding_ids,
-            "requirements": requirements,
-            "status": status,
-        });
-        std::fs::write(
-            &manifest_path,
-            serde_json::to_vec_pretty(&manifest).map_err(|err| {
-                format!(
-                    "Failed to serialize dependency environment manifest '{}': {}",
-                    manifest_path.display(),
-                    err
-                )
-            })?,
-        )
-        .map_err(|err| {
-            format!(
-                "Failed to write dependency environment manifest '{}': {}",
-                manifest_path.display(),
-                err
-            )
-        })?;
-
-        Ok(serde_json::json!({
-            "contract_version": 1,
-            "environment_key": environment_key,
-            "environment_kind": environment_kind,
-            "env_id": manifest["env_id"],
-            "env_ids": manifest["env_ids"],
-            "python_executable": python_executable,
-            "state": state,
-            "requirements_fingerprint": requirements_fingerprint,
-            "platform_key": requirements.platform_key,
-            "backend_key": requirements.backend_key,
-            "manifest_path": manifest_path.to_string_lossy().to_string(),
-        }))
     }
 }
