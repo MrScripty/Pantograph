@@ -10,6 +10,7 @@ consumers depend on stale fields.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contract.rs` | Public serde and validation tests for request/result DTOs and Pumas entry paths. |
+| `readiness_execution_contract.rs` | Public serde and validation tests for execution freshness request/proof envelopes. |
 | `readiness_contract.rs` | Public serde and validation tests for the host readiness input contract. |
 | `fixtures/` | Versioned JSON examples for ready and unavailable planning states. |
 
@@ -45,6 +46,9 @@ migrate to the shared contract.
 - Pumas artifact entry paths reject local absolute paths.
 - Readiness requests use typed policy enum values and reject unknown/path-shaped
   fields before host wiring consumes them.
+- Readiness execution envelopes bind readiness input and preflight proof to
+  active-run freshness identity without carrying paths, load targets, or raw
+  provider request payloads into scheduler proof.
 
 ## Revisit Triggers
 - Host-language generated schemas are added.
@@ -77,3 +81,5 @@ cargo test -p pantograph-dependency-planning
   diagnostic flows.
 - Readiness fixtures intentionally cover host input only; preflight result
   fixtures cover readiness proof after host processing.
+- Readiness execution envelope fixtures cover scheduler-admission freshness and
+  proof retention identity. They are not runtime-host handoff fixtures.

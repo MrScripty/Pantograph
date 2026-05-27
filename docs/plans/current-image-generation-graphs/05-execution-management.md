@@ -13766,6 +13766,87 @@ Worker rules:
     inferring freshness from graph data, technical-fit preview facts, reduced
     execution-plan readiness projections, Tauri/frontend state, or the absence
     of local paths.
+- 2026-05-27 Milestone 5d active run-loop readiness freshness design:
+  - Decision: use option 2. Add a separate path-free execution freshness
+    envelope in `pantograph-dependency-planning` while keeping
+    `DependencyPlanningIdentityKey` scoped to stable dependency identity.
+    Workflow-service builds the envelope from the admitted scheduler task and
+    current executable validation state; scheduler admission validates the
+    envelope before any runtime task can move from `WaitingDependencyReadiness`
+    to `Ready`.
+  - Ownership tightening from code review: `pantograph-dependency-planning`
+    must own validated envelope newtypes instead of importing
+    inference-interface or scheduler-owned graph/session/task types.
+    Workflow-service owns adapters from executable validation snapshots,
+    active-run task graph state, and scheduler task records into those shared
+    envelope contracts.
+  - Required DTOs: add validated request/proof envelope contracts carrying
+    workflow/run/task/node identity, graph revision, validation session or
+    executable snapshot identity, descriptor fingerprint, dependency
+    requirements id, selected binding ids, dependency override fingerprint,
+    readiness proof id/version, and correlation id. They must not carry paths,
+    Pumas package facts, load targets, artifact paths, worker settings,
+    frontend display state, or runtime-host payloads.
+  - Freshness/proof retention requirements: queue admission must retain a
+    workflow-service owned freshness context containing executable validation
+    snapshot identity, graph revision, validation session id, descriptor
+    fingerprint, selected binding ids, dependency requirements id, and
+    dependency override fingerprint. Scheduler admission/dispatch proof must
+    carry fingerprints and bounded diagnostics only, not raw override patches
+    or provider-private request payloads. The admitted proof envelope must be
+    retained with the ready runtime task, or in a workflow-service owned
+    active-run proof store keyed by task/state identity, before dispatch
+    selection can expose the task.
+  - Standards compliance tightening: dependency-planning validation remains the
+    sync core and exposes validated newtypes plus typed errors; workflow-service
+    owns async provider/store orchestration without holding locks across awaits;
+    proof retention must be atomic with the scheduler state transition; all
+    public envelope contracts carry explicit versions, serde fixtures,
+    unknown-field rejection, bounded typed diagnostics, and README/API Consumer
+    Contract updates; no new dependency may be added without dependency-standard
+    cost/ownership justification.
+  - Validation and staging: dependency-planning gets serde/negative field and
+    replay diagnostics first; workflow-service then exposes the freshness source
+    fields through an owner API and wraps readiness requests/proofs; scheduler
+    replaces bare `SchedulerDependencyReadinessProof` with envelope-aware proof
+    contracts; scheduler tests reject stale, mismatched, replayed, cross-run,
+    and cross-task proofs and verify proof retention across the transition to
+    `Ready`; replay/idempotency, active-run recovery, concurrent-workflow
+    isolation, and persisted-state fixture tests are added where the slice
+    touches those surfaces; scheduler README text is updated with the new
+    retention invariant; the active run loop is wired only after the envelope
+    path is validated. The old runtime-dispatch-not-wired terminal path is a
+    replacement target, not a compatibility fallback.
+- 2026-05-27 Milestone 5d dependency readiness execution envelope contract
+  slice:
+  - Smallest useful vertical slice: added only the
+    `pantograph-dependency-planning` path-free execution freshness contracts,
+    validated wrappers, fixtures, and public integration tests. Touched files
+    were limited to dependency-planning source/tests/fixtures/READMEs plus the
+    Milestone 5d plan and this execution log.
+  - No-fallback/no-legacy confirmation: the slice adds canonical scheduler
+    readiness proof envelope contracts without wiring legacy runtime dispatch,
+    graph/front-end proof reconstruction, executable path identity, Pumas load
+    targets, or runtime-host payloads into scheduler proof.
+  - Implementation completed: added dependency-planning-owned newtypes for
+    active-run freshness ids, `DependencyReadinessExecutionContext`,
+    `DependencyReadinessRequestEnvelope`,
+    `DependencyReadinessProofEnvelope`, and validated wrappers; added fixtures
+    and tests for valid request/proof envelopes plus unknown-field, missing
+    validation identity, caller-context drift, requirements drift, zero proof
+    version, executable handoff field, and raw request payload rejection.
+  - Verification passed: `cargo fmt -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning --test
+    readiness_execution_contract -- --nocapture`, `cargo test -p
+    pantograph-dependency-planning -- --nocapture`, `cargo check -p
+    pantograph-dependency-planning`, `git diff --check`, and targeted source
+    search over changed production dependency-planning files for
+    `ModelDependencyRequest`, `ModelRefV2`, `modelPath`, `model_path`,
+    `local_load_path`, `load_target`, and `selected_artifact_path`.
+  - Remaining follow-up: workflow-service must next expose the queue-admission
+    freshness source fields through its owner API before the readiness lifecycle
+    can wrap provider requests/proofs and scheduler admission can consume the
+    envelope.
 
 ### Traceability Links
 

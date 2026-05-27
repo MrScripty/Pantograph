@@ -13,6 +13,7 @@ frontend state, and scheduler policy.
 | `environment.rs` | Dependency-environment request/result DTOs, typed requirement and binding rows, status rows, operation timestamps, validation errors, environment refs, and validation helpers. |
 | `environment/` | Child modules for dependency-environment result payload rows that would otherwise make the envelope module too broad. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
+| `execution.rs` | Path-free execution freshness envelope DTOs that correlate readiness requests and preflight proof with active scheduler task identity. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
 | `preflight.rs` | Path-free preflight request/result contracts, shared dependency-planning identity/correlation key, and the validated projection from dependency-environment result to scheduler preflight proof. |
 | `producer.rs` | Pure dependency requirements proof producer that derives path-free requirements ids, override fingerprints, proof status, and diagnostics. |
@@ -71,6 +72,16 @@ is the only public facade.
   identity, readiness state, requirements/environment identity, and diagnostics;
   it does not carry requirements tables, binding rows, operation timing, local
   paths, Pumas package facts, or runtime load targets into scheduler admission.
+- Dependency readiness execution envelopes carry only path-free active-run
+  freshness identity, descriptor fingerprints, requirements ids, binding ids,
+  override fingerprints, proof ids, and correlation ids. They do not carry
+  local paths, Pumas package facts, load targets, frontend display state,
+  runtime-host payloads, or raw provider-private request payloads into
+  scheduler proof.
+- Workflow-service adapts graph, validation, and scheduler task ids into
+  dependency-readiness envelope newtypes. This crate must not import
+  inference-interface, scheduler, frontend, Tauri, runtime-host, Pumas client,
+  or provider implementation types.
 - Dependency requirements proof production stays in this crate as pure domain
   logic. It can consume optional typed availability facts, but it cannot call
   Pumas, inspect files, select runtime/device policy, or query scheduler state.
@@ -124,6 +135,12 @@ assert_eq!(task_id.as_str(), "image_generation");
   They must not synthesize preflight proof from graph node data, technical-fit
   preview diagnostics, reduced execution-plan projections, or frontend/Tauri
   display state.
+- Scheduler admission callers must wrap readiness requests and preflight proof
+  with `DependencyReadinessRequestEnvelope` and
+  `DependencyReadinessProofEnvelope` before moving a runtime task from
+  `WaitingDependencyReadiness` to `Ready`. The proof envelope is the scheduler
+  proof payload; provider request payloads remain provider inputs and must not
+  be copied into scheduler proof.
 
 ## Structured Producer Contract
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
@@ -135,6 +152,10 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Readiness request fixtures use typed `policy` enum values and reject unknown,
   path-shaped, and executable handoff fields before host wiring can consume
   them.
+- Readiness execution envelope fixtures use explicit contract versions and
+  validated freshness ids. They reject unknown fields, path-shaped fields,
+  executable handoff fields, mismatched caller context, mismatched requirements
+  ids, and zero proof versions.
 - Requirements ids include only canonical typed identity fields: model ref,
   task, artifact kind, scheduler intent, platform key, selected bindings,
   dependency override fingerprint, and dependency-planning-local trait intents.

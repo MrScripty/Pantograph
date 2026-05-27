@@ -1,0 +1,71 @@
+{
+  "contract_version": 1,
+  "execution_context": {
+    "contract_version": 1,
+    "workflow_id": "workflow-image",
+    "workflow_run_id": "run-1",
+    "scheduler_task_id": "task-node-inference",
+    "node_id": "node-inference",
+    "graph_revision": "42",
+    "validation_session_id": "validation-session-1",
+    "validation_snapshot_id": "validation-snapshot-1",
+    "descriptor_fingerprint": "descriptor-tiny-sd-v1",
+    "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64:torch-diffusers",
+    "selected_binding_ids": [
+      "torch-diffusers"
+    ],
+    "dependency_override_fingerprint": "override-fingerprint-v1",
+    "correlation_id": "readiness-correlation-1"
+  },
+  "readiness_request": {
+    "contract_version": 1,
+    "identity_key": {
+      "model_ref": {
+        "model_id": "image/stable-diffusion/tiny-sd",
+        "revision": "main",
+        "selected_artifact_id": "diffusers-bundle"
+      },
+      "task_id": "image_generation",
+      "task_type": "text_to_image",
+      "expected_artifact_kind": "diffusers_bundle",
+      "scheduler_intent": {
+        "requested_runtime_id": "pytorch",
+        "requested_device_id": "cuda:0"
+      },
+      "platform_context": {
+        "platform_key": "linux-x86_64"
+      },
+      "selected_binding_ids": [
+        "torch-diffusers"
+      ]
+    },
+    "planning_request": {
+      "model_ref": {
+        "model_id": "image/stable-diffusion/tiny-sd",
+        "revision": "main",
+        "selected_artifact_id": "diffusers-bundle"
+      },
+      "task_id": "image_generation",
+      "task_type": "text_to_image",
+      "expected_artifact_kind": "diffusers_bundle",
+      "scheduler_intent": {
+        "requested_runtime_id": "pytorch",
+        "requested_device_id": "cuda:0"
+      },
+      "platform_context": {
+        "platform_key": "linux-x86_64"
+      },
+      "selected_binding_ids": [
+        "torch-diffusers"
+      ],
+      "caller_context": {
+        "source_node_type": "llm-inference",
+        "workflow_id": "workflow-image",
+        "node_id": "node-inference",
+        "port_id": "pumas_model_ref",
+        "run_id": "run-1"
+      }
+    },
+    "policy": "auto_install_missing"
+  }
+}

@@ -392,7 +392,7 @@ impl TryFrom<serde_json::Value> for ValidatedDependencyPlanningRequest {
     }
 }
 
-fn validate_identifier(
+pub(crate) fn validate_identifier(
     field: &'static str,
     value: &str,
 ) -> Result<String, DependencyPlanningContractError> {

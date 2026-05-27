@@ -17,6 +17,8 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 | `dependency_environment_unavailable_result.json` | Unavailable dependency-environment resolve result with typed failure state and diagnostic. |
 | `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, scheduler intent, platform, and selected bindings. |
 | `dependency_readiness_request.json` | Path-free host readiness input with typed policy and no readiness proof or executable handoff facts. |
+| `dependency_readiness_request_envelope.json` | Path-free readiness request plus active-run freshness identity for provider invocation. |
+| `dependency_readiness_proof_envelope_ready.json` | Ready scheduler proof envelope that binds preflight proof to active-run freshness identity. |
 | `dependency_preflight_ready_result.json` | Ready path-free preflight result with dependency-environment identity and readiness proof. |
 | `dependency_preflight_request.json` | Path-free preflight request with graph intent and dependency-environment identity. |
 | `dependency_preflight_unavailable_result.json` | Unavailable path-free preflight result with ordered typed diagnostics. |
@@ -41,6 +43,9 @@ shape reviewable and testable.
   `dependency_requirements_id` or `environment_ref`.
 - Readiness request fixtures must use typed policy enum values, not raw mode
   strings or booleans.
+- Readiness execution envelope fixtures must not contain Pumas load targets,
+  local paths, frontend display state, runtime-host payloads, or raw provider
+  request payloads in scheduler proof.
 - Load paths may appear only in ready result fixtures as Pumas-approved handoff
   targets.
 - Diagnostics must use typed codes and severities.
@@ -78,6 +83,9 @@ cross-layer tests without importing unrelated runtime behavior.
   fixtures so backend handoff facts cannot become graph identity.
 - Readiness fixtures stay separate from preflight result fixtures so host input
   cannot be mistaken for host-produced dependency readiness proof.
+- Readiness execution request envelopes may wrap host readiness input, but
+  readiness proof envelopes carry preflight proof only. They must not embed the
+  raw readiness request or dependency override patch values in scheduler proof.
 - Preflight request/result fixtures reject legacy selected runtime/device
   fields; runtime/device values in these fixtures are scheduler intent only.
 
@@ -116,3 +124,6 @@ cargo test -p pantograph-dependency-planning dependency_planning_request_fixture
   dependency-environment request fixtures.
 - Readiness fixtures reject unknown, path-shaped, executable handoff, and
   proof-bearing fields before host wiring consumes them.
+- Readiness execution envelope fixtures reject unknown, path-shaped, executable
+  handoff, mismatched freshness, mismatched requirements, and zero proof version
+  cases through public integration tests.

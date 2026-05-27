@@ -7,6 +7,7 @@
 
 mod environment;
 mod error;
+mod execution;
 mod model_ref;
 mod preflight;
 mod producer;
@@ -28,6 +29,16 @@ pub use environment::{
     ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
 };
 pub use error::{DependencyPlanningContractError, PumasArtifactEntryPathError};
+pub use execution::{
+    DependencyReadinessCorrelationId, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessExecutionContext, DependencyReadinessGraphRevision,
+    DependencyReadinessNodeId, DependencyReadinessProofEnvelope, DependencyReadinessProofId,
+    DependencyReadinessProofVersion, DependencyReadinessRequestEnvelope,
+    DependencyReadinessSchedulerTaskId, DependencyReadinessValidationSessionId,
+    DependencyReadinessValidationSnapshotId, DependencyReadinessWorkflowId,
+    DependencyReadinessWorkflowRunId, ValidatedDependencyReadinessExecutionContext,
+    ValidatedDependencyReadinessProofEnvelope, ValidatedDependencyReadinessRequestEnvelope,
+};
 pub use model_ref::{
     ModelArtifactKind, ModelRefMigrationDiagnostic, ModelStorageKind, ModelValidationState,
     PumasArtifactEntryPath, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
