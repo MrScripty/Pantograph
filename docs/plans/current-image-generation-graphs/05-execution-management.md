@@ -13847,6 +13847,31 @@ Worker rules:
     freshness source fields through its owner API before the readiness lifecycle
     can wrap provider requests/proofs and scheduler admission can consume the
     envelope.
+- 2026-05-27 Milestone 5d current validation proof freshness field slice:
+  - Smallest useful vertical slice: retained selected binding ids and
+    dependency override fingerprint on
+    `CurrentDependencyRequirementsProof` inside the current validation-state
+    owner. Touched files were limited to
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`
+    plus the Milestone 5d plan/status log.
+  - No-fallback/no-legacy confirmation: the slice keeps path-free dependency
+    sidecar identity on the canonical dependency requirements proof instead of
+    rediscovering it from graph node data, frontend/Tauri state, runtime-host
+    payloads, or reduced execution-plan projections.
+  - Implementation completed: direct proof recording and producer-derived
+    proof creation now preserve selected binding ids and dependency override
+    fingerprint for later readiness execution envelope construction.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`, `cargo
+    test -p pantograph-workflow-service inference_validation_state --lib --
+    --nocapture`, `cargo check -p pantograph-workflow-service`, `git diff
+    --check`, and targeted source search over the changed validation-state file
+    for `ModelDependencyRequest`, `ModelRefV2`, `modelPath`, `model_path`,
+    `local_load_path`, `load_target`, and `selected_artifact_path`. Search
+    matches are existing path-sanitization/test assertions. Existing warning:
+    `set_active_run_execution_plan` remains a pre-existing unused store method.
+  - Remaining follow-up: thread the retained proof freshness fields into
+    workflow-service scheduler projections and executable validation snapshots
+    before queue admission constructs dependency readiness execution contexts.
 
 ### Traceability Links
 

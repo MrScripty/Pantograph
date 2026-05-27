@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, HashMap};
 
 use pantograph_dependency_planning::{
     produce_dependency_requirements_proof, DependencyBindingId, DependencyEnvironmentRequest,
-    DependencyNodeTypeId, DependencyOverridePatchV1, DependencyPlanningCallerContext,
-    DependencyPlanningDiagnostic, DependencyPlanningIdentityKey, DependencyPlanningPlatformContext,
-    DependencyPlanningRequest, DependencyRequirementsId, DependencyRequirementsProof,
-    DependencyRequirementsProofStatus, DependencyTaskId, DeviceIntentId, PumasModelRef,
-    RuntimeIntentId, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyPlanningRequest,
+    DependencyNodeTypeId, DependencyOverrideFingerprint, DependencyOverridePatchV1,
+    DependencyPlanningCallerContext, DependencyPlanningDiagnostic, DependencyPlanningIdentityKey,
+    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyRequirementsId,
+    DependencyRequirementsProof, DependencyRequirementsProofStatus, DependencyTaskId,
+    DeviceIntentId, PumasModelRef, RuntimeIntentId, SchedulerIntent,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
@@ -158,6 +158,8 @@ impl CurrentInferenceValidationStateStore {
             device_constraint: node.device_constraint.clone(),
             trait_constraints: Vec::new(),
             dependency_requirements_id: request.dependency_requirements_id,
+            selected_binding_ids: request.selected_binding_ids,
+            dependency_override_fingerprint: request.dependency_override_fingerprint,
             status: request.status,
             diagnostics: request.diagnostics,
         };
@@ -467,6 +469,8 @@ pub struct CurrentDependencyRequirementsProofRequest {
     pub validation_session_id: DraftGraphValidationSessionId,
     pub inference_node_id: WorkflowNodeId,
     pub dependency_requirements_id: DependencyRequirementsId,
+    pub selected_binding_ids: Vec<DependencyBindingId>,
+    pub dependency_override_fingerprint: DependencyOverrideFingerprint,
     pub status: CurrentDependencyRequirementsProofStatus,
     pub diagnostics: Vec<DependencyPlanningDiagnostic>,
 }
@@ -487,6 +491,9 @@ pub struct CurrentDependencyRequirementsProof {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trait_constraints: Vec<SchedulerTraitSetting>,
     pub dependency_requirements_id: DependencyRequirementsId,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_binding_ids: Vec<DependencyBindingId>,
+    pub dependency_override_fingerprint: DependencyOverrideFingerprint,
     pub status: CurrentDependencyRequirementsProofStatus,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DependencyPlanningDiagnostic>,
@@ -760,6 +767,8 @@ impl CurrentInferenceValidationNodeRecord {
             device_constraint: self.device_constraint.clone(),
             trait_constraints: Vec::new(),
             dependency_requirements_id: producer_proof.dependency_requirements_id,
+            selected_binding_ids: producer_proof.identity_key.selected_binding_ids,
+            dependency_override_fingerprint: producer_proof.dependency_override_fingerprint,
             status: current_status_from_producer_status(producer_proof.status),
             diagnostics: producer_proof.diagnostics,
         }
@@ -1253,6 +1262,12 @@ mod tests {
         assert_eq!(
             proof.dependency_requirements_id.as_str(),
             "requirements.image_generation.cuda0"
+        );
+        assert_eq!(proof.selected_binding_ids.len(), 1);
+        assert_eq!(proof.selected_binding_ids[0].as_str(), "torch-diffusers");
+        assert_eq!(
+            proof.dependency_override_fingerprint.as_str(),
+            "override.none"
         );
         assert_eq!(
             proof.status,
@@ -1755,6 +1770,12 @@ mod tests {
             dependency_requirements_id: dependency_requirements_id
                 .parse()
                 .expect("valid dependency requirements id"),
+            selected_binding_ids: vec![
+                DependencyBindingId::parse("torch-diffusers").expect("valid binding id")
+            ],
+            dependency_override_fingerprint: "override.none"
+                .parse()
+                .expect("valid override fingerprint"),
             status,
             diagnostics: Vec::new(),
         }

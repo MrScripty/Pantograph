@@ -865,6 +865,36 @@ defining an image-only inference-node interface.
     freshness source fields from queue admission/active-run state without ad
     hoc side tables, then wrap readiness lifecycle requests/proofs with the new
     dependency-planning envelopes before scheduler admission is changed.
+- [x] 2026-05-27 current validation proof freshness field slice:
+  - Smallest useful vertical slice: keep the next workflow-service prerequisite
+    inside the current inference validation-state owner by retaining selected
+    binding ids and dependency override fingerprint on
+    `CurrentDependencyRequirementsProof`. Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`
+    plus this plan/status log.
+  - No-fallback/no-legacy confirmation: this slice does not infer dependency
+    freshness from graph node data, frontend state, reduced execution-plan
+    projections, or runtime-host payloads. It preserves the canonical
+    dependency requirements proof as the owner of path-free dependency sidecar
+    identity needed by later scheduler proof envelopes.
+  - Implementation completed: `CurrentDependencyRequirementsProofRequest` and
+    `CurrentDependencyRequirementsProof` now carry selected binding ids and
+    dependency override fingerprint. Proofs recorded directly and proofs
+    derived from the dependency requirements producer retain those fields
+    instead of dropping them.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`, `cargo
+    test -p pantograph-workflow-service inference_validation_state --lib --
+    --nocapture`, `cargo check -p pantograph-workflow-service`, `git diff
+    --check`, and targeted source search over the changed validation-state file
+    for `ModelDependencyRequest`, `ModelRefV2`, `modelPath`, `model_path`,
+    `local_load_path`, `load_target`, and `selected_artifact_path`. The search
+    matches only existing path-sanitization/test assertions in this file.
+    Existing warning noted: `set_active_run_execution_plan` remains a
+    pre-existing unused store method.
+  - Remaining follow-up: expose these proof freshness fields through
+    workflow-service scheduler inference projections and executable validation
+    snapshots so queue admission can build
+    `DependencyReadinessExecutionContext` without re-reading draft graph state.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
