@@ -13745,6 +13745,27 @@ Worker rules:
     `cargo test -p pantograph-workflow-service readiness_lifecycle --
     --nocapture`. Existing warning noted: `set_active_run_execution_plan`
     remains a pre-existing unused store method.
+- 2026-05-26 Milestone 5d active run-loop readiness caller re-plan boundary:
+  - Discovered issue: the active run loop cannot yet call the scheduler-owned
+    dependency-readiness lifecycle without weakening the freshness/idempotency
+    contract. Current readiness/preflight DTOs correlate model ref, task kind,
+    scheduler intent, workflow/run/node/task ids, and provider output, but they
+    do not carry graph revision, executable validation snapshot identity,
+    validation session id, descriptor fingerprint, dependency sidecar choices,
+    proof id/version, correlation id, or replay semantics as first-class
+    validated fields.
+  - Required re-plan before implementation: extend or wrap the shared
+    dependency-readiness/preflight contract with a path-free execution
+    freshness envelope owned by `pantograph-dependency-planning` or another
+    dedicated contract crate. Workflow-service remains the lifecycle
+    orchestrator, but active run execution must reject stale graph revisions,
+    stale validation sessions, mismatched descriptor fingerprints, mismatched
+    sidecar choices, stale dependency override fingerprints, duplicate proof,
+    and cross-run/cross-task proof reuse before runtime-host dispatch.
+  - No-fallback/no-legacy confirmation: do not wire active execution by
+    inferring freshness from graph data, technical-fit preview facts, reduced
+    execution-plan readiness projections, Tauri/frontend state, or the absence
+    of local paths.
 
 ### Traceability Links
 

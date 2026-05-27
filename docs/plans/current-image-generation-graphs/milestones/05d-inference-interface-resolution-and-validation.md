@@ -646,6 +646,40 @@ defining an image-only inference-node interface.
   - Remaining follow-up: wire the active run loop to call this lifecycle for
     runtime inference tasks in `WaitingDependencyReadiness`, then expose only
     `Ready` scheduler tasks to runtime-host dispatch selection.
+- [x] 2026-05-26 active run-loop readiness caller re-plan boundary recorded:
+  - Discovered issue: the next production caller cannot be wired standards-
+    compliantly yet because the current `DependencyReadinessRequest`,
+    `DependencyPlanningIdentityKey`, and `DependencyPreflightResult` path does
+    not carry enough execution freshness identity to prove that a dependency
+    readiness proof belongs to the admitted active runtime task. The lifecycle
+    currently correlates model ref, task kind, scheduler intent, workflow id,
+    run id, node id, and scheduler task id through task intent/caller context,
+    but graph revision, executable validation snapshot identity, validation
+    session id, descriptor fingerprint, dependency sidecar choices, and proof
+    replay/idempotency identity are not first-class fields in the shared
+    readiness/preflight contract.
+  - Why this blocks implementation: calling the lifecycle from the active run
+    loop now would let queue execution advance from task intent plus provider
+    output alone. That would bypass the already planned requirement that
+    scheduler admission consume the current backend validation summary and
+    reject stale graph revisions, stale validation sessions, mismatched
+    descriptor fingerprints, mismatched dependency sidecar choices, replayed
+    proof, and cross-run/cross-task proof reuse before runtime-host dispatch.
+  - Required re-plan: extend or wrap the shared dependency-readiness/preflight
+    contract with a path-free execution freshness envelope before wiring the
+    active run-loop caller. The design must decide the owner and exact fields
+    for graph revision, validation session/snapshot id, descriptor fingerprint,
+    scheduler task id, proof id/version, correlation id, selected binding ids,
+    dependency override fingerprint, and idempotent retry/replay behavior.
+    Workflow-service may orchestrate the lifecycle, but the cross-crate DTOs
+    must remain in `pantograph-dependency-planning` or another dedicated
+    contract crate.
+  - No-fallback/no-legacy confirmation: do not wire active execution by
+    inferring freshness from graph node data, technical-fit preview facts,
+    reduced execution-plan dependency readiness, Tauri/frontend state, or the
+    absence of a path. Do not preserve the old runtime-dispatch-not-wired path
+    as a compatibility fallback once the freshness envelope and runtime caller
+    are implemented.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
