@@ -1,5 +1,6 @@
 mod contracts;
 mod policy;
+mod readiness_lifecycle;
 mod store;
 mod store_admission;
 pub(crate) mod task_orchestrator;

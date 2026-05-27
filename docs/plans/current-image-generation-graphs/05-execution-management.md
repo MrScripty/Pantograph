@@ -13664,6 +13664,41 @@ Worker rules:
     linked ADR with lifecycle/API/error/idempotency behavior and must delete or
     fail-close replaced legacy readiness/preflight success paths in the same
     commit instead of leaving compatibility shims.
+- 2026-05-26 Milestone 5d workflow-service readiness lifecycle contract:
+  - Smallest useful vertical slice: added a focused workflow-service scheduler
+    readiness lifecycle owner that builds a validated, path-free
+    `DependencyReadinessRequest` for an admitted runtime inference task, calls
+    an injected dependency-readiness provider, and delegates provider
+    `DependencyPreflightResult` output to the existing scheduler
+    readiness-admission bridge.
+  - Allowed write set used:
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, the
+    Milestone 5d plan, and this execution log.
+  - No-fallback/no-legacy confirmation: the lifecycle does not call
+    `ModelDependencyRequest`, build `ModelRefV2`, read graph `modelPath` or
+    `model_path`, synthesize load targets, call Pumas load-target resolution,
+    dispatch runtime hosts, or route dependency readiness through
+    node-engine/Tauri/frontend payloads.
+  - Tests added: ready provider proof builds the expected request and admits the
+    task to `Ready`; missing provider proof defers through scheduler policy;
+    mismatched provider proof becomes a typed scheduler-policy failure.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service readiness_lifecycle --
+    --nocapture`; `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo check -p pantograph-workflow-service`; `git diff --check`; and
+    targeted source search of new lifecycle source/tests for retired
+    path-shaped terms. Existing warning noted: `cargo check` still reports the
+    pre-existing unused `set_active_run_execution_plan` store method; this
+    slice did not introduce that warning.
+  - Remaining follow-up: wire a production provider/lifecycle caller from the
+    active run loop and add the full-path acceptance test that exposes only
+    `Ready` scheduler tasks as runtime-host dispatch candidates. Any future
+    async provider work must add lifecycle-owned cancellation, tracked task
+    handles, shutdown, and tracing here rather than in Tauri, node-engine, or
+    runtime adapters.
 
 ### Traceability Links
 

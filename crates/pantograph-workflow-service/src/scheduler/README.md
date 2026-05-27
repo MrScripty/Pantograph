@@ -13,6 +13,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `contracts.rs` | Scheduler request/response DTOs, queue item contracts, keep-alive/unload semantics, and stale-cleanup worker types. |
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
+| `readiness_lifecycle.rs` | Workflow-service lifecycle owner that builds typed dependency-readiness requests for admitted runtime tasks, calls a readiness provider, and applies scheduler readiness admission without owning dependency policy. |
 | `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 | `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, active-run scheduler task-state transition storage, and active-run finish transitions. |
 | `store_task_results.rs` | Staged active-run scheduler task-result storage used by Milestone 5c before durable diagnostics-ledger replay replaces the storage backend. |
@@ -114,6 +115,15 @@ only a path-free `DependencyPreflightResult`, applies
 `pantograph-scheduler` readiness policy, and persists the resulting validated
 task-state transition; it must not resolve dependencies through node-engine,
 legacy preflight, Tauri, or graph-authored paths.
+The dependency-readiness lifecycle is the workflow-service owner for producing
+the readiness request that precedes that bridge. It reads the admitted active
+run scheduler task graph, constructs a validated
+`DependencyReadinessRequest` from scheduler intent and Pumas model reference,
+calls an injected provider, and then delegates task-state admission to the
+orchestrator. This lifecycle currently owns no background tasks; if future
+provider I/O becomes asynchronous, spawned work, cancellation, retries,
+shutdown, and tracing must be owned by this module rather than by Tauri,
+frontend code, node-engine, or runtime adapters.
 Runtime inference tasks that depend on upstream task outputs initialize as
 `AwaitingInputs` even when their schedulable intent is otherwise complete.
 They may become dispatch candidates only after scheduler-owned input-readiness
@@ -197,6 +207,11 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   scheduler task-state transitions. It must not call
   `ModelDependencyRequest`, build `ModelRefV2`, read graph `modelPath`, or
   synthesize executable load targets.
+- Dependency readiness request construction for admitted runtime tasks must
+  stay in `readiness_lifecycle.rs`. It may project scheduler intent into the
+  shared `DependencyReadinessRequest`, but it must not become a Pumas
+  load-target resolver, dependency installer, runtime-host dispatcher, or
+  graph-validation preview producer.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable

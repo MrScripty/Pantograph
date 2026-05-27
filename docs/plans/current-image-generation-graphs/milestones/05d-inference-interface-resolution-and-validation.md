@@ -544,6 +544,43 @@ defining an image-only inference-node interface.
     preserves the intended separation: graph editor and node-engine can display
     or validate preview facts, scheduler/workflow-service owns execution
     readiness, and runtime hosts receive only scheduler-approved handoff facts.
+- [x] 2026-05-26 workflow-service readiness lifecycle contract slice completed:
+  - Smallest useful vertical slice: add a focused workflow-service scheduler
+    readiness lifecycle owner that builds a validated, path-free
+    `DependencyReadinessRequest` for one admitted runtime inference task, calls
+    an injected dependency-readiness provider, and delegates the returned
+    `DependencyPreflightResult` to the existing scheduler readiness-admission
+    bridge.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the lifecycle projects only
+    `SchedulableTaskIntent`/Pumas model ref/scheduler intent into
+    `DependencyReadinessRequest`. It does not call `ModelDependencyRequest`,
+    build `ModelRefV2`, read graph `modelPath` or `model_path`, synthesize load
+    targets, call Pumas load-target resolution, dispatch runtime hosts, or
+    route dependency readiness through node-engine/Tauri/frontend payloads.
+  - Focused tests added: ready provider proof builds the expected request and
+    admits the task to `Ready`; missing provider proof defers the task through
+    scheduler policy; mismatched provider proof becomes a typed scheduler
+    policy failure without a legacy bridge.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service readiness_lifecycle --
+    --nocapture`; `cargo fmt -p pantograph-workflow-service -- --check`;
+    `cargo check -p pantograph-workflow-service`; `git diff --check`; and
+    targeted source search of the new lifecycle source/tests for retired
+    path-shaped terms. `cargo check` still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning in scheduler store; this
+    slice did not introduce it.
+  - Remaining follow-up: wire a production provider/lifecycle caller from the
+    active run loop, then add the full-path acceptance test that exposes only
+    `Ready` scheduler tasks as runtime-host dispatch candidates. The current
+    lifecycle is synchronous and owns no background tasks; any later async
+    provider work must add explicit cancellation, tracked task handles, and
+    shutdown behavior in this lifecycle module.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
