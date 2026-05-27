@@ -78,6 +78,11 @@ Dependency-environment sidecar edges use the exact-only
 `dependency_environment_sidecar` port data type. Graph editing can display and
 persist that typed association, but workflow-service subject resolution is the
 only owner that may interpret it for dependency actions.
+Dependency-environment action handling derives and validates the canonical
+`DependencyEnvironmentRequest` from current backend validation state before it
+reports `RequestReady`. The derived request is not supplied by frontend or
+Tauri callers; `Check` and `Install` also require the current sidecar choices
+to match the stored dependency requirements proof.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.

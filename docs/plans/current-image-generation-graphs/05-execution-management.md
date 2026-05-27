@@ -13160,6 +13160,31 @@ Worker rules:
   - Remaining follow-up: derive canonical `DependencyEnvironmentRequest` after
     producer proof, current executable descriptor summary, sidecar-authored
     choices, and dependency-planning identity agree.
+- 2026-05-26 Milestone 5d workflow-service dependency-environment request
+  derivation slice:
+  - Slice: require workflow-service to derive and validate the canonical
+    path-free `DependencyEnvironmentRequest` before dependency-environment
+    action intents can report `RequestReady`.
+  - Allowed write set used: workflow-service current validation state/tests
+    and graph README, plus Milestone 5d plan/status files.
+  - No-fallback/no-legacy result: frontend and Tauri still send only action
+    intent identity; workflow-service derives the request from the current
+    executable descriptor summary, dependency-planning producer proof, host
+    platform context, sidecar-selected bindings, and sidecar manual override
+    patches. It does not expose the canonical request to the graph editor,
+    accept request fields from transport, or use path-shaped model data.
+  - Behavior: `Resolve` creates or refreshes the current proof through the
+    same derivation path. `Check` and `Install` require an existing proof whose
+    derived requirements id still matches the current sidecar choices; changed
+    bindings or override patches return typed stale diagnostics instead of
+    silently reusing old dependency state.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service inference_validation_state`.
+  - Existing unrelated warning: `set_active_run_execution_plan` remains unused
+    in `pantograph-workflow-service`.
+  - Remaining follow-up: connect the validated request to the canonical
+    dependency-environment service/result owner once that owner exists, keeping
+    frontend/Tauri as action-intent transport only.
 
 ### Traceability Links
 

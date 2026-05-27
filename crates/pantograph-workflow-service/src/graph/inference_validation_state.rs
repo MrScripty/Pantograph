@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 
 use pantograph_dependency_planning::{
-    produce_dependency_requirements_proof, DependencyBindingId, DependencyOverridePatchV1,
-    DependencyPlanningCallerContext, DependencyPlanningDiagnostic, DependencyPlanningRequest,
-    DependencyRequirementsId, DependencyRequirementsProofStatus, DependencyTaskId, DeviceIntentId,
-    PumasModelRef, RuntimeIntentId, SchedulerIntent, ValidatedDependencyPlanningRequest,
+    produce_dependency_requirements_proof, DependencyBindingId, DependencyEnvironmentRequest,
+    DependencyNodeTypeId, DependencyOverridePatchV1, DependencyPlanningCallerContext,
+    DependencyPlanningDiagnostic, DependencyPlanningIdentityKey, DependencyPlanningPlatformContext,
+    DependencyPlanningRequest, DependencyRequirementsId, DependencyRequirementsProof,
+    DependencyRequirementsProofStatus, DependencyTaskId, DeviceIntentId, PumasModelRef,
+    RuntimeIntentId, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
@@ -256,27 +259,48 @@ impl CurrentInferenceValidationStateStore {
                 &intent.graph_revision,
                 &record.validation_session_id,
             ) {
-                Ok(_proof) => return request_ready_dependency_environment_action_result(&intent),
-                Err(CurrentDependencyRequirementsProofStateError::Missing)
-                    if matches!(intent.action, DependencyEnvironmentAction::Resolve) =>
-                {
-                    return match node_record.produce_current_dependency_requirements_proof(
-                        &intent.graph_session_id,
+                Ok(proof) => {
+                    let current_dependency_requirements_id =
+                        Some(proof.dependency_requirements_id.clone());
+                    return match node_record.derive_current_dependency_environment_request(
+                        intent.action,
                         &intent.graph_revision,
                         &record.validation_session_id,
                         request.selected_binding_ids,
                         request.dependency_override_patches,
+                        current_dependency_requirements_id,
                     ) {
-                        Ok(_proof) => request_ready_dependency_environment_action_result(&intent),
-                        Err(error) => {
-                            let hint = error.to_string();
-                            blocked_dependency_environment_action_result(
-                                &intent,
-                                InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
-                                "Dependency requirements proof could not be produced from current validation state.",
-                                Some(&hint),
-                            )
+                        Ok(_environment_request) => {
+                            request_ready_dependency_environment_action_result(&intent)
                         }
+                        Err(error) => blocked_dependency_environment_action_result(
+                            &intent,
+                            error.diagnostic_code(),
+                            error.message(),
+                            error.hint().as_deref(),
+                        ),
+                    };
+                }
+                Err(CurrentDependencyRequirementsProofStateError::Missing)
+                    if matches!(intent.action, DependencyEnvironmentAction::Resolve) =>
+                {
+                    return match node_record.derive_current_dependency_environment_request(
+                        intent.action,
+                        &intent.graph_revision,
+                        &record.validation_session_id,
+                        request.selected_binding_ids,
+                        request.dependency_override_patches,
+                        None,
+                    ) {
+                        Ok(_environment_request) => {
+                            request_ready_dependency_environment_action_result(&intent)
+                        }
+                        Err(error) => blocked_dependency_environment_action_result(
+                            &intent,
+                            error.diagnostic_code(),
+                            error.message(),
+                            error.hint().as_deref(),
+                        ),
                     };
                 }
                 Err(CurrentDependencyRequirementsProofStateError::Missing) => {
@@ -531,6 +555,60 @@ enum CurrentDependencyRequirementsProofStateError {
     Invalid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CurrentDependencyEnvironmentRequestError {
+    RequirementsStale,
+    RequirementsUnavailable,
+    RequirementsInvalid,
+    Contract(String),
+}
+
+impl CurrentDependencyEnvironmentRequestError {
+    fn diagnostic_code(&self) -> InferenceDiagnosticCode {
+        match self {
+            Self::RequirementsStale => InferenceDiagnosticCode::DescriptorStale,
+            Self::RequirementsUnavailable => {
+                InferenceDiagnosticCode::DependencySidecarDescriptorUnavailable
+            }
+            Self::RequirementsInvalid | Self::Contract(_) => {
+                InferenceDiagnosticCode::DependencySidecarDescriptorInvalid
+            }
+        }
+    }
+
+    fn message(&self) -> &'static str {
+        match self {
+            Self::RequirementsStale => {
+                "Dependency requirements proof is stale for the current sidecar choices."
+            }
+            Self::RequirementsUnavailable => {
+                "Dependency requirements proof is unavailable for dependency request derivation."
+            }
+            Self::RequirementsInvalid | Self::Contract(_) => {
+                "Dependency environment request could not be derived from current validation state."
+            }
+        }
+    }
+
+    fn hint(&self) -> Option<String> {
+        match self {
+            Self::RequirementsStale => Some(
+                "Resolve dependency requirements again after changing sidecar bindings or overrides."
+                    .to_string(),
+            ),
+            Self::RequirementsUnavailable => Some(
+                "Resolve dependency requirements before checking or installing environments."
+                    .to_string(),
+            ),
+            Self::RequirementsInvalid => Some(
+                "Refresh descriptor validation and dependency requirements before resolving environments."
+                    .to_string(),
+            ),
+            Self::Contract(message) => Some(message.clone()),
+        }
+    }
+}
+
 impl CurrentInferenceValidationNodeRecord {
     fn has_dependency_basis(&self) -> bool {
         !self.node_id.as_str().is_empty()
@@ -630,35 +708,13 @@ impl CurrentInferenceValidationNodeRecord {
         ))
     }
 
-    fn produce_current_dependency_requirements_proof(
-        &mut self,
-        _graph_session_id: &pantograph_inference_interface_contracts::WorkflowGraphSessionId,
+    fn current_dependency_requirements_proof_from_producer(
+        &self,
         graph_revision: &WorkflowGraphRevision,
         validation_session_id: &DraftGraphValidationSessionId,
-        selected_binding_ids: Vec<DependencyBindingId>,
-        dependency_override_patches: Vec<DependencyOverridePatchV1>,
-    ) -> Result<
-        CurrentDependencyRequirementsProof,
-        pantograph_dependency_planning::DependencyPlanningContractError,
-    > {
-        let planning_request = DependencyPlanningRequest {
-            model_ref: path_free_model_ref(&self.pumas_model_ref),
-            task_id: DependencyTaskId::parse(self.task_kind.as_str())?,
-            task_type: None,
-            expected_artifact_kind: None,
-            scheduler_intent: SchedulerIntent {
-                requested_runtime_id: self.runtime_constraint.clone(),
-                requested_device_id: self.device_constraint.clone(),
-            },
-            platform_context: None,
-            selected_binding_ids,
-            dependency_override_patches,
-            trait_intents: Vec::new(),
-            caller_context: DependencyPlanningCallerContext::default(),
-        };
-        let validated_request = ValidatedDependencyPlanningRequest::try_from(planning_request)?;
-        let producer_proof = produce_dependency_requirements_proof(&validated_request, None)?;
-        let proof = CurrentDependencyRequirementsProof {
+        producer_proof: DependencyRequirementsProof,
+    ) -> CurrentDependencyRequirementsProof {
+        CurrentDependencyRequirementsProof {
             inference_node_id: self.node_id.clone(),
             graph_revision: graph_revision.clone(),
             validation_session_id: validation_session_id.clone(),
@@ -671,9 +727,107 @@ impl CurrentInferenceValidationNodeRecord {
             dependency_requirements_id: producer_proof.dependency_requirements_id,
             status: current_status_from_producer_status(producer_proof.status),
             diagnostics: producer_proof.diagnostics,
+        }
+    }
+
+    fn dependency_planning_request(
+        &self,
+        selected_binding_ids: Vec<DependencyBindingId>,
+        dependency_override_patches: Vec<DependencyOverridePatchV1>,
+    ) -> Result<
+        DependencyPlanningRequest,
+        pantograph_dependency_planning::DependencyPlanningContractError,
+    > {
+        Ok(DependencyPlanningRequest {
+            model_ref: path_free_model_ref(&self.pumas_model_ref),
+            task_id: DependencyTaskId::parse(self.task_kind.as_str())?,
+            task_type: None,
+            expected_artifact_kind: None,
+            scheduler_intent: SchedulerIntent {
+                requested_runtime_id: self.runtime_constraint.clone(),
+                requested_device_id: self.device_constraint.clone(),
+            },
+            platform_context: Some(DependencyPlanningPlatformContext::from_os_arch(
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )?),
+            selected_binding_ids,
+            dependency_override_patches,
+            trait_intents: Vec::new(),
+            caller_context: DependencyPlanningCallerContext {
+                source_node_type: Some(DependencyNodeTypeId::parse("llm-inference")?),
+                node_id: Some(self.node_id.as_str().to_string()),
+                ..Default::default()
+            },
+        })
+    }
+
+    fn derive_current_dependency_environment_request(
+        &mut self,
+        action: DependencyEnvironmentAction,
+        graph_revision: &WorkflowGraphRevision,
+        validation_session_id: &DraftGraphValidationSessionId,
+        selected_binding_ids: Vec<DependencyBindingId>,
+        dependency_override_patches: Vec<DependencyOverridePatchV1>,
+        current_dependency_requirements_id: Option<DependencyRequirementsId>,
+    ) -> Result<ValidatedDependencyEnvironmentRequest, CurrentDependencyEnvironmentRequestError>
+    {
+        let planning_request = self
+            .dependency_planning_request(selected_binding_ids, dependency_override_patches)
+            .map_err(|error| {
+                CurrentDependencyEnvironmentRequestError::Contract(error.to_string())
+            })?;
+        let validated_request = ValidatedDependencyPlanningRequest::try_from(
+            planning_request.clone(),
+        )
+        .map_err(|error| CurrentDependencyEnvironmentRequestError::Contract(error.to_string()))?;
+        let producer_proof = produce_dependency_requirements_proof(&validated_request, None)
+            .map_err(|error| {
+                CurrentDependencyEnvironmentRequestError::Contract(error.to_string())
+            })?;
+        let proof_status = current_status_from_producer_status(producer_proof.status);
+        match proof_status {
+            CurrentDependencyRequirementsProofStatus::Current => {}
+            CurrentDependencyRequirementsProofStatus::Stale => {
+                return Err(CurrentDependencyEnvironmentRequestError::RequirementsStale);
+            }
+            CurrentDependencyRequirementsProofStatus::Unavailable => {
+                return Err(CurrentDependencyEnvironmentRequestError::RequirementsUnavailable);
+            }
+            CurrentDependencyRequirementsProofStatus::Invalid => {
+                return Err(CurrentDependencyEnvironmentRequestError::RequirementsInvalid);
+            }
+        }
+
+        let dependency_requirements_id = producer_proof.dependency_requirements_id.clone();
+        if matches!(action, DependencyEnvironmentAction::Resolve) {
+            let proof = self.current_dependency_requirements_proof_from_producer(
+                graph_revision,
+                validation_session_id,
+                producer_proof,
+            );
+            self.dependency_requirements_proof = Some(proof);
+        } else if current_dependency_requirements_id
+            .map(|current_id| current_id != dependency_requirements_id)
+            .unwrap_or(true)
+        {
+            return Err(CurrentDependencyEnvironmentRequestError::RequirementsStale);
+        }
+
+        let identity_key = DependencyPlanningIdentityKey::from_planning_request(&planning_request)
+            .map_err(|error| {
+                CurrentDependencyEnvironmentRequestError::Contract(error.to_string())
+            })?;
+        let request = DependencyEnvironmentRequest {
+            contract_version: 1,
+            action,
+            identity_key,
+            planning_request,
+            dependency_requirements_id: Some(dependency_requirements_id),
+            environment_ref: None,
         };
-        self.dependency_requirements_proof = Some(proof.clone());
-        Ok(proof)
+        ValidatedDependencyEnvironmentRequest::try_from(request)
+            .map_err(|error| CurrentDependencyEnvironmentRequestError::Contract(error.to_string()))
     }
 
     fn current_dependency_requirements_proof(
@@ -1131,6 +1285,65 @@ mod tests {
                 InferenceDiagnosticCode::DependencyRequirementsMissing
             );
         }
+    }
+
+    #[tokio::test]
+    async fn check_action_rejects_sidecar_choices_that_do_not_match_current_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("valid validation session");
+
+        let mut resolve_request = state_request_with_validation_session(
+            "graph-session-1",
+            "aaaaaaaaaaaaaaaa",
+            "aaaaaaaaaaaaaaaa",
+            "validation.session.1",
+            "dependency-node-1",
+            true,
+        );
+        resolve_request.selected_binding_ids =
+            vec![DependencyBindingId::parse("binding-a").expect("valid binding id")];
+        let resolve_result = store
+            .resolve_dependency_environment_action_intent(resolve_request)
+            .await;
+        assert_eq!(
+            resolve_result.status,
+            DependencyEnvironmentActionIntentStatus::RequestReady
+        );
+
+        let mut check_request = state_request_with_validation_session_and_action(
+            "graph-session-1",
+            "aaaaaaaaaaaaaaaa",
+            "aaaaaaaaaaaaaaaa",
+            "validation.session.1",
+            "dependency-node-1",
+            true,
+            DependencyEnvironmentAction::Check,
+        );
+        check_request.selected_binding_ids =
+            vec![DependencyBindingId::parse("binding-b").expect("valid binding id")];
+        let check_result = store
+            .resolve_dependency_environment_action_intent(check_request)
+            .await;
+
+        assert_eq!(
+            check_result.status,
+            DependencyEnvironmentActionIntentStatus::Blocked
+        );
+        assert_eq!(
+            check_result.diagnostics[0].code,
+            InferenceDiagnosticCode::DescriptorStale
+        );
     }
 
     #[tokio::test]

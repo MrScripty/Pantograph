@@ -800,6 +800,22 @@ defining an image-only inference-node interface.
         `DependencyEnvironmentRequest` only after the producer proof, current
         executable descriptor summary, sidecar-authored choices, and
         dependency-planning identity agree.
+      - Workflow-service dependency-environment request derivation slice
+        completed on 2026-05-26: `RequestReady` now requires workflow-service
+        to derive and validate a canonical path-free
+        `DependencyEnvironmentRequest` from the current executable descriptor
+        state, dependency-planning producer proof, host platform context,
+        sidecar-selected bindings, and sidecar manual override patches.
+        `Resolve` creates or refreshes the current proof through the same
+        derivation path; `Check` and `Install` compare the current sidecar
+        choices against the stored proof and return typed stale diagnostics
+        when they no longer agree. The request remains backend-internal and is
+        not carried by frontend or Tauri action intents/results. Verification
+        passed: `cargo fmt`; `cargo test -p pantograph-workflow-service
+        inference_validation_state`. Remaining follow-up: connect the validated
+        request to the canonical dependency-environment service/result boundary
+        once that service owner exists, and keep frontend/Tauri as action-intent
+        transport only.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the
