@@ -248,11 +248,120 @@ defining an image-only inference-node interface.
       validated intent/revision/session types after boundary parsing; raw
       strings, numeric revisions, or JSON maps may not become internal
       freshness keys.
-- [ ] Delete or rewrite `ModelDependencyRequest`/`model_path` dependency
-      hydration call sites that are on the `puma-lib` -> inference path. Any
-      remaining dependency-environment work must consume the canonical
-      path-free dependency-planning contract directly, not a compatibility
-      adapter around the retired request.
+- [ ] Replace `ModelDependencyRequest`/`ModelRefV2.model_path` dependency
+      preflight with scheduler-owned readiness and runtime handoff. Re-plan
+      decision on 2026-05-26: use option 3. Dependency readiness, runtime/device
+      selection influence, selected environment identity, executable model-load
+      target resolution, and runtime-host launch facts belong to the
+      workflow-service/scheduler/runtime-host boundary, not to node-engine,
+      embedded-runtime task execution, Tauri, frontend graph data, or Puma-Lib
+      node metadata.
+      Scope clarification: this is not a compatibility adapter around
+      `ModelDependencyRequest`, `ModelRefV2`, `model_path`, `environment_ref`,
+      or graph-authored package facts. It is a replacement path. Each legacy
+      producer/consumer must either move to the canonical scheduler-owned
+      handoff or be deleted when no active runtime path needs it.
+      Required contract shape:
+      1. Workflow-service validation/admission derives a path-free dependency
+         readiness request from `pumas_model_ref`, descriptor facts, scheduler
+         intent, selected binding ids, manual override patches, and current
+         graph revision/session identity.
+      2. Scheduler admission consumes a typed readiness proof and the current
+         validation summary before it can mark an inference task schedulable.
+         The proof must include stable dependency identity, action/result state,
+         diagnostics, and selected environment identity, but no local paths or
+         graph-authored environment refs.
+      3. Runtime-host handoff consumes only scheduler-selected runtime/device,
+         readiness proof identity, materialized upstream inputs, and
+         backend-owned executable load-target facts. Load targets are resolved
+         by the backend/runtime host from Pumas-approved references, never by
+         node-engine or graph editor data.
+      4. Node-engine continues to execute only non-inference tasks on this path.
+         Inference nodes become scheduler tasks and must not call dependency
+         preflight, `ModelDependencyResolver`, `resolve_model_ref`, or
+         `build_model_ref_v2`.
+      5. Tauri remains transport/composition only. It may manage concrete
+         services until the active runtime path no longer needs them, but must
+         not expose direct dependency commands, synthesize paths, or own
+         dependency readiness policy.
+      Staged implementation order:
+      1. Add or reuse scheduler-owned DTOs for dependency readiness proof and
+         runtime-host handoff inputs, with focused tests that reject
+         `ModelDependencyRequest`, `ModelRefV2`, `model_path`, `environment_ref`,
+         and local load-target fields at the boundary.
+      2. Wire workflow-service queue/admission to require the backend
+         validation summary plus dependency readiness proof before creating
+         schedulable inference tasks. Keep graph editing and validation display
+         separate from queue admission.
+      3. Wire runtime-host dispatch to consume scheduler handoff facts directly
+         and resolve executable load targets through the backend/Pumas-approved
+         provider path.
+      4. Replace embedded-runtime and node-engine Python-backed dependency
+         preflight call sites with fail-closed diagnostics that point to the
+         scheduler handoff when a runtime task reaches them without proof.
+      5. Delete `ModelDependencyRequest`, `ModelDependencyResolver`,
+         `ModelRefV2`, `build_model_ref_v2`, path-derived model-id repair, and
+         tests/fixtures for successful path-shaped preflight once all active
+         runtime execution paths use the scheduler handoff.
+      Verification gate: every slice must run focused scheduler/workflow-service
+      tests for proof freshness and stale graph revision rejection, focused
+      runtime-host tests for path-free handoff consumption, and source-search
+      checks proving no successful path converts the scheduler handoff back into
+      `ModelDependencyRequest`, `ModelRefV2`, graph `modelPath`, or
+      `model_path`.
+      Standards compliance tightening:
+      1. Contract placement and validation must follow executable-contract
+         standards. Shared readiness proof and runtime handoff DTOs must live in
+         an existing dedicated contract crate or a narrowly owned new contract
+         crate, not inside Tauri, embedded-runtime implementation modules, or
+         frontend code. Raw IPC/graph/persisted input must parse once into
+         validated newtypes/enums with private unchecked constructors,
+         `TryFrom`/`FromStr` boundary parsing, and specific error enums.
+         Public library APIs must not expose `Result<T, String>`, raw
+         `serde_json::Value`, path-shaped primitives, or unbranded `String`
+         identifiers when those values cross crate or process boundaries.
+      2. Scheduler/readiness policy must be a synchronous core with async
+         shells only around I/O, runtime dispatch, Pumas/load-target lookup, or
+         durable store operations. No implementation slice may create a global
+         Tokio runtime, spawn detached tasks, hold graph/session/store locks
+         across `.await`, or hide background polling/retry loops outside a
+         named lifecycle owner with cancellation, tracked task handles,
+         shutdown behavior, tracing, and idempotency rules.
+      3. Composition and dependency ownership must stay narrow. Concrete Pumas
+         load-target providers, runtime-host dispatchers, resource monitors,
+         and test fakes are selected at composition roots or explicit lifecycle
+         owners. Feature/domain crates depend on contracts/facades only. Any
+         new dependency requires cargo-tree inspection, narrow owner
+         declaration, lockfile update when applicable, and a note in the slice
+         log explaining why `std` or existing workspace crates were
+         insufficient.
+      4. Multi-user/concurrent workflow safety is required in the contract, not
+         left to callers. Readiness proofs and runtime handoffs must carry
+         enough validated identity to reject stale or cross-session use:
+         workflow/run/session id, graph revision, validation session id when
+         applicable, scheduler task id, readiness proof id/version, selected
+         runtime/device ids, and correlation id. Queue admission and runtime
+         dispatch must be idempotent for retries and must reject proofs whose
+         validation summary or dependency result no longer matches the current
+         admitted task.
+      5. Verification must include the thinnest cross-layer acceptance path
+         before deleting legacy runtime success paths: graph/session validation
+         produces a readiness proof, scheduler admission consumes it, runtime
+         handoff is built without paths, and a fake runtime-host receives only
+         scheduler-owned handoff facts. Unit tests alone, typecheck alone, or
+         isolated DTO tests are insufficient for the first production slice
+         crossing workflow-service, scheduler, and runtime-host ownership.
+         Tests that touch durable stores, temp roots, global caches, or runtime
+         registries must isolate those resources per test or serialize with a
+         documented guard.
+      6. Documentation/deletion gates are part of each source slice. Every
+         touched `src/` directory must update its README or a linked ADR with
+         purpose, invariants, API consumer contract, lifecycle/error semantics,
+         rejected alternatives, and revisit triggers. Slices that replace a
+         legacy path must delete or fail-close the superseded successful path in
+         the same commit; do not leave deprecated branches, compatibility
+         shims, or successful path-shaped fixtures for later cleanup unless the
+         plan records an explicit unresolved re-plan boundary.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

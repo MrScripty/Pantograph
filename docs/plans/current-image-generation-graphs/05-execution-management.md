@@ -13458,6 +13458,92 @@ Worker rules:
     embedded-runtime/node-engine `ModelDependencyRequest` dependency
     preflight/model-ref path, then remove the managed resolver object from
     Tauri app setup once no active runtime path depends on it.
+- 2026-05-26 Milestone 5d dependency preflight/runtime handoff re-plan:
+  - Boundary clarified: the remaining `ModelDependencyRequest` and
+    `ModelRefV2.model_path` path is no longer just a dependency-environment
+    cleanup item. It is an active inference execution boundary where
+    node-engine/embedded-runtime dependency preflight still participates in
+    readiness, model-ref hydration, and runtime input construction for
+    Python-backed runtime nodes.
+  - Decision: use option 3. Replace the legacy preflight/model-ref path with
+    scheduler-owned readiness and runtime-host handoff. Dependency readiness,
+    runtime/device selection influence, selected environment identity,
+    executable model-load target resolution, and runtime launch facts belong to
+    workflow-service/scheduler/runtime-host ownership, not node-engine, Tauri,
+    frontend graph data, or Puma-Lib node metadata.
+  - Rejected approaches:
+    1. A narrow `ModelDependencyRequest` cleanup that still returns
+       `ModelRefV2` was rejected because it preserves `model_path` as successful
+       runtime authority.
+    2. A scheduler-handoff-to-`ModelRefV2` adapter was rejected as a
+       compatibility shim.
+    3. Immediate hard deletion was rejected because active Python-backed
+       runtime paths still need an executable replacement before the resolver
+       object and preflight gates can be removed.
+  - Required implementation sequence:
+    1. Define or reuse scheduler-owned dependency readiness proof and
+       runtime-host handoff DTOs that reject local paths, graph-authored
+       `environment_ref`, `ModelDependencyRequest`, and `ModelRefV2`.
+    2. Wire workflow-service admission to require backend validation summary
+       plus dependency readiness proof before schedulable inference tasks are
+       created.
+    3. Wire runtime-host dispatch to consume scheduler-selected runtime/device,
+       readiness identity, materialized upstream inputs, and backend/Pumas
+       load-target facts directly.
+    4. Replace embedded-runtime/node-engine Python-backed dependency preflight
+       call sites with fail-closed diagnostics for missing scheduler handoff.
+    5. Delete `ModelDependencyRequest`, `ModelDependencyResolver`,
+       `ModelRefV2`, `build_model_ref_v2`, path-derived model-id repair, and
+       successful path-shaped tests/fixtures after all active runtime paths use
+       the scheduler handoff.
+  - Standards constraints: do not add fallback execution, graph-local paths,
+    frontend dependency policy, Tauri business logic, raw JSON readiness maps,
+    or adapters from the new handoff back into the old resolver/model-ref
+    contracts. Each production slice must update the touched source README or
+    ADR and include source-search checks for retired path-shaped terms.
+- 2026-05-26 Milestone 5d standards iteration for dependency
+  preflight/runtime handoff re-plan:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/ARCHITECTURE-PATTERNS.md`,
+    `DOCUMENTATION-STANDARDS.md`, `TESTING-STANDARDS.md`,
+    `DEPENDENCY-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-ASYNC-STANDARDS.md`.
+  - Contract tightening added: scheduler readiness proof and runtime-host
+    handoff DTOs must be executable contracts in an owned contract crate, with
+    validated newtypes/enums, boundary parsing through `TryFrom`/`FromStr`,
+    private unchecked constructors, and specific error enums. Public library
+    APIs must not expose `Result<T, String>`, raw JSON maps, unbranded
+    identifiers, local paths, `ModelDependencyRequest`, or `ModelRefV2` across
+    crate/process boundaries.
+  - Async/lifecycle tightening added: readiness policy stays a synchronous
+    core; async is allowed only at I/O/runtime/durable-store shells. No global
+    runtime creation, detached spawns, locks across `.await`, or hidden
+    background polling/retry loops are allowed. Any concurrent dispatch owner
+    must document cancellation, tracked handles, shutdown, tracing, and
+    idempotency.
+  - Composition/dependency tightening added: concrete Pumas load-target
+    providers, runtime-host dispatchers, resource monitors, and fakes must be
+    selected at composition roots or explicit lifecycle owners. New dependencies
+    require narrow owner declaration, cargo-tree inspection, lockfile updates
+    when applicable, and a slice-log justification when `std` or existing
+    workspace crates are insufficient.
+  - Concurrency/freshness tightening added: proofs and handoffs must carry
+    validated workflow/run/session/revision/validation/task/proof/runtime/
+    device/correlation identity sufficient to reject stale, cross-session, or
+    mismatched admitted tasks and to make queue admission/runtime dispatch
+    idempotent under concurrent users and retries.
+  - Verification tightening added: the first production slice crossing
+    workflow-service, scheduler, and runtime-host must include a thin
+    cross-layer acceptance test proving validation creates a proof, scheduler
+    admission consumes it, runtime handoff is path-free, and a fake runtime host
+    receives only scheduler-owned facts. Resource-touching tests must isolate
+    durable/global state or serialize with a documented guard.
+  - Documentation/deletion tightening added: every touched source directory
+    must update README/ADR coverage, and replacement slices must delete or
+    fail-close superseded successful legacy paths in the same commit instead of
+    leaving deprecated branches, compatibility shims, or successful path-shaped
+    fixtures.
 
 ### Traceability Links
 
