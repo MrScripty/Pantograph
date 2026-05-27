@@ -5,6 +5,7 @@
 //! task specific ports are resolved by workflow-service descriptors and
 //! persisted as authored inference interface snapshots.
 
+use super::DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID;
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
 use node_engine::{
@@ -54,6 +55,9 @@ impl InferenceTask {
     pub const PORT_DEVICE: &'static str = "device";
     /// Port ID for canonical Pumas model reference input
     pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
+    /// Port ID for optional dependency-environment sidecar association
+    pub const PORT_DEPENDENCY_ENVIRONMENT_SIDECAR: &'static str =
+        DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID;
     /// Port ID for bounded execution diagnostics output
     pub const PORT_DIAGNOSTICS: &'static str = "diagnostics";
 
@@ -87,6 +91,11 @@ impl TaskDescriptor for InferenceTask {
                     Self::PORT_PUMAS_MODEL_REF,
                     "Pumas Model Ref",
                     PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    Self::PORT_DEPENDENCY_ENVIRONMENT_SIDECAR,
+                    "Dependency Environment",
+                    PortDataType::DependencyEnvironmentSidecar,
                 ),
             ],
             outputs: vec![PortMetadata::optional(
@@ -133,7 +142,13 @@ mod tests {
                 .iter()
                 .map(|port| port.id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["task_kind", "runtime", "device", "pumas_model_ref"]
+            vec![
+                "task_kind",
+                "runtime",
+                "device",
+                "pumas_model_ref",
+                "dependency_environment_sidecar"
+            ]
         );
         assert_eq!(
             meta.outputs
@@ -206,6 +221,10 @@ mod tests {
             .iter()
             .any(|p| p.id == InferenceTask::PORT_PUMAS_MODEL_REF
                 && p.data_type == PortDataType::Json));
+        assert!(meta.inputs.iter().any(|p| p.id
+            == InferenceTask::PORT_DEPENDENCY_ENVIRONMENT_SIDECAR
+            && p.data_type == PortDataType::DependencyEnvironmentSidecar
+            && !p.required));
         assert!(!meta.inputs.iter().any(|p| p.id == "resolved_model_source"));
         assert!(!meta
             .inputs

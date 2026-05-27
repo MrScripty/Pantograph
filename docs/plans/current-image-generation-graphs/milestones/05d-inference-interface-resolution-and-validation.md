@@ -497,6 +497,24 @@ defining an image-only inference-node interface.
         pantograph-workflow-service
         dependency_environment_sidecar_port_type_projects_through_contract_type`;
         `npm run typecheck`.
+      - Descriptor port-pair sub-slice completed on 2026-05-26:
+        `dependency-environment` is now a control/manual descriptor that
+        exposes only authored sidecar choices plus the typed
+        `dependency_environment_sidecar` association output. It no longer
+        exposes graph-facing `pumas_model_ref`, model/task/backend/platform
+        authority fields, `dependency_requirements`, `environment_ref`, or
+        dependency status ports. Canonical `llm-inference` now exposes the
+        matching optional `dependency_environment_sidecar` input while keeping
+        execution fail-closed through the typed inference gateway. Verification
+        passed: `cargo fmt`; `cargo test -p workflow-nodes
+        test_descriptor_has_canonical_inference_contract_ports`; `cargo test -p
+        workflow-nodes test_descriptor_has_required_ports`; `cargo test -p
+        workflow-nodes contract_projection_preserves_port_directions_and_value_types`;
+        `cargo test -p workflow-nodes`.
+        Discovered follow-up: app and reusable graph mock backends still carry
+        older dynamic `llm-inference` mock ports. They must be cleaned up in
+        the frontend no-legacy/mock cleanup slice rather than treated as
+        canonical descriptor facts.
       - Workflow-service fail-closed builder sub-slice completed on
         2026-05-26: `GraphSessionStore` and `WorkflowService` now accept
         `DependencyEnvironmentActionIntent`, validate it against the current

@@ -442,6 +442,18 @@ mod tests {
         assert_eq!(pumas_model_ref.value_type, PortValueType::Json);
         assert_eq!(pumas_model_ref.requirement, PortRequirement::Optional);
 
+        let dependency_sidecar = llm
+            .inputs
+            .iter()
+            .find(|port| port.id.as_str() == "dependency_environment_sidecar")
+            .expect("dependency sidecar port");
+        assert_eq!(dependency_sidecar.kind, PortKind::Input);
+        assert_eq!(
+            dependency_sidecar.value_type,
+            PortValueType::DependencyEnvironmentSidecar
+        );
+        assert_eq!(dependency_sidecar.requirement, PortRequirement::Optional);
+
         let diagnostics = llm
             .outputs
             .iter()

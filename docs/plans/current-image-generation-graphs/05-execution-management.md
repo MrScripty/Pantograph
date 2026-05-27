@@ -12906,6 +12906,33 @@ Worker rules:
   - Remaining follow-up: add the descriptor port pair to
     `dependency-environment` and `llm-inference`, then implement the
     workflow-service sidecar subject resolver.
+- 2026-05-26 Milestone 5d dependency sidecar descriptor port-pair slice:
+  - Smallest useful vertical slice: update only the workflow-node descriptor
+    contracts so the graph can author the typed sidecar association before
+    workflow-service consumes it.
+  - Allowed files: `crates/workflow-nodes/src/processing/mod.rs`,
+    `crates/workflow-nodes/src/processing/inference.rs`,
+    `crates/workflow-nodes/src/processing/dependency_environment.rs`,
+    `crates/workflow-nodes/src/contracts.rs`, processing README, and Milestone
+    5d plan/status docs.
+  - No-fallback/no-legacy result: `dependency-environment` is now
+    control/manual, exposes the exact-only `dependency_environment_sidecar`
+    output, and no longer exposes model/task/backend/platform authority,
+    dependency requirements, dependency status, or `environment_ref` graph
+    ports. `llm-inference` exposes the matching optional sidecar input and
+    still fails closed through the host typed inference gateway.
+  - Verification passed: `cargo fmt`; `cargo test -p workflow-nodes
+    test_descriptor_has_canonical_inference_contract_ports`; `cargo test -p
+    workflow-nodes test_descriptor_has_required_ports`; `cargo test -p
+    workflow-nodes contract_projection_preserves_port_directions_and_value_types`;
+    `cargo test -p workflow-nodes`.
+  - Discovered follow-up: frontend mock backends still contain old dynamic
+    `llm-inference` mock ports. They must be cleaned up in the frontend
+    no-legacy/mock cleanup slice before broad frontend validation coverage
+    treats mocks as canonical descriptor facts.
+  - Remaining follow-up: implement the workflow-service dependency action
+    subject resolver that validates the typed sidecar edge and joins the
+    associated inference node to current validation state.
 
 ### Traceability Links
 

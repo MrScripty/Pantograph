@@ -11,7 +11,7 @@ adapters such as the Python runtime.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
-| `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
+| `dependency_environment.rs` | Declares the dependency-environment sidecar/control node that associates dependency actions with one inference node. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
 | `inference.rs` | Declares the canonical `llm-inference` bootstrap contract for model reference and scheduler constraint inputs before backend descriptor resolution. |
@@ -49,10 +49,13 @@ cannot bypass the host typed inference gateway.
 The optional `runtime` input is not projected into node-engine execution,
 worker envelopes, or inference requests directly; scheduler-produced execution
 decisions are the only source of selected runtime facts.
-The dependency-environment descriptor consumes explicit `pumas_model_ref` or
-`model_id` identity and must not expose `model_path` as graph-facing dependency
-identity. Pumas remains responsible for mapping model references to approved
-artifact load targets.
+The dependency-environment descriptor is a control/manual sidecar. It exposes
+only user-authored sidecar choices plus the typed
+`dependency_environment_sidecar` association output; it does not consume
+`pumas_model_ref`, model facts, backend keys, platform context, dependency
+requirements, or environment references as graph ports. Workflow-service derives
+dependency requests from the associated inference node and backend validation
+state.
 The old descriptor-local `base_url`/model generation config has been removed;
 generation and task options must flow through descriptor-authored graph ports
 and typed inference requests.
@@ -83,8 +86,9 @@ environment-ref data ports.
 - Python-backed node contracts must preserve canonical port meanings across
   releases. Retired path-shaped inputs are removed rather than maintained as
   compatibility shims.
-- Dependency environment handoff, when used, is represented as structured JSON
-  rather than opaque string flags.
+- Dependency environment association uses the exact-only
+  `dependency_environment_sidecar` port type rather than structured JSON,
+  opaque string flags, or runtime environment-ref ports.
 - KV-cache reuse, when exposed by processing nodes, uses explicit `kv_cache`
   ports rather than generic `json` ports.
 - Static `llm-inference` descriptors must not expose prompt, text, image,

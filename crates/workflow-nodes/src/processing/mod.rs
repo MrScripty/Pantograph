@@ -2,6 +2,8 @@
 //!
 //! Nodes that transform, analyze, or generate data.
 
+pub const DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID: &str = "dependency_environment_sidecar";
+
 mod audio_generation;
 mod dependency_environment;
 mod depth_estimation;
