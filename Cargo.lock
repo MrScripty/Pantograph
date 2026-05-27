@@ -7347,6 +7347,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-dependency-environment-service"
+version = "0.1.0"
+dependencies = [
+ "pantograph-dependency-planning",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pantograph-dependency-planning"
 version = "0.1.0"
 dependencies = [

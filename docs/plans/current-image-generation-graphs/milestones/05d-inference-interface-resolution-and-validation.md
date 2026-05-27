@@ -961,6 +961,35 @@ defining an image-only inference-node interface.
         6. After the service returns ready environment identity, feed the
            scheduler readiness/admission proof path from canonical dependency
            results rather than graph-authored dependency-environment outputs.
+      - Dependency-environment service contract slice completed on 2026-05-26:
+        added `pantograph-dependency-environment-service` as a no-I/O service
+        facade over provider traits and added
+        `ValidatedDependencyEnvironmentResult` to the shared
+        dependency-planning contract. The slice accepts only
+        `ValidatedDependencyEnvironmentRequest`, validates provider output
+        before returning it, and includes a not-implemented provider that emits
+        typed diagnostic results instead of falling back to
+        `ModelDependencyRequest`.
+      - Files touched by the slice: workspace `Cargo.toml`/`Cargo.lock`,
+        `crates/pantograph-dependency-planning/src/environment.rs`,
+        `crates/pantograph-dependency-planning/src/lib.rs`, and the new
+        `crates/pantograph-dependency-environment-service/` crate with README,
+        source README, public API tests, and crate docs.
+      - No-fallback/no-legacy result: the new crate has no dependency on
+        node-engine, embedded-runtime, Tauri, workflow-service, frontend DTOs,
+        Pumas, filesystem/process/runtime infrastructure, or legacy resolver
+        crates. Path-shaped and `ModelDependencyRequest` terms appear only in
+        rejection guards, documentation, and tests.
+      - Verification passed: `cargo tree -p
+        pantograph-dependency-environment-service --depth 1`; `cargo test -p
+        pantograph-dependency-environment-service`; `cargo test -p
+        pantograph-dependency-planning dependency_environment`; `cargo fmt`;
+        `git diff --check` for touched implementation files; targeted
+        source-search for legacy path-shaped fields and commands.
+      - Deviation: this slice does not yet wire workflow-service to the new
+        service. That remains the next vertical slice so lock-free snapshotting,
+        stale revision/session rejection, and backend-owned display projection
+        can be tested at the workflow-service boundary.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

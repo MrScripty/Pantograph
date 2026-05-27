@@ -13324,6 +13324,37 @@ Worker rules:
     retries, or subprocess supervision require an explicit lifecycle owner with
     cancellation, tracked task handles, shutdown behavior, idempotency/overlap
     rules, and lifecycle-owner tracing.
+- 2026-05-26 Milestone 5d dependency-environment service contract slice:
+  - Smallest useful vertical slice: add the dedicated
+    `pantograph-dependency-environment-service` crate, add the shared
+    `ValidatedDependencyEnvironmentResult` boundary, and prove a no-I/O
+    provider can return validated typed diagnostics without touching legacy
+    resolver paths.
+  - Allowed write set: workspace `Cargo.toml`/`Cargo.lock`, the new
+    `crates/pantograph-dependency-environment-service/` crate,
+    `crates/pantograph-dependency-planning/src/environment.rs`,
+    `crates/pantograph-dependency-planning/src/lib.rs`, focused tests, README
+    docs, and this plan.
+  - No-fallback/no-legacy result: the new service crate accepts only
+    `ValidatedDependencyEnvironmentRequest`, returns only
+    `ValidatedDependencyEnvironmentResult`, has no dependency on node-engine,
+    embedded-runtime, Tauri, workflow-service, frontend DTOs, Pumas, process,
+    filesystem, runtime, or legacy resolver crates, and emits explicit
+    not-implemented diagnostics instead of adapting `ModelDependencyRequest`.
+  - Implementation completed: added the no-I/O service facade and provider
+    trait, typed service errors, not-implemented provider, shared validated
+    result wrapper, result semantic checks for ready/not-implemented/invalid
+    states, crate-level docs, crate/source/test READMEs, and public API tests.
+  - Verification passed: `cargo tree -p
+    pantograph-dependency-environment-service --depth 1`; `cargo test -p
+    pantograph-dependency-environment-service`; `cargo test -p
+    pantograph-dependency-planning dependency_environment`; `cargo fmt`; `git
+    diff --check` for touched implementation files; targeted source-search for
+    retired path-shaped fields and commands.
+  - Deviation: this slice does not wire workflow-service yet. Next slice must
+    call the service from a lock-free workflow-service snapshot, reject stale
+    graph revisions/session ids before publishing, and keep the action response
+    as an intent response while full dependency results stay backend-owned.
 
 ### Traceability Links
 

@@ -253,6 +253,45 @@ impl DependencyEnvironmentResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub struct ValidatedDependencyEnvironmentResult(DependencyEnvironmentResult);
+
+impl ValidatedDependencyEnvironmentResult {
+    pub fn into_inner(self) -> DependencyEnvironmentResult {
+        self.0
+    }
+
+    pub fn as_result(&self) -> &DependencyEnvironmentResult {
+        &self.0
+    }
+}
+
+impl TryFrom<DependencyEnvironmentResult> for ValidatedDependencyEnvironmentResult {
+    type Error = DependencyPlanningContractError;
+
+    fn try_from(value: DependencyEnvironmentResult) -> Result<Self, Self::Error> {
+        value.validate()?;
+        validate_environment_result_semantics(&value)?;
+        Ok(Self(value))
+    }
+}
+
+impl TryFrom<serde_json::Value> for ValidatedDependencyEnvironmentResult {
+    type Error = DependencyPlanningContractError;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        reject_path_shaped_result_fields(&value)?;
+        let result: DependencyEnvironmentResult = serde_json::from_value(value).map_err(|_| {
+            DependencyPlanningContractError::InvalidField {
+                field: "dependency_environment_result",
+                reason: "result JSON did not match dependency environment contract",
+            }
+        })?;
+        Self::try_from(result)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub struct ValidatedDependencyEnvironmentRequest(DependencyEnvironmentRequest);
 
 impl ValidatedDependencyEnvironmentRequest {
@@ -348,4 +387,105 @@ fn reject_path_shaped_request_fields(
     } else {
         Ok(())
     }
+}
+
+fn reject_path_shaped_result_fields(
+    value: &serde_json::Value,
+) -> Result<(), DependencyPlanningContractError> {
+    if contains_path_shaped_fields(value) {
+        Err(DependencyPlanningContractError::InvalidField {
+            field: "dependency_environment_result",
+            reason: "result must not contain path-shaped dependency identity fields",
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn contains_path_shaped_fields(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(object) => object.iter().any(|(key, child)| {
+            matches!(
+                key.as_str(),
+                "model_path"
+                    | "modelPath"
+                    | "entry_path"
+                    | "entryPath"
+                    | "selected_artifact_path"
+                    | "selectedArtifactPath"
+                    | "local_load_path"
+                    | "localLoadPath"
+            ) || contains_path_shaped_fields(child)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(contains_path_shaped_fields),
+        _ => false,
+    }
+}
+
+fn validate_environment_result_semantics(
+    result: &DependencyEnvironmentResult,
+) -> Result<(), DependencyPlanningContractError> {
+    if result.readiness_state == DependencyEnvironmentReadinessState::Ready {
+        if result.dependency_requirements_id.is_none() {
+            return Err(DependencyPlanningContractError::MissingField {
+                field: "dependency_requirements_id",
+            });
+        }
+        if result.environment_ref.is_none() {
+            return Err(DependencyPlanningContractError::MissingField {
+                field: "environment_ref",
+            });
+        }
+        if result.validation_state != DependencyEnvironmentValidationState::Valid {
+            return Err(DependencyPlanningContractError::InvalidField {
+                field: "dependency_environment_result.validation_state",
+                reason: "ready dependency environment results must be valid",
+            });
+        }
+        if result.install_state != DependencyEnvironmentInstallState::Installed {
+            return Err(DependencyPlanningContractError::InvalidField {
+                field: "dependency_environment_result.install_state",
+                reason: "ready dependency environment results must be installed",
+            });
+        }
+        if let Some(operation) = &result.operation {
+            if operation.state != DependencyEnvironmentOperationState::Succeeded {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_environment_result.operation.state",
+                    reason: "ready dependency environment operations must be succeeded",
+                });
+            }
+        }
+    }
+
+    if result.validation_state == DependencyEnvironmentValidationState::Invalid
+        && result.validation_errors.is_empty()
+        && result.diagnostics.is_empty()
+    {
+        return Err(DependencyPlanningContractError::InvalidField {
+            field: "dependency_environment_result.validation_errors",
+            reason:
+                "invalid dependency environment results require validation errors or diagnostics",
+        });
+    }
+
+    if result.readiness_state == DependencyEnvironmentReadinessState::NotImplemented
+        || result.install_state == DependencyEnvironmentInstallState::NotImplemented
+        || result.validation_state == DependencyEnvironmentValidationState::NotImplemented
+    {
+        if result.failure_state != Some(DependencyEnvironmentFailureState::NotImplemented) {
+            return Err(DependencyPlanningContractError::InvalidField {
+                field: "dependency_environment_result.failure_state",
+                reason: "not-implemented dependency environment results require not_implemented failure state",
+            });
+        }
+        if result.diagnostics.is_empty() {
+            return Err(DependencyPlanningContractError::InvalidField {
+                field: "dependency_environment_result.diagnostics",
+                reason: "not-implemented dependency environment results require diagnostics",
+            });
+        }
+    }
+
+    Ok(())
 }

@@ -1,0 +1,19 @@
+[package]
+name = "pantograph-dependency-environment-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Pantograph dependency environment service facade and provider contracts"
+
+[lints]
+workspace = true
+
+[dependencies]
+pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

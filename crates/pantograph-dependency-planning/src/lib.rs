@@ -25,7 +25,7 @@ pub use environment::{
     DependencyOperationTimestampMs, DependencyRequirement, DependencyRequirementBinding,
     DependencyRequirementKind, DependencyRequirementName, DependencyValidationFieldPath,
     PythonBindingDetails, PythonPackageManagerKind, PythonRequirementDetails,
-    ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
 };
 pub use error::{DependencyPlanningContractError, PumasArtifactEntryPathError};
 pub use model_ref::{
