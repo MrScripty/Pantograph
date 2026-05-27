@@ -816,6 +816,20 @@ defining an image-only inference-node interface.
         request to the canonical dependency-environment service/result boundary
         once that service owner exists, and keep frontend/Tauri as action-intent
         transport only.
+      - Re-plan boundary discovered on 2026-05-26: the validated
+        `DependencyEnvironmentRequest` now exists inside workflow-service, but
+        there is no canonical workflow-service dependency-environment
+        service/result owner to consume it. The remaining executable dependency
+        paths still route through retired `ModelDependencyRequest`/
+        `model_path` resolver contracts in node-engine, embedded-runtime, and
+        Tauri model-dependency commands. Continuing implementation directly
+        would either preserve the legacy hydration path or require inventing a
+        new service boundary without a recorded owner contract. Required
+        re-plan decision: define the backend owner for
+        `DependencyEnvironmentRequest -> DependencyEnvironmentResult`, its
+        relationship to Pumas/dependency planning, and the deletion sequence
+        for the retired `ModelDependencyRequest` dependency-environment
+        execution path.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

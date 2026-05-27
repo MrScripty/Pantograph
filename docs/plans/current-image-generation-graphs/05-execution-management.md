@@ -13185,6 +13185,23 @@ Worker rules:
   - Remaining follow-up: connect the validated request to the canonical
     dependency-environment service/result owner once that owner exists, keeping
     frontend/Tauri as action-intent transport only.
+- 2026-05-26 Milestone 5d dependency-environment service owner re-plan
+  boundary:
+  - Trigger: workflow-service can now derive and validate the canonical
+    `DependencyEnvironmentRequest`, but there is no canonical backend service
+    owner for `DependencyEnvironmentRequest -> DependencyEnvironmentResult`.
+  - Codebase effect: the only executable dependency-environment/dependency
+    resolver paths still route through retired `ModelDependencyRequest` and
+    path-shaped `model_path` contracts in node-engine, embedded-runtime, and
+    Tauri model-dependency commands.
+  - Why implementation stops: wiring the validated request into those paths
+    would preserve legacy compatibility, while creating a replacement service
+    without a recorded owner contract would expand the current slice beyond the
+    plan.
+  - Required re-plan: choose the backend owner for canonical
+    dependency-environment execution, define how it talks to Pumas/dependency
+    planning, and sequence deletion or replacement of the retired
+    `ModelDependencyRequest` dependency-environment execution path.
 
 ### Traceability Links
 
