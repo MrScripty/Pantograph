@@ -706,6 +706,23 @@ falling back to previously rendered ports.
    node-engine task input bindings, and once the scheduler proof path is wired,
    retire node-engine/embedded-runtime `environment_ref` input gates as
    dependency-admission authority.
+3d. Add a narrow backend-owned dependency requirements proof before deriving
+   `DependencyEnvironmentRequest`. This is option 2 now with option 3
+   discipline: the first implementation may store the proof in workflow-
+   service current validation state, but the contract shape must be suitable
+   for `pantograph-dependency-planning` to become the producer later without
+   rewriting frontend, Tauri, scheduler, or node-engine callers. The proof is
+   bounded and path-free: associated inference node id, graph revision,
+   validation session id, descriptor fingerprint, validated Pumas model ref,
+   task kind, validated runtime/device/trait constraints, dependency
+   requirements id or fingerprint, proof status, and typed diagnostics. It must
+   not contain executable paths, package facts, frontend display state, runtime
+   load targets, media payloads, or scheduler dispatch decisions. `Resolve`
+   may create or refresh the current proof through the backend dependency
+   planning boundary; `Check` and `Install` must require an existing current
+   proof and fail closed with typed diagnostics when it is missing, stale, or
+   invalid. The graph editor and Tauri transport continue to send action
+   intent only.
 4. Tighten request extraction before it feeds live validation. This is a hard
    prerequisite for the synchronous validation publisher and the later
    event-driven path: use one

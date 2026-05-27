@@ -443,6 +443,21 @@ defining an image-only inference-node interface.
          planning requirements identity are available. `Resolve` may create the
          current requirements identity; `Check` and `Install` must fail closed
          until it exists.
+         Re-plan decision: implement this as a narrow backend-owned dependency
+         requirements proof in workflow-service current validation state first,
+         with the contract shaped so `pantograph-dependency-planning` can later
+         become the producer without changing graph editor, Tauri, scheduler, or
+         node-engine callers. The proof must be bounded, path-free, and keyed to
+         the associated inference node: graph revision, validation session id,
+         descriptor fingerprint, validated `PumasModelRef`, task kind, validated
+         runtime/device/trait constraints, requirements id or fingerprint, proof
+         status, and typed diagnostics. It must not store executable paths,
+         Pumas package facts, runtime load targets, scheduler dispatch decisions,
+         frontend display state, media payloads, or arbitrary JSON metadata.
+         `Resolve` may create or refresh this proof through the backend
+         dependency-planning boundary; `Check` and `Install` require an existing
+         current proof and return typed missing/stale/invalid diagnostics instead
+         of deriving partial requests.
       5. Remove frontend path-era dependency subject inference and embedded
          runtime/node-engine `environment_ref` gates as active dependency
          admission paths once scheduler readiness proof is wired.
@@ -629,6 +644,16 @@ defining an image-only inference-node interface.
         `cargo test -p pantograph-workflow-service
         sidecar_association_is_not_materialized_as_scheduler_input`; `cargo
         test -p pantograph-workflow-service task_binding_resolution`.
+      - Dependency requirements proof re-plan decision recorded on 2026-05-26:
+        continue with option 2 using option 3 discipline. The next code slice
+        adds a focused workflow-service proof record and owner API that extends
+        current validation-state node records just enough to derive dependency
+        actions safely, while keeping the shape compatible with a later
+        `pantograph-dependency-planning` producer. The slice must include tests
+        proving `Resolve` can create or refresh the proof, `Check`/`Install`
+        fail closed without a current proof, stale graph revision/session/
+        descriptor mismatches block request derivation, and no path/package/
+        frontend/runtime-load fields appear in the proof or request boundary.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the

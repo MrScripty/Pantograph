@@ -12988,6 +12988,29 @@ Worker rules:
   - Remaining follow-up: dependency readiness still needs the canonical
     dependency-requirements identity/proof before `DependencyEnvironmentRequest`
     derivation and scheduler admission can consume readiness facts.
+- 2026-05-26 Milestone 5d dependency requirements proof re-plan decision:
+  - Decision: proceed with option 2 using option 3 discipline. Add the smallest
+    backend-owned dependency requirements proof now, but design the DTO/owner API
+    so `pantograph-dependency-planning` can become the proof producer later
+    without changing graph editor, Tauri, scheduler, or node-engine callers.
+  - Required proof contents: associated inference node id, graph revision,
+    validation session id, descriptor fingerprint, validated `PumasModelRef`,
+    task kind, validated runtime/device/trait constraints, dependency
+    requirements id or fingerprint, proof status, and typed diagnostics.
+  - Explicit exclusions: executable paths, Pumas package facts, runtime load
+    targets, scheduler dispatch decisions, frontend display state, media
+    payloads, stringly metadata bags, and arbitrary JSON are not proof fields.
+  - Behavior: `Resolve` may create or refresh the current proof through the
+    backend dependency-planning boundary. `Check` and `Install` require an
+    existing current proof and return typed missing/stale/invalid diagnostics
+    when it is absent or mismatched. No action may derive a partial
+    `DependencyEnvironmentRequest` from frontend state, graph display data,
+    package facts, or model paths.
+  - Next implementation slice: extend the workflow-service current validation
+    state owner with this proof record and focused tests for resolve creation,
+    check/install fail-closed behavior, stale revision/session/descriptor
+    rejection, bounded serialization, and absence of path/package/runtime-load
+    fields.
 
 ### Traceability Links
 
