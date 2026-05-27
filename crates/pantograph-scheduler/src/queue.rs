@@ -172,6 +172,7 @@ impl SchedulerTaskStateKind {
             SchedulerTaskStateKind::AwaitingInputs
                 | SchedulerTaskStateKind::InputUnavailable
                 | SchedulerTaskStateKind::Invalid
+                | SchedulerTaskStateKind::WaitingDependencyReadiness
                 | SchedulerTaskStateKind::Ready
         )
     }

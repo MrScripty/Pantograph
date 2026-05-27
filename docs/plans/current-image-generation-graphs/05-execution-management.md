@@ -13544,6 +13544,25 @@ Worker rules:
     fail-close superseded successful legacy paths in the same commit instead of
     leaving deprecated branches, compatibility shims, or successful path-shaped
     fixtures.
+- 2026-05-26 Milestone 5d scheduler task-state readiness gate slice:
+  - Completed a thin fail-closed runtime inference state slice. Runtime
+    inference tasks with complete graph inputs and `SchedulableTaskIntent` now
+    initialize as `WaitingDependencyReadiness`, not `Ready`, until the
+    scheduler-owned dependency readiness proof path admits them.
+  - `pantograph-scheduler` now allows `WaitingDependencyReadiness` as an
+    initial durable task state so workflow-service can represent the canonical
+    proof gate without a compatibility bridge.
+  - No-fallback/no-legacy confirmation: the slice did not add
+    `ModelDependencyRequest`, `ModelRefV2`, graph `modelPath`, `model_path`,
+    local load target fields, or scheduler-handoff-to-legacy adapters.
+  - Verification passed: `cargo fmt`; `cargo test -p pantograph-scheduler`;
+    `cargo test -p pantograph-workflow-service orchestrator_initializes --
+    --nocapture`; `git diff --check`; and targeted source search of touched
+    scheduler/workflow-service files for retired path-shaped terms.
+  - Remaining follow-up: wire workflow-service proof-producing admission so
+    backend validation summary plus dependency readiness proof can transition
+    runtime inference from `WaitingDependencyReadiness` into dispatch
+    selection.
 
 ### Traceability Links
 

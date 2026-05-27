@@ -69,6 +69,11 @@ change behind stable typed contracts.
 - Readiness proof, task state, resource snapshots, batching decisions, and
   lifecycle diagnostics are separate contracts; none of them may silently stand
   in for another.
+- `WaitingDependencyReadiness` is a valid initial task state for runtime
+  inference tasks whose graph inputs are available but whose scheduler-owned
+  dependency readiness proof has not been admitted. It prevents
+  `SchedulableTaskIntent` from being treated as executable runtime authority by
+  itself.
 - Runtime choices from a graph are hard constraints only when explicitly
   provided; otherwise scheduler policy selects the runtime.
 - Dispatch selection consumes only typed scheduler candidates, readiness proof,

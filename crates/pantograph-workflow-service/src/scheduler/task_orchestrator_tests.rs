@@ -193,7 +193,7 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
 }
 
 #[test]
-fn orchestrator_initializes_ready_state_for_schedulable_task() {
+fn orchestrator_initializes_runtime_task_waiting_for_dependency_readiness() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_intent = runtime_host_request_fixture().handoff.task_intent;
     let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
@@ -205,7 +205,10 @@ fn orchestrator_initializes_ready_state_for_schedulable_task() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].task_id.as_str(), task_intent.task_id.as_str());
     assert_eq!(records[0].state_version, 1);
-    assert!(matches!(records[0].state, SchedulerTaskState::Ready { .. }));
+    assert!(matches!(
+        records[0].state,
+        SchedulerTaskState::WaitingDependencyReadiness { .. }
+    ));
 }
 
 #[test]

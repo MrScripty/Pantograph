@@ -112,6 +112,11 @@ Runtime inference tasks that depend on upstream task outputs initialize as
 `AwaitingInputs` even when their schedulable intent is otherwise complete.
 They may become dispatch candidates only after scheduler-owned input-readiness
 logic materializes the connected upstream results.
+Runtime inference tasks with complete graph inputs and a schedulable intent now
+initialize as `WaitingDependencyReadiness`, not `Ready`, until
+scheduler-owned dependency readiness proof is admitted. Workflow-service must
+not treat `SchedulableTaskIntent` alone as executable runtime authority or
+bridge it back into dependency preflight/model-path contracts.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.
@@ -176,6 +181,11 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Runtime inference tasks with upstream dependencies must not initialize as
   `Ready`; they remain `AwaitingInputs` until scheduler task-result materialized
   inputs can prove dispatch inputs are available.
+- Runtime inference tasks without pending graph inputs must not initialize as
+  `Ready` solely because a `SchedulableTaskIntent` exists; they remain
+  `WaitingDependencyReadiness` until scheduler admission consumes the canonical
+  dependency readiness proof and can produce a dispatch-selected runtime
+  handoff.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable

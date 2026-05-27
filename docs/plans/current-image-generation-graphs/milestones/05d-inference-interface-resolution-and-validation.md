@@ -362,6 +362,31 @@ defining an image-only inference-node interface.
          the same commit; do not leave deprecated branches, compatibility
          shims, or successful path-shaped fixtures for later cleanup unless the
          plan records an explicit unresolved re-plan boundary.
+- [x] 2026-05-26 scheduler task-state readiness gate slice completed:
+  - Smallest useful vertical slice: reuse the existing scheduler-owned
+    readiness proof/runtime handoff contracts and remove the premature `Ready`
+    initial state for runtime inference tasks that have a
+    `SchedulableTaskIntent` but no admitted dependency readiness proof.
+  - Allowed files touched:
+    `crates/pantograph-scheduler/src/queue.rs`,
+    `crates/pantograph-scheduler/src/README.md`,
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: no adapter back to
+    `ModelDependencyRequest`, `ModelRefV2`, graph `modelPath`, `model_path`, or
+    local load targets was introduced. Runtime inference with complete graph
+    inputs now initializes as `WaitingDependencyReadiness`; connected-input
+    runtime tasks still initialize as `AwaitingInputs`.
+  - Verification passed: `cargo fmt`; `cargo test -p pantograph-scheduler`;
+    `cargo test -p pantograph-workflow-service orchestrator_initializes --
+    --nocapture`; `git diff --check`; and targeted source search of the touched
+    scheduler/workflow-service files for retired path-shaped terms.
+  - Remaining follow-up: add the production proof-producing workflow-service
+    admission path that consumes backend validation summary plus dependency
+    readiness proof and transitions runtime inference from
+    `WaitingDependencyReadiness` to dispatch selection.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

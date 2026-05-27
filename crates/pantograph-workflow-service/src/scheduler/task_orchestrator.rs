@@ -577,7 +577,7 @@ fn initial_task_state(
                 return Ok(awaiting_inputs_state());
             }
             if let Some(task_intent) = task.schedulable_intent.clone() {
-                Ok(SchedulerTaskState::Ready {
+                Ok(SchedulerTaskState::WaitingDependencyReadiness {
                     execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },
                 })
             } else {
