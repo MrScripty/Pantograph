@@ -416,6 +416,33 @@ defining an image-only inference-node interface.
     ownership, then build dispatch candidates from the ready task state and
     scheduler facts without introducing load-target paths into workflow-service
     graph data.
+- [x] 2026-05-26 production readiness-proof caller re-plan boundary recorded:
+  - Discovered issue: workflow-service now has a path-free bridge for consuming
+    `DependencyPreflightResult`, but the active production run path does not yet
+    have a canonical owner that produces that proof for each admitted runtime
+    inference task. Current `WorkflowTechnicalFitDependencyReadinessFact`
+    values and reduced execution-plan dependency-readiness projections are
+    diagnostic/inspection facts; they do not carry the full
+    `DependencyPlanningIdentityKey`, `dependency_requirements_id`,
+    `DependencyEnvironmentRef`, graph/session/revision freshness, and
+    scheduler task correlation required by scheduler readiness admission.
+  - Why this blocks the next implementation slice: deriving a
+    `DependencyPreflightResult` from reduced technical-fit facts or reduced
+    `WorkflowExecutionPlanNodeDecision` would create a second authority path and
+    violate the no-fallback/no-legacy rule. The proof must come from a
+    backend-owned dependency-readiness provider/session boundary that consumes
+    typed validation summary, Pumas model ref, selected binding ids, scheduler
+    intent, and run identity.
+  - Required re-plan: define the production proof producer and freshness
+    contract before wiring runtime session execution. The design must state
+    whether the proof is produced during executable validation publication,
+    queue admission, or a scheduler-owned readiness lifecycle step, and how
+    stale graph revisions, validation sessions, dependency actions, retries,
+    and concurrent workflow runs are rejected or correlated.
+  - No-fallback/no-legacy confirmation: do not convert
+    `WorkflowTechnicalFitDependencyReadinessFact`, reduced execution-plan
+    dependency readiness, graph node data, or Tauri/frontend payloads into a
+    fake `DependencyPreflightResult`.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

@@ -13583,6 +13583,24 @@ Worker rules:
     `DependencyPreflightResult` from backend validation/dependency readiness
     ownership and then feeds ready runtime tasks into scheduler dispatch
     selection.
+- 2026-05-26 Milestone 5d production readiness-proof caller re-plan boundary:
+  - Discovered that the next production runtime-session slice needs a canonical
+    producer for `DependencyPreflightResult`. Existing
+    `WorkflowTechnicalFitDependencyReadinessFact` and reduced
+    `WorkflowExecutionPlanNodeDecision` dependency-readiness data are
+    diagnostic/inspection projections and do not carry the full identity,
+    environment, requirements, freshness, and scheduler task correlation needed
+    by scheduler readiness admission.
+  - Re-plan required before implementation: decide the backend-owned proof
+    producer and lifecycle boundary. The design must specify whether proofs are
+    produced during executable validation publication, queue admission, or a
+    scheduler-owned dependency-readiness step, and how stale validation
+    sessions, graph revisions, retries, dependency actions, and concurrent runs
+    are correlated or rejected.
+  - No-fallback/no-legacy confirmation: do not synthesize
+    `DependencyPreflightResult` from technical-fit facts, reduced execution
+    plans, graph node data, Tauri/frontend payloads, `ModelDependencyRequest`,
+    `ModelRefV2`, or local paths.
 
 ### Traceability Links
 
