@@ -13035,6 +13035,25 @@ Worker rules:
     creates or refreshes this proof for `Resolve`, then derive the canonical
     `DependencyEnvironmentRequest` from the proof and associated current
     descriptor state.
+- 2026-05-26 Milestone 5d dependency requirements proof producer re-plan
+  boundary:
+  - Discovery: `pantograph-dependency-planning` currently provides typed
+    planning request, identity, environment, and preflight DTOs, but not a
+    producer API that derives a dependency requirements id/proof from a
+    validated planning request. Continuing directly in workflow-service would
+    move dependency-planning policy into the wrong crate or synthesize hidden
+    ids.
+  - Options:
+    1. Add the producer API in `pantograph-dependency-planning` now, then have
+       workflow-service call it for `Resolve` and store the returned proof.
+    2. Add only a workflow-service adapter for externally supplied
+       dependency-planning results, keeping proof production for a later
+       dependency-planning slice.
+    3. Keep dependency actions fail-closed until the full scheduler readiness
+       proof is designed.
+  - Recommendation: choose option 1 to keep moving toward real dependency
+    actions while preserving ownership; choose option 2 only if the producer API
+    needs a separate cross-crate proposal/review first.
 
 ### Traceability Links
 

@@ -668,6 +668,24 @@ defining an image-only inference-node interface.
         `allow(dead_code)` until the dependency-planning producer slice calls
         it. Verification passed: `cargo fmt`; `cargo test -p
         pantograph-workflow-service inference_validation_state`.
+      - Re-plan boundary discovered on 2026-05-26: the next implementation
+        step needs a backend producer for the dependency requirements proof, but
+        `pantograph-dependency-planning` currently exposes request, identity,
+        environment, and preflight DTOs rather than a producer API that derives
+        a requirements id/proof from a validated planning request. Implementing
+        request derivation inside workflow-service would make workflow-service
+        own dependency-planning policy; synthesizing ids locally would be a
+        hidden fallback. Options to decide:
+        1. Add the producer API in `pantograph-dependency-planning` now and
+           have workflow-service call it to create/refresh proofs for `Resolve`.
+        2. Add a narrow workflow-service adapter that only validates and stores
+           externally supplied dependency-planning results, leaving proof
+           production to a later dependency-planning slice.
+        3. Keep dependency actions fail-closed and defer proof production until
+           the full scheduler readiness proof is designed.
+        Recommendation: option 1 if the goal is to continue toward real
+        dependency actions now; option 2 only if dependency-planning ownership
+        needs a separate cross-crate proposal first.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the
