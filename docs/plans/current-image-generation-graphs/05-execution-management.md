@@ -13722,6 +13722,29 @@ Worker rules:
   - Remaining follow-up: implement the workflow-service provider that calls the
     dependency-environment service, projects the validated result through this
     function, and feeds the scheduler-owned readiness lifecycle.
+- 2026-05-26 Milestone 5d workflow-service dependency-environment readiness
+  provider adapter:
+  - Smallest useful vertical slice: implemented
+    `WorkflowDependencyReadinessProvider` for the canonical
+    `DependencyEnvironmentService` facade. It converts lifecycle
+    `DependencyReadinessRequest` input into a path-free
+    `DependencyEnvironmentRequest` using `Resolve`, validates provider output,
+    projects the result into `DependencyPreflightResult`, and feeds scheduler
+    readiness admission through the existing lifecycle.
+  - Allowed write set used:
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, the
+    Milestone 5d plan, and this execution log.
+  - No-fallback/no-legacy confirmation: no `ModelDependencyRequest`,
+    `ModelRefV2`, graph path fields, package-fact synthesis, Tauri/frontend
+    display state, or load-target facts are used as readiness proof. A
+    not-implemented dependency-environment provider becomes typed terminal
+    scheduler diagnostics, not a runtime fallback attempt.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service` and
+    `cargo test -p pantograph-workflow-service readiness_lifecycle --
+    --nocapture`. Existing warning noted: `set_active_run_execution_plan`
+    remains a pre-existing unused store method.
 
 ### Traceability Links
 

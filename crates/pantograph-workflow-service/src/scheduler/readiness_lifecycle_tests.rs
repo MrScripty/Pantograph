@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentService, NotImplementedDependencyEnvironmentProvider,
+};
 use pantograph_dependency_planning::{
     DependencyEnvironmentReadinessState, DependencyPreflightResult, DependencyReadinessPolicy,
     ValidatedDependencyReadinessRequest,
@@ -158,6 +161,43 @@ fn readiness_lifecycle_rejects_mismatched_provider_proof_through_scheduler_polic
     };
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic.code == SchedulerTaskStateDiagnosticCode::SchedulerPolicyError
+    }));
+}
+
+#[test]
+fn readiness_lifecycle_uses_dependency_environment_service_provider() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let lifecycle = WorkflowDependencyReadinessLifecycle::new(orchestrator.clone());
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = initialized_store(&orchestrator, &task_graph);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let provider = DependencyEnvironmentService::new(NotImplementedDependencyEnvironmentProvider);
+
+    let record = lifecycle
+        .resolve_and_admit_active_runtime_task(
+            &mut store,
+            &provider,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+        )
+        .expect("not-implemented dependency provider should produce typed terminal state");
+
+    let SchedulerTaskState::TerminalFailed { diagnostics } = record.state else {
+        panic!("not-implemented dependency provider should terminal-fail the runtime task");
+    };
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == SchedulerTaskStateDiagnosticCode::TerminalFailure
     }));
 }
 

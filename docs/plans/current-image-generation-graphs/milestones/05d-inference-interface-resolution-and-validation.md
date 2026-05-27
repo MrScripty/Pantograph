@@ -613,6 +613,39 @@ defining an image-only inference-node interface.
   - Remaining follow-up: implement the workflow-service readiness provider that
     calls the dependency-environment service, projects the validated result
     through this function, and feeds the scheduler-owned readiness lifecycle.
+- [x] 2026-05-26 workflow-service dependency-environment readiness provider
+      adapter slice completed:
+  - Smallest useful vertical slice: implement
+    `WorkflowDependencyReadinessProvider` for the canonical
+    `DependencyEnvironmentService` facade. The adapter turns the lifecycle's
+    validated `DependencyReadinessRequest` into a path-free
+    `DependencyEnvironmentRequest` with `Resolve`, validates provider output,
+    projects it through
+    `dependency_preflight_result_from_environment_result`, and returns the
+    resulting `DependencyPreflightResult` to scheduler readiness admission.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the adapter consumes only canonical
+    dependency-planning and dependency-environment-service contracts. It does
+    not call `ModelDependencyRequest`, build `ModelRefV2`, read graph
+    `modelPath` or `model_path`, inspect package facts, synthesize load
+    targets, use Tauri/frontend display state, or convert reduced technical-fit
+    facts into proof. The default not-implemented provider produces typed
+    terminal scheduler diagnostics instead of a fallback runtime attempt.
+  - Focused test added: the readiness lifecycle uses
+    `DependencyEnvironmentService<NotImplementedDependencyEnvironmentProvider>`
+    as a concrete provider and terminal-fails the runtime task through
+    scheduler policy.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service` and
+    `cargo test -p pantograph-workflow-service readiness_lifecycle --
+    --nocapture`. The test still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire the active run loop to call this lifecycle for
+    runtime inference tasks in `WaitingDependencyReadiness`, then expose only
+    `Ready` scheduler tasks to runtime-host dispatch selection.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

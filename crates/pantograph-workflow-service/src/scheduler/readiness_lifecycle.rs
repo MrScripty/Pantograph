@@ -1,9 +1,13 @@
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentProvider, DependencyEnvironmentService,
+};
 use pantograph_dependency_planning::{
-    DependencyPlanningCallerContext, DependencyPlanningContractError,
+    dependency_preflight_result_from_environment_result, DependencyEnvironmentAction,
+    DependencyEnvironmentRequest, DependencyPlanningCallerContext, DependencyPlanningContractError,
     DependencyPlanningIdentityKey, DependencyPlanningRequest, DependencyPreflightResult,
     DependencyReadinessPolicy, DependencyReadinessRequest, DependencyTraitIntent,
     DependencyTraitIntentId, DependencyTraitIntentValue, SchedulerIntent,
-    ValidatedDependencyReadinessRequest,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyReadinessRequest,
 };
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTraitValue};
 use thiserror::Error;
@@ -28,6 +32,30 @@ pub(crate) trait WorkflowDependencyReadinessProvider {
         &self,
         request: &ValidatedDependencyReadinessRequest,
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError>;
+}
+
+impl<P> WorkflowDependencyReadinessProvider for DependencyEnvironmentService<P>
+where
+    P: DependencyEnvironmentProvider,
+{
+    fn resolve_dependency_readiness(
+        &self,
+        request: &ValidatedDependencyReadinessRequest,
+    ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
+        let environment_request = dependency_environment_request_from_readiness_request(request)?;
+        let environment_result = self.handle(&environment_request).map_err(|error| {
+            WorkflowDependencyReadinessProviderError::Failed {
+                message: error.to_string(),
+            }
+        })?;
+        let preflight_result = dependency_preflight_result_from_environment_result(
+            &environment_result,
+        )
+        .map_err(|error| WorkflowDependencyReadinessProviderError::Failed {
+            message: error.to_string(),
+        })?;
+        Ok(Some(preflight_result.into_inner()))
+    }
 }
 
 /// Scheduler-owned workflow-service lifecycle for dependency readiness proof.
@@ -114,6 +142,23 @@ impl WorkflowDependencyReadinessLifecycle {
 pub(crate) enum WorkflowDependencyReadinessProviderError {
     #[error("dependency readiness provider failed: {message}")]
     Failed { message: String },
+}
+
+fn dependency_environment_request_from_readiness_request(
+    request: &ValidatedDependencyReadinessRequest,
+) -> Result<ValidatedDependencyEnvironmentRequest, WorkflowDependencyReadinessProviderError> {
+    let request = request.as_request();
+    ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+        contract_version: 1,
+        action: DependencyEnvironmentAction::Resolve,
+        identity_key: request.identity_key.clone(),
+        planning_request: request.planning_request.clone(),
+        dependency_requirements_id: None,
+        environment_ref: None,
+    })
+    .map_err(|error| WorkflowDependencyReadinessProviderError::Failed {
+        message: error.to_string(),
+    })
 }
 
 #[derive(Debug, Error)]
