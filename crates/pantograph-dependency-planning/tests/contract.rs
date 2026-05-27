@@ -1,14 +1,15 @@
 use pantograph_dependency_planning::{
-    DependencyEnvironmentAction, DependencyEnvironmentFailureState,
-    DependencyEnvironmentInstallState, DependencyEnvironmentKind,
-    DependencyEnvironmentReadinessState, DependencyEnvironmentRequest, DependencyEnvironmentResult,
-    DependencyEnvironmentValidationState, DependencyOperationTimestampMs,
-    DependencyPlanningContractError, DependencyPlanningDiagnosticCode,
-    DependencyPlanningIdentityKey, DependencyPlanningPlatformContext, DependencyPlanningRequest,
-    DependencyPlanningResult, DependencyPlanningState, DependencyPreflightRequest,
-    DependencyPreflightResult, DependencyRequirementKind, ModelArtifactKind,
-    PumasArtifactEntryPath, PumasArtifactEntryPathError, PumasArtifactLoadPathKind,
-    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+    dependency_preflight_result_from_environment_result, DependencyEnvironmentAction,
+    DependencyEnvironmentFailureState, DependencyEnvironmentInstallState,
+    DependencyEnvironmentKind, DependencyEnvironmentReadinessState, DependencyEnvironmentRequest,
+    DependencyEnvironmentResult, DependencyEnvironmentValidationState,
+    DependencyOperationTimestampMs, DependencyPlanningContractError,
+    DependencyPlanningDiagnosticCode, DependencyPlanningIdentityKey,
+    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyPlanningResult,
+    DependencyPlanningState, DependencyPreflightRequest, DependencyPreflightResult,
+    DependencyRequirementKind, ModelArtifactKind, PumasArtifactEntryPath,
+    PumasArtifactEntryPathError, PumasArtifactLoadPathKind, ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyEnvironmentResult, ValidatedDependencyPlanningRequest,
     ValidatedDependencyPreflightRequest, ValidatedDependencyPreflightResult,
 };
 
@@ -270,6 +271,63 @@ fn dependency_preflight_result_fixtures_decode_and_validate() {
             &DependencyPlanningDiagnosticCode::RuntimeUnavailable
         ]
     );
+}
+
+#[test]
+fn dependency_preflight_projection_preserves_ready_environment_identity() {
+    let environment_result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("ready environment result should decode");
+    let environment_result = ValidatedDependencyEnvironmentResult::try_from(environment_result)
+        .expect("ready environment result should validate");
+
+    let preflight_result = dependency_preflight_result_from_environment_result(&environment_result)
+        .expect("ready environment result should project to preflight proof");
+    let preflight_result = preflight_result.as_result();
+
+    assert_eq!(
+        preflight_result.readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(
+        preflight_result.identity_key,
+        environment_result.as_result().identity_key
+    );
+    assert_eq!(
+        preflight_result.dependency_requirements_id,
+        environment_result.as_result().dependency_requirements_id
+    );
+    assert_eq!(
+        preflight_result.environment_ref,
+        environment_result.as_result().environment_ref
+    );
+    assert!(preflight_result.diagnostics.is_empty());
+}
+
+#[test]
+fn dependency_preflight_projection_preserves_unavailable_diagnostics() {
+    let environment_result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_UNAVAILABLE_RESULT)
+            .expect("unavailable environment result should decode");
+    let environment_result = ValidatedDependencyEnvironmentResult::try_from(environment_result)
+        .expect("unavailable environment result should validate");
+
+    let preflight_result = dependency_preflight_result_from_environment_result(&environment_result)
+        .expect("unavailable environment result should project to preflight proof");
+    let preflight_result = preflight_result.as_result();
+
+    assert_eq!(
+        preflight_result.readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    assert_eq!(
+        preflight_result.identity_key,
+        environment_result.as_result().identity_key
+    );
+    assert_eq!(
+        preflight_result.diagnostics,
+        environment_result.as_result().diagnostics
+    );
+    assert!(preflight_result.environment_ref.is_none());
 }
 
 #[test]

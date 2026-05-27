@@ -33,8 +33,9 @@ pub use model_ref::{
     PumasArtifactEntryPath, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
 };
 pub use preflight::{
-    DependencyPlanningIdentityKey, DependencyPreflightRequest, DependencyPreflightResult,
-    ValidatedDependencyPreflightRequest, ValidatedDependencyPreflightResult,
+    dependency_preflight_result_from_environment_result, DependencyPlanningIdentityKey,
+    DependencyPreflightRequest, DependencyPreflightResult, ValidatedDependencyPreflightRequest,
+    ValidatedDependencyPreflightResult,
 };
 pub use producer::{
     produce_dependency_requirements_proof, produce_dependency_requirements_proof_from_request,

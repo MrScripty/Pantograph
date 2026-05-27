@@ -581,6 +581,38 @@ defining an image-only inference-node interface.
     lifecycle is synchronous and owns no background tasks; any later async
     provider work must add explicit cancellation, tracked task handles, and
     shutdown behavior in this lifecycle module.
+- [x] 2026-05-26 dependency-environment to preflight projection slice
+      completed:
+  - Smallest useful vertical slice: add the canonical pure contract projection
+    from `ValidatedDependencyEnvironmentResult` to
+    `ValidatedDependencyPreflightResult` in `pantograph-dependency-planning`.
+    This gives the workflow-service readiness provider/caller a real path-free
+    proof source without synthesizing scheduler proof from graph node data,
+    technical-fit preview facts, reduced execution-plan projections, or
+    frontend/Tauri display state.
+  - Allowed files touched:
+    `crates/pantograph-dependency-planning/src/preflight.rs`,
+    `crates/pantograph-dependency-planning/src/lib.rs`,
+    `crates/pantograph-dependency-planning/src/README.md`,
+    `crates/pantograph-dependency-planning/tests/contract.rs`, this milestone,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the projection preserves only validated
+    path-free identity, readiness state, dependency requirements id,
+    dependency environment ref, and typed diagnostics. It does not carry
+    requirements/binding display rows, operation timing, `ModelDependencyRequest`,
+    `ModelRefV2`, graph `modelPath`, `model_path`, local load targets, Pumas
+    package facts, runtime host handoff data, or executable paths into
+    scheduler admission.
+  - Focused tests added: ready dependency-environment result projects to ready
+    preflight proof with requirements/environment identity; unavailable
+    dependency-environment result projects its readiness state and diagnostics
+    without fabricating environment identity.
+  - Verification passed: `cargo fmt -p pantograph-dependency-planning` and
+    `cargo test -p pantograph-dependency-planning dependency_preflight_projection
+    --test contract -- --nocapture`.
+  - Remaining follow-up: implement the workflow-service readiness provider that
+    calls the dependency-environment service, projects the validated result
+    through this function, and feeds the scheduler-owned readiness lifecycle.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

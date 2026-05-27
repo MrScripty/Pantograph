@@ -13699,6 +13699,29 @@ Worker rules:
     async provider work must add lifecycle-owned cancellation, tracked task
     handles, shutdown, and tracing here rather than in Tauri, node-engine, or
     runtime adapters.
+- 2026-05-26 Milestone 5d dependency-environment to preflight projection:
+  - Smallest useful vertical slice: added the pure dependency-planning contract
+    projection from `ValidatedDependencyEnvironmentResult` to
+    `ValidatedDependencyPreflightResult`. This gives the workflow-service
+    readiness provider/caller a canonical proof source before it wires
+    dependency-environment service output into scheduler readiness admission.
+  - Allowed write set used:
+    `crates/pantograph-dependency-planning/src/preflight.rs`,
+    `crates/pantograph-dependency-planning/src/lib.rs`,
+    `crates/pantograph-dependency-planning/src/README.md`,
+    `crates/pantograph-dependency-planning/tests/contract.rs`, the Milestone
+    5d plan, and this execution log.
+  - No-fallback/no-legacy confirmation: the projection preserves only
+    path-free identity, readiness state, dependency requirements id,
+    dependency environment ref, and typed diagnostics. It drops
+    dependency-environment display rows, operation timing, package facts, local
+    paths, runtime-host handoff data, and executable load targets.
+  - Verification passed: `cargo fmt -p pantograph-dependency-planning` and
+    `cargo test -p pantograph-dependency-planning
+    dependency_preflight_projection --test contract -- --nocapture`.
+  - Remaining follow-up: implement the workflow-service provider that calls the
+    dependency-environment service, projects the validated result through this
+    function, and feeds the scheduler-owned readiness lifecycle.
 
 ### Traceability Links
 

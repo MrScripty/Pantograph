@@ -14,7 +14,7 @@ frontend state, and scheduler policy.
 | `environment/` | Child modules for dependency-environment result payload rows that would otherwise make the envelope module too broad. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
-| `preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
+| `preflight.rs` | Path-free preflight request/result contracts, shared dependency-planning identity/correlation key, and the validated projection from dependency-environment result to scheduler preflight proof. |
 | `producer.rs` | Pure dependency requirements proof producer that derives path-free requirements ids, override fingerprints, proof status, and diagnostics. |
 | `readiness.rs` | Path-free host readiness input contract and typed readiness policy for producing preflight proof without leaking executable handoff facts. |
 | `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, dependency overrides, and validated ids. |
@@ -66,6 +66,11 @@ is the only public facade.
 - Dependency readiness input is a host request, not readiness proof; it carries
   typed policy and path-free planning identity while the host produces
   `DependencyPreflightResult`.
+- Dependency-environment results are projected into scheduler preflight proof
+  through the preflight module. The projection preserves only path-free
+  identity, readiness state, requirements/environment identity, and diagnostics;
+  it does not carry requirements tables, binding rows, operation timing, local
+  paths, Pumas package facts, or runtime load targets into scheduler admission.
 - Dependency requirements proof production stays in this crate as pure domain
   logic. It can consume optional typed availability facts, but it cannot call
   Pumas, inspect files, select runtime/device policy, or query scheduler state.
@@ -113,6 +118,12 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Dependency requirements proof producer APIs accept validated planning
   requests plus optional typed availability facts and return path-free proof
   records. They are synchronous because the producer performs no I/O.
+- Scheduler readiness callers must use
+  `dependency_preflight_result_from_environment_result` when turning a
+  dependency-environment provider result into `DependencyPreflightResult`.
+  They must not synthesize preflight proof from graph node data, technical-fit
+  preview diagnostics, reduced execution-plan projections, or frontend/Tauri
+  display state.
 
 ## Structured Producer Contract
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.

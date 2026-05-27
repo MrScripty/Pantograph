@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::environment::{DependencyEnvironmentReadinessState, DependencyEnvironmentRef};
+use crate::environment::{
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRef,
+    ValidatedDependencyEnvironmentResult,
+};
 use crate::error::DependencyPlanningContractError;
 use crate::model_ref::{ModelArtifactKind, PumasModelRef};
 use crate::request::{
@@ -286,6 +289,27 @@ impl TryFrom<serde_json::Value> for ValidatedDependencyPreflightResult {
         })?;
         Self::try_from(result)
     }
+}
+
+/// Project a validated dependency-environment result into scheduler preflight
+/// proof.
+///
+/// This projection intentionally drops provider-only display payloads such as
+/// requirements, bindings, operation timing, and validation rows. Scheduler
+/// readiness admission needs only path-free identity, readiness state,
+/// requirements/environment identity, and diagnostics.
+pub fn dependency_preflight_result_from_environment_result(
+    result: &ValidatedDependencyEnvironmentResult,
+) -> Result<ValidatedDependencyPreflightResult, DependencyPlanningContractError> {
+    let result = result.as_result();
+    ValidatedDependencyPreflightResult::try_from(DependencyPreflightResult {
+        contract_version: default_dependency_preflight_contract_version(),
+        identity_key: result.identity_key.clone(),
+        readiness_state: result.readiness_state,
+        dependency_requirements_id: result.dependency_requirements_id.clone(),
+        environment_ref: result.environment_ref.clone(),
+        diagnostics: result.diagnostics.clone(),
+    })
 }
 
 fn default_dependency_preflight_contract_version() -> u32 {
