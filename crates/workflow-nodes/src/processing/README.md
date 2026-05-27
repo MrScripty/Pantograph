@@ -67,6 +67,10 @@ Compatible text-generation
 descriptors now also reserve explicit `kv_cache_in` and `kv_cache_out` ports
 using the first-class `kv_cache` graph type so KV reuse remains graph-visible
 instead of hiding behind generic JSON ports.
+Dependency-environment sidecar association uses the first-class
+`dependency_environment_sidecar` port type. Processing descriptors must not
+represent that association with `json`, `any`, `component`, or runtime
+environment-ref data ports.
 
 ## Alternatives Rejected
 - Leave dependency environment handoff as an undocumented runtime-only input.

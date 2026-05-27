@@ -66,6 +66,9 @@ translate emitted execution facts instead of inferring graph-change semantics
 locally.
 Graph-authoring, GUI, and binding contract semantics are not owned here; they
 are resolved through `pantograph-node-contracts` projections.
+`DependencyEnvironmentSidecar` is an exact-only association marker for
+workflow-service subject resolution. It is not executable runtime data and must
+not be coerced through `any`, `json`, or `component` ports.
 
 For scheduler-owned workflow execution, `single_task.rs` is the only supported
 one-task core execution plumbing. It requires an explicit node type from the

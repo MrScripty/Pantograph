@@ -59,6 +59,10 @@ backend-projected execution identity over raw `execution_id` fallback fields.
   data and are not authoritative by themselves.
 - Workflow event `ownership` payloads are backend-authored transport context;
   consumers may fall back to `execution_id` only for mock or legacy producers.
+- `dependency_environment_sidecar` is a typed association marker mirrored from
+  Rust port contracts. Package components may display and route it as a port
+  type, but they must not interpret it as runtime data or dependency request
+  authority.
 
 ## Revisit Triggers
 - Workflow persistence adopts a versioned schema that needs explicit migration

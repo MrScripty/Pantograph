@@ -64,11 +64,28 @@ pub enum PortDataType {
     Tensor,
     /// Raw audio samples
     AudioSamples,
+    /// Dependency-environment sidecar association marker.
+    DependencyEnvironmentSidecar,
 }
 
 impl PortDataType {
     /// Check if this type can connect to another type
     pub fn is_compatible_with(&self, other: &PortDataType) -> bool {
+        if matches!(
+            (self, other),
+            (
+                PortDataType::DependencyEnvironmentSidecar,
+                PortDataType::DependencyEnvironmentSidecar
+            )
+        ) {
+            return true;
+        }
+        if matches!(self, PortDataType::DependencyEnvironmentSidecar)
+            || matches!(other, PortDataType::DependencyEnvironmentSidecar)
+        {
+            return false;
+        }
+
         // Any type is compatible with everything
         if matches!(self, PortDataType::Any) || matches!(other, PortDataType::Any) {
             return true;
@@ -365,8 +382,12 @@ mod tests {
         assert!(PortDataType::Boolean.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::Json.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::KvCache.is_compatible_with(&PortDataType::KvCache));
+        assert!(PortDataType::DependencyEnvironmentSidecar
+            .is_compatible_with(&PortDataType::DependencyEnvironmentSidecar));
         assert!(!PortDataType::Number.is_compatible_with(&PortDataType::Boolean));
         assert!(!PortDataType::KvCache.is_compatible_with(&PortDataType::Json));
+        assert!(!PortDataType::DependencyEnvironmentSidecar.is_compatible_with(&PortDataType::Any));
+        assert!(!PortDataType::DependencyEnvironmentSidecar.is_compatible_with(&PortDataType::Json));
     }
 
     #[test]

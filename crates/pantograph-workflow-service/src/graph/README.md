@@ -73,6 +73,10 @@ backend-owned `pantograph-node-contracts` records. Dynamic per-node port
 overlays are resolved through `effective_definition.rs` as
 `EffectiveNodeContract` values, then projected back to workflow-service DTOs
 for existing graph-edit callers.
+Dependency-environment sidecar edges use the exact-only
+`dependency_environment_sidecar` port data type. Graph editing can display and
+persist that typed association, but workflow-service subject resolution is the
+only owner that may interpret it for dependency actions.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.

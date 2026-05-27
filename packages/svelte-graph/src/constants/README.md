@@ -20,6 +20,9 @@ rules would make node handles, edges, legends, and tests drift.
 - Constants should remain framework-light and easy to import from package code.
 - Port type labels must match package workflow type contracts.
 - Visual constants should avoid becoming a second source of backend semantics.
+- Association marker types such as `dependency_environment_sidecar` may receive
+  presentation colors here, but the constants must not define dependency
+  request, scheduler, or runtime semantics.
 
 ## Decision
 Keep reusable graph constants here and export supported constants through the

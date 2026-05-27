@@ -380,6 +380,9 @@ fn convert_value_type(value_type: node_engine::PortDataType) -> PortValueType {
         node_engine::PortDataType::Vector => PortValueType::Vector,
         node_engine::PortDataType::Tensor => PortValueType::Tensor,
         node_engine::PortDataType::AudioSamples => PortValueType::AudioSamples,
+        node_engine::PortDataType::DependencyEnvironmentSidecar => {
+            PortValueType::DependencyEnvironmentSidecar
+        }
     }
 }
 
@@ -692,11 +695,18 @@ mod tests {
             category: node_engine::NodeCategory::Processing,
             label: "Extended Types".to_string(),
             description: "Preserves engine-only value types".to_string(),
-            inputs: vec![node_engine::PortMetadata::required(
-                "model",
-                "Model",
-                node_engine::PortDataType::ModelHandle,
-            )],
+            inputs: vec![
+                node_engine::PortMetadata::required(
+                    "model",
+                    "Model",
+                    node_engine::PortDataType::ModelHandle,
+                ),
+                node_engine::PortMetadata::optional(
+                    "dependency_environment_sidecar",
+                    "Dependency Environment",
+                    node_engine::PortDataType::DependencyEnvironmentSidecar,
+                ),
+            ],
             outputs: vec![node_engine::PortMetadata::optional(
                 "tensor",
                 "Tensor",
@@ -708,6 +718,10 @@ mod tests {
         let contract = task_metadata_to_contract(&metadata).expect("contract");
 
         assert_eq!(contract.inputs[0].value_type, PortValueType::ModelHandle);
+        assert_eq!(
+            contract.inputs[1].value_type,
+            PortValueType::DependencyEnvironmentSidecar
+        );
         assert_eq!(contract.outputs[0].value_type, PortValueType::Tensor);
         assert_eq!(contract.execution_semantics, NodeExecutionSemantics::Batch);
     }

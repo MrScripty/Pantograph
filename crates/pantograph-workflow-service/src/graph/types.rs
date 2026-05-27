@@ -30,6 +30,7 @@ pub enum PortDataType {
     Vector,
     Tensor,
     AudioSamples,
+    DependencyEnvironmentSidecar,
 }
 
 impl PortDataType {
@@ -66,6 +67,9 @@ impl PortDataType {
             PortDataType::Vector => pantograph_node_contracts::PortValueType::Vector,
             PortDataType::Tensor => pantograph_node_contracts::PortValueType::Tensor,
             PortDataType::AudioSamples => pantograph_node_contracts::PortValueType::AudioSamples,
+            PortDataType::DependencyEnvironmentSidecar => {
+                pantograph_node_contracts::PortValueType::DependencyEnvironmentSidecar
+            }
         }
     }
 
@@ -97,6 +101,9 @@ impl PortDataType {
             pantograph_node_contracts::PortValueType::Vector => PortDataType::Vector,
             pantograph_node_contracts::PortValueType::Tensor => PortDataType::Tensor,
             pantograph_node_contracts::PortValueType::AudioSamples => PortDataType::AudioSamples,
+            pantograph_node_contracts::PortValueType::DependencyEnvironmentSidecar => {
+                PortDataType::DependencyEnvironmentSidecar
+            }
         }
     }
 }
@@ -173,6 +180,20 @@ mod tests {
             .expect("port definition should project to contract");
 
         assert_eq!(contract.inference_payloads, definition.inference_payloads);
+    }
+
+    #[test]
+    fn dependency_environment_sidecar_port_type_projects_through_contract_type() {
+        let value_type = PortDataType::DependencyEnvironmentSidecar.to_contract_value_type();
+
+        assert_eq!(
+            value_type,
+            pantograph_node_contracts::PortValueType::DependencyEnvironmentSidecar
+        );
+        assert_eq!(
+            PortDataType::from_contract_value_type(value_type),
+            PortDataType::DependencyEnvironmentSidecar
+        );
     }
 }
 

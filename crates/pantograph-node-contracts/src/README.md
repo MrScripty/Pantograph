@@ -63,6 +63,10 @@ candidates, graph-authoring diagnostics, or saved-workflow migration results.
   policy, and typed rejection diagnostics for unmigratable artifacts.
 - Compatibility results carry structured source/target ids and typed rejection
   reasons.
+- Dependency-environment sidecar associations use the exact-only
+  `DependencyEnvironmentSidecar` port value type. They are not compatible with
+  `Any`, `Json`, or `Component` ports because they describe graph association
+  authority, not runtime data.
 - Effective contracts include resolution diagnostics so callers can explain
   why a node shape differs from its static type contract.
 - Host adapters project contracts; they do not define compatibility rules.

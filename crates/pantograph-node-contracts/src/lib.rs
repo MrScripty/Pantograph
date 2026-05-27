@@ -219,6 +219,7 @@ pub enum PortValueType {
     Vector,
     Tensor,
     AudioSamples,
+    DependencyEnvironmentSidecar,
 }
 
 impl PortValueType {
@@ -227,6 +228,25 @@ impl PortValueType {
     }
 
     pub fn compatibility_with(self, target: Self) -> PortTypeCompatibility {
+        if matches!(
+            (self, target),
+            (
+                Self::DependencyEnvironmentSidecar,
+                Self::DependencyEnvironmentSidecar
+            )
+        ) {
+            return PortTypeCompatibility::compatible(CompatibilityRule::Exact);
+        }
+
+        if matches!(self, Self::DependencyEnvironmentSidecar)
+            || matches!(target, Self::DependencyEnvironmentSidecar)
+        {
+            return PortTypeCompatibility {
+                compatible: false,
+                rule: None,
+            };
+        }
+
         if matches!(self, Self::Any) || matches!(target, Self::Any) {
             return PortTypeCompatibility::compatible(CompatibilityRule::Any);
         }

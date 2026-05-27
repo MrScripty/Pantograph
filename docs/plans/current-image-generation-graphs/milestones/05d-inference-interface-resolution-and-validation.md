@@ -480,6 +480,23 @@ defining an image-only inference-node interface.
         Verification passed: `cargo fmt --package
         pantograph-inference-interface-contracts`; `cargo test -p
         pantograph-inference-interface-contracts`.
+      - Sidecar port value contract sub-slice completed on 2026-05-26:
+        `dependency_environment_sidecar` now exists as an exact-only port value
+        type across `node-engine`, `pantograph-node-contracts`,
+        workflow-service graph DTOs, workflow-node contract projection, the app
+        workflow TypeScript types, and the reusable `svelte-graph` package
+        types. Compatibility tests prove it connects only to the same sidecar
+        type and rejects `any`/`json` shortcuts, while projection tests prove
+        Rust DTO conversions preserve the type. Remaining implementation work
+        is adding the actual descriptor port pair and workflow-service subject
+        resolver. Verification passed: `cargo fmt`; `cargo test -p
+        node-engine test_port_data_type_compatibility`; `cargo test -p
+        pantograph-node-contracts port_value_type_compatibility_matches_backend_rules`;
+        `cargo test -p workflow-nodes
+        projection_preserves_extended_engine_value_types`; `cargo test -p
+        pantograph-workflow-service
+        dependency_environment_sidecar_port_type_projects_through_contract_type`;
+        `npm run typecheck`.
       - Workflow-service fail-closed builder sub-slice completed on
         2026-05-26: `GraphSessionStore` and `WorkflowService` now accept
         `DependencyEnvironmentActionIntent`, validate it against the current

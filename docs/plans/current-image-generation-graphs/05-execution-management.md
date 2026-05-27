@@ -12880,6 +12880,32 @@ Worker rules:
   - Remaining follow-up: implement the typed
     `dependency_environment_sidecar` port/value contract and then the
     workflow-service subject resolver that consumes these diagnostics.
+- 2026-05-26 Milestone 5d dependency sidecar port value contract slice:
+  - Smallest useful vertical slice: add the typed
+    `DependencyEnvironmentSidecar`/`dependency_environment_sidecar` port value
+    across Rust graph/contract boundaries and frontend port typing without yet
+    changing node descriptors or resolver behavior.
+  - Allowed files: `crates/node-engine/src/types.rs`,
+    `crates/pantograph-node-contracts/src/lib.rs` and tests,
+    `crates/pantograph-workflow-service/src/graph/types.rs`,
+    `crates/workflow-nodes/src/contracts.rs`, app and `svelte-graph`
+    TypeScript port-type mirrors, related README files, and Milestone 5d plan
+    docs.
+  - No-fallback/no-legacy result: the sidecar marker is exact-only and rejects
+    `any`/`json` shortcuts instead of preserving generic graph data behavior.
+    Frontend color/type wiring is display-only and does not own dependency
+    request, scheduler, or runtime semantics.
+  - Verification passed: `cargo fmt`; `cargo test -p node-engine
+    test_port_data_type_compatibility`; `cargo test -p
+    pantograph-node-contracts port_value_type_compatibility_matches_backend_rules`;
+    `cargo test -p workflow-nodes
+    projection_preserves_extended_engine_value_types`; `cargo test -p
+    pantograph-workflow-service
+    dependency_environment_sidecar_port_type_projects_through_contract_type`;
+    `npm run typecheck`.
+  - Remaining follow-up: add the descriptor port pair to
+    `dependency-environment` and `llm-inference`, then implement the
+    workflow-service sidecar subject resolver.
 
 ### Traceability Links
 

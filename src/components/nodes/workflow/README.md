@@ -61,6 +61,10 @@ or requiring the whole workflow view to remount.
 - Model-derived port metadata arrives from backend-owned graph state, so
   workflow node components must render additive handles from `data.definition`
   rather than inventing their own durable port lists.
+- The `dependency_environment_sidecar` port data type is a backend-owned
+  association marker. Components may render it as a typed handle, but they must
+  not use it to synthesize dependency requests, model paths, platform context,
+  or scheduler admission state.
 - Audio playback must support both low-latency stream playback and final-audio
   controls while cleaning up timers and `AudioContext` resources deterministically.
 - Final generated audio may arrive before browser metadata resolves, so the UI

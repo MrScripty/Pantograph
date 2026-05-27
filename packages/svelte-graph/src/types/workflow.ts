@@ -17,6 +17,7 @@ export type PortDataType =
   | 'document'
   | 'json'
   | 'kv_cache'
+  | 'dependency_environment_sidecar'
   | 'boolean'
   | 'number'
   | 'vector_db';

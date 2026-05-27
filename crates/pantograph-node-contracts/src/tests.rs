@@ -80,7 +80,15 @@ fn port_value_type_compatibility_matches_backend_rules() {
             .rule,
         Some(CompatibilityRule::StringCoercion)
     );
+    assert_eq!(
+        PortValueType::DependencyEnvironmentSidecar
+            .compatibility_with(PortValueType::DependencyEnvironmentSidecar)
+            .rule,
+        Some(CompatibilityRule::Exact)
+    );
     assert!(!PortValueType::KvCache.is_compatible_with(PortValueType::Json));
+    assert!(!PortValueType::DependencyEnvironmentSidecar.is_compatible_with(PortValueType::Any));
+    assert!(!PortValueType::DependencyEnvironmentSidecar.is_compatible_with(PortValueType::Json));
 }
 
 #[test]
