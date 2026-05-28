@@ -9,11 +9,12 @@ use crate::workflow::WorkflowServiceError;
 use super::super::executable_validation_snapshot_source::{
     CurrentExecutableValidationSnapshotSource, CurrentExecutableValidationSnapshotSourceRequest,
 };
-use super::super::inference_interface_publication::{
-    publish_inference_validation_for_resolution_inputs, WorkflowGraphInferenceValidationPublication,
-};
-use super::super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
+use super::super::inference_interface_publication::WorkflowGraphInferenceValidationPublication;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
+use super::super::inference_validation_publisher::{
+    publish_workflow_graph_validation_attempt, WorkflowGraphValidationPublishAttempt,
+    WorkflowGraphValidationPublishAttemptOutcome,
+};
 use super::super::inference_validation_state::{
     CurrentInferenceSchedulerProjectionRequest, WorkflowGraphCurrentValidationRefreshRequest,
     WorkflowGraphCurrentValidationRefreshResponse, WorkflowGraphCurrentValidationSummaryRequest,
@@ -82,85 +83,40 @@ impl GraphSessionStore {
         let validation_session_id =
             DraftGraphValidationSessionId::parse(format!("validation.session.{}", Uuid::new_v4()))
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let resolution_inputs = inference_interface_resolution_inputs_from_graph(&graph);
-        self.validation_lifecycle
-            .begin_validation(
-                graph_session_id.clone(),
-                current_graph_revision.clone(),
-                validation_session_id.clone(),
-            )
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let facts_by_node_id = self
-            .inference_interface_facts_provider
-            .facts_for_resolution_inputs(&resolution_inputs.requests)
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let current_graph_revision_after_facts = self
-            .current_graph_revision_for_validation(&request.graph_session_id)
-            .await?;
-        if current_graph_revision_after_facts != current_graph_revision {
-            let summary = self
-                .validation_state
-                .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
-                    graph_session_id,
-                    requested_graph_revision: request.graph_revision,
-                    current_graph_revision: current_graph_revision_after_facts,
-                })
-                .await;
-            return Ok(WorkflowGraphCurrentValidationRefreshResponse {
-                summary,
-                node_projections: Vec::new(),
-            });
-        }
-        if self
-            .validation_lifecycle
-            .accept_publication(
-                &graph_session_id,
-                &current_graph_revision,
-                &validation_session_id,
-            )
-            .await
-            .is_err()
-        {
-            let summary = self
-                .validation_state
-                .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
-                    graph_session_id,
-                    requested_graph_revision: request.graph_revision,
-                    current_graph_revision,
-                })
-                .await;
-            return Ok(WorkflowGraphCurrentValidationRefreshResponse {
-                summary,
-                node_projections: Vec::new(),
-            });
-        }
-
-        let publication = publish_inference_validation_for_resolution_inputs(
-            validation_session_id,
-            current_graph_revision.clone(),
-            resolution_inputs,
-            facts_by_node_id,
+        let publication = publish_workflow_graph_validation_attempt(
+            WorkflowGraphValidationPublishAttempt {
+                graph_session_id: graph_session_id.clone(),
+                graph_revision: current_graph_revision.clone(),
+                validation_session_id,
+                graph,
+            },
+            self.inference_interface_facts_provider.as_ref(),
+            &self.validation_lifecycle,
+            &self.validation_state,
+            || self.current_graph_revision_for_validation(&request.graph_session_id),
         )
-        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        .await?;
 
-        let node_projections = publication.node_projections.clone();
-        self.validation_state
-            .record_validation_publication(
-                graph_session_id.clone(),
-                publication.validation_session,
-                publication.node_projections,
-            )
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let (summary_revision, node_projections) = match publication {
+            WorkflowGraphValidationPublishAttemptOutcome::Published(publication) => (
+                current_graph_revision.clone(),
+                publication.node_projections.clone(),
+            ),
+            WorkflowGraphValidationPublishAttemptOutcome::StaleGraphRevision {
+                current_graph_revision,
+            } => (current_graph_revision, Vec::new()),
+            WorkflowGraphValidationPublishAttemptOutcome::PublicationRejected {
+                current_graph_revision,
+                ..
+            } => (current_graph_revision, Vec::new()),
+        };
 
         let summary = self
             .validation_state
             .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
                 graph_session_id,
                 requested_graph_revision: request.graph_revision,
-                current_graph_revision,
+                current_graph_revision: summary_revision,
             })
             .await;
 
@@ -242,51 +198,30 @@ impl GraphSessionStore {
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
-        let resolution_inputs = inference_interface_resolution_inputs_from_graph(&graph);
-        self.validation_lifecycle
-            .begin_validation(
-                graph_session_id.clone(),
-                graph_revision.clone(),
-                validation_session_id.clone(),
-            )
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let facts_by_node_id = self
-            .inference_interface_facts_provider
-            .facts_for_resolution_inputs(&resolution_inputs.requests)
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let current_graph_revision_after_facts = self
-            .current_graph_revision_for_validation(session_id)
-            .await?;
-        if current_graph_revision_after_facts != graph_revision {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "validation graph revision changed before publication".to_string(),
-            ));
-        }
-        self.validation_lifecycle
-            .accept_publication(&graph_session_id, &graph_revision, &validation_session_id)
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-
-        let publication = publish_inference_validation_for_resolution_inputs(
-            validation_session_id,
-            graph_revision,
-            resolution_inputs,
-            facts_by_node_id,
+        match publish_workflow_graph_validation_attempt(
+            WorkflowGraphValidationPublishAttempt {
+                graph_session_id: graph_session_id.clone(),
+                graph_revision: graph_revision.clone(),
+                validation_session_id,
+                graph,
+            },
+            self.inference_interface_facts_provider.as_ref(),
+            &self.validation_lifecycle,
+            &self.validation_state,
+            || self.current_graph_revision_for_validation(session_id),
         )
-        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-
-        self.validation_state
-            .record_validation_publication(
-                graph_session_id,
-                publication.validation_session.clone(),
-                publication.node_projections.clone(),
-            )
-            .await
-            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-
-        Ok(publication)
+        .await?
+        {
+            WorkflowGraphValidationPublishAttemptOutcome::Published(publication) => Ok(publication),
+            WorkflowGraphValidationPublishAttemptOutcome::StaleGraphRevision { .. } => {
+                Err(WorkflowServiceError::InvalidRequest(
+                    "validation graph revision changed before publication".to_string(),
+                ))
+            }
+            WorkflowGraphValidationPublishAttemptOutcome::PublicationRejected {
+                reason, ..
+            } => Err(WorkflowServiceError::InvalidRequest(reason.to_string())),
+        }
     }
 
     async fn current_graph_revision_for_validation(

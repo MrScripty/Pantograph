@@ -3093,6 +3093,48 @@ defining an image-only inference-node interface.
     completion, panic, and cancellation paths; add transport-visible
     overflow/backpressure diagnostics in the dedicated graph-validation
     transport slice.
+- [x] 2026-05-28 validation publisher attempt extraction slice completed:
+  - Smallest useful vertical slice: added a dedicated workflow-service
+    `inference_validation_publisher` module for one validation publication
+    attempt after graph snapshotting, then routed both
+    `refresh_current_validation_summary` and
+    `publish_inference_validation_session` through it.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: fact lookup, lifecycle freshness
+    checks, descriptor publication, and current-state recording now have one
+    workflow-service path. No frontend/Tauri resolver facts, raw paths, graph
+    mutation validation policy, or alternate publication branch was added.
+  - Standards result: the publisher accepts typed graph session, graph revision,
+    validation-session id, and graph snapshot input, keeps graph lock ownership
+    outside the fact-provider await point, records current state only after
+    freshness checks, and adds a deterministic explicit-publication stale
+    revision test using barriers rather than sleeps.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service refresh_current_validation_summary --lib`;
+    `cargo test -p pantograph-workflow-service current_validation_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo check -p
+    pantograph-workflow-service`; source-search verification that fact lookup,
+    descriptor publication, and current-state recording appear only in the
+    publisher module rather than `session_inference_validation_api.rs`;
+    source-search verification for retired workflow events, model paths, raw
+    JSON, `anyhow`, and `Result<T, String>` in the publisher/session validation
+    API; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: move graph snapshot request ownership fully into the
+    publisher API, add the explicit bounded node-projection policy, and then
+    add task ownership/cancellation around the publisher before transport
+    delivery.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

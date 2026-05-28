@@ -14519,6 +14519,37 @@ Worker rules:
     `Result<T, String>` in the lifecycle owner; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d validation publisher attempt extraction slice:
+  - Smallest useful vertical slice: add a dedicated workflow-service
+    validation publisher module for one publication attempt after graph
+    snapshotting, then route both refresh and explicit validation publication
+    through it.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: fact lookup, lifecycle checks, descriptor
+    publication, and current-state recording now share one workflow-service
+    path. No Tauri/frontend validation policy, transport-supplied facts, raw
+    path state, or alternate validation resolver was added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service refresh_current_validation_summary --lib`;
+    `cargo test -p pantograph-workflow-service current_validation_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo check -p
+    pantograph-workflow-service`; source-search verification that fact lookup,
+    descriptor publication, and current-state recording appear only in the
+    publisher module rather than `session_inference_validation_api.rs`;
+    source-search verification for retired workflow events, model paths, raw
+    JSON, `anyhow`, and `Result<T, String>` in the publisher/session validation
+    API; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 

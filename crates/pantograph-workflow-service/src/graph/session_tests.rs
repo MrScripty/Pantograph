@@ -803,6 +803,54 @@ async fn publish_inference_validation_session_records_current_summary() {
 }
 
 #[tokio::test]
+async fn publish_inference_validation_session_rejects_revision_changed_during_fact_lookup() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let publish_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let publish = tokio::spawn(async move {
+        publish_store
+            .publish_inference_validation_session(
+                &session_id,
+                DraftGraphValidationSessionId::parse("validation.session.stale.publish")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    entered.notified().await;
+
+    store
+        .remove_edge(WorkflowGraphRemoveEdgeRequest {
+            session_id: session.session_id.clone(),
+            edge_id: "dep-env-to-infer".to_string(),
+        })
+        .await
+        .expect("mutate graph while validation facts are pending");
+    release.notify_one();
+
+    let error = publish
+        .await
+        .expect("publish task should not panic")
+        .expect_err("publish should reject stale graph revision");
+    assert!(
+        error
+            .to_string()
+            .contains("validation graph revision changed before publication"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn dependency_environment_action_intent_blocks_invalid_service_output() {
     let store = GraphSessionStore::with_timeout_and_providers(
         std::time::Duration::from_secs(5 * 60),
