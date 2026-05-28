@@ -118,12 +118,14 @@ legacy preflight, Tauri, or graph-authored paths.
 The dependency-readiness lifecycle is the workflow-service owner for producing
 the readiness request that precedes that bridge. It reads the admitted active
 run scheduler task graph, constructs a validated
-`DependencyReadinessRequest` from scheduler intent and Pumas model reference,
-calls an injected provider, and then delegates task-state admission to the
-orchestrator. This lifecycle currently owns no background tasks; if future
-provider I/O becomes asynchronous, spawned work, cancellation, retries,
-shutdown, and tracing must be owned by this module rather than by Tauri,
-frontend code, node-engine, or runtime adapters.
+`DependencyReadinessRequestEnvelope` from scheduler intent, Pumas model
+reference, and the task graph's saved dependency-readiness source, calls an
+injected provider, validates provider preflight output against the envelope,
+and then delegates task-state admission to the orchestrator. This lifecycle
+currently owns no background tasks; if future provider I/O becomes
+asynchronous, spawned work, cancellation, retries, shutdown, and tracing must
+be owned by this module rather than by Tauri, frontend code, node-engine, or
+runtime adapters.
 The first concrete lifecycle provider adapter is the canonical
 `DependencyEnvironmentService` facade. It converts the readiness request into a
 path-free dependency-environment resolve request, validates provider output,
@@ -216,9 +218,10 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   synthesize executable load targets.
 - Dependency readiness request construction for admitted runtime tasks must
   stay in `readiness_lifecycle.rs`. It may project scheduler intent into the
-  shared `DependencyReadinessRequest`, but it must not become a Pumas
-  load-target resolver, dependency installer, runtime-host dispatcher, or
-  graph-validation preview producer.
+  shared `DependencyReadinessRequestEnvelope` using the saved
+  `dependency_readiness_source`, but it must not become a Pumas load-target
+  resolver, dependency installer, runtime-host dispatcher, or graph-validation
+  preview producer.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable

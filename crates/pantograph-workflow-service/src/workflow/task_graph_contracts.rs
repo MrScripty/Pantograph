@@ -1,4 +1,9 @@
-use pantograph_dependency_planning::DependencyOverridePatchV1;
+use pantograph_dependency_planning::{
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyOverridePatchV1,
+    DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
+    DependencyReadinessValidationSessionId, DependencyReadinessValidationSnapshotId,
+    DependencyRequirementsId,
+};
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerNodeId,
@@ -7,7 +12,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 5;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -78,6 +83,22 @@ pub struct WorkflowSchedulerTaskIntentTemplate {
     pub dependency_override_patches: Vec<DependencyOverridePatchV1>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub estimate_hints: Vec<SchedulerEstimateHint>,
+    pub dependency_readiness_source: WorkflowSchedulerDependencyReadinessSource,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowSchedulerDependencyReadinessSource {
+    pub graph_revision: DependencyReadinessGraphRevision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DependencyReadinessValidationSessionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_snapshot_id: Option<DependencyReadinessValidationSnapshotId>,
+    pub descriptor_fingerprint: DependencyReadinessDescriptorFingerprint,
+    pub dependency_requirements_id: DependencyRequirementsId,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_binding_ids: Vec<DependencyBindingId>,
+    pub dependency_override_fingerprint: DependencyOverrideFingerprint,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

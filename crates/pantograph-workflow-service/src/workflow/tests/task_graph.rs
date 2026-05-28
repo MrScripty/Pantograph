@@ -1,6 +1,7 @@
 use pantograph_dependency_planning::{
-    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, DependencyTaskId,
-    DeviceIntentId, PumasModelRef, RuntimeIntentId,
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessGraphRevision, DependencyReadinessValidationSessionId,
+    DependencyRequirementsId, DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId,
 };
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -15,10 +16,11 @@ use crate::workflow::{
     workflow_scheduler_task_graph, workflow_scheduler_task_graph_with_inference_projections,
     WorkflowSchedulerBlockedInferenceTaskProjection,
     WorkflowSchedulerBlockedInferenceTaskProjectionReason,
-    WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerReadyInferenceTaskProjection,
-    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskProjectionDiagnosticCode, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    WorkflowSchedulerDependencyReadinessSource, WorkflowSchedulerInferenceTaskProjection,
+    WorkflowSchedulerInferenceTaskProjections, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerReadyInferenceTaskProjection, WorkflowSchedulerSourceInputTemplate,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskProjectionDiagnosticCode,
+    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 
 fn workflow_id() -> WorkflowId {
@@ -55,21 +57,38 @@ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
                     value: SchedulerTraitValue::String("euler_discrete".to_string()),
                 }],
                 estimate_hints: Vec::new(),
-                dependency_requirements_id: DependencyRequirementsId::parse(
-                    "requirements.image_generation.cuda0",
-                )
-                .expect("requirements id"),
-                selected_binding_ids: vec![
-                    DependencyBindingId::parse("torch-diffusers").expect("binding id")
-                ],
-                dependency_override_fingerprint: DependencyOverrideFingerprint::parse(
-                    "override.none",
-                )
-                .expect("override fingerprint"),
+                dependency_readiness_source: dependency_readiness_source("iface.test.v1"),
             },
         ),
     ])
     .expect("projection")
+}
+
+fn dependency_readiness_source(
+    descriptor_fingerprint: &str,
+) -> WorkflowSchedulerDependencyReadinessSource {
+    WorkflowSchedulerDependencyReadinessSource {
+        graph_revision: DependencyReadinessGraphRevision::parse("graph.revision.001")
+            .expect("graph revision"),
+        validation_session_id: Some(
+            DependencyReadinessValidationSessionId::parse("validation.session.001")
+                .expect("validation session"),
+        ),
+        validation_snapshot_id: None,
+        descriptor_fingerprint: DependencyReadinessDescriptorFingerprint::parse(
+            descriptor_fingerprint,
+        )
+        .expect("descriptor fingerprint"),
+        dependency_requirements_id: DependencyRequirementsId::parse(
+            "requirements.image_generation.cuda0",
+        )
+        .expect("requirements id"),
+        selected_binding_ids: vec![
+            DependencyBindingId::parse("torch-diffusers").expect("binding id")
+        ],
+        dependency_override_fingerprint: DependencyOverrideFingerprint::parse("override.none")
+            .expect("override fingerprint"),
+    }
 }
 
 fn blocked_inference_projection(

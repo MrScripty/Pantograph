@@ -3,7 +3,9 @@ use std::fmt;
 use std::str::FromStr;
 
 use pantograph_dependency_planning::{
-    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, DependencyTaskId,
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessGraphRevision, DependencyReadinessValidationSessionId,
+    DependencyReadinessValidationSnapshotId, DependencyRequirementsId, DependencyTaskId,
     PumasModelRef,
 };
 use pantograph_inference_interface_contracts::{
@@ -29,6 +31,7 @@ use super::task_graph::{
     WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
     WorkflowSchedulerReadyInferenceTaskProjection,
 };
+use super::task_graph_contracts::WorkflowSchedulerDependencyReadinessSource;
 use crate::graph::{
     CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
     InferenceInterfaceNodeProjectionRecord, WorkflowGraph,
@@ -435,6 +438,7 @@ impl WorkflowExecutableValidationSnapshotNode {
 
     fn scheduler_projection(
         &self,
+        snapshot: &WorkflowExecutableValidationSnapshotRecord,
     ) -> Result<WorkflowSchedulerInferenceTaskProjection, WorkflowExecutableValidationSnapshotError>
     {
         let scheduler_node_id = SchedulerNodeId::parse(self.node_id.as_str()).map_err(|error| {
@@ -459,12 +463,55 @@ impl WorkflowExecutableValidationSnapshotNode {
                 constraints: self.constraints.clone(),
                 trait_settings: self.trait_settings.clone(),
                 estimate_hints: self.estimate_hints.clone(),
-                dependency_requirements_id: self.dependency_requirements_id.clone(),
-                selected_binding_ids: self.selected_binding_ids.clone(),
-                dependency_override_fingerprint: self.dependency_override_fingerprint.clone(),
+                dependency_readiness_source: workflow_scheduler_dependency_readiness_source(
+                    snapshot, self,
+                )?,
             },
         ))
     }
+}
+
+fn workflow_scheduler_dependency_readiness_source(
+    snapshot: &WorkflowExecutableValidationSnapshotRecord,
+    node: &WorkflowExecutableValidationSnapshotNode,
+) -> Result<WorkflowSchedulerDependencyReadinessSource, WorkflowExecutableValidationSnapshotError> {
+    Ok(WorkflowSchedulerDependencyReadinessSource {
+        graph_revision: DependencyReadinessGraphRevision::parse(snapshot.graph_revision.as_str())
+            .map_err(|error| {
+            WorkflowExecutableValidationSnapshotError::InvalidSchedulerProjection {
+                message: error.to_string(),
+            }
+        })?,
+        validation_session_id: Some(
+            DependencyReadinessValidationSessionId::parse(snapshot.validation_session_id.as_str())
+                .map_err(|error| {
+                    WorkflowExecutableValidationSnapshotError::InvalidSchedulerProjection {
+                        message: error.to_string(),
+                    }
+                })?,
+        ),
+        validation_snapshot_id: Some(
+            DependencyReadinessValidationSnapshotId::parse(
+                snapshot.validation_snapshot_id.as_str(),
+            )
+            .map_err(|error| {
+                WorkflowExecutableValidationSnapshotError::InvalidSchedulerProjection {
+                    message: error.to_string(),
+                }
+            })?,
+        ),
+        descriptor_fingerprint: DependencyReadinessDescriptorFingerprint::parse(
+            node.descriptor_fingerprint.as_str(),
+        )
+        .map_err(|error| {
+            WorkflowExecutableValidationSnapshotError::InvalidSchedulerProjection {
+                message: error.to_string(),
+            }
+        })?,
+        dependency_requirements_id: node.dependency_requirements_id.clone(),
+        selected_binding_ids: node.selected_binding_ids.clone(),
+        dependency_override_fingerprint: node.dependency_override_fingerprint.clone(),
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -530,7 +577,7 @@ impl ValidatedWorkflowExecutableValidationSnapshotRecord {
             .0
             .nodes
             .iter()
-            .map(WorkflowExecutableValidationSnapshotNode::scheduler_projection)
+            .map(|node| node.scheduler_projection(&self.0))
             .collect::<Result<Vec<_>, _>>()?;
         WorkflowSchedulerInferenceTaskProjections::from_records(records).map_err(|error| {
             WorkflowExecutableValidationSnapshotError::InvalidSchedulerProjection {
@@ -1133,10 +1180,16 @@ mod tests {
                 assert_eq!(ready.trait_settings.len(), 1);
                 assert_eq!(ready.estimate_hints.len(), 1);
                 assert_eq!(
-                    ready.dependency_requirements_id.as_str(),
+                    ready
+                        .dependency_readiness_source
+                        .dependency_requirements_id
+                        .as_str(),
                     "requirements.image_generation.cuda0"
                 );
-                assert_eq!(ready.selected_binding_ids.len(), 1);
+                assert_eq!(
+                    ready.dependency_readiness_source.selected_binding_ids.len(),
+                    1
+                );
             }
             WorkflowSchedulerInferenceTaskProjection::Blocked(_) => {
                 panic!("executable snapshot must produce ready projection")

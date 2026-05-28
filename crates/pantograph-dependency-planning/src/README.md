@@ -78,6 +78,9 @@ is the only public facade.
   local paths, Pumas package facts, load targets, frontend display state,
   runtime-host payloads, or raw provider-private request payloads into
   scheduler proof.
+- Cross-crate consumers construct readiness execution context and envelope
+  DTOs through `execution.rs` constructors. Do not duplicate these DTOs or use
+  serde JSON round-trips as a constructor escape hatch.
 - Workflow-service adapts graph, validation, and scheduler task ids into
   dependency-readiness envelope newtypes. This crate must not import
   inference-interface, scheduler, frontend, Tauri, runtime-host, Pumas client,

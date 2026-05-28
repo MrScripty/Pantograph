@@ -1,9 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use pantograph_dependency_planning::{
-    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, DependencyTaskId,
-    PumasModelRef,
-};
+use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_node_contracts::NodeTypeContract;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -16,8 +13,9 @@ use workflow_nodes::processing::DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID;
 
 use super::task_execution_classification::classify_workflow_scheduler_task;
 use super::task_graph_contracts::{
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerDependencyReadinessSource, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,
@@ -86,9 +84,7 @@ pub struct WorkflowSchedulerReadyInferenceTaskProjection {
     pub constraints: SchedulerRuntimeDeviceConstraints,
     pub trait_settings: Vec<SchedulerTraitSetting>,
     pub estimate_hints: Vec<SchedulerEstimateHint>,
-    pub dependency_requirements_id: DependencyRequirementsId,
-    pub selected_binding_ids: Vec<DependencyBindingId>,
-    pub dependency_override_fingerprint: DependencyOverrideFingerprint,
+    pub dependency_readiness_source: WorkflowSchedulerDependencyReadinessSource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -299,6 +295,7 @@ fn schedulable_intent_for_node(
                 trait_settings: projection.trait_settings.clone(),
                 dependency_override_patches: Vec::new(),
                 estimate_hints: projection.estimate_hints.clone(),
+                dependency_readiness_source: projection.dependency_readiness_source.clone(),
             };
             (
                 Some(SchedulableTaskIntent {

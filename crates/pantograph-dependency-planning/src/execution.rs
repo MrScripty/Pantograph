@@ -166,6 +166,40 @@ pub struct DependencyReadinessExecutionContext {
 }
 
 impl DependencyReadinessExecutionContext {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        workflow_id: DependencyReadinessWorkflowId,
+        workflow_run_id: DependencyReadinessWorkflowRunId,
+        scheduler_task_id: DependencyReadinessSchedulerTaskId,
+        node_id: DependencyReadinessNodeId,
+        graph_revision: DependencyReadinessGraphRevision,
+        validation_session_id: Option<DependencyReadinessValidationSessionId>,
+        validation_snapshot_id: Option<DependencyReadinessValidationSnapshotId>,
+        descriptor_fingerprint: DependencyReadinessDescriptorFingerprint,
+        dependency_requirements_id: DependencyRequirementsId,
+        selected_binding_ids: Vec<DependencyBindingId>,
+        dependency_override_fingerprint: Option<DependencyOverrideFingerprint>,
+        correlation_id: DependencyReadinessCorrelationId,
+    ) -> Result<Self, DependencyPlanningContractError> {
+        let context = Self {
+            contract_version: 1,
+            workflow_id,
+            workflow_run_id,
+            scheduler_task_id,
+            node_id,
+            graph_revision,
+            validation_session_id,
+            validation_snapshot_id,
+            descriptor_fingerprint,
+            dependency_requirements_id,
+            selected_binding_ids,
+            dependency_override_fingerprint,
+            correlation_id,
+        };
+        context.validate()?;
+        Ok(context)
+    }
+
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         validate_contract_version(
             self.contract_version,
@@ -256,6 +290,19 @@ pub struct DependencyReadinessRequestEnvelope {
 }
 
 impl DependencyReadinessRequestEnvelope {
+    pub fn new(
+        execution_context: DependencyReadinessExecutionContext,
+        readiness_request: DependencyReadinessRequest,
+    ) -> Result<Self, DependencyPlanningContractError> {
+        let envelope = Self {
+            contract_version: 1,
+            execution_context,
+            readiness_request,
+        };
+        envelope.validate()?;
+        Ok(envelope)
+    }
+
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         validate_contract_version(
             self.contract_version,
@@ -365,6 +412,23 @@ pub struct DependencyReadinessProofEnvelope {
 }
 
 impl DependencyReadinessProofEnvelope {
+    pub fn new(
+        execution_context: DependencyReadinessExecutionContext,
+        preflight_result: DependencyPreflightResult,
+        readiness_proof_id: DependencyReadinessProofId,
+        readiness_proof_version: DependencyReadinessProofVersion,
+    ) -> Result<Self, DependencyPlanningContractError> {
+        let envelope = Self {
+            contract_version: 1,
+            execution_context,
+            preflight_result,
+            readiness_proof_id,
+            readiness_proof_version,
+        };
+        envelope.validate()?;
+        Ok(envelope)
+    }
+
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         validate_contract_version(
             self.contract_version,

@@ -4,10 +4,12 @@ use pantograph_dependency_planning::{
     produce_dependency_requirements_proof, DependencyBindingId, DependencyEnvironmentRequest,
     DependencyNodeTypeId, DependencyOverrideFingerprint, DependencyOverridePatchV1,
     DependencyPlanningCallerContext, DependencyPlanningDiagnostic, DependencyPlanningIdentityKey,
-    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyRequirementsId,
-    DependencyRequirementsProof, DependencyRequirementsProofStatus, DependencyTaskId,
-    DeviceIntentId, PumasModelRef, RuntimeIntentId, SchedulerIntent,
-    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+    DependencyPlanningPlatformContext, DependencyPlanningRequest,
+    DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
+    DependencyReadinessValidationSessionId, DependencyRequirementsId, DependencyRequirementsProof,
+    DependencyRequirementsProofStatus, DependencyTaskId, DeviceIntentId, PumasModelRef,
+    RuntimeIntentId, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
@@ -34,8 +36,8 @@ use super::InferenceInterfaceNodeProjectionRecord;
 use crate::workflow::{
     WorkflowSchedulerBlockedInferenceTaskProjection,
     WorkflowSchedulerBlockedInferenceTaskProjectionReason,
-    WorkflowSchedulerInferenceTaskProjection, WorkflowSchedulerInferenceTaskProjections,
-    WorkflowSchedulerReadyInferenceTaskProjection,
+    WorkflowSchedulerDependencyReadinessSource, WorkflowSchedulerInferenceTaskProjection,
+    WorkflowSchedulerInferenceTaskProjections, WorkflowSchedulerReadyInferenceTaskProjection,
 };
 
 #[allow(dead_code)]
@@ -853,15 +855,47 @@ impl CurrentInferenceValidationNodeRecord {
                     },
                     trait_settings: Vec::new(),
                     estimate_hints: Vec::new(),
-                    dependency_requirements_id: dependency_requirements_proof
-                        .dependency_requirements_id
-                        .clone(),
-                    selected_binding_ids: dependency_requirements_proof
-                        .selected_binding_ids
-                        .clone(),
-                    dependency_override_fingerprint: dependency_requirements_proof
-                        .dependency_override_fingerprint
-                        .clone(),
+                    dependency_readiness_source: WorkflowSchedulerDependencyReadinessSource {
+                        graph_revision: DependencyReadinessGraphRevision::parse(
+                            graph_revision.as_str(),
+                        )
+                        .map_err(|error| {
+                            CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                                node_id: self.node_id.clone(),
+                                message: format!("graph revision is invalid: {error}"),
+                            }
+                        })?,
+                        validation_session_id: Some(
+                            DependencyReadinessValidationSessionId::parse(
+                                validation_session_id.as_str(),
+                            )
+                            .map_err(|error| {
+                                CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                                    node_id: self.node_id.clone(),
+                                    message: format!("validation session id is invalid: {error}"),
+                                }
+                            })?,
+                        ),
+                        validation_snapshot_id: None,
+                        descriptor_fingerprint: DependencyReadinessDescriptorFingerprint::parse(
+                            self.descriptor_fingerprint.as_str(),
+                        )
+                        .map_err(|error| {
+                            CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                                node_id: self.node_id.clone(),
+                                message: format!("descriptor fingerprint is invalid: {error}"),
+                            }
+                        })?,
+                        dependency_requirements_id: dependency_requirements_proof
+                            .dependency_requirements_id
+                            .clone(),
+                        selected_binding_ids: dependency_requirements_proof
+                            .selected_binding_ids
+                            .clone(),
+                        dependency_override_fingerprint: dependency_requirements_proof
+                            .dependency_override_fingerprint
+                            .clone(),
+                    },
                 },
             ));
         }
@@ -1820,10 +1854,19 @@ mod tests {
             Some("pytorch")
         );
         assert_eq!(
-            projection.dependency_requirements_id.as_str(),
+            projection
+                .dependency_readiness_source
+                .dependency_requirements_id
+                .as_str(),
             "requirements.image_generation.cuda0"
         );
-        assert_eq!(projection.selected_binding_ids.len(), 1);
+        assert_eq!(
+            projection
+                .dependency_readiness_source
+                .selected_binding_ids
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]

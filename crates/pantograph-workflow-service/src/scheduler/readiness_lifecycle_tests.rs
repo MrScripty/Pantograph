@@ -5,8 +5,13 @@ use pantograph_dependency_environment_service::{
     DependencyEnvironmentService, NotImplementedDependencyEnvironmentProvider,
 };
 use pantograph_dependency_planning::{
-    DependencyEnvironmentReadinessState, DependencyPreflightResult, DependencyReadinessPolicy,
-    ValidatedDependencyReadinessRequest,
+    produce_dependency_requirements_proof, DependencyEnvironmentReadinessState,
+    DependencyNodeTypeId, DependencyPlanningCallerContext, DependencyPlanningRequest,
+    DependencyPreflightResult, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessGraphRevision, DependencyReadinessPolicy,
+    DependencyReadinessValidationSessionId, DependencyTraitIntent, DependencyTraitIntentId,
+    DependencyTraitIntentValue, SchedulerIntent, ValidatedDependencyPlanningRequest,
+    ValidatedDependencyReadinessRequestEnvelope,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
@@ -19,7 +24,8 @@ use pantograph_scheduler::{
 
 use crate::workflow::{
     WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskGraph, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskIntentTemplate,
+    WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 
 use super::super::WorkflowExecutionSessionStore;
@@ -45,7 +51,7 @@ fn readiness_lifecycle_builds_request_and_admits_ready_provider_result() {
             task_graph,
         )
         .expect("initialize active run task state");
-    let provider = RecordingReadinessProvider::new(Some(ready_preflight_result()));
+    let provider = RecordingReadinessProvider::new(Some(ready_preflight_result(&task_intent)));
 
     let record = lifecycle
         .resolve_and_admit_active_runtime_task(
@@ -62,16 +68,25 @@ fn readiness_lifecycle_builds_request_and_admits_ready_provider_result() {
     assert_eq!(record.state.kind(), SchedulerTaskStateKind::Ready);
     let request = provider.last_request().expect("provider request");
     assert_eq!(
-        request.as_request().planning_request.model_ref,
+        request
+            .as_envelope()
+            .readiness_request
+            .planning_request
+            .model_ref,
         task_intent.model_ref
     );
     assert_eq!(
-        request.as_request().planning_request.task_id,
+        request
+            .as_envelope()
+            .readiness_request
+            .planning_request
+            .task_id,
         task_intent.task_type
     );
     assert_eq!(
         request
-            .as_request()
+            .as_envelope()
+            .readiness_request
             .planning_request
             .caller_context
             .run_id
@@ -80,7 +95,8 @@ fn readiness_lifecycle_builds_request_and_admits_ready_provider_result() {
     );
     assert_eq!(
         request
-            .as_request()
+            .as_envelope()
+            .readiness_request
             .planning_request
             .scheduler_intent
             .requested_runtime_id,
@@ -126,7 +142,7 @@ fn readiness_lifecycle_defers_when_provider_has_no_proof() {
 }
 
 #[test]
-fn readiness_lifecycle_rejects_mismatched_provider_proof_through_scheduler_policy() {
+fn readiness_lifecycle_rejects_mismatched_provider_proof_before_scheduler_policy() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let lifecycle = WorkflowDependencyReadinessLifecycle::new(orchestrator.clone());
     let task_intent = runtime_host_request_fixture().handoff.task_intent;
@@ -141,11 +157,11 @@ fn readiness_lifecycle_rejects_mismatched_provider_proof_through_scheduler_polic
             task_graph,
         )
         .expect("initialize active run task state");
-    let mut stale_proof = ready_preflight_result();
+    let mut stale_proof = ready_preflight_result(&task_intent);
     stale_proof.identity_key.model_ref.model_id = "pumas:other-model".to_string();
     let provider = RecordingReadinessProvider::new(Some(stale_proof));
 
-    let record = lifecycle
+    let error = lifecycle
         .resolve_and_admit_active_runtime_task(
             &mut store,
             &provider,
@@ -154,14 +170,9 @@ fn readiness_lifecycle_rejects_mismatched_provider_proof_through_scheduler_polic
             task_intent.task_id.as_str(),
             DependencyReadinessPolicy::CheckOnly,
         )
-        .expect("mismatched proof should become typed scheduler failure");
+        .expect_err("mismatched proof should fail envelope validation");
 
-    let SchedulerTaskState::TerminalFailed { diagnostics } = record.state else {
-        panic!("mismatched proof should terminal-fail the runtime task");
-    };
-    assert!(diagnostics.iter().any(|diagnostic| {
-        diagnostic.code == SchedulerTaskStateDiagnosticCode::SchedulerPolicyError
-    }));
+    assert!(error.to_string().contains("dependency planning"));
 }
 
 #[test]
@@ -218,7 +229,7 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
 
 struct RecordingReadinessProvider {
     result: Mutex<Option<DependencyPreflightResult>>,
-    last_request: Mutex<Option<ValidatedDependencyReadinessRequest>>,
+    last_request: Mutex<Option<ValidatedDependencyReadinessRequestEnvelope>>,
 }
 
 impl RecordingReadinessProvider {
@@ -229,7 +240,7 @@ impl RecordingReadinessProvider {
         }
     }
 
-    fn last_request(&self) -> Option<ValidatedDependencyReadinessRequest> {
+    fn last_request(&self) -> Option<ValidatedDependencyReadinessRequestEnvelope> {
         self.last_request
             .lock()
             .expect("provider request lock")
@@ -240,7 +251,7 @@ impl RecordingReadinessProvider {
 impl WorkflowDependencyReadinessProvider for RecordingReadinessProvider {
     fn resolve_dependency_readiness(
         &self,
-        request: &ValidatedDependencyReadinessRequest,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
         *self.last_request.lock().expect("provider request lock") = Some(request.clone());
         Ok(self.result.lock().expect("provider result lock").clone())
@@ -254,13 +265,71 @@ fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     .expect("runtime host request fixture")
 }
 
-fn ready_preflight_result() -> DependencyPreflightResult {
+fn ready_preflight_result(task_intent: &SchedulableTaskIntent) -> DependencyPreflightResult {
+    let planning_request = dependency_planning_request_for_intent(task_intent);
+    let validated_request = ValidatedDependencyPlanningRequest::try_from(planning_request.clone())
+        .expect("validated dependency planning request");
+    let requirements_proof = produce_dependency_requirements_proof(&validated_request, None)
+        .expect("dependency requirements proof");
     let mut result = runtime_host_request_fixture()
         .handoff
         .readiness_proof
         .preflight_result;
+    result.identity_key = requirements_proof.identity_key;
+    result.dependency_requirements_id = Some(requirements_proof.dependency_requirements_id);
     result.readiness_state = DependencyEnvironmentReadinessState::Ready;
     result
+}
+
+fn dependency_planning_request_for_intent(
+    task_intent: &SchedulableTaskIntent,
+) -> DependencyPlanningRequest {
+    DependencyPlanningRequest {
+        model_ref: task_intent.model_ref.clone(),
+        task_id: task_intent.task_type.clone(),
+        task_type: Some(task_intent.task_type.clone()),
+        expected_artifact_kind: None,
+        scheduler_intent: SchedulerIntent {
+            requested_runtime_id: task_intent.constraints.requested_runtime_id.clone(),
+            requested_device_id: task_intent.constraints.requested_device_id.clone(),
+        },
+        platform_context: None,
+        selected_binding_ids: Vec::new(),
+        dependency_override_patches: task_intent.dependency_override_patches.clone(),
+        trait_intents: task_intent
+            .trait_settings
+            .iter()
+            .map(|setting| DependencyTraitIntent {
+                trait_id: DependencyTraitIntentId::parse(setting.trait_id.as_str())
+                    .expect("trait id"),
+                value: match &setting.value {
+                    pantograph_scheduler::SchedulerTraitValue::String(value) => {
+                        DependencyTraitIntentValue::Text(value.clone())
+                    }
+                    pantograph_scheduler::SchedulerTraitValue::Bool(value) => {
+                        DependencyTraitIntentValue::Boolean(*value)
+                    }
+                    pantograph_scheduler::SchedulerTraitValue::I64(value) => {
+                        DependencyTraitIntentValue::Integer(*value)
+                    }
+                    pantograph_scheduler::SchedulerTraitValue::U64(value) => {
+                        DependencyTraitIntentValue::Integer(
+                            i64::try_from(*value).expect("trait value fits"),
+                        )
+                    }
+                },
+            })
+            .collect(),
+        caller_context: DependencyPlanningCallerContext {
+            source_node_type: Some(
+                DependencyNodeTypeId::parse("llm-inference").expect("node type"),
+            ),
+            workflow_id: Some(task_intent.workflow_id.as_str().to_string()),
+            node_id: Some(task_intent.node_id.as_str().to_string()),
+            port_id: None,
+            run_id: Some(task_intent.workflow_run_id.as_str().to_string()),
+        },
+    }
 }
 
 fn orchestrator_without_runtime_host_response() -> WorkflowSchedulerTaskOrchestrator {
@@ -294,6 +363,27 @@ fn task_graph(tasks: Vec<WorkflowSchedulerTask>) -> WorkflowSchedulerTaskGraph {
 }
 
 fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask {
+    let planning_request = dependency_planning_request_for_intent(&task_intent);
+    let validated_request = ValidatedDependencyPlanningRequest::try_from(planning_request)
+        .expect("validated dependency planning request");
+    let requirements_proof = produce_dependency_requirements_proof(&validated_request, None)
+        .expect("dependency requirements proof");
+    let dependency_readiness_source = crate::workflow::WorkflowSchedulerDependencyReadinessSource {
+        graph_revision: DependencyReadinessGraphRevision::parse("graph.revision.001")
+            .expect("graph revision"),
+        validation_session_id: Some(
+            DependencyReadinessValidationSessionId::parse("validation.session.001")
+                .expect("validation session"),
+        ),
+        validation_snapshot_id: None,
+        descriptor_fingerprint: DependencyReadinessDescriptorFingerprint::parse(
+            "descriptor.fingerprint.001",
+        )
+        .expect("descriptor fingerprint"),
+        dependency_requirements_id: requirements_proof.dependency_requirements_id,
+        selected_binding_ids: requirements_proof.identity_key.selected_binding_ids,
+        dependency_override_fingerprint: requirements_proof.dependency_override_fingerprint,
+    };
     WorkflowSchedulerTask {
         workflow_id: task_intent.workflow_id.clone(),
         workflow_run_id: task_intent.workflow_run_id.clone(),
@@ -303,8 +393,15 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
         dependency_task_ids: Vec::new(),
         input_bindings: Vec::new(),
+        schedulable_intent_template: Some(WorkflowSchedulerTaskIntentTemplate {
+            task_type: task_intent.task_type.clone(),
+            constraints: task_intent.constraints.clone(),
+            trait_settings: task_intent.trait_settings.clone(),
+            dependency_override_patches: task_intent.dependency_override_patches.clone(),
+            estimate_hints: task_intent.estimate_hints.clone(),
+            dependency_readiness_source,
+        }),
         schedulable_intent: Some(task_intent),
-        schedulable_intent_template: None,
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,

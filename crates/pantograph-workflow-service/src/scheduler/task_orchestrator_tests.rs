@@ -2,7 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use pantograph_dependency_planning::{
-    DependencyEnvironmentReadinessState, DependencyPreflightResult, DependencyReadinessPolicy,
+    DependencyEnvironmentReadinessState, DependencyOverrideFingerprint, DependencyPreflightResult,
+    DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
+    DependencyReadinessPolicy, DependencyReadinessValidationSessionId, DependencyRequirementsId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionPort,
@@ -358,6 +360,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
             trait_settings: Vec::new(),
             dependency_override_patches: Vec::new(),
             estimate_hints: Vec::new(),
+            dependency_readiness_source: dependency_readiness_source(),
         }),
         non_runtime_task_template: None,
         source_input_task_template: None,
@@ -649,6 +652,7 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
             trait_settings: Vec::new(),
             dependency_override_patches: Vec::new(),
             estimate_hints: Vec::new(),
+            dependency_readiness_source: dependency_readiness_source(),
         }),
         non_runtime_task_template: None,
         source_input_task_template: None,
@@ -1371,6 +1375,31 @@ fn scheduler_workflow_id() -> SchedulerWorkflowId {
 
 fn scheduler_workflow_run_id() -> SchedulerWorkflowRunId {
     SchedulerWorkflowRunId::parse("run.001").expect("workflow run id")
+}
+
+fn dependency_readiness_source() -> crate::workflow::WorkflowSchedulerDependencyReadinessSource {
+    crate::workflow::WorkflowSchedulerDependencyReadinessSource {
+        graph_revision: DependencyReadinessGraphRevision::parse("graph.revision.001")
+            .expect("graph revision"),
+        validation_session_id: Some(
+            DependencyReadinessValidationSessionId::parse("validation.session.001")
+                .expect("validation session"),
+        ),
+        validation_snapshot_id: None,
+        descriptor_fingerprint: DependencyReadinessDescriptorFingerprint::parse(
+            "descriptor.fingerprint.001",
+        )
+        .expect("descriptor fingerprint"),
+        dependency_requirements_id: DependencyRequirementsId::parse(
+            "dependency-requirements-blake3:test",
+        )
+        .expect("dependency requirements id"),
+        selected_binding_ids: Vec::new(),
+        dependency_override_fingerprint: DependencyOverrideFingerprint::parse(
+            "dependency-overrides-blake3:test",
+        )
+        .expect("dependency override fingerprint"),
+    }
 }
 
 fn empty_run_request() -> WorkflowExecutionSessionRunRequest {

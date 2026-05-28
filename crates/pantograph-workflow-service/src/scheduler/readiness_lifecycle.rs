@@ -2,12 +2,18 @@ use pantograph_dependency_environment_service::{
     DependencyEnvironmentProvider, DependencyEnvironmentService,
 };
 use pantograph_dependency_planning::{
-    dependency_preflight_result_from_environment_result, DependencyEnvironmentAction,
-    DependencyEnvironmentRequest, DependencyPlanningCallerContext, DependencyPlanningContractError,
-    DependencyPlanningIdentityKey, DependencyPlanningRequest, DependencyPreflightResult,
-    DependencyReadinessPolicy, DependencyReadinessRequest, DependencyTraitIntent,
-    DependencyTraitIntentId, DependencyTraitIntentValue, SchedulerIntent,
-    ValidatedDependencyEnvironmentRequest, ValidatedDependencyReadinessRequest,
+    dependency_preflight_result_from_environment_result, produce_dependency_requirements_proof,
+    DependencyEnvironmentAction, DependencyEnvironmentRequest, DependencyPlanningCallerContext,
+    DependencyPlanningContractError, DependencyPlanningIdentityKey, DependencyPlanningRequest,
+    DependencyPreflightResult, DependencyReadinessCorrelationId,
+    DependencyReadinessExecutionContext, DependencyReadinessNodeId, DependencyReadinessPolicy,
+    DependencyReadinessProofEnvelope, DependencyReadinessProofId, DependencyReadinessProofVersion,
+    DependencyReadinessRequest, DependencyReadinessRequestEnvelope,
+    DependencyReadinessSchedulerTaskId, DependencyReadinessWorkflowId,
+    DependencyReadinessWorkflowRunId, DependencyTraitIntent, DependencyTraitIntentId,
+    DependencyTraitIntentValue, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyPlanningRequest, ValidatedDependencyReadinessProofEnvelope,
+    ValidatedDependencyReadinessRequestEnvelope,
 };
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTraitValue};
 use thiserror::Error;
@@ -30,7 +36,7 @@ use super::{
 pub(crate) trait WorkflowDependencyReadinessProvider {
     fn resolve_dependency_readiness(
         &self,
-        request: &ValidatedDependencyReadinessRequest,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError>;
 }
 
@@ -40,7 +46,7 @@ where
 {
     fn resolve_dependency_readiness(
         &self,
-        request: &ValidatedDependencyReadinessRequest,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
         let environment_request = dependency_environment_request_from_readiness_request(request)?;
         let environment_result = self.handle(&environment_request).map_err(|error| {
@@ -83,22 +89,27 @@ impl WorkflowDependencyReadinessLifecycle {
         workflow_run_id: &str,
         task_id: &str,
         policy: DependencyReadinessPolicy,
-    ) -> Result<ValidatedDependencyReadinessRequest, WorkflowDependencyReadinessLifecycleError>
-    {
+    ) -> Result<
+        ValidatedDependencyReadinessRequestEnvelope,
+        WorkflowDependencyReadinessLifecycleError,
+    > {
         let (task_graph, records) =
             active_scheduler_task_state(store, session_id, workflow_run_id)?;
         let task_context = runtime_task_context(&task_graph, &records, workflow_run_id, task_id)?;
         let planning_request = dependency_planning_request_from_task_context(&task_context)?;
         let identity_key = DependencyPlanningIdentityKey::from_planning_request(&planning_request)
             .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
-        DependencyReadinessRequest {
+        let readiness_request = DependencyReadinessRequest {
             contract_version: 1,
             identity_key,
             planning_request,
             policy,
-        }
-        .try_into()
-        .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
+        };
+        let execution_context =
+            dependency_readiness_execution_context_from_task_context(&task_context)?;
+        DependencyReadinessRequestEnvelope::new(execution_context, readiness_request)
+            .and_then(ValidatedDependencyReadinessRequestEnvelope::try_from)
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
     }
 
     pub(crate) fn resolve_and_admit_active_runtime_task<P>(
@@ -123,6 +134,9 @@ impl WorkflowDependencyReadinessLifecycle {
         let preflight_result = provider
             .resolve_dependency_readiness(&request)
             .map_err(WorkflowDependencyReadinessLifecycleError::Provider)?;
+        if let Some(preflight_result) = preflight_result.as_ref() {
+            validate_preflight_result_matches_readiness_envelope(&request, preflight_result)?;
+        }
         self.orchestrator
             .apply_runtime_dependency_readiness_admission(
                 store,
@@ -145,15 +159,21 @@ pub(crate) enum WorkflowDependencyReadinessProviderError {
 }
 
 fn dependency_environment_request_from_readiness_request(
-    request: &ValidatedDependencyReadinessRequest,
+    request: &ValidatedDependencyReadinessRequestEnvelope,
 ) -> Result<ValidatedDependencyEnvironmentRequest, WorkflowDependencyReadinessProviderError> {
-    let request = request.as_request();
+    let envelope = request.as_envelope();
+    let request = &envelope.readiness_request;
     ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
         action: DependencyEnvironmentAction::Resolve,
         identity_key: request.identity_key.clone(),
         planning_request: request.planning_request.clone(),
-        dependency_requirements_id: None,
+        dependency_requirements_id: Some(
+            envelope
+                .execution_context
+                .dependency_requirements_id
+                .clone(),
+        ),
         environment_ref: None,
     })
     .map_err(|error| WorkflowDependencyReadinessProviderError::Failed {
@@ -178,6 +198,7 @@ pub(crate) enum WorkflowDependencyReadinessLifecycleError {
 #[allow(dead_code)]
 struct RuntimeTaskContext<'a> {
     task_graph: &'a WorkflowSchedulerTaskGraph,
+    task: &'a crate::workflow::WorkflowSchedulerTask,
     task_id: &'a str,
     node_type: &'a str,
     record: &'a SchedulerTaskStateRecord,
@@ -245,6 +266,7 @@ fn runtime_task_context<'a>(
     }
     Ok(RuntimeTaskContext {
         task_graph,
+        task,
         task_id,
         node_type: &task.node_type,
         record,
@@ -278,7 +300,9 @@ fn dependency_planning_request_from_task_context(
             requested_device_id: task_intent.constraints.requested_device_id.clone(),
         },
         platform_context: None,
-        selected_binding_ids: Vec::new(),
+        selected_binding_ids: dependency_readiness_source(context)?
+            .selected_binding_ids
+            .clone(),
         dependency_override_patches: task_intent.dependency_override_patches.clone(),
         trait_intents: task_intent
             .trait_settings
@@ -296,10 +320,107 @@ fn dependency_planning_request_from_task_context(
             run_id: Some(context.task_graph.workflow_run_id.as_str().to_string()),
         },
     };
-    request
+    let validated_request = request
         .validate()
+        .and_then(|_| ValidatedDependencyPlanningRequest::try_from(request.clone()))
         .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
+    validate_dependency_requirements_source_matches_planning_request(context, &validated_request)?;
     Ok(request)
+}
+
+#[allow(dead_code)]
+fn dependency_readiness_source<'a>(
+    context: &'a RuntimeTaskContext<'a>,
+) -> Result<
+    &'a crate::workflow::WorkflowSchedulerDependencyReadinessSource,
+    WorkflowDependencyReadinessLifecycleError,
+> {
+    let Some(template) = context.task.schedulable_intent_template.as_ref() else {
+        return Err(invalid_request(format!(
+            "scheduler task '{}' has no dependency readiness source",
+            context.task_id
+        )));
+    };
+    Ok(&template.dependency_readiness_source)
+}
+
+#[allow(dead_code)]
+fn validate_dependency_requirements_source_matches_planning_request(
+    context: &RuntimeTaskContext<'_>,
+    request: &ValidatedDependencyPlanningRequest,
+) -> Result<(), WorkflowDependencyReadinessLifecycleError> {
+    let source = dependency_readiness_source(context)?;
+    let proof = produce_dependency_requirements_proof(request, None)
+        .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
+    if proof.dependency_requirements_id != source.dependency_requirements_id {
+        return Err(invalid_request(format!(
+            "scheduler task '{}' dependency requirements id does not match the saved validation proof",
+            context.task_id
+        )));
+    }
+    if proof.dependency_override_fingerprint != source.dependency_override_fingerprint {
+        return Err(invalid_request(format!(
+            "scheduler task '{}' dependency override fingerprint does not match the saved validation proof",
+            context.task_id
+        )));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn dependency_readiness_execution_context_from_task_context(
+    context: &RuntimeTaskContext<'_>,
+) -> Result<DependencyReadinessExecutionContext, WorkflowDependencyReadinessLifecycleError> {
+    let source = dependency_readiness_source(context)?;
+    DependencyReadinessExecutionContext::new(
+        DependencyReadinessWorkflowId::parse(context.task_graph.workflow_id.as_str())
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
+        DependencyReadinessWorkflowRunId::parse(context.task_graph.workflow_run_id.as_str())
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
+        DependencyReadinessSchedulerTaskId::parse(context.task_id)
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
+        DependencyReadinessNodeId::parse(context.task.node_id.as_str())
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
+        source.graph_revision.clone(),
+        source.validation_session_id.clone(),
+        source.validation_snapshot_id.clone(),
+        source.descriptor_fingerprint.clone(),
+        source.dependency_requirements_id.clone(),
+        source.selected_binding_ids.clone(),
+        Some(source.dependency_override_fingerprint.clone()),
+        DependencyReadinessCorrelationId::parse(format!(
+            "{}-{}-v{}",
+            context.task_graph.workflow_run_id.as_str(),
+            context.task_id,
+            context.record.state_version
+        ))
+        .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
+    )
+    .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
+}
+
+#[allow(dead_code)]
+fn validate_preflight_result_matches_readiness_envelope(
+    request: &ValidatedDependencyReadinessRequestEnvelope,
+    result: &DependencyPreflightResult,
+) -> Result<(), WorkflowDependencyReadinessLifecycleError> {
+    let context = request.as_envelope().execution_context.clone();
+    let proof_id =
+        DependencyReadinessProofId::parse(format!("{}-proof", context.correlation_id.as_str()))
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
+    let proof = DependencyReadinessProofEnvelope::new(
+        context,
+        result.clone(),
+        proof_id,
+        DependencyReadinessProofVersion::parse(1)
+            .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
+    )
+    .and_then(ValidatedDependencyReadinessProofEnvelope::try_from)
+    .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
+    proof
+        .as_envelope()
+        .validate_matches_request_envelope(request)
+        .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
 }
 
 #[allow(dead_code)]

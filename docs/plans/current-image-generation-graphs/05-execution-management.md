@@ -14051,6 +14051,51 @@ Worker rules:
     snapshot proof freshness to build the dependency readiness execution
     context/envelope. Frontend/Tauri publish-before-run wiring and TypeScript
     contract mirrors remain pending.
+- 2026-05-27 Milestone 5d queue-admission readiness envelope source slice:
+  - Smallest useful vertical slice: carried saved executable snapshot
+    dependency proof freshness into runtime scheduler task templates and used it
+    to build validated `DependencyReadinessRequestEnvelope` values in the
+    workflow-service readiness lifecycle.
+  - Allowed files touched:
+    `crates/pantograph-dependency-planning/src/execution.rs`,
+    dependency-planning READMEs,
+    `crates/pantograph-workflow-service/src/workflow/task_graph_contracts.rs`,
+    `crates/pantograph-workflow-service/src/workflow/task_graph.rs`,
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs`,
+    focused workflow-service tests, workflow/scheduler READMEs, and this plan
+    log.
+  - No-fallback/no-legacy result: readiness lifecycle no longer reconstructs
+    selected binding ids as empty defaults or omits dependency requirements id
+    when calling dependency-environment resolve. It consumes the saved
+    `dependency_readiness_source`, verifies the reconstructed dependency
+    requirements id and override fingerprint against the canonical producer,
+    and validates provider preflight output against the shared readiness
+    envelope before scheduler admission.
+  - Contract update: `WorkflowSchedulerTaskGraph` schema is now version 6, and
+    runtime `WorkflowSchedulerTaskIntentTemplate` requires a typed
+    `WorkflowSchedulerDependencyReadinessSource`. Shared dependency readiness
+    execution context/request/proof envelopes now expose constructor APIs so
+    cross-crate consumers do not bypass `#[non_exhaustive]` with duplicate DTOs
+    or JSON construction.
+  - Verification passed: `cargo fmt -p pantograph-dependency-planning -p
+    pantograph-workflow-service`; `cargo check -p
+    pantograph-workflow-service`; `cargo test -p pantograph-dependency-planning
+    --test readiness_execution_contract -- --nocapture`; `cargo test -p
+    pantograph-workflow-service readiness_lifecycle --lib -- --nocapture`;
+    `cargo test -p pantograph-workflow-service task_graph --lib --
+    --nocapture`; `cargo test -p pantograph-workflow-service
+    task_binding_resolution --lib -- --nocapture`; and `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib --
+    --nocapture`. Existing warning: `set_active_run_execution_plan` remains a
+    pre-existing unused store method.
+  - Remaining follow-up: scheduler readiness/admission still retains the
+    admitted ready proof as the older `SchedulerDependencyReadinessProof`
+    wrapper. The next slice must either replace that scheduler proof wrapper
+    with the validated readiness proof envelope or add a workflow-service
+    active-run proof store keyed by task/state identity before runtime dispatch
+    selection is allowed to consume ready runtime tasks.
 
 ### Traceability Links
 

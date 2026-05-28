@@ -145,8 +145,9 @@ pub use self::task_graph::{
     WorkflowSchedulerReadyInferenceTaskProjection,
 };
 pub use self::task_graph_contracts::{
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerDependencyReadinessSource, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskIntentTemplate,
     WorkflowSchedulerTaskProjectionDiagnostic, WorkflowSchedulerTaskProjectionDiagnosticCode,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity,

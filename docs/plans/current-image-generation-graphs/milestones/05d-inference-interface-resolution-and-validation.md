@@ -1168,10 +1168,18 @@ defining an image-only inference-node interface.
     assertions and `PumasModelRef.selected_artifact_path: None` fixture
     values. Existing warning: `set_active_run_execution_plan` remains a
     pre-existing unused store method.
-  - Remaining follow-up: queue admission must consume the saved snapshot
-    freshness fields to build the dependency readiness execution
-    context/envelope. Frontend/Tauri publish-before-run wiring and TypeScript
-    contract mirrors remain pending slices.
+  - 2026-05-27 follow-up slice completed: queue admission now carries saved
+    snapshot freshness into scheduler task templates as a typed
+    `dependency_readiness_source`; the readiness lifecycle builds and validates
+    a shared `DependencyReadinessRequestEnvelope` from that source before
+    dependency-environment provider calls and scheduler readiness admission.
+  - Remaining follow-up: scheduler readiness/admission still retains ready
+    proof as the older `SchedulerDependencyReadinessProof` wrapper. Replace it
+    with the validated readiness proof envelope, or add a workflow-service
+    active-run proof store keyed by task/state identity, before runtime
+    dispatch selection is allowed to consume ready runtime tasks.
+    Frontend/Tauri publish-before-run wiring and TypeScript contract mirrors
+    remain pending slices.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

@@ -13,6 +13,7 @@ actions, persisted fixtures, and backend handoff boundaries.
 | `src/lib.rs` | Curated public re-exports for dependency-planning consumers. |
 | `src/environment.rs` | Typed dependency-environment resolve/check/install request, result, requirement, binding, status-row, operation, validation-error, and environment-ref contracts. |
 | `src/environment/` | Dependency-environment child modules for result payload rows and row-level validation helpers. |
+| `src/execution.rs` | Path-free dependency-readiness execution context plus request/proof envelopes used to bind readiness checks to an admitted scheduler task and validation snapshot. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
 | `src/preflight.rs` | Path-free preflight request/result contracts and shared dependency-planning identity/correlation key. |
 | `src/producer.rs` | Pure dependency requirements proof producer that derives path-free requirements ids, override fingerprints, status, and diagnostics from validated planning requests plus optional typed availability facts. |
@@ -52,6 +53,10 @@ instead of parallel artifact DTO families. Dependency-environment contracts live
 in this crate because they are shared boundary DTOs for graph, frontend,
 embedded-runtime, and host dependency systems; the actual package-manager and
 Pumas I/O remains outside this crate.
+Dependency readiness execution contexts and request/proof envelopes are
+constructed through crate-owned constructors. Downstream crates must not build
+those `#[non_exhaustive]` structs through JSON round-trips or duplicate local
+DTOs.
 
 ## Alternatives Rejected
 - Keep dependency-planning DTOs in `node-engine`: rejected because node-engine
