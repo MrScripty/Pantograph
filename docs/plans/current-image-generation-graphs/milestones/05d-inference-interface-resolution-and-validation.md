@@ -2231,6 +2231,136 @@ defining an image-only inference-node interface.
       provider. Event-driven validation may trigger from graph edits or explicit
       validation requests, but those triggers pass identity/revision intent only;
       they do not carry resolver facts from frontend or Tauri.
+      Re-plan decision recorded on 2026-05-28: implement option 2 followed by
+      option 3. First extract the current refresh implementation into a
+      workflow-service validation publisher core that owns the reusable
+      `graph snapshot -> fact provider -> descriptor publication -> current
+      validation state` path. The existing explicit refresh command must call
+      this publisher instead of keeping inline validation logic. After that
+      publisher is tested, add the live validation lifecycle owner around the
+      same publisher. Do not add a second validation resolver, do not move
+      descriptor resolution into Tauri/frontend, and do not let graph mutation
+      APIs become validation policy owners.
+      Option 2 implementation requirements:
+      1. Add a workflow-service publisher API that accepts graph session id,
+         requested graph revision, and a graph snapshot or snapshot request.
+         It must compute/confirm the current graph revision, release
+         graph-session locks before fact resolution, call the existing
+         inference-interface fact provider, publish descriptor projections,
+         record current validation state, and return the same summary plus
+         bounded node projections used by the toolbar refresh path.
+      2. Route every existing validation publication entrypoint through the
+         same publisher core. `refresh_current_validation_summary` must call
+         it, and `publish_inference_validation_session` must either call it or
+         be retired if caller-supplied validation session ids are no longer
+         canonical. Do not keep parallel graph snapshot, fact lookup,
+         publication, or current-state recording implementations.
+      3. Re-check graph/session freshness after fact resolution and before
+         recording current validation state, returning stale typed diagnostics
+         instead of writing publication results when the graph revision or
+         session has changed while facts were being resolved.
+      4. Keep the publisher synchronous-domain/async-boundary split explicit:
+         extraction, publication, aggregation, and state recording stay in
+         workflow-service domain modules; async is limited to fact-provider,
+         lock, persistence, or transport boundaries.
+      5. Add an explicit bounded node-projection policy. If publication would
+         exceed the bound, return a typed validation diagnostic and do not
+         serialize or emit an unbounded projection list. Keep this separate from
+         the existing validation event cap.
+      6. Add the publisher as a focused workflow-service module owned by the
+         graph validation boundary, then have `GraphSessionStore` compose it.
+         Do not add more inline lifecycle/publisher behavior to
+         `GraphSessionStore`.
+      7. Add tests proving lock-free fact resolution, stale revision rejection
+         before and after fact lookup, bounded projection records, current-state
+         publication, no raw resolver facts from transport callers, no parallel
+         publication path, and parity with the existing refresh response shape.
+      Option 3 lifecycle-owner requirements:
+      1. Add a workflow-service lifecycle owner keyed by graph session id and
+         graph revision that starts, cancels, supersedes, and cleans up
+         validation sessions. It must publish pending/stale/invalid/executable
+         state without blocking graph display or editing.
+      2. Use bounded event/state buffers with typed overflow/backpressure
+         diagnostics, observe task errors and panics, cancel or supersede
+         in-flight work when graph revisions change, and reject writes for stale
+         graph revisions or validation session ids.
+      3. Stop accepting validation work when a graph session closes and ensure
+         close cleanup cannot leave stale events able to update current
+         validation state.
+      4. Add validation-state cleanup APIs and call them from graph-session
+         close and stale-session cleanup. Cleanup must cancel in-flight
+         validation work, drop buffered validation state for the closed session,
+         and prevent late provider results from recording current state.
+      5. Keep the lifecycle owner as a dedicated workflow-service module
+         composed by `GraphSessionStore`; it owns cancellation, supersession,
+         backpressure, session-close cleanup, and publication scheduling, while
+         the publisher owns one validation publication attempt.
+      6. Expose lifecycle events through a dedicated graph-validation
+         transport-only Tauri event channel/subscription after backend tests
+         pass. Do not reuse execution-run `WorkflowEvent` channels as the
+         validation lifecycle transport, and do not couple validation event
+         delivery to graph mutation responses.
+      7. Tauri may carry events and commands only; it must not own freshness,
+         descriptor resolution, enqueue policy, dependency request derivation,
+         cancellation policy, validation buffers, or graph mutation policy.
+      8. The graph editor consumes validation events as display/status overlays:
+         authored ports render immediately, backend projections update
+         display-only runtime overlays, submit/enqueue state comes from the
+         latest backend validation summary, and editing remains available while
+         validation is pending.
+      Standards-compliance gates for the option 2 -> option 3 sequence:
+      1. Public workflow-service APIs must use typed request/response/error
+         structs, for example `WorkflowGraphValidationPublishRequest`,
+         `WorkflowGraphValidationPublishResponse`, and
+         `WorkflowGraphValidationSnapshot`, or equivalent existing canonical
+         DTOs. Raw graph-session, node, revision, and validation-session strings
+         must be parsed at the graph API/Tauri boundary before internal use; do
+         not expose `Result<T, String>`, `anyhow`, untyped maps, or raw JSON as
+         the publisher/lifecycle module contract.
+      2. Add or reuse explicit typed diagnostic codes before implementation uses
+         them. Overflow, backpressure, stale revision, superseded validation,
+         provider failure, task panic, task cancellation, closed session, and
+         projection-bound failures must not be encoded only in message text.
+         Diagnostic context must stay bounded and omit raw Pumas facts, local
+         paths, and unbounded node projection payloads.
+      3. The dedicated graph-validation transport event must have typed identity
+         fields for graph session id, graph revision, validation session id,
+         event sequence, event kind, bounded payload, and diagnostic summary.
+         Frontend consumers must discard stale events by identity and sequence;
+         Tauri must only forward typed transport DTOs and must not translate
+         resolver facts or validation policy.
+      4. Tests must use deterministic fakes, barriers, or channels rather than
+         sleeps to prove no graph-session lock is held across fact-provider
+         await points, provider results are rejected after close/supersession,
+         stale writes cannot update current validation state, bounded buffers
+         emit typed diagnostics, and task cancellation/panic paths are observed
+         at the lifecycle owner.
+      5. New source modules/directories must update the relevant README or linked
+         ADR in the same implementation slice. Required documentation includes
+         the API consumer contract, lifecycle ownership, cancellation/cleanup
+         behavior, event ordering, projection bounds, diagnostics, and rejected
+         alternatives. Candidate ownership points are the workflow-service graph
+         README, workflow-service crate README, Tauri workflow README, frontend
+         workflow service/graph-editor READMEs, and this milestone file.
+      6. Do not add new dependencies for lifecycle/event delivery unless an
+         implementation slice records why existing Tokio/std primitives are not
+         sufficient. Runtime creation remains at the composition root; spawned
+         validation work must have tracked handles, cancellation, shutdown, and
+         panic/error observation.
+      7. Each slice must include source-search verification proving retired
+         validation publication paths, reused execution `WorkflowEvent`
+         transports, raw transport facts, compatibility aliases, and fallback
+         validation resolvers are absent from the touched blast radius.
+      Re-plan triggers: stop if implementing the publisher requires frontend or
+      Tauri-supplied resolver facts, if graph mutation APIs must own validation
+      policy, if lifecycle cancellation cannot be modeled without a workflow-
+      service owner, if event delivery would require unbounded buffers or
+      detached tasks without shutdown, or if queue admission would need to
+      consume anything other than current backend validation state. Also stop
+      if current validation state cannot be cleaned up on graph-session close,
+      if stale provider results cannot be rejected after fact lookup, or if a
+      dedicated graph-validation transport would require duplicating validation
+      resolver logic outside workflow-service.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit
@@ -2782,6 +2912,40 @@ defining an image-only inference-node interface.
   - Remaining follow-up: implement the event-driven validation lifecycle owner
     on top of provider -> sync publisher -> current-state recorder before
     frontend event delivery or queue admission consumes live validation updates.
+- [x] 2026-05-28 graph-session validation cleanup slice completed:
+  - Smallest useful vertical slice: added an explicit workflow-service cleanup
+    boundary for current inference-validation state and wired graph edit-session
+    close to clear validation records for the closed graph session.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: close cleanup does not preserve any
+    alternate validation cache or transport-owned summary. The current
+    validation owner remains keyed by typed graph session and graph revision,
+    and session close removes only the closed session's backend-owned state.
+  - Standards result: cleanup is owned by workflow-service, uses typed
+    `WorkflowGraphSessionId` values internally, adds deterministic focused
+    tests, and documents the lifecycle invariant in the graph README. No new
+    dependencies, frontend transport, Tauri policy, or legacy validation path
+    were added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    close_session_clears_current_validation_state --lib`; `cargo test -p
+    pantograph-workflow-service
+    clear_graph_session_removes_only_matching_validation_state --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_state
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; and `cargo check -p
+    pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: add the event-driven lifecycle owner that cancels or
+    supersedes in-flight validation work and uses this cleanup boundary for
+    buffered events and late provider-result rejection.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

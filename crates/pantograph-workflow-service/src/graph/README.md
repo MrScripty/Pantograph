@@ -296,6 +296,10 @@ the summary/gate remains the only submit authority.
   gating, and scheduler admission must consume that owner instead of carrying
   separate validation-summary caches or reconstructing freshness in Tauri or
   frontend code.
+- Closing a graph edit session clears that session's current inference-
+  validation state before reporting success. Later validation lifecycle owners
+  must use the same workflow-service cleanup boundary for cancellation,
+  buffered event cleanup, and stale provider-result rejection.
 - Graph-session locks may be held only long enough to canonicalize/snapshot
   graph state, compute the current graph revision, and check target-node
   existence. Pumas lookup, inference capability resolution, runtime availability

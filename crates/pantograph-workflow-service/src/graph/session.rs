@@ -11,7 +11,7 @@ use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
     DependencyEnvironmentActionIntentStatus, InferenceDiagnosticCode, InferenceDiagnosticSeverity,
     InferenceInterfaceDiagnostic, InferencePortId, ValidatedDependencyEnvironmentActionIntent,
-    WorkflowGraphRevision,
+    WorkflowGraphRevision, WorkflowGraphSessionId,
 };
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -163,6 +163,8 @@ impl GraphSessionStore {
         &self,
         session_id: &str,
     ) -> Result<WorkflowGraphEditSessionCloseResponse, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         let removed = self.sessions.write().await.remove(session_id);
         if removed.is_none() {
             return Err(WorkflowServiceError::SessionNotFound(format!(
@@ -170,7 +172,23 @@ impl GraphSessionStore {
                 session_id
             )));
         }
+        self.validation_state
+            .clear_graph_session(&graph_session_id)
+            .await;
         Ok(WorkflowGraphEditSessionCloseResponse { ok: true })
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn validation_state_record_count_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<usize, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        Ok(self
+            .validation_state
+            .record_count_for_graph_session(&graph_session_id)
+            .await)
     }
 
     async fn get_session_handle(

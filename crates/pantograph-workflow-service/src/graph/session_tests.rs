@@ -385,6 +385,46 @@ async fn current_validation_summary_allows_executable_summary() {
 }
 
 #[tokio::test]
+async fn close_session_clears_current_validation_state() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Executable,
+                true,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    assert_eq!(
+        store
+            .validation_state_record_count_for_session(&session.session_id)
+            .await
+            .expect("validation state record count"),
+        1
+    );
+
+    store
+        .close_session(&session.session_id)
+        .await
+        .expect("close graph session");
+
+    assert_eq!(
+        store
+            .validation_state_record_count_for_session(&session.session_id)
+            .await
+            .expect("validation state record count"),
+        0
+    );
+}
+
+#[tokio::test]
 async fn current_validation_summary_blocks_pending_summary() {
     let store = GraphSessionStore::new();
     let session = store

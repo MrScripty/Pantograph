@@ -14389,6 +14389,31 @@ Worker rules:
   - Verification passed: `npm run test:frontend --
     workflowValidationProjectionOverlays.test.ts workflowToolbarEvents.test.ts`;
     `npm run typecheck`; and `git diff --check`.
+- 2026-05-28 Milestone 5d graph-session validation cleanup slice:
+  - Smallest useful vertical slice: add workflow-service-owned cleanup for
+    current inference-validation state and invoke it when a graph edit session
+    closes.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: session close removes only backend-owned
+    current validation state for the closed graph session and does not add
+    alternate summary caches, transport-owned validation state, or compatibility
+    validation paths.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    close_session_clears_current_validation_state --lib`; `cargo test -p
+    pantograph-workflow-service
+    clear_graph_session_removes_only_matching_validation_state --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_state
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; and `cargo check -p
+    pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 

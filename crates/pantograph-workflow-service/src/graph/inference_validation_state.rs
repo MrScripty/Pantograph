@@ -101,6 +101,29 @@ impl CurrentInferenceValidationStateStore {
         Ok(())
     }
 
+    pub(crate) async fn clear_graph_session(
+        &self,
+        graph_session_id: &WorkflowGraphSessionId,
+    ) -> usize {
+        let mut summaries = self.summaries.write().await;
+        let before = summaries.len();
+        summaries.retain(|key, _record| &key.graph_session_id != graph_session_id);
+        before - summaries.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn record_count_for_graph_session(
+        &self,
+        graph_session_id: &WorkflowGraphSessionId,
+    ) -> usize {
+        self.summaries
+            .read()
+            .await
+            .keys()
+            .filter(|key| &key.graph_session_id == graph_session_id)
+            .count()
+    }
+
     pub(crate) async fn current_validation_summary(
         &self,
         request: WorkflowGraphCurrentValidationSummaryStateRequest,
@@ -1628,6 +1651,60 @@ mod tests {
         assert_eq!(
             result.diagnostics[0].code,
             InferenceDiagnosticCode::ValidationSummaryMissing
+        );
+    }
+
+    #[tokio::test]
+    async fn clear_graph_session_removes_only_matching_validation_state() {
+        let store = CurrentInferenceValidationStateStore::new();
+        let target_session_id: WorkflowGraphSessionId =
+            "graph-session-1".parse().expect("valid graph session id");
+        let other_session_id: WorkflowGraphSessionId =
+            "graph-session-2".parse().expect("valid graph session id");
+        store
+            .record_validation_session(
+                target_session_id.clone(),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+            )
+            .await
+            .expect("valid validation session");
+        store
+            .record_validation_session(
+                other_session_id.clone(),
+                validation_session(
+                    "bbbbbbbbbbbbbbbb",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+            )
+            .await
+            .expect("valid validation session");
+
+        assert_eq!(
+            store
+                .record_count_for_graph_session(&target_session_id)
+                .await,
+            1
+        );
+
+        let removed = store.clear_graph_session(&target_session_id).await;
+
+        assert_eq!(removed, 1);
+        assert_eq!(
+            store
+                .record_count_for_graph_session(&target_session_id)
+                .await,
+            0
+        );
+        assert_eq!(
+            store
+                .record_count_for_graph_session(&other_session_id)
+                .await,
+            1
         );
     }
 
