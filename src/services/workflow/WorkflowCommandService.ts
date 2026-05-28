@@ -43,6 +43,8 @@ import type {
   WorkflowExecutionSessionRunRequest,
   WorkflowExecutableValidationSnapshotRecord,
   WorkflowEvent,
+  WorkflowGraphCurrentValidationSummaryRequest,
+  WorkflowGraphCurrentValidationSummaryResponse,
   WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
   WorkflowManagedMediaDependencyId,
   WorkflowManagedMediaDependencyInstallFromStagingRequest,
@@ -124,6 +126,36 @@ export class WorkflowCommandService extends WorkflowProjectionService {
 
     return invokeWorkflowCommand<WorkflowExecutableValidationSnapshotRecord>(
       'publish_graph_session_executable_validation_snapshot',
+      { request },
+    );
+  }
+
+  async currentGraphValidationSummary(
+    request: WorkflowGraphCurrentValidationSummaryRequest,
+  ): Promise<WorkflowGraphCurrentValidationSummaryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        graph_session_id: request.graph_session_id,
+        requested_graph_revision: request.graph_revision,
+        current_graph_revision: request.graph_revision,
+        validation_session_id: 'mock-validation-session',
+        state: 'current',
+        summary: {
+          status: 'executable',
+          executable: true,
+          enqueue_disabled_reasons: [],
+          diagnostics_count: 0,
+          blocking_diagnostics_count: 0,
+        },
+        submit_gate: {
+          allowed: true,
+        },
+        diagnostics: [],
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowGraphCurrentValidationSummaryResponse>(
+      'current_graph_validation_summary',
       { request },
     );
   }

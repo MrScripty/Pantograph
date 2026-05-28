@@ -10,8 +10,8 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
-| `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
-| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, queue, and retention commands return backend-owned results without optimistic client replacement. |
+| `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, current-validation summary, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
+| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, current-validation summary, queue, and retention commands return backend-owned results without optimistic client replacement. |
 | `WorkflowService.graphInspection.test.ts` | Focused IPC boundary test for saved graph inspection projection requests and backend-owned stale diagnostics. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, run-inspection, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowProjectionSubscriptionService.ts` | Typed diagnostics projection invalidation subscription helper over the Tauri event bridge. |
@@ -98,6 +98,10 @@ typed command before saved-run admission wiring consumes it. The service mirrors
 the Rust request and snapshot record shape, but workflow-service remains the
 owner of graph revision checks, validation-session freshness, executable
 snapshot compaction, attribution persistence, and enqueue gating.
+Current graph validation summary reads are forwarded as typed graph-session
+commands before toolbar submit. The service preserves the backend submit gate,
+validation-session id, and diagnostics, and does not resolve inference
+descriptors or infer queue eligibility from local node data.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.

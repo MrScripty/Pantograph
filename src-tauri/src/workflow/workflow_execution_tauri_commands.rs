@@ -16,6 +16,7 @@ use pantograph_workflow_service::{
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
     InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
     WorkflowExecutableValidationSnapshotRecord, WorkflowGraph,
+    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphEditSessionGraphResponse,
     WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
 };
@@ -311,6 +312,17 @@ pub async fn resolve_dependency_environment_action_intent(
 ) -> Result<DependencyEnvironmentActionIntentResult, String> {
     workflow_service
         .workflow_graph_resolve_dependency_environment_action_intent(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
+#[command]
+pub async fn current_graph_validation_summary(
+    request: WorkflowGraphCurrentValidationSummaryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphCurrentValidationSummaryResponse, String> {
+    workflow_service
+        .workflow_graph_current_validation_summary(request)
         .await
         .map_err(|error| error.to_envelope_json())
 }

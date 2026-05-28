@@ -972,6 +972,89 @@ export interface WorkflowGraphSessionExecutableValidationSnapshotPublishRequest 
   validation_snapshot_id?: string | null;
 }
 
+export interface WorkflowGraphCurrentValidationSummaryRequest {
+  graph_session_id: string;
+  graph_revision: string;
+}
+
+export type WorkflowGraphCurrentValidationSummaryState =
+  | 'current'
+  | 'pending'
+  | 'missing'
+  | 'stale'
+  | 'unavailable'
+  | 'invalid';
+
+export type WorkflowGraphValidationSubmitGateReason =
+  | 'validation_summary_missing'
+  | 'graph_revision_stale'
+  | 'validation_pending'
+  | 'validation_stale'
+  | 'descriptor_unresolved'
+  | 'descriptor_unavailable'
+  | 'blocking_diagnostics'
+  | 'missing_required_input'
+  | 'invalid_port_binding'
+  | 'invalid_runtime_constraint'
+  | 'invalid_device_constraint'
+  | 'drift_requires_review'
+  | 'validation_not_executable';
+
+export interface WorkflowGraphValidationSubmitGate {
+  allowed: boolean;
+  reason_code?: WorkflowGraphValidationSubmitGateReason | null;
+  message?: string | null;
+}
+
+export type WorkflowGraphValidationSummaryStatus =
+  | 'pending'
+  | 'stale'
+  | 'unresolved'
+  | 'unavailable'
+  | 'blocked'
+  | 'executable';
+
+export type WorkflowGraphEnqueueDisabledReason =
+  | 'validation_pending'
+  | 'validation_stale'
+  | 'descriptor_unresolved'
+  | 'descriptor_unavailable'
+  | 'blocking_diagnostics'
+  | 'missing_required_input'
+  | 'invalid_port_binding'
+  | 'invalid_runtime_constraint'
+  | 'invalid_device_constraint'
+  | 'drift_requires_review';
+
+export interface WorkflowGraphValidationSummary {
+  status: WorkflowGraphValidationSummaryStatus;
+  executable: boolean;
+  enqueue_disabled_reasons?: WorkflowGraphEnqueueDisabledReason[];
+  diagnostics_count: number;
+  blocking_diagnostics_count: number;
+}
+
+export type WorkflowGraphValidationDiagnosticSeverity = 'info' | 'warning' | 'error';
+
+export interface WorkflowGraphValidationDiagnostic {
+  severity: WorkflowGraphValidationDiagnosticSeverity;
+  code: string;
+  message: string;
+  hint?: string | null;
+  port_id?: string | null;
+}
+
+export interface WorkflowGraphCurrentValidationSummaryResponse {
+  graph_session_id: string;
+  requested_graph_revision: string;
+  current_graph_revision: string;
+  validation_session_id?: string | null;
+  state: WorkflowGraphCurrentValidationSummaryState;
+  summary?: WorkflowGraphValidationSummary | null;
+  submit_gate: WorkflowGraphValidationSubmitGate;
+  diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
 export interface WorkflowExecutableValidationSnapshotDiagnostic {
   severity: string;
   code: string;

@@ -96,6 +96,11 @@ pub use inference_interface_validation::{
 pub(crate) use inference_validation_state::{
     CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofStatus,
 };
+pub use inference_validation_state::{
+    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
+    WorkflowGraphCurrentValidationSummaryState, WorkflowGraphValidationSubmitGate,
+    WorkflowGraphValidationSubmitGateReason,
+};
 pub use inspection::{
     inspect_workflow_graph, inspect_workflow_graph_with_run_context,
     WorkflowGraphInspectionProjection, WorkflowGraphInspectionRequest,

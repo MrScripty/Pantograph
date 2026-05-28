@@ -4,7 +4,11 @@ import { applyWorkflowExecutionEvent } from '../../packages/svelte-graph/src/sto
 import {
   buildAudioRuntimeDataFromCompletedOutputs,
 } from './nodes/workflow/audioOutputState.ts';
-import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
+import type {
+  NodeExecutionState,
+  WorkflowEvent,
+  WorkflowGraphValidationSubmitGate,
+} from '../services/workflow/types.ts';
 
 interface WorkflowToolbarStoreActions {
   setNodeExecutionState: (
@@ -45,6 +49,7 @@ export interface WorkflowSubmitDisabledReasonInput {
   hasSavedWorkflow: boolean;
   hasWorkflowId: boolean;
   semanticVersionInvalid: boolean;
+  submitGate?: WorkflowGraphValidationSubmitGate | null;
 }
 
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
@@ -71,11 +76,14 @@ export function workflowSubmitDisabledReason({
   hasSavedWorkflow,
   hasWorkflowId,
   semanticVersionInvalid,
+  submitGate = null,
 }: WorkflowSubmitDisabledReasonInput): string | null {
   if (isReadOnly) return 'Cannot submit a read-only graph';
   if (isDirty) return 'Save workflow changes before submitting';
   if (!hasSavedWorkflow || !hasWorkflowId) return 'Save the workflow before submitting';
   if (semanticVersionInvalid) return 'Workflow version must use numeric major.minor.patch format';
+  if (!submitGate) return 'Workflow validation summary unavailable';
+  if (!submitGate.allowed) return submitGate.message ?? 'Workflow validation does not allow submit';
   if (isExecuting) return 'Workflow submission is in progress';
   return null;
 }

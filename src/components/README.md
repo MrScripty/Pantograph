@@ -65,6 +65,10 @@ as the package graph so GUI behavior and backend validation stay aligned.
   submission must publish the current graph-session executable validation
   snapshot through the workflow service before run admission; the toolbar only
   passes graph-session/workflow identity and does not compute validation facts.
+- Submit availability must use the workflow-service current validation summary
+  submit gate for the saved graph revision. Components may display the
+  backend-provided message, but must not rebuild inference validation,
+  dependency proof, Pumas readiness, runtime, or scheduler eligibility locally.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.
@@ -114,6 +118,12 @@ clean workflows through scheduler execution session create/run/close commands.
 That keeps the Graph page on the same canonical run path as Scheduler,
 Diagnostics, and I/O Inspector instead of executing the edit-session graph
 directly.
+Before enabling Submit, `WorkflowToolbar.svelte` reads the backend current
+validation summary for the saved graph-session revision and uses the returned
+submit gate plus validation-session id when publishing the executable
+validation snapshot. If the summary is missing, stale, pending, unavailable, or
+invalid, the toolbar displays the backend gate message and leaves graph editing
+unblocked.
 Submit disabled reasons are rendered visibly below the toolbar rather than
 being available only as button titles, because Puma-Lib selection and other
 node edits mark workflows dirty and require a save before scheduler submission.

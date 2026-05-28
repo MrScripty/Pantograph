@@ -54,6 +54,10 @@ while still handling desktop runtime execution concerns.
   the migration.
 - Runtime admission, reservation, retention, and eviction policy must not be
   implemented directly in Tauri workflow command handlers.
+- Current graph validation summary commands must stay transport-thin. Tauri
+  forwards graph session and graph revision identity to workflow-service and
+  must not resolve inference descriptors, Pumas model state, dependency
+  requirements, or scheduler eligibility locally.
 - Public GUI workflow submission must enter through scheduler execution-session
   commands. The legacy edit-session run command must stay unregistered.
 - Retention cleanup command handlers must stay transport-thin and delegate to
@@ -146,6 +150,10 @@ compute queue priority, session ownership, authority, or audit outcomes.
 Scheduler estimate query commands likewise stay thin wrappers over
 workflow-service projection DTOs and must not parse raw diagnostic payload JSON
 inside Tauri.
+Current graph validation summary commands likewise stay thin wrappers over the
+workflow-service graph-session read model. Tauri exposes the typed submit gate
+and validation-session id returned by workflow-service, but does not create a
+fallback validation path or infer queue eligibility from frontend graph data.
 The legacy Tauri-local node registry mirror has also been removed; definition
 commands now use the service-owned registry directly.
 The legacy Tauri-local execution manager has been removed; undo/redo and

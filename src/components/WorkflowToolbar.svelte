@@ -7,6 +7,7 @@
     clearNodeRuntimeData,
     clearStreamContent,
     edges,
+    workflowGraph,
     setNodeExecutionState,
     updateNodeRuntimeData,
     appendStreamContent,
@@ -27,6 +28,7 @@
   import {
     AUDIO_RUNTIME_DATA_KEYS,
   } from './nodes/workflow/audioOutputState';
+  import type { WorkflowGraphCurrentValidationSummaryResponse } from '../services/workflow/types';
   import {
     focusWorkflowDiagnostics,
     selectActiveWorkflowRun,
@@ -53,6 +55,8 @@
   let previousWorkflowId = $state<string | null>(null);
   let activeWorkflowRunId = $state<string | null>(null);
   let waitingForInput = $state(false);
+  let currentValidationSummary = $state<WorkflowGraphCurrentValidationSummaryResponse | null>(null);
+  let currentValidationSummaryKey = $state<string | null>(null);
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -71,6 +75,7 @@
       hasSavedWorkflow: Boolean(currentSavedWorkflow),
       hasWorkflowId: Boolean($currentGraphId),
       semanticVersionInvalid: workflowSemanticVersionInvalid,
+      submitGate: currentValidationSummary?.submit_gate ?? null,
     }),
   );
   let submitDisabled = $derived(submitDisabledReason !== null);
@@ -130,6 +135,40 @@
   });
 
   $effect(() => {
+    const graphSessionId = $currentSessionId;
+    const graphRevision = $workflowGraph.derived_graph?.graph_fingerprint ?? null;
+    if ($currentGraphType !== 'workflow' || !graphSessionId || !graphRevision || $isDirty) {
+      currentValidationSummary = null;
+      currentValidationSummaryKey = null;
+      return;
+    }
+
+    const requestKey = `${graphSessionId}:${graphRevision}`;
+    currentValidationSummaryKey = requestKey;
+    let cancelled = false;
+
+    void workflowService
+      .currentGraphValidationSummary({
+        graph_session_id: graphSessionId,
+        graph_revision: graphRevision,
+      })
+      .then((summary) => {
+        if (!cancelled && currentValidationSummaryKey === requestKey) {
+          currentValidationSummary = summary;
+        }
+      })
+      .catch(() => {
+        if (!cancelled && currentValidationSummaryKey === requestKey) {
+          currentValidationSummary = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
     return workflowService.subscribeEvents((event) => {
       const result = applyWorkflowToolbarEvent({
         event,
@@ -169,6 +208,7 @@
     clearStreamContent();
     const submittedWorkflowId = $currentGraphId;
     const submittedGraphSessionId = $currentSessionId;
+    const submittedValidationSummary = currentValidationSummary;
 
     try {
       if ($isReadOnly) {
@@ -182,6 +222,15 @@
       }
       if (!submittedGraphSessionId) {
         throw new Error('No active workflow graph session');
+      }
+      if (!submittedValidationSummary?.submit_gate.allowed) {
+        throw new Error(
+          submittedValidationSummary?.submit_gate.message ??
+            'Workflow validation summary unavailable',
+        );
+      }
+      if (!submittedValidationSummary.validation_session_id) {
+        throw new Error('Workflow validation session is unavailable');
       }
       if (!isNumericWorkflowSemanticVersion(workflowSemanticVersion)) {
         throw new Error('Workflow version must use numeric major.minor.patch format');
@@ -215,7 +264,7 @@
               workflow_id: submittedWorkflowId,
               workflow_semantic_version: submittedVersion,
               graph_session_id: submittedGraphSessionId,
-              validation_session_id: null,
+              validation_session_id: submittedValidationSummary.validation_session_id,
               validation_snapshot_id: null,
             });
             response = await workflowService.runWorkflowExecutionSession({

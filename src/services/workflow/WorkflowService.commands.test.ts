@@ -21,6 +21,7 @@ import type {
   WorkflowAdminQueueCancelResponse,
   WorkflowAdminQueuePushFrontResponse,
   WorkflowAdminQueueReprioritizeResponse,
+  WorkflowGraphCurrentValidationSummaryResponse,
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
   WorkflowExecutableValidationSnapshotRecord,
@@ -611,6 +612,56 @@ test('execution session commands preserve scheduler-backed request boundaries', 
         args: {
           request: {
             session_id: 'execution-session-a',
+          },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('workflow command service forwards current validation summary requests', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const summaryResponse: WorkflowGraphCurrentValidationSummaryResponse = {
+    graph_session_id: 'graph-session-a',
+    requested_graph_revision: 'graph-revision-a',
+    current_graph_revision: 'graph-revision-a',
+    validation_session_id: 'validation-session-a',
+    state: 'current',
+    summary: {
+      status: 'executable',
+      executable: true,
+      enqueue_disabled_reasons: [],
+      diagnostics_count: 0,
+      blocking_diagnostics_count: 0,
+    },
+    submit_gate: {
+      allowed: true,
+    },
+    diagnostics: [],
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return summaryResponse;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const summary = await service.currentGraphValidationSummary({
+      graph_session_id: 'graph-session-a',
+      graph_revision: 'graph-revision-a',
+    });
+
+    assert.deepEqual(summary, summaryResponse);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'current_graph_validation_summary',
+        args: {
+          request: {
+            graph_session_id: 'graph-session-a',
+            graph_revision: 'graph-revision-a',
           },
         },
       },

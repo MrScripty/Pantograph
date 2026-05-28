@@ -137,6 +137,7 @@ test('workflowSubmitDisabledReason explains every disabled submit gate', () => {
     hasSavedWorkflow: true,
     hasWorkflowId: true,
     semanticVersionInvalid: false,
+    submitGate: { allowed: true },
   };
 
   assert.equal(workflowSubmitDisabledReason(enabled), null);
@@ -155,6 +156,21 @@ test('workflowSubmitDisabledReason explains every disabled submit gate', () => {
   assert.equal(
     workflowSubmitDisabledReason({ ...enabled, isReadOnly: true, isDirty: true }),
     'Cannot submit a read-only graph',
+  );
+  assert.equal(
+    workflowSubmitDisabledReason({ ...enabled, submitGate: null }),
+    'Workflow validation summary unavailable',
+  );
+  assert.equal(
+    workflowSubmitDisabledReason({
+      ...enabled,
+      submitGate: {
+        allowed: false,
+        reason_code: 'validation_pending',
+        message: 'Inference validation is still pending',
+      },
+    }),
+    'Inference validation is still pending',
   );
 });
 

@@ -36,7 +36,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
 | `dependency_environment_subject.rs` | Workflow-service-owned dependency-environment action subject resolver for typed sidecar associations between dependency-environment control nodes and inference nodes. |
-| `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks, dependency-environment action diagnostics, and proof-aware scheduler/executable snapshot projections. |
+| `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks, dependency-environment action diagnostics, submit-gate summaries, and proof-aware scheduler/executable snapshot projections. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -92,6 +92,12 @@ validation-state read model rather than caller-supplied publications. That
 read model must include current path-free dependency requirements proof
 freshness for each executable inference node before workflow-service may
 persist a runtime-admissible executable snapshot.
+Graph-session current validation summary reads are the backend-owned submit
+gate for the editor and queue-admission boundary. They report whether the
+latest graph revision has a current executable validation session, preserve
+typed diagnostics for unavailable/stale/invalid states, and never ask Tauri or
+frontend code to resolve descriptors, Pumas state, dependency proofs, or
+scheduler runtime policy.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.

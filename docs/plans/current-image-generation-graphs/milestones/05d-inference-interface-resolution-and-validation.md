@@ -1267,6 +1267,25 @@ defining an image-only inference-node interface.
     rules, shutdown/session-close cleanup, and panic/error observation. Graph
     editing must remain available while validation is pending, and tests must
     prove stale or superseded sessions cannot mutate current state.
+  - 2026-05-27 follow-up slice completed: workflow-service now exposes a
+    current graph validation summary read model for `graph_session_id +
+    graph_revision`, Tauri exposes it as a thin command, TypeScript mirrors the
+    typed summary/gate DTOs, and `WorkflowToolbar.svelte` disables Submit from
+    the backend `submit_gate`. Saved-run Submit now passes the accepted
+    `validation_session_id` into the executable snapshot publisher so
+    validation-session races fail closed in workflow-service.
+  - No-fallback/no-legacy confirmation: the summary API is a read of current
+    workflow-service validation state. It does not resolve descriptors, Pumas
+    model state, runtime facts, dependency proofs, or scheduler policy in
+    Tauri/frontend code, and missing/pending/stale/unavailable/invalid states
+    are typed gate responses rather than compatibility fallbacks.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service current_validation_summary`; `npm run
+    test:frontend -- WorkflowService.commands.test.ts
+    workflowToolbarEvents.test.ts`; and `npm run typecheck`. Verification
+    blocked for full Tauri app compile by the pre-existing
+    `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
+    missing-method error.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

@@ -6,8 +6,10 @@ use crate::graph::{
     InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
     InferenceInterfaceResolverFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
     InferenceRuntimeAvailabilityFact, InferenceRuntimeAvailabilityState,
+    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryState,
     WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgesRequest,
+    WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
@@ -262,6 +264,163 @@ async fn dependency_environment_action_intent_consumes_current_validation_summar
     assert_eq!(
         result.diagnostics[0].code,
         InferenceDiagnosticCode::GraphValidationPending
+    );
+}
+
+#[tokio::test]
+async fn current_validation_summary_fails_closed_without_published_summary() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    let response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("current validation summary response");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Missing
+    );
+    assert!(!response.submit_gate.allowed);
+    assert_eq!(
+        response.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::ValidationSummaryMissing)
+    );
+    assert_eq!(
+        response.diagnostics[0].code,
+        InferenceDiagnosticCode::ValidationSummaryMissing
+    );
+}
+
+#[tokio::test]
+async fn current_validation_summary_reports_stale_graph_revision() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Executable,
+                true,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    let response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: "stale-revision".parse().expect("valid stale revision"),
+        })
+        .await
+        .expect("current validation summary response");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Stale
+    );
+    assert!(!response.submit_gate.allowed);
+    assert_eq!(
+        response.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
+    );
+    assert_eq!(
+        response.diagnostics[0].code,
+        InferenceDiagnosticCode::GraphRevisionMismatch
+    );
+}
+
+#[tokio::test]
+async fn current_validation_summary_allows_executable_summary() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Executable,
+                true,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    let response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("current validation summary response");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert!(response.submit_gate.allowed);
+    assert_eq!(
+        response
+            .validation_session_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("validation.session.1")
+    );
+}
+
+#[tokio::test]
+async fn current_validation_summary_blocks_pending_summary() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Pending,
+                false,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    let response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("current validation summary response");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Pending
+    );
+    assert!(!response.submit_gate.allowed);
+    assert_eq!(
+        response.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::ValidationPending)
     );
 }
 

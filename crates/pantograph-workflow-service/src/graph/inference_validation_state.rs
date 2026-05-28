@@ -17,7 +17,8 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
     InferenceAvailabilityStatus, InferenceDiagnosticCode, InferenceDiagnosticSeverity,
     InferenceInterfaceDiagnostic, InferenceInterfaceFingerprint, InferenceTaskKind,
-    ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision, WorkflowNodeId,
+    ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision, WorkflowGraphSessionId,
+    WorkflowNodeId,
 };
 use pantograph_scheduler::SchedulerTraitSetting;
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,7 @@ use crate::workflow::{
 
 #[allow(dead_code)]
 pub const CURRENT_DEPENDENCY_REQUIREMENTS_PROOF_MAX_DIAGNOSTICS: usize = 16;
+pub const CURRENT_VALIDATION_SUMMARY_MAX_DIAGNOSTICS: usize = 16;
 
 #[derive(Debug)]
 pub(crate) struct CurrentInferenceValidationStateStore {
@@ -97,6 +99,58 @@ impl CurrentInferenceValidationStateStore {
         };
         self.summaries.write().await.insert(key, record);
         Ok(())
+    }
+
+    pub(crate) async fn current_validation_summary(
+        &self,
+        request: WorkflowGraphCurrentValidationSummaryStateRequest,
+    ) -> WorkflowGraphCurrentValidationSummaryResponse {
+        if request.requested_graph_revision != request.current_graph_revision {
+            return current_validation_summary_response(
+                request.graph_session_id,
+                request.requested_graph_revision,
+                request.current_graph_revision,
+                None,
+                WorkflowGraphCurrentValidationSummaryState::Stale,
+                None,
+                vec![summary_diagnostic(
+                    InferenceDiagnosticCode::GraphRevisionMismatch,
+                    "Graph validation summary was requested for a stale graph revision.",
+                    Some("Refresh validation for the current graph revision before submitting."),
+                )],
+            );
+        }
+
+        let summaries = self.summaries.read().await;
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id.clone(),
+            graph_revision: request.current_graph_revision.clone(),
+        };
+        let Some(record) = summaries.get(&key) else {
+            return current_validation_summary_response(
+                request.graph_session_id,
+                request.requested_graph_revision,
+                request.current_graph_revision,
+                None,
+                WorkflowGraphCurrentValidationSummaryState::Missing,
+                None,
+                vec![summary_diagnostic(
+                    InferenceDiagnosticCode::ValidationSummaryMissing,
+                    "Inference validation has not completed for this graph revision.",
+                    Some("Run graph validation before submitting this workflow."),
+                )],
+            );
+        };
+
+        current_validation_summary_response(
+            request.graph_session_id,
+            request.requested_graph_revision,
+            request.current_graph_revision,
+            Some(record.validation_session_id.clone()),
+            current_validation_summary_state(record.summary.status),
+            Some(record.summary.clone()),
+            bounded_current_validation_diagnostics(record),
+        )
     }
 
     #[allow(dead_code)]
@@ -493,6 +547,268 @@ impl CurrentInferenceValidationStateStore {
             validation_summary: record.summary.clone(),
             nodes,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowGraphCurrentValidationSummaryStateRequest {
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub requested_graph_revision: WorkflowGraphRevision,
+    pub current_graph_revision: WorkflowGraphRevision,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphCurrentValidationSummaryRequest {
+    pub graph_session_id: String,
+    pub graph_revision: WorkflowGraphRevision,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphCurrentValidationSummaryResponse {
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub requested_graph_revision: WorkflowGraphRevision,
+    pub current_graph_revision: WorkflowGraphRevision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+    pub state: WorkflowGraphCurrentValidationSummaryState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<DraftGraphValidationSummary>,
+    pub submit_gate: WorkflowGraphValidationSubmitGate,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowGraphCurrentValidationSummaryState {
+    Current,
+    Pending,
+    Missing,
+    Stale,
+    Unavailable,
+    Invalid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphValidationSubmitGate {
+    pub allowed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<WorkflowGraphValidationSubmitGateReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowGraphValidationSubmitGateReason {
+    ValidationSummaryMissing,
+    GraphRevisionStale,
+    ValidationPending,
+    ValidationStale,
+    DescriptorUnresolved,
+    DescriptorUnavailable,
+    BlockingDiagnostics,
+    MissingRequiredInput,
+    InvalidPortBinding,
+    InvalidRuntimeConstraint,
+    InvalidDeviceConstraint,
+    DriftRequiresReview,
+    ValidationNotExecutable,
+}
+
+fn current_validation_summary_response(
+    graph_session_id: WorkflowGraphSessionId,
+    requested_graph_revision: WorkflowGraphRevision,
+    current_graph_revision: WorkflowGraphRevision,
+    validation_session_id: Option<DraftGraphValidationSessionId>,
+    state: WorkflowGraphCurrentValidationSummaryState,
+    summary: Option<DraftGraphValidationSummary>,
+    diagnostics: Vec<InferenceInterfaceDiagnostic>,
+) -> WorkflowGraphCurrentValidationSummaryResponse {
+    let submit_gate = submit_gate_for_current_validation_summary(state, summary.as_ref());
+    WorkflowGraphCurrentValidationSummaryResponse {
+        graph_session_id,
+        requested_graph_revision,
+        current_graph_revision,
+        validation_session_id,
+        state,
+        summary,
+        submit_gate,
+        diagnostics,
+    }
+}
+
+fn current_validation_summary_state(
+    status: DraftGraphValidationStatus,
+) -> WorkflowGraphCurrentValidationSummaryState {
+    match status {
+        DraftGraphValidationStatus::Executable => {
+            WorkflowGraphCurrentValidationSummaryState::Current
+        }
+        DraftGraphValidationStatus::Pending => WorkflowGraphCurrentValidationSummaryState::Pending,
+        DraftGraphValidationStatus::Stale => WorkflowGraphCurrentValidationSummaryState::Stale,
+        DraftGraphValidationStatus::Unresolved | DraftGraphValidationStatus::Unavailable => {
+            WorkflowGraphCurrentValidationSummaryState::Unavailable
+        }
+        DraftGraphValidationStatus::Blocked => WorkflowGraphCurrentValidationSummaryState::Invalid,
+        _ => WorkflowGraphCurrentValidationSummaryState::Invalid,
+    }
+}
+
+fn submit_gate_for_current_validation_summary(
+    state: WorkflowGraphCurrentValidationSummaryState,
+    summary: Option<&DraftGraphValidationSummary>,
+) -> WorkflowGraphValidationSubmitGate {
+    if summary.is_some_and(|summary| summary.executable) {
+        return WorkflowGraphValidationSubmitGate {
+            allowed: true,
+            reason_code: None,
+            message: None,
+        };
+    }
+
+    let reason_code = submit_gate_reason(state, summary);
+    WorkflowGraphValidationSubmitGate {
+        allowed: false,
+        reason_code: Some(reason_code),
+        message: Some(submit_gate_message(reason_code).to_string()),
+    }
+}
+
+fn submit_gate_reason(
+    state: WorkflowGraphCurrentValidationSummaryState,
+    summary: Option<&DraftGraphValidationSummary>,
+) -> WorkflowGraphValidationSubmitGateReason {
+    match state {
+        WorkflowGraphCurrentValidationSummaryState::Missing => {
+            return WorkflowGraphValidationSubmitGateReason::ValidationSummaryMissing;
+        }
+        WorkflowGraphCurrentValidationSummaryState::Stale => {
+            return WorkflowGraphValidationSubmitGateReason::GraphRevisionStale;
+        }
+        WorkflowGraphCurrentValidationSummaryState::Pending => {
+            return WorkflowGraphValidationSubmitGateReason::ValidationPending;
+        }
+        WorkflowGraphCurrentValidationSummaryState::Unavailable => {
+            return WorkflowGraphValidationSubmitGateReason::DescriptorUnavailable;
+        }
+        WorkflowGraphCurrentValidationSummaryState::Invalid
+        | WorkflowGraphCurrentValidationSummaryState::Current => {}
+    }
+
+    summary
+        .and_then(|summary| summary.enqueue_disabled_reasons.first().copied())
+        .map(submit_gate_reason_from_disabled_reason)
+        .unwrap_or(WorkflowGraphValidationSubmitGateReason::ValidationNotExecutable)
+}
+
+fn submit_gate_reason_from_disabled_reason(
+    reason: pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason,
+) -> WorkflowGraphValidationSubmitGateReason {
+    match reason {
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::ValidationPending => {
+            WorkflowGraphValidationSubmitGateReason::ValidationPending
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::ValidationStale => {
+            WorkflowGraphValidationSubmitGateReason::ValidationStale
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::DescriptorUnresolved => {
+            WorkflowGraphValidationSubmitGateReason::DescriptorUnresolved
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::DescriptorUnavailable => {
+            WorkflowGraphValidationSubmitGateReason::DescriptorUnavailable
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::BlockingDiagnostics => {
+            WorkflowGraphValidationSubmitGateReason::BlockingDiagnostics
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::MissingRequiredInput => {
+            WorkflowGraphValidationSubmitGateReason::MissingRequiredInput
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::InvalidPortBinding => {
+            WorkflowGraphValidationSubmitGateReason::InvalidPortBinding
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::InvalidRuntimeConstraint => {
+            WorkflowGraphValidationSubmitGateReason::InvalidRuntimeConstraint
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::InvalidDeviceConstraint => {
+            WorkflowGraphValidationSubmitGateReason::InvalidDeviceConstraint
+        }
+        pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::DriftRequiresReview => {
+            WorkflowGraphValidationSubmitGateReason::DriftRequiresReview
+        }
+        _ => WorkflowGraphValidationSubmitGateReason::ValidationNotExecutable,
+    }
+}
+
+fn submit_gate_message(reason: WorkflowGraphValidationSubmitGateReason) -> &'static str {
+    match reason {
+        WorkflowGraphValidationSubmitGateReason::ValidationSummaryMissing => {
+            "Inference validation has not completed for this graph revision"
+        }
+        WorkflowGraphValidationSubmitGateReason::GraphRevisionStale => {
+            "Inference validation is stale for the current graph"
+        }
+        WorkflowGraphValidationSubmitGateReason::ValidationPending => {
+            "Inference validation is still pending"
+        }
+        WorkflowGraphValidationSubmitGateReason::ValidationStale => {
+            "Inference validation must be refreshed before submitting"
+        }
+        WorkflowGraphValidationSubmitGateReason::DescriptorUnresolved => {
+            "Inference descriptor could not be resolved"
+        }
+        WorkflowGraphValidationSubmitGateReason::DescriptorUnavailable => {
+            "Inference descriptor is unavailable"
+        }
+        WorkflowGraphValidationSubmitGateReason::BlockingDiagnostics => {
+            "Inference validation has blocking diagnostics"
+        }
+        WorkflowGraphValidationSubmitGateReason::MissingRequiredInput => {
+            "Inference validation is missing required inputs"
+        }
+        WorkflowGraphValidationSubmitGateReason::InvalidPortBinding => {
+            "Inference validation has invalid port bindings"
+        }
+        WorkflowGraphValidationSubmitGateReason::InvalidRuntimeConstraint => {
+            "Inference validation has an invalid runtime constraint"
+        }
+        WorkflowGraphValidationSubmitGateReason::InvalidDeviceConstraint => {
+            "Inference validation has an invalid device constraint"
+        }
+        WorkflowGraphValidationSubmitGateReason::DriftRequiresReview => {
+            "Inference interface drift requires review"
+        }
+        WorkflowGraphValidationSubmitGateReason::ValidationNotExecutable => {
+            "Inference validation is not executable"
+        }
+    }
+}
+
+fn bounded_current_validation_diagnostics(
+    record: &CurrentInferenceValidationStateRecord,
+) -> Vec<InferenceInterfaceDiagnostic> {
+    record
+        .nodes
+        .values()
+        .flat_map(|node| node.projection.descriptor.diagnostics.iter().cloned())
+        .take(CURRENT_VALIDATION_SUMMARY_MAX_DIAGNOSTICS)
+        .collect()
+}
+
+fn summary_diagnostic(
+    code: InferenceDiagnosticCode,
+    message: &'static str,
+    hint: Option<&'static str>,
+) -> InferenceInterfaceDiagnostic {
+    InferenceInterfaceDiagnostic {
+        severity: InferenceDiagnosticSeverity::Error,
+        code,
+        message: message.to_string(),
+        hint: hint.map(str::to_string),
+        port_id: None,
     }
 }
 

@@ -14231,6 +14231,45 @@ Worker rules:
     panic/error observation. Tests must prove graph editing remains available
     while validation is pending and stale or superseded sessions cannot mutate
     current validation state.
+- 2026-05-27 Milestone 5d current validation summary submit-gate slice:
+  - Smallest useful vertical slice: add the backend-owned current validation
+    summary read model/API for `graph_session_id + graph_revision`, expose it
+    through a thin Tauri command and TypeScript service method, and wire saved
+    graph Submit to the returned `submit_gate` and `validation_session_id`.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    workflow-service graph README, `src-tauri/src/app_setup.rs`,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    Tauri workflow README, `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    workflow service README, `src/components/WorkflowToolbar.svelte`,
+    `src/components/workflowToolbarEvents.ts`,
+    `src/components/workflowToolbarEvents.test.ts`, components README, this
+    milestone, and this execution log.
+  - No-fallback/no-legacy result: the read model only consumes the
+    workflow-service current validation-state owner. Missing, pending, stale,
+    unavailable, invalid, and non-executable states are typed submit-gate
+    responses. Tauri and frontend code do not resolve descriptors, Pumas model
+    state, dependency proofs, runtime facts, or scheduler policy, and Submit
+    passes the accepted `validation_session_id` into the fail-closed executable
+    snapshot publisher.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service current_validation_summary`; `npm run
+    test:frontend -- WorkflowService.commands.test.ts
+    workflowToolbarEvents.test.ts`; and `npm run typecheck`.
+  - Verification blocked: `cargo check --manifest-path src-tauri/Cargo.toml`
+    still fails on the pre-existing
+    `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
+    missing-method error, unrelated to this slice.
+  - Remaining follow-up: continue Milestone 5d with live validation UX/event
+    lifecycle work using this summary/gate DTO as the single submit authority;
+    do not add frontend polling or local validation interpretation.
 
 ### Traceability Links
 

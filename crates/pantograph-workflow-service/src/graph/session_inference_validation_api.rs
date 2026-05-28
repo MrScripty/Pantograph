@@ -13,11 +13,40 @@ use super::super::inference_interface_publication::{
 };
 use super::super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
-use super::super::inference_validation_state::CurrentInferenceSchedulerProjectionRequest;
+use super::super::inference_validation_state::{
+    CurrentInferenceSchedulerProjectionRequest, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryResponse,
+    WorkflowGraphCurrentValidationSummaryStateRequest,
+};
 use super::super::types::WorkflowGraph;
 use super::GraphSessionStore;
 
 impl GraphSessionStore {
+    pub async fn current_validation_summary(
+        &self,
+        request: WorkflowGraphCurrentValidationSummaryRequest,
+    ) -> Result<WorkflowGraphCurrentValidationSummaryResponse, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(&request.graph_session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(&request.graph_session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let current_graph_revision =
+            WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        Ok(self
+            .validation_state
+            .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
+                graph_session_id,
+                requested_graph_revision: request.graph_revision,
+                current_graph_revision,
+            })
+            .await)
+    }
+
     pub async fn scheduler_inference_task_projections_for_session(
         &self,
         session_id: &str,
