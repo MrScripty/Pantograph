@@ -3166,6 +3166,41 @@ defining an image-only inference-node interface.
   - Remaining follow-up: project this typed publication error into
     transport-visible validation diagnostics when the dedicated live validation
     transport is added.
+- [x] 2026-05-28 validation lifecycle cancellation signal slice completed:
+  - Smallest useful vertical slice: added owner-issued cancellation receivers to
+    active validation lifecycle records. Starting a replacement validation
+    session signals cancellation to the superseded session, and closing a graph
+    edit session signals cancellation before dropping active lifecycle state.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: cancellation is owned by the
+    workflow-service lifecycle owner and keyed by typed graph session, graph
+    revision, and validation-session ids. No detached tasks, transport-owned
+    cancellation, frontend policy, or alternate validation resolver was added.
+  - Standards result: cancellation uses Tokio watch channels already available
+    in the crate, adds deterministic supersession/close tests without sleeps,
+    and preserves the sync-core/async-shell boundary by signaling cancellation
+    before future task ownership is introduced.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for
+    retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls in the lifecycle owner; and
+    `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: use these cancellation receivers from tracked spawned
+    validation tasks and observe task completion, cancellation, and panic paths
+    at the lifecycle owner.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

@@ -4,7 +4,7 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
 };
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 
 #[derive(Debug)]
 pub(crate) struct WorkflowGraphValidationLifecycleOwner {
@@ -29,7 +29,7 @@ impl WorkflowGraphValidationLifecycleOwner {
         graph_session_id: WorkflowGraphSessionId,
         graph_revision: WorkflowGraphRevision,
         validation_session_id: DraftGraphValidationSessionId,
-    ) -> Result<WorkflowGraphValidationLifecycleBegin, WorkflowGraphValidationLifecycleError> {
+    ) -> Result<watch::Receiver<bool>, WorkflowGraphValidationLifecycleError> {
         if self
             .closed_sessions
             .read()
@@ -39,15 +39,20 @@ impl WorkflowGraphValidationLifecycleOwner {
             return Err(WorkflowGraphValidationLifecycleError::GraphSessionClosed);
         }
 
+        let (cancellation_tx, cancellation) = watch::channel(false);
         let record = WorkflowGraphValidationLifecycleRecord {
             graph_revision: graph_revision.clone(),
             validation_session_id: validation_session_id.clone(),
+            cancellation_tx,
         };
         let previous = self
             .active
             .write()
             .await
             .insert(graph_session_id.clone(), record);
+        if let Some(previous) = previous.as_ref() {
+            let _ = previous.cancellation_tx.send(true);
+        }
         let kind = match previous.as_ref() {
             Some(previous) => WorkflowGraphValidationLifecycleEventKind::ValidationSuperseded {
                 superseded_validation_session_id: previous.validation_session_id.clone(),
@@ -61,9 +66,7 @@ impl WorkflowGraphValidationLifecycleOwner {
             kind,
         )
         .await;
-        Ok(WorkflowGraphValidationLifecycleBegin {
-            superseded_validation_session_id: previous.map(|record| record.validation_session_id),
-        })
+        Ok(cancellation)
     }
 
     pub(crate) async fn accept_publication(
@@ -136,6 +139,9 @@ impl WorkflowGraphValidationLifecycleOwner {
             .await
             .insert(graph_session_id.clone());
         let closed = self.active.write().await.remove(graph_session_id);
+        if let Some(record) = closed.as_ref() {
+            let _ = record.cancellation_tx.send(true);
+        }
         self.events.write().await.remove(graph_session_id);
         closed.map(|record| record.validation_session_id)
     }
@@ -196,15 +202,11 @@ impl Default for WorkflowGraphValidationLifecycleOwner {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowGraphValidationLifecycleBegin {
-    pub(crate) superseded_validation_session_id: Option<DraftGraphValidationSessionId>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 struct WorkflowGraphValidationLifecycleRecord {
     graph_revision: WorkflowGraphRevision,
     validation_session_id: DraftGraphValidationSessionId,
+    cancellation_tx: watch::Sender<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -273,7 +275,7 @@ mod tests {
             .parse()
             .expect("valid validation session id");
 
-        let first = owner
+        let first_cancellation = owner
             .begin_validation(
                 graph_session_id.clone(),
                 graph_revision.clone(),
@@ -281,7 +283,9 @@ mod tests {
             )
             .await
             .expect("begin first validation");
-        let second = owner
+        assert!(!*first_cancellation.borrow());
+
+        let second_cancellation = owner
             .begin_validation(
                 graph_session_id.clone(),
                 graph_revision.clone(),
@@ -290,11 +294,8 @@ mod tests {
             .await
             .expect("begin second validation");
 
-        assert!(first.superseded_validation_session_id.is_none());
-        assert_eq!(
-            second.superseded_validation_session_id,
-            Some(first_session.clone())
-        );
+        assert!(*first_cancellation.borrow());
+        assert!(!*second_cancellation.borrow());
         assert_eq!(
             owner
                 .accept_publication(&graph_session_id, &graph_revision, &first_session)
@@ -335,7 +336,7 @@ mod tests {
         let validation_session_id: DraftGraphValidationSessionId = "validation.session.1"
             .parse()
             .expect("valid validation session id");
-        owner
+        let cancellation = owner
             .begin_validation(
                 graph_session_id.clone(),
                 graph_revision.clone(),
@@ -347,6 +348,7 @@ mod tests {
         let closed = owner.close_graph_session(&graph_session_id).await;
 
         assert_eq!(closed, Some(validation_session_id.clone()));
+        assert!(*cancellation.borrow());
         assert_eq!(
             owner
                 .accept_publication(&graph_session_id, &graph_revision, &validation_session_id)
