@@ -7,6 +7,8 @@ mod effective_definition;
 #[cfg(test)]
 mod effective_definition_tests;
 mod executable_topology;
+#[allow(dead_code)]
+mod executable_validation_snapshot_source;
 mod group_mutation;
 mod inference_interface_facts;
 mod inference_interface_patch;

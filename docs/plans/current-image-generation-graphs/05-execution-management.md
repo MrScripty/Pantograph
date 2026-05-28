@@ -13985,6 +13985,29 @@ Worker rules:
     after partial durable state, frontend/Tauri publish-before-run transport,
     TypeScript/Rust contract field alignment, and direct caller-supplied runtime
     snapshot rejection tests before active runtime readiness wiring continues.
+- 2026-05-27 Milestone 5d current executable validation snapshot source slice:
+  - Completed the first proof-promotion implementation slice by adding a
+    workflow-service validation-state read model that returns owned executable
+    node projection records joined with current dependency requirements proof.
+  - Touched files:
+    `crates/pantograph-workflow-service/src/graph/executable_validation_snapshot_source.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`, and Milestone 5d
+    plan logs.
+  - No-fallback/no-legacy result: the read model provides the future snapshot
+    publisher with path-free proof freshness from the validation-state owner,
+    not draft graph node data, frontend/Tauri state, provider-private payloads,
+    Pumas package facts, local paths, or runtime load targets.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`, `cargo
+    test -p pantograph-workflow-service inference_validation_state --lib --
+    --nocapture`, `cargo check -p pantograph-workflow-service`, `git diff
+    --check`, and targeted source search over changed validation-state files for
+    legacy model/path/load-target terms. Search matches are existing
+    path-sanitization/test assertions. Existing warning:
+    `set_active_run_execution_plan` remains a pre-existing unused store method.
+  - Follow-up: remove temporary `dead_code` allowances for the snapshot source
+    read model when the graph-session executable publish command consumes it in
+    the next slice.
 
 ### Traceability Links
 

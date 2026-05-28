@@ -1081,6 +1081,40 @@ defining an image-only inference-node interface.
     session execution, scheduler task graph/readiness, dependency-planning
     envelope, frontend command-service/toolbar, and Tauri command tests plus
     `git diff --check`.
+- [x] 2026-05-27 current executable validation snapshot source slice:
+  - Smallest useful vertical slice: added the workflow-service validation-state
+    read model that returns current executable node projection records joined
+    with current dependency requirements proof. Touched files were limited to
+    `crates/pantograph-workflow-service/src/graph/executable_validation_snapshot_source.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`, and this plan log.
+  - No-fallback/no-legacy confirmation: queue admission and future snapshot
+    publication now have a validation-state-owned source for proof freshness.
+    The slice does not read draft graph node data, frontend/Tauri state,
+    provider-private payloads, Pumas package facts, local paths, or runtime load
+    targets.
+  - Implementation completed: `CurrentInferenceValidationStateStore` now has a
+    `current_executable_validation_snapshot_source` read API that returns owned
+    projection-plus-proof records and fails closed for missing, stale,
+    unavailable, invalid, incomplete, stale-session, missing-summary, and
+    non-executable-summary cases. The current validation node record retains
+    the original projection record so the later snapshot publisher does not
+    have to reconstruct descriptor/authored-port data from reduced scheduler
+    projections.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`, `cargo
+    test -p pantograph-workflow-service inference_validation_state --lib --
+    --nocapture`, `cargo check -p pantograph-workflow-service`, `git diff
+    --check`, and targeted source search over the changed validation-state and
+    snapshot-source files for `ModelDependencyRequest`, `ModelRefV2`,
+    `modelPath`, `model_path`, `local_load_path`, `load_target`,
+    `selected_artifact_path`, `package_facts`, and `runtime_load_target`.
+    Search matches are existing path-sanitization/test assertions. Existing
+    warning: `set_active_run_execution_plan` remains a pre-existing unused
+    store method.
+  - Deviation/follow-up: the new read model is intentionally marked
+    `dead_code` until the graph-session executable publish command consumes it
+    in the next slice. Remove those temporary allowances when the consumer is
+    wired.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

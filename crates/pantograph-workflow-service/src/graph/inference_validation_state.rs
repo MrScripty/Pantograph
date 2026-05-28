@@ -22,6 +22,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::dependency_environment_subject::DependencyEnvironmentActionSubjectResolution;
+use super::executable_validation_snapshot_source::{
+    CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
+    CurrentExecutableValidationSnapshotSourceError,
+    CurrentExecutableValidationSnapshotSourceRequest,
+};
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
@@ -416,6 +421,74 @@ impl CurrentInferenceValidationStateStore {
             }
         })
     }
+
+    #[allow(dead_code)]
+    pub(crate) async fn current_executable_validation_snapshot_source(
+        &self,
+        request: CurrentExecutableValidationSnapshotSourceRequest,
+    ) -> Result<
+        CurrentExecutableValidationSnapshotSource,
+        CurrentExecutableValidationSnapshotSourceError,
+    > {
+        let summaries = self.summaries.read().await;
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id.clone(),
+            graph_revision: request.graph_revision.clone(),
+        };
+        let record = summaries
+            .get(&key)
+            .ok_or(CurrentExecutableValidationSnapshotSourceError::ValidationSummaryMissing)?;
+
+        if request
+            .validation_session_id
+            .as_ref()
+            .is_some_and(|validation_session_id| {
+                validation_session_id != &record.validation_session_id
+            })
+        {
+            return Err(CurrentExecutableValidationSnapshotSourceError::ValidationSessionMismatch);
+        }
+
+        if !record.summary.executable {
+            return Err(
+                CurrentExecutableValidationSnapshotSourceError::ValidationSummaryNotExecutable {
+                    status: record.summary.status,
+                },
+            );
+        }
+
+        let mut nodes = Vec::with_capacity(record.nodes.len());
+        for node in record.nodes.values() {
+            if !node.has_dependency_basis() {
+                return Err(
+                    CurrentExecutableValidationSnapshotSourceError::IncompleteNodeState {
+                        node_id: node.node_id.clone(),
+                        message: "node record is missing descriptor, task, model, availability, or constraint data"
+                            .to_string(),
+                    },
+                );
+            }
+            let dependency_requirements_proof = node
+                .current_dependency_requirements_proof(
+                    &request.graph_revision,
+                    &record.validation_session_id,
+                )
+                .map_err(|error| executable_snapshot_source_proof_error(error, &node.node_id))?
+                .clone();
+            nodes.push(CurrentExecutableValidationSnapshotNodeSource {
+                projection: node.projection.clone(),
+                dependency_requirements_proof,
+            });
+        }
+
+        Ok(CurrentExecutableValidationSnapshotSource {
+            graph_session_id: request.graph_session_id,
+            graph_revision: request.graph_revision,
+            validation_session_id: record.validation_session_id.clone(),
+            validation_summary: record.summary.clone(),
+            nodes,
+        })
+    }
 }
 
 fn diagnostic_code_for_summary_status(
@@ -570,20 +643,31 @@ pub(crate) struct CurrentInferenceValidationNodeRecord {
     pub pumas_model_ref: PumasModelRef,
     pub runtime_constraint: Option<RuntimeIntentId>,
     pub device_constraint: Option<DeviceIntentId>,
+    #[allow(dead_code)]
+    pub projection: InferenceInterfaceNodeProjectionRecord,
     pub dependency_requirements_proof: Option<CurrentDependencyRequirementsProof>,
 }
 
 impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidationNodeRecord {
     fn from(record: InferenceInterfaceNodeProjectionRecord) -> Self {
+        let node_id = record.node_id.clone();
+        let descriptor_fingerprint = record.descriptor.descriptor_fingerprint.clone();
+        let task_kind = record.descriptor.task_kind.clone();
+        let availability_status = record.descriptor.availability.status;
+        let validation_status = record.validation_summary.status;
+        let pumas_model_ref = record.descriptor.model_ref.clone();
+        let runtime_constraint = record.runtime_constraint.clone();
+        let device_constraint = record.device_constraint.clone();
         Self {
-            node_id: record.node_id,
-            descriptor_fingerprint: record.descriptor.descriptor_fingerprint,
-            task_kind: record.descriptor.task_kind,
-            availability_status: record.descriptor.availability.status,
-            validation_status: record.validation_summary.status,
-            pumas_model_ref: record.descriptor.model_ref,
-            runtime_constraint: record.runtime_constraint,
-            device_constraint: record.device_constraint,
+            node_id,
+            descriptor_fingerprint,
+            task_kind,
+            availability_status,
+            validation_status,
+            pumas_model_ref,
+            runtime_constraint,
+            device_constraint,
+            projection: record,
             dependency_requirements_proof: None,
         }
     }
@@ -595,6 +679,35 @@ enum CurrentDependencyRequirementsProofStateError {
     Stale,
     Unavailable,
     Invalid,
+}
+
+#[allow(dead_code)]
+fn executable_snapshot_source_proof_error(
+    error: CurrentDependencyRequirementsProofStateError,
+    node_id: &WorkflowNodeId,
+) -> CurrentExecutableValidationSnapshotSourceError {
+    match error {
+        CurrentDependencyRequirementsProofStateError::Missing => {
+            CurrentExecutableValidationSnapshotSourceError::DependencyProofMissing {
+                node_id: node_id.clone(),
+            }
+        }
+        CurrentDependencyRequirementsProofStateError::Stale => {
+            CurrentExecutableValidationSnapshotSourceError::DependencyProofStale {
+                node_id: node_id.clone(),
+            }
+        }
+        CurrentDependencyRequirementsProofStateError::Unavailable => {
+            CurrentExecutableValidationSnapshotSourceError::DependencyProofUnavailable {
+                node_id: node_id.clone(),
+            }
+        }
+        CurrentDependencyRequirementsProofStateError::Invalid => {
+            CurrentExecutableValidationSnapshotSourceError::DependencyProofInvalid {
+                node_id: node_id.clone(),
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1664,6 +1777,144 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn executable_snapshot_source_returns_projection_with_current_dependency_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("record publication");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Current,
+            ))
+            .await
+            .expect("record proof");
+
+        let source = store
+            .current_executable_validation_snapshot_source(snapshot_source_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .expect("snapshot source");
+
+        assert_eq!(source.nodes.len(), 1);
+        assert_eq!(
+            source.validation_session_id.as_str(),
+            "validation.session.1"
+        );
+        let node = &source.nodes[0];
+        assert_eq!(node.projection.node_id.as_str(), "infer");
+        assert_eq!(
+            node.projection.descriptor.descriptor_fingerprint.as_str(),
+            "iface.scheduler.v1"
+        );
+        assert_eq!(
+            node.dependency_requirements_proof
+                .dependency_requirements_id
+                .as_str(),
+            "requirements.image_generation.cuda0"
+        );
+        assert_eq!(
+            node.dependency_requirements_proof.selected_binding_ids[0].as_str(),
+            "torch-diffusers"
+        );
+        assert_eq!(
+            node.dependency_requirements_proof
+                .dependency_override_fingerprint
+                .as_str(),
+            "override.none"
+        );
+    }
+
+    #[tokio::test]
+    async fn executable_snapshot_source_fails_closed_without_current_dependency_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("record publication");
+
+        let error = store
+            .current_executable_validation_snapshot_source(snapshot_source_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .expect_err("missing proof");
+
+        assert!(matches!(
+            error,
+            CurrentExecutableValidationSnapshotSourceError::DependencyProofMissing { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn executable_snapshot_source_rejects_stale_dependency_proof() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("record publication");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Stale,
+            ))
+            .await
+            .expect("record proof");
+
+        let error = store
+            .current_executable_validation_snapshot_source(snapshot_source_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .expect_err("stale proof");
+
+        assert!(matches!(
+            error,
+            CurrentExecutableValidationSnapshotSourceError::DependencyProofStale { .. }
+        ));
+    }
+
     fn state_request(
         graph_session_id: &str,
         intent_revision: &str,
@@ -1811,6 +2062,19 @@ mod tests {
         validation_session_id: Option<&str>,
     ) -> CurrentInferenceSchedulerProjectionRequest {
         CurrentInferenceSchedulerProjectionRequest {
+            graph_session_id: graph_session_id.parse().expect("valid graph session id"),
+            graph_revision: graph_revision.parse().expect("valid graph revision"),
+            validation_session_id: validation_session_id
+                .map(|value| value.parse().expect("valid validation session id")),
+        }
+    }
+
+    fn snapshot_source_request(
+        graph_session_id: &str,
+        graph_revision: &str,
+        validation_session_id: Option<&str>,
+    ) -> CurrentExecutableValidationSnapshotSourceRequest {
+        CurrentExecutableValidationSnapshotSourceRequest {
             graph_session_id: graph_session_id.parse().expect("valid graph session id"),
             graph_revision: graph_revision.parse().expect("valid graph revision"),
             validation_session_id: validation_session_id
