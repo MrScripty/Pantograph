@@ -9,7 +9,8 @@ use crate::graph::{
     WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationSummaryRequest,
     WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
-    WorkflowGraphRemoveEdgesRequest, WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest,
+    WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
@@ -33,6 +34,7 @@ use pantograph_inference_interface_contracts::{
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use tokio::sync::Notify;
 
 fn sample_graph() -> WorkflowGraph {
     WorkflowGraph {
@@ -537,6 +539,76 @@ async fn refresh_current_validation_summary_rejects_stale_requested_revision() {
 }
 
 #[tokio::test]
+async fn refresh_current_validation_summary_rejects_revision_changed_during_fact_lookup() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let requested_revision = session
+        .graph_revision
+        .parse()
+        .expect("valid graph revision");
+    let refresh_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let refresh = tokio::spawn(async move {
+        refresh_store
+            .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: session_id,
+                graph_revision: requested_revision,
+            })
+            .await
+    });
+    entered.notified().await;
+
+    let updated = store
+        .remove_edge(WorkflowGraphRemoveEdgeRequest {
+            session_id: session.session_id.clone(),
+            edge_id: "dep-env-to-infer".to_string(),
+        })
+        .await
+        .expect("mutate graph while validation facts are pending");
+    release.notify_one();
+    let response = refresh
+        .await
+        .expect("refresh task should not panic")
+        .expect("refresh response");
+
+    assert_eq!(
+        response.summary.state,
+        WorkflowGraphCurrentValidationSummaryState::Stale
+    );
+    assert!(response.node_projections.is_empty());
+    assert!(!response.summary.submit_gate.allowed);
+    assert_eq!(
+        response.summary.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
+    );
+
+    let current = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id,
+            graph_revision: updated
+                .graph_revision
+                .parse()
+                .expect("valid updated graph revision"),
+        })
+        .await
+        .expect("current validation summary response");
+    assert_eq!(
+        current.state,
+        WorkflowGraphCurrentValidationSummaryState::Missing
+    );
+}
+
+#[tokio::test]
 async fn publish_inference_validation_session_records_current_summary() {
     let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
         StaticInferenceFactsProvider {
@@ -897,6 +969,36 @@ impl InferenceInterfaceFactsProvider for StaticInferenceFactsProvider {
         BTreeMap<String, InferenceInterfaceResolverFacts>,
         InferenceInterfaceFactsProviderError,
     > {
+        Ok(inputs
+            .iter()
+            .filter_map(|input| {
+                self.facts
+                    .get(&input.node_id)
+                    .cloned()
+                    .map(|facts| (input.node_id.clone(), facts))
+            })
+            .collect())
+    }
+}
+
+#[derive(Debug)]
+struct BlockingInferenceFactsProvider {
+    facts: BTreeMap<String, InferenceInterfaceResolverFacts>,
+    entered: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
+#[async_trait]
+impl InferenceInterfaceFactsProvider for BlockingInferenceFactsProvider {
+    async fn facts_for_resolution_inputs(
+        &self,
+        inputs: &[InferenceInterfaceGraphResolutionInput],
+    ) -> Result<
+        BTreeMap<String, InferenceInterfaceResolverFacts>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        self.entered.notify_one();
+        self.release.notified().await;
         Ok(inputs
             .iter()
             .filter_map(|input| {

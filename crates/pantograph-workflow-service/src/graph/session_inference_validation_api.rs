@@ -88,6 +88,23 @@ impl GraphSessionStore {
             .facts_for_resolution_inputs(&resolution_inputs.requests)
             .await
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let current_graph_revision_after_facts = self
+            .current_graph_revision_for_validation(&request.graph_session_id)
+            .await?;
+        if current_graph_revision_after_facts != current_graph_revision {
+            let summary = self
+                .validation_state
+                .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
+                    graph_session_id,
+                    requested_graph_revision: request.graph_revision,
+                    current_graph_revision: current_graph_revision_after_facts,
+                })
+                .await;
+            return Ok(WorkflowGraphCurrentValidationRefreshResponse {
+                summary,
+                node_projections: Vec::new(),
+            });
+        }
 
         let publication = publish_inference_validation_for_resolution_inputs(
             validation_session_id,
@@ -200,6 +217,14 @@ impl GraphSessionStore {
             .facts_for_resolution_inputs(&resolution_inputs.requests)
             .await
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let current_graph_revision_after_facts = self
+            .current_graph_revision_for_validation(session_id)
+            .await?;
+        if current_graph_revision_after_facts != graph_revision {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "validation graph revision changed before publication".to_string(),
+            ));
+        }
 
         let publication = publish_inference_validation_for_resolution_inputs(
             validation_session_id,
@@ -219,6 +244,18 @@ impl GraphSessionStore {
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
         Ok(publication)
+    }
+
+    async fn current_graph_revision_for_validation(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowGraphRevision, WorkflowServiceError> {
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
     }
 
     pub(crate) async fn executable_validation_snapshot_source_for_session(

@@ -2946,6 +2946,40 @@ defining an image-only inference-node interface.
   - Remaining follow-up: add the event-driven lifecycle owner that cancels or
     supersedes in-flight validation work and uses this cleanup boundary for
     buffered events and late provider-result rejection.
+- [x] 2026-05-28 validation publication post-provider freshness slice
+  completed:
+  - Smallest useful vertical slice: re-check graph-session freshness after
+    inference fact-provider await points and before recording current
+    validation state, so graph changes during fact lookup return stale summary
+    diagnostics instead of publishing outdated descriptor projections.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: stale provider results are rejected
+    through the existing backend-owned validation summary path. The slice does
+    not add frontend/Tauri resolver facts, alternate publication paths, path
+    metadata, or compatibility fallbacks.
+  - Standards result: the graph lock is reacquired only to canonicalize and
+    compute the current graph revision after fact lookup; publication and state
+    recording still happen only when the originally snapshotted revision is
+    current. The new race test uses `tokio::sync::Notify` instead of sleeps.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary_rejects_revision_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo test
+    -p pantograph-workflow-service inference_validation_state --lib`; `cargo
+    check -p pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: the event-driven lifecycle owner can now build on a
+    publisher that rejects stale post-provider results, but it still needs task
+    ownership, cancellation/supersession, bounded event state, and transport
+    event delivery slices.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

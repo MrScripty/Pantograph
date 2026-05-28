@@ -14414,6 +14414,29 @@ Worker rules:
     pantograph-workflow-service`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d post-provider validation freshness slice:
+  - Smallest useful vertical slice: re-check graph-session revision after
+    asynchronous inference fact lookup and before current validation state is
+    recorded.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: stale provider results now return the
+    existing typed stale validation summary instead of recording outdated
+    descriptor projections. No transport-supplied facts, alternate resolver,
+    path metadata, or compatibility publication branch was added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary_rejects_revision_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo test
+    -p pantograph-workflow-service inference_validation_state --lib`; `cargo
+    check -p pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 
