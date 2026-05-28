@@ -14184,9 +14184,53 @@ Worker rules:
     --experimental-strip-types --test src/components/workflowToolbarEvents.test.ts
     src/services/workflow/WorkflowService.commands.test.ts`; and `git diff
     --check`.
-  - Remaining follow-up: live validation summary state still needs to feed the
-    submit disabled reason so missing/stale validation is visible before the
-    publish command rejects the submit attempt.
+  - 2026-05-27 re-plan decision: the next slice is option 3, a backend-owned
+    current validation summary read model/API for `graph_session_id +
+    graph_revision` that feeds the graph editor Submit disabled reason. The
+    summary must expose current/pending/missing/stale/unavailable/invalid and
+    executable/not-executable status, current `validation_session_id`,
+    diagnostics, and graph revision without letting Tauri/frontend resolve
+    descriptors, Pumas facts, runtime facts, dependency proofs, or scheduler
+    policy. Publish-before-run remains the fail-closed admission guard.
+  - 2026-05-27 investigation tightening recorded: the option 3 summary API must
+    be a cheap read of workflow-service current validation state rather than a
+    descriptor/Pumas/runtime/dependency re-resolution path. Missing, pending,
+    stale, unavailable, invalid, and non-executable editor states are typed
+    response states, not transport failures. The response owns the Submit gate
+    with `allowed`, typed reason code, and display message; Tauri stays a thin
+    wrapper; TypeScript mirrors are strongly typed; and saved-run Submit must
+    pass the accepted summary's `validation_session_id` into the executable
+    snapshot publisher so graph/session races fail closed.
+  - 2026-05-27 standards iteration recorded: the option 3 implementation slice
+    must include focused workflow-service tests for all typed summary/gate
+    states and validation-session mismatch; Tauri command tests; TypeScript
+    service DTO tests; toolbar/store tests proving Submit follows backend
+    `submit_gate`; one thin cross-layer summary-to-submit-publisher acceptance
+    check; affected README updates; and source-search checks proving Tauri/
+    frontend do not resolve descriptors, Pumas/runtime facts, dependency
+    proofs, or scheduler policy. Option 3 must not introduce frontend polling
+    or background validation workers; any temporary refresh helper must be
+    graph-session/revision scoped and cleaned up on graph/session change.
+  - Future target recorded for option 4: event-driven live validation should
+    reuse the option 3 summary DTO and state owner, then replace explicit
+    refresh/query mechanics with workflow-service-owned validation events.
+    Graph edits must remain nonblocking; stale sessions must be discarded by
+    graph session/revision/validation identity; node-scoped events carry
+    descriptor, drift, diagnostic, and update-proposal payloads; graph-scoped
+    events carry summary status; and the editor disables Submit from the latest
+    backend summary rather than local inference.
+  - Option 4 preservation note recorded: event-driven validation may replace
+    explicit query mechanics, but must publish the same backend-owned
+    summary/gate shape with graph session, graph revision, validation session,
+    and monotonic event-sequence identity. It must not create a second
+    submit-gate authority, frontend polling policy loop, or frontend-owned
+    validation interpretation.
+  - Option 4 async lifecycle standards recorded: workflow-service must own any
+    spawned validation tasks, tracked handles, cancellation tokens, bounded
+    event buffers, supersession rules, shutdown/session-close cleanup, and
+    panic/error observation. Tests must prove graph editing remains available
+    while validation is pending and stale or superseded sessions cannot mutate
+    current validation state.
 
 ### Traceability Links
 
