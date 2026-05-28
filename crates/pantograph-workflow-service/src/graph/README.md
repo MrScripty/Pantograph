@@ -35,7 +35,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_request.rs` | Draft-graph extraction of path-free inference-interface resolver requests from connected `puma-lib` model references and explicit inference-node constraints. |
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
-| `inference_validation_lifecycle.rs` | Workflow-service validation lifecycle owner for active validation-session identity, supersession, session-close rejection, and publication freshness checks. |
+| `inference_validation_lifecycle.rs` | Workflow-service validation lifecycle owner for active validation-session identity, supersession, session-close rejection, bounded lifecycle event retention, and publication freshness checks. |
 | `dependency_environment_subject.rs` | Workflow-service-owned dependency-environment action subject resolver for typed sidecar associations between dependency-environment control nodes and inference nodes. |
 | `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks, dependency-environment action diagnostics, submit-gate summaries, and proof-aware scheduler/executable snapshot projections. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
@@ -262,6 +262,15 @@ the summary/gate remains the only submit authority.
   validation session supersedes any active validation session for the graph edit
   session, publication is accepted only for the active graph revision and
   validation-session id, and session close rejects later validation publication.
+- Validation-session lifecycle events are retained in a bounded workflow-service
+  buffer keyed by graph edit-session identity. Events use backend-owned graph
+  session id, graph revision, validation-session id, and monotonic per-session
+  sequence numbers. When the buffer reaches capacity the oldest events are
+  dropped and the owner records the dropped-event count; transport delivery will
+  project that bounded state as typed graph-validation lifecycle diagnostics
+  rather than replaying unbounded history. Closing a graph edit session removes
+  the session's buffered lifecycle events so stale validation events cannot be
+  delivered after close.
 - Current inference-validation state may store a bounded, path-free dependency
   requirements proof keyed to the associated inference node, graph revision,
   validation session, descriptor fingerprint, model ref, task kind, and

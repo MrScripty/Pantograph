@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
@@ -6,15 +6,22 @@ use pantograph_inference_interface_contracts::{
 use thiserror::Error;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct WorkflowGraphValidationLifecycleOwner {
     active: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationLifecycleRecord>>,
     closed_sessions: RwLock<HashSet<WorkflowGraphSessionId>>,
+    events: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationLifecycleEventLog>>,
+    max_events_per_session: usize,
 }
 
 impl WorkflowGraphValidationLifecycleOwner {
     pub(crate) fn new() -> Self {
-        Self::default()
+        Self {
+            active: RwLock::new(HashMap::new()),
+            closed_sessions: RwLock::new(HashSet::new()),
+            events: RwLock::new(HashMap::new()),
+            max_events_per_session: DEFAULT_MAX_LIFECYCLE_EVENTS_PER_SESSION,
+        }
     }
 
     pub(crate) async fn begin_validation(
@@ -33,10 +40,27 @@ impl WorkflowGraphValidationLifecycleOwner {
         }
 
         let record = WorkflowGraphValidationLifecycleRecord {
+            graph_revision: graph_revision.clone(),
+            validation_session_id: validation_session_id.clone(),
+        };
+        let previous = self
+            .active
+            .write()
+            .await
+            .insert(graph_session_id.clone(), record);
+        let kind = match previous.as_ref() {
+            Some(previous) => WorkflowGraphValidationLifecycleEventKind::ValidationSuperseded {
+                superseded_validation_session_id: previous.validation_session_id.clone(),
+            },
+            None => WorkflowGraphValidationLifecycleEventKind::ValidationPending,
+        };
+        self.push_event(
+            graph_session_id.clone(),
             graph_revision,
             validation_session_id,
-        };
-        let previous = self.active.write().await.insert(graph_session_id, record);
+            kind,
+        )
+        .await;
         Ok(WorkflowGraphValidationLifecycleBegin {
             superseded_validation_session_id: previous.map(|record| record.validation_session_id),
         })
@@ -62,6 +86,13 @@ impl WorkflowGraphValidationLifecycleOwner {
         if &record.validation_session_id != validation_session_id {
             return Err(WorkflowGraphValidationLifecycleError::ValidationSessionSuperseded);
         }
+        self.push_event(
+            graph_session_id.clone(),
+            graph_revision.clone(),
+            validation_session_id.clone(),
+            WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
+        )
+        .await;
         Ok(())
     }
 
@@ -73,11 +104,64 @@ impl WorkflowGraphValidationLifecycleOwner {
             .write()
             .await
             .insert(graph_session_id.clone());
-        self.active
-            .write()
-            .await
-            .remove(graph_session_id)
-            .map(|record| record.validation_session_id)
+        let closed = self.active.write().await.remove(graph_session_id);
+        self.events.write().await.remove(graph_session_id);
+        closed.map(|record| record.validation_session_id)
+    }
+
+    async fn push_event(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        graph_revision: WorkflowGraphRevision,
+        validation_session_id: DraftGraphValidationSessionId,
+        kind: WorkflowGraphValidationLifecycleEventKind,
+    ) {
+        let mut events = self.events.write().await;
+        let event_log = events.entry(graph_session_id.clone()).or_default();
+        if event_log.events.len() == self.max_events_per_session {
+            event_log.events.pop_front();
+            event_log.dropped_event_count += 1;
+        }
+        let event = WorkflowGraphValidationLifecycleEvent {
+            graph_session_id,
+            graph_revision,
+            validation_session_id,
+            sequence: event_log.next_sequence,
+            kind,
+        };
+        event_log.next_sequence += 1;
+        event_log.events.push_back(event);
+    }
+
+    #[cfg(test)]
+    fn with_event_limit(max_events_per_session: usize) -> Self {
+        Self {
+            max_events_per_session,
+            ..Self::new()
+        }
+    }
+
+    #[cfg(test)]
+    async fn event_snapshot(
+        &self,
+        graph_session_id: &WorkflowGraphSessionId,
+    ) -> WorkflowGraphValidationLifecycleEventSnapshot {
+        let events = self.events.read().await;
+        let Some(event_log) = events.get(graph_session_id) else {
+            return WorkflowGraphValidationLifecycleEventSnapshot::default();
+        };
+        WorkflowGraphValidationLifecycleEventSnapshot {
+            events: event_log.events.iter().cloned().collect(),
+            dropped_event_count: event_log.dropped_event_count,
+        }
+    }
+}
+
+const DEFAULT_MAX_LIFECYCLE_EVENTS_PER_SESSION: usize = 128;
+
+impl Default for WorkflowGraphValidationLifecycleOwner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -90,6 +174,38 @@ pub(crate) struct WorkflowGraphValidationLifecycleBegin {
 struct WorkflowGraphValidationLifecycleRecord {
     graph_revision: WorkflowGraphRevision,
     validation_session_id: DraftGraphValidationSessionId,
+}
+
+#[derive(Debug, Default)]
+struct WorkflowGraphValidationLifecycleEventLog {
+    events: VecDeque<WorkflowGraphValidationLifecycleEvent>,
+    next_sequence: u64,
+    dropped_event_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowGraphValidationLifecycleEvent {
+    graph_session_id: WorkflowGraphSessionId,
+    graph_revision: WorkflowGraphRevision,
+    validation_session_id: DraftGraphValidationSessionId,
+    sequence: u64,
+    kind: WorkflowGraphValidationLifecycleEventKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum WorkflowGraphValidationLifecycleEventKind {
+    ValidationPending,
+    ValidationSuperseded {
+        superseded_validation_session_id: DraftGraphValidationSessionId,
+    },
+    PublicationAccepted,
+}
+
+#[cfg(test)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct WorkflowGraphValidationLifecycleEventSnapshot {
+    events: Vec<WorkflowGraphValidationLifecycleEvent>,
+    dropped_event_count: u64,
 }
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
@@ -155,6 +271,21 @@ mod tests {
             .accept_publication(&graph_session_id, &graph_revision, &second_session)
             .await
             .expect("latest validation session can publish");
+        let events = owner.event_snapshot(&graph_session_id).await;
+        assert_eq!(
+            events
+                .events
+                .iter()
+                .map(|event| &event.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                &WorkflowGraphValidationLifecycleEventKind::ValidationPending,
+                &WorkflowGraphValidationLifecycleEventKind::ValidationSuperseded {
+                    superseded_validation_session_id: first_session
+                },
+                &WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
+            ]
+        );
     }
 
     #[tokio::test]
@@ -192,5 +323,53 @@ mod tests {
                 .map(|_| ()),
             Err(WorkflowGraphValidationLifecycleError::GraphSessionClosed)
         );
+        let events = owner
+            .event_snapshot(&"graph-session-1".parse().unwrap())
+            .await;
+        assert!(events.events.is_empty());
+        assert_eq!(events.dropped_event_count, 0);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_event_log_is_bounded_and_records_dropped_events() {
+        let owner = WorkflowGraphValidationLifecycleOwner::with_event_limit(2);
+        let graph_session_id: WorkflowGraphSessionId =
+            "graph-session-1".parse().expect("valid graph session id");
+        let graph_revision: WorkflowGraphRevision =
+            "aaaaaaaaaaaaaaaa".parse().expect("valid graph revision");
+        let first_session: DraftGraphValidationSessionId = "validation.session.1"
+            .parse()
+            .expect("valid validation session id");
+        let second_session: DraftGraphValidationSessionId = "validation.session.2"
+            .parse()
+            .expect("valid validation session id");
+
+        owner
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                first_session,
+            )
+            .await
+            .expect("begin first validation");
+        owner
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                second_session.clone(),
+            )
+            .await
+            .expect("begin second validation");
+        owner
+            .accept_publication(&graph_session_id, &graph_revision, &second_session)
+            .await
+            .expect("latest validation publishes");
+
+        let events = owner.event_snapshot(&graph_session_id).await;
+
+        assert_eq!(events.dropped_event_count, 1);
+        assert_eq!(events.events.len(), 2);
+        assert_eq!(events.events[0].sequence, 1);
+        assert_eq!(events.events[1].sequence, 2);
     }
 }

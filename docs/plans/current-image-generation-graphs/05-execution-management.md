@@ -14466,6 +14466,33 @@ Worker rules:
     --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d validation lifecycle bounded event state slice:
+  - Smallest useful vertical slice: add bounded per-graph-session lifecycle
+    event retention to the workflow-service validation lifecycle owner, with
+    pending, superseded, and publication-accepted events plus monotonic event
+    sequences, dropped-event accounting, and close cleanup that removes buffered
+    lifecycle events for the closed graph session.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: lifecycle events remain backend-owned,
+    bounded, and keyed by typed graph session, graph revision, and validation
+    session ids. This slice does not add Tauri/frontend validation policy,
+    transport-supplied facts, unbounded streams, or an alternate resolver path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; source-search verification
+    for retired workflow events, model paths, raw JSON, `anyhow`, and
+    `Result<T, String>` in the lifecycle owner; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 
