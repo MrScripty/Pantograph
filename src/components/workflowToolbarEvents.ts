@@ -52,6 +52,12 @@ export interface WorkflowSubmitDisabledReasonInput {
   submitGate?: WorkflowGraphValidationSubmitGate | null;
 }
 
+export interface WorkflowValidationRefreshKeyInput {
+  currentGraphType: string | null | undefined;
+  graphSessionId: string | null | undefined;
+  graphRevision: string | null | undefined;
+}
+
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');
   return (
@@ -86,6 +92,18 @@ export function workflowSubmitDisabledReason({
   if (!submitGate.allowed) return submitGate.message ?? 'Workflow validation does not allow submit';
   if (isExecuting) return 'Workflow submission is in progress';
   return null;
+}
+
+export function workflowValidationRefreshKey({
+  currentGraphType,
+  graphSessionId,
+  graphRevision,
+}: WorkflowValidationRefreshKeyInput): string | null {
+  if (currentGraphType !== 'workflow' || !graphSessionId || !graphRevision) {
+    return null;
+  }
+
+  return `${graphSessionId}:${graphRevision}`;
 }
 
 export function isWorkflowSemanticVersionConflictError(error: unknown): boolean {

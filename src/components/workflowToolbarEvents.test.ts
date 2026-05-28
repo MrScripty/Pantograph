@@ -9,6 +9,7 @@ import {
   isWorkflowSemanticVersionConflictError,
   nextWorkflowPatchSemanticVersion,
   workflowSubmitDisabledReason,
+  workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
 
@@ -171,6 +172,55 @@ test('workflowSubmitDisabledReason explains every disabled submit gate', () => {
       },
     }),
     'Inference validation is still pending',
+  );
+});
+
+test('workflowValidationRefreshKey allows dirty draft validation to stay separate from submit gating', () => {
+  const refreshKey = workflowValidationRefreshKey({
+    currentGraphType: 'workflow',
+    graphSessionId: 'graph-session-1',
+    graphRevision: 'graph-revision-1',
+  });
+
+  assert.equal(refreshKey, 'graph-session-1:graph-revision-1');
+  assert.equal(
+    workflowSubmitDisabledReason({
+      isExecuting: false,
+      isReadOnly: false,
+      isDirty: true,
+      hasSavedWorkflow: true,
+      hasWorkflowId: true,
+      semanticVersionInvalid: false,
+      submitGate: { allowed: true },
+    }),
+    'Save workflow changes before submitting',
+  );
+});
+
+test('workflowValidationRefreshKey rejects non-workflow or incomplete validation context', () => {
+  assert.equal(
+    workflowValidationRefreshKey({
+      currentGraphType: 'system',
+      graphSessionId: 'graph-session-1',
+      graphRevision: 'graph-revision-1',
+    }),
+    null,
+  );
+  assert.equal(
+    workflowValidationRefreshKey({
+      currentGraphType: 'workflow',
+      graphSessionId: null,
+      graphRevision: 'graph-revision-1',
+    }),
+    null,
+  );
+  assert.equal(
+    workflowValidationRefreshKey({
+      currentGraphType: 'workflow',
+      graphSessionId: 'graph-session-1',
+      graphRevision: null,
+    }),
+    null,
   );
 });
 

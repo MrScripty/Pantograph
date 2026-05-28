@@ -1487,6 +1487,17 @@ defining an image-only inference-node interface.
       invalid validation state from backend events, disables submit/enqueue
       from the latest backend summary, and does not block editing while
       validation runs.
+      2026-05-27 implementation slice: frontend validation refresh eligibility
+      is now keyed only by workflow graph type, graph session id, and current
+      graph revision. Dirty saved-workflow state no longer suppresses
+      validation refresh, so unsaved graph edits can request backend descriptor
+      projections from the current edit session and render display-only
+      validation overlays while editing continues. Dirty state remains a submit
+      gate through `workflowSubmitDisabledReason`; validation availability is
+      not treated as permission to enqueue unsaved workflow revisions.
+      Verification passed: `npm run test:frontend --
+      workflowToolbarEvents.test.ts workflowValidationProjectionOverlays.test.ts`;
+      `npm run typecheck`.
 - [ ] Add the descriptor-backed dependency-environment action intent slice.
       Define a minimal action-intent DTO that carries only graph/session
       identity, graph revision/validation session identity, target node id, and

@@ -43,6 +43,7 @@
     isWorkflowSemanticVersionConflictError,
     nextWorkflowPatchSemanticVersion,
     workflowSubmitDisabledReason,
+    workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
   import {
     INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY,
@@ -141,14 +142,18 @@
   $effect(() => {
     const graphSessionId = $currentSessionId;
     const graphRevision = $workflowGraph.derived_graph?.graph_fingerprint ?? null;
-    if ($currentGraphType !== 'workflow' || !graphSessionId || !graphRevision || $isDirty) {
+    const requestKey = workflowValidationRefreshKey({
+      currentGraphType: $currentGraphType,
+      graphSessionId,
+      graphRevision,
+    });
+    if (!requestKey) {
       currentValidationSummary = null;
       currentValidationSummaryKey = null;
       clearNodeRuntimeData([INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]);
       return;
     }
 
-    const requestKey = `${graphSessionId}:${graphRevision}`;
     if (currentValidationSummaryKey !== requestKey) {
       clearNodeRuntimeData([INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]);
     }
