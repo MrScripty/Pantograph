@@ -16,8 +16,8 @@ use pantograph_workflow_service::{
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
     InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
     WorkflowExecutableValidationSnapshotRecord, WorkflowGraph,
-    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
-    WorkflowGraphEditSessionGraphResponse,
+    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryResponse, WorkflowGraphEditSessionGraphResponse,
     WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
 };
 
@@ -323,6 +323,17 @@ pub async fn current_graph_validation_summary(
 ) -> Result<WorkflowGraphCurrentValidationSummaryResponse, String> {
     workflow_service
         .workflow_graph_current_validation_summary(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
+#[command]
+pub async fn refresh_current_graph_validation_summary(
+    request: WorkflowGraphCurrentValidationRefreshRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphCurrentValidationSummaryResponse, String> {
+    workflow_service
+        .workflow_graph_refresh_current_validation_summary(request)
         .await
         .map_err(|error| error.to_envelope_json())
 }

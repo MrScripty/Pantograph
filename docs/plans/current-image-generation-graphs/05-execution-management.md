@@ -14270,6 +14270,45 @@ Worker rules:
   - Remaining follow-up: continue Milestone 5d with live validation UX/event
     lifecycle work using this summary/gate DTO as the single submit authority;
     do not add frontend polling or local validation interpretation.
+- 2026-05-27 Milestone 5d current validation refresh slice:
+  - Smallest useful vertical slice: add a backend-owned graph-session refresh
+    API for current validation, expose it through thin Tauri and TypeScript
+    commands, and make the toolbar use refresh for clean saved graph revisions
+    before relying on the returned submit gate.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    workflow-service graph README, `src-tauri/src/app_setup.rs`,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    Tauri workflow README, `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    workflow service README, `src/components/WorkflowToolbar.svelte`,
+    components README, this milestone, and this execution log.
+  - No-fallback/no-legacy result: the refresh request carries only graph
+    session id and caller-observed graph revision. Workflow-service rejects
+    stale revisions as typed summary/gate responses, generates the validation
+    session id, runs descriptor publication outside the graph lock, records
+    current validation state, and returns the shared summary DTO. Tauri and
+    frontend code do not mint validation session ids, resolve descriptors,
+    supply Pumas/runtime facts, produce dependency proofs, or infer scheduler
+    eligibility.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service current_validation_summary`; `npm run
+    test:frontend -- WorkflowService.commands.test.ts
+    workflowToolbarEvents.test.ts`; `npm run typecheck`; and `git diff
+    --check`.
+  - Verification blocked: `cargo check --manifest-path src-tauri/Cargo.toml`
+    still fails on the pre-existing
+    `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
+    missing-method error, unrelated to this slice.
+  - Remaining follow-up: continue live-validation UX/event lifecycle work by
+    reusing this backend refresh and summary/gate owner; do not add polling or
+    a second validation interpretation path in frontend/Tauri.
 
 ### Traceability Links
 

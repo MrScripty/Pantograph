@@ -98,6 +98,12 @@ latest graph revision has a current executable validation session, preserve
 typed diagnostics for unavailable/stale/invalid states, and never ask Tauri or
 frontend code to resolve descriptors, Pumas state, dependency proofs, or
 scheduler runtime policy.
+Graph-session current validation refreshes are also backend-owned. A refresh
+request carries graph-session identity and the graph revision observed by the
+caller; workflow-service snapshots the current graph, rejects stale requested
+revisions as typed summary responses, generates the validation-session id,
+runs the existing descriptor publication core outside the graph lock, records
+current validation state, and returns the same summary/gate DTO used by submit.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.

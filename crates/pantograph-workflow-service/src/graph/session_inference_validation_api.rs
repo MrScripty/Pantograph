@@ -1,6 +1,7 @@
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
 };
+use uuid::Uuid;
 
 use crate::workflow::WorkflowSchedulerInferenceTaskProjections;
 use crate::workflow::WorkflowServiceError;
@@ -14,8 +15,8 @@ use super::super::inference_interface_publication::{
 use super::super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
 use super::super::inference_validation_state::{
-    CurrentInferenceSchedulerProjectionRequest, WorkflowGraphCurrentValidationSummaryRequest,
-    WorkflowGraphCurrentValidationSummaryResponse,
+    CurrentInferenceSchedulerProjectionRequest, WorkflowGraphCurrentValidationRefreshRequest,
+    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphCurrentValidationSummaryStateRequest,
 };
 use super::super::types::WorkflowGraph;
@@ -36,6 +37,69 @@ impl GraphSessionStore {
             WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
+
+        Ok(self
+            .validation_state
+            .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
+                graph_session_id,
+                requested_graph_revision: request.graph_revision,
+                current_graph_revision,
+            })
+            .await)
+    }
+
+    pub async fn refresh_current_validation_summary(
+        &self,
+        request: WorkflowGraphCurrentValidationRefreshRequest,
+    ) -> Result<WorkflowGraphCurrentValidationSummaryResponse, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(&request.graph_session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(&request.graph_session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let graph = state.graph.clone();
+        let current_graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        if current_graph_revision != request.graph_revision {
+            return Ok(self
+                .validation_state
+                .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
+                    graph_session_id,
+                    requested_graph_revision: request.graph_revision,
+                    current_graph_revision,
+                })
+                .await);
+        }
+
+        let validation_session_id =
+            DraftGraphValidationSessionId::parse(format!("validation.session.{}", Uuid::new_v4()))
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let resolution_inputs = inference_interface_resolution_inputs_from_graph(&graph);
+        let facts_by_node_id = self
+            .inference_interface_facts_provider
+            .facts_for_resolution_inputs(&resolution_inputs.requests)
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+
+        let publication = publish_inference_validation_for_resolution_inputs(
+            validation_session_id,
+            current_graph_revision.clone(),
+            resolution_inputs,
+            facts_by_node_id,
+        )
+        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+
+        self.validation_state
+            .record_validation_publication(
+                graph_session_id.clone(),
+                publication.validation_session,
+                publication.node_projections,
+            )
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
         Ok(self
             .validation_state

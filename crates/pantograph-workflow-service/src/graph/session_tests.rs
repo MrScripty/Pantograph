@@ -6,10 +6,10 @@ use crate::graph::{
     InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
     InferenceInterfaceResolverFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
     InferenceRuntimeAvailabilityFact, InferenceRuntimeAvailabilityState,
-    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryState,
-    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgesRequest,
-    WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
+    WorkflowGraphRemoveEdgesRequest, WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
@@ -421,6 +421,74 @@ async fn current_validation_summary_blocks_pending_summary() {
     assert_eq!(
         response.submit_gate.reason_code,
         Some(WorkflowGraphValidationSubmitGateReason::ValidationPending)
+    );
+}
+
+#[tokio::test]
+async fn refresh_current_validation_summary_generates_backend_validation_session() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    let response = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert!(response.submit_gate.allowed);
+    let validation_session_id = response
+        .validation_session_id
+        .as_ref()
+        .expect("backend generated validation session id");
+    assert!(validation_session_id
+        .as_str()
+        .starts_with("validation.session."));
+    assert_ne!(validation_session_id.as_str(), "validation.session.1");
+}
+
+#[tokio::test]
+async fn refresh_current_validation_summary_rejects_stale_requested_revision() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    let response = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: "stale-revision".parse().expect("valid stale revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Stale
+    );
+    assert!(!response.submit_gate.allowed);
+    assert!(response.validation_session_id.is_none());
+    assert_eq!(
+        response.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
     );
 }
 

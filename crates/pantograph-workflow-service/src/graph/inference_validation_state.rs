@@ -566,6 +566,13 @@ pub struct WorkflowGraphCurrentValidationSummaryRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphCurrentValidationRefreshRequest {
+    pub graph_session_id: String,
+    pub graph_revision: WorkflowGraphRevision,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct WorkflowGraphCurrentValidationSummaryResponse {
     pub graph_session_id: WorkflowGraphSessionId,
     pub requested_graph_revision: WorkflowGraphRevision,

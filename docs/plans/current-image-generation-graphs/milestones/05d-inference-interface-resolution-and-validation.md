@@ -1286,6 +1286,27 @@ defining an image-only inference-node interface.
     blocked for full Tauri app compile by the pre-existing
     `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
     missing-method error.
+  - 2026-05-27 follow-up slice completed: workflow-service now owns current
+    validation refresh for `graph_session_id + graph_revision`. The refresh
+    path rejects stale requested revisions as typed summary/gate responses,
+    generates the validation-session id in the backend, runs the existing
+    descriptor publication core outside the graph lock, records current state,
+    and returns the same summary DTO consumed by Submit. Tauri and TypeScript
+    expose thin refresh commands, and the toolbar uses refresh instead of a
+    passive read so a clean saved graph can obtain a backend validation session
+    without frontend-owned validation identity.
+  - No-fallback/no-legacy confirmation: refresh requests do not accept
+    caller-minted validation session ids, raw Pumas facts, runtime facts,
+    dependency proofs, package summaries, load targets, local paths, or
+    scheduler policy. The default fact-provider path still reports typed
+    unavailable/not-implemented states rather than synthesizing support.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service current_validation_summary`; `npm run
+    test:frontend -- WorkflowService.commands.test.ts
+    workflowToolbarEvents.test.ts`; `npm run typecheck`; and `git diff
+    --check`. Verification blocked for full Tauri app compile by the existing
+    `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
+    missing-method error.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

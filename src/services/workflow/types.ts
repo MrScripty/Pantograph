@@ -977,6 +977,11 @@ export interface WorkflowGraphCurrentValidationSummaryRequest {
   graph_revision: string;
 }
 
+export interface WorkflowGraphCurrentValidationRefreshRequest {
+  graph_session_id: string;
+  graph_revision: string;
+}
+
 export type WorkflowGraphCurrentValidationSummaryState =
   | 'current'
   | 'pending'

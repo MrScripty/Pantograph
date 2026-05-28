@@ -148,7 +148,7 @@
     let cancelled = false;
 
     void workflowService
-      .currentGraphValidationSummary({
+      .refreshCurrentGraphValidationSummary({
         graph_session_id: graphSessionId,
         graph_revision: graphRevision,
       })

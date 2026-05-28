@@ -119,11 +119,14 @@ That keeps the Graph page on the same canonical run path as Scheduler,
 Diagnostics, and I/O Inspector instead of executing the edit-session graph
 directly.
 Before enabling Submit, `WorkflowToolbar.svelte` reads the backend current
-validation summary for the saved graph-session revision and uses the returned
-submit gate plus validation-session id when publishing the executable
-validation snapshot. If the summary is missing, stale, pending, unavailable, or
-invalid, the toolbar displays the backend gate message and leaves graph editing
-unblocked.
+validation summary for the saved graph-session revision through the backend
+refresh API and uses the returned submit gate plus validation-session id when
+publishing the executable validation snapshot. The toolbar sends only the
+graph session id and caller-observed graph revision; workflow-service owns
+validation-session id generation, descriptor publication, and stale-revision
+diagnostics. If the summary is missing, stale, pending, unavailable, or
+invalid, the toolbar displays the backend gate message and leaves graph
+editing unblocked.
 Submit disabled reasons are rendered visibly below the toolbar rather than
 being available only as button titles, because Puma-Lib selection and other
 node edits mark workflows dirty and require a save before scheduler submission.
