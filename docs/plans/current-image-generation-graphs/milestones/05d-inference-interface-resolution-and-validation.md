@@ -3058,6 +3058,41 @@ defining an image-only inference-node interface.
     completion, panic, and cancellation paths; expose bounded lifecycle events
     through a dedicated graph-validation transport after backend lifecycle tests
     pass.
+- [x] 2026-05-28 validation lifecycle publication event slice completed:
+  - Smallest useful vertical slice: changed lifecycle publication acceptance to
+    decide active-session freshness while holding the active-session read lock,
+    release that lock, and then record either an accepted or typed rejected
+    publication event in the bounded lifecycle event log.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: rejected publications remain typed
+    lifecycle outcomes for the active workflow-service owner. No transport
+    facts, frontend policy, raw path state, or alternate validation resolver was
+    added.
+  - Standards result: lifecycle event retention no longer holds the active
+    lifecycle read guard while awaiting event-buffer writes. Superseded
+    publications now have a typed `PublicationRejected` lifecycle event rather
+    than message-only or missing state.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; source-search verification
+    for retired workflow events, model paths, raw JSON, `anyhow`, and
+    `Result<T, String>` in the lifecycle owner; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: add task ownership/cancellation with observed
+    completion, panic, and cancellation paths; add transport-visible
+    overflow/backpressure diagnostics in the dedicated graph-validation
+    transport slice.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

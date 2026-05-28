@@ -14493,6 +14493,32 @@ Worker rules:
     `Result<T, String>` in the lifecycle owner; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d validation lifecycle publication event slice:
+  - Smallest useful vertical slice: record accepted and typed rejected
+    publication events in the bounded workflow-service lifecycle owner after
+    active-session freshness is checked and the active-session read lock is
+    released.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: stale or superseded publication attempts stay
+    typed workflow-service lifecycle events. No frontend/Tauri validation
+    policy, transport-supplied facts, raw path state, or alternate validation
+    resolver was added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; source-search verification
+    for retired workflow events, model paths, raw JSON, `anyhow`, and
+    `Result<T, String>` in the lifecycle owner; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 

@@ -76,15 +76,29 @@ impl WorkflowGraphValidationLifecycleOwner {
             return Err(WorkflowGraphValidationLifecycleError::GraphSessionClosed);
         }
 
-        let active = self.active.read().await;
-        let Some(record) = active.get(graph_session_id) else {
-            return Err(WorkflowGraphValidationLifecycleError::ValidationSessionMissing);
+        let result = {
+            let active = self.active.read().await;
+            match active.get(graph_session_id) {
+                Some(record) if &record.graph_revision != graph_revision => {
+                    Err(WorkflowGraphValidationLifecycleError::GraphRevisionChanged)
+                }
+                Some(record) if &record.validation_session_id != validation_session_id => {
+                    Err(WorkflowGraphValidationLifecycleError::ValidationSessionSuperseded)
+                }
+                Some(_) => Ok(()),
+                None => Err(WorkflowGraphValidationLifecycleError::ValidationSessionMissing),
+            }
         };
-        if &record.graph_revision != graph_revision {
-            return Err(WorkflowGraphValidationLifecycleError::GraphRevisionChanged);
-        }
-        if &record.validation_session_id != validation_session_id {
-            return Err(WorkflowGraphValidationLifecycleError::ValidationSessionSuperseded);
+
+        if let Err(error) = result {
+            return self
+                .record_publication_rejection(
+                    graph_session_id.clone(),
+                    graph_revision.clone(),
+                    validation_session_id.clone(),
+                    error,
+                )
+                .await;
         }
         self.push_event(
             graph_session_id.clone(),
@@ -94,6 +108,23 @@ impl WorkflowGraphValidationLifecycleOwner {
         )
         .await;
         Ok(())
+    }
+
+    async fn record_publication_rejection(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        graph_revision: WorkflowGraphRevision,
+        validation_session_id: DraftGraphValidationSessionId,
+        reason: WorkflowGraphValidationLifecycleError,
+    ) -> Result<(), WorkflowGraphValidationLifecycleError> {
+        self.push_event(
+            graph_session_id,
+            graph_revision,
+            validation_session_id,
+            WorkflowGraphValidationLifecycleEventKind::PublicationRejected { reason },
+        )
+        .await;
+        Err(reason)
     }
 
     pub(crate) async fn close_graph_session(
@@ -199,6 +230,9 @@ enum WorkflowGraphValidationLifecycleEventKind {
         superseded_validation_session_id: DraftGraphValidationSessionId,
     },
     PublicationAccepted,
+    PublicationRejected {
+        reason: WorkflowGraphValidationLifecycleError,
+    },
 }
 
 #[cfg(test)]
@@ -282,6 +316,9 @@ mod tests {
                 &WorkflowGraphValidationLifecycleEventKind::ValidationPending,
                 &WorkflowGraphValidationLifecycleEventKind::ValidationSuperseded {
                     superseded_validation_session_id: first_session
+                },
+                &WorkflowGraphValidationLifecycleEventKind::PublicationRejected {
+                    reason: WorkflowGraphValidationLifecycleError::ValidationSessionSuperseded,
                 },
                 &WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
             ]
