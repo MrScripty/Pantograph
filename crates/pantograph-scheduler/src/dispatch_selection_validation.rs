@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use pantograph_dependency_planning::{
-    DependencyEnvironmentRef, DependencyPlanningContractError, DeviceIntentId,
+    DependencyEnvironmentRef, DependencyPlanningContractError, DependencyReadinessProofEnvelope,
+    DeviceIntentId,
 };
 
 use crate::dispatch_selection::{
@@ -9,7 +10,6 @@ use crate::dispatch_selection::{
 };
 use crate::error::SchedulerContractError;
 use crate::intent::SchedulableTaskIntent;
-use crate::readiness::SchedulerDependencyReadinessProof;
 use crate::resource::{SchedulerResourceFitAssessment, SchedulerResourceReservation};
 use crate::resource_types::{SchedulerResourceDiagnosticSeverity, SchedulerResourceFitState};
 
@@ -146,7 +146,7 @@ pub(crate) fn validate_resource_fit(
 }
 
 pub(crate) fn validate_environment_ref(
-    readiness_proof: &SchedulerDependencyReadinessProof,
+    readiness_proof: &DependencyReadinessProofEnvelope,
     environment_ref: &DependencyEnvironmentRef,
 ) -> Result<(), SchedulerContractError> {
     let Some(proof_environment_ref) = &readiness_proof.preflight_result.environment_ref else {

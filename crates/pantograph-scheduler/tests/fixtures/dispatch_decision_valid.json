@@ -44,6 +44,20 @@
     "selected_artifact_path": "pumas://artifacts/juggernaut-xl-v10/diffusers"
   },
   "readiness_proof": {
+    "contract_version": 1,
+    "execution_context": {
+      "contract_version": 1,
+      "workflow_id": "workflow.image_generation",
+      "workflow_run_id": "run.001",
+      "scheduler_task_id": "task.001",
+      "node_id": "node.llm_inference",
+      "graph_revision": "graph.revision.001",
+      "validation_session_id": "validation.session.001",
+      "validation_snapshot_id": "validation.snapshot.001",
+      "descriptor_fingerprint": "descriptor.image_generation.001",
+      "dependency_requirements_id": "deps.image_generation",
+      "correlation_id": "correlation.image_generation.001"
+    },
     "preflight_result": {
       "contract_version": 1,
       "identity_key": {
@@ -57,7 +71,9 @@
       "environment_ref": {
         "environment_id": "env.image_generation"
       }
-    }
+    },
+    "readiness_proof_id": "readiness.proof.image_generation.001",
+    "readiness_proof_version": 1
   },
   "environment_ref": {
     "environment_id": "env.image_generation"

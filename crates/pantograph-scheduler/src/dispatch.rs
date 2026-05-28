@@ -3,14 +3,14 @@ use std::fmt;
 use std::str::FromStr;
 
 use pantograph_dependency_planning::{
-    DependencyEnvironmentRef, DependencyPlanningContractError, DeviceIntentId, PumasModelRef,
-    RuntimeIntentId,
+    DependencyEnvironmentRef, DependencyPlanningContractError, DependencyReadinessProofEnvelope,
+    DeviceIntentId, PumasModelRef, RuntimeIntentId,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::SchedulerContractError;
 use crate::intent::{SchedulableTaskIntent, SchedulerTraitSetting};
-use crate::readiness::SchedulerDependencyReadinessProof;
+use crate::readiness::validate_ready_proof_for_intent;
 
 const MAX_ID_LEN: usize = 128;
 const MAX_TEXT_LEN: usize = 1024;
@@ -157,7 +157,7 @@ pub struct SchedulerDispatchDecision {
     pub selected_runtime_variant_id: Option<SchedulerRuntimeVariantId>,
     pub selected_device_ids: Vec<DeviceIntentId>,
     pub selected_model_ref: PumasModelRef,
-    pub readiness_proof: SchedulerDependencyReadinessProof,
+    pub readiness_proof: DependencyReadinessProofEnvelope,
     pub environment_ref: DependencyEnvironmentRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batching_group_id: Option<SchedulerBatchingGroupId>,
@@ -176,8 +176,7 @@ impl SchedulerDispatchDecision {
         self.selected_model_ref
             .validate()
             .map_err(map_dependency_error)?;
-        self.readiness_proof
-            .validate_for_intent(&self.task_intent)?;
+        validate_ready_proof_for_intent(&self.readiness_proof, &self.task_intent)?;
         self.environment_ref
             .validate()
             .map_err(map_dependency_error)?;

@@ -2,7 +2,8 @@ use std::fmt;
 use std::str::FromStr;
 
 use pantograph_dependency_planning::{
-    DependencyEnvironmentRef, DeviceIntentId, PumasModelRef, RuntimeIntentId,
+    DependencyEnvironmentRef, DependencyReadinessProofEnvelope, DeviceIntentId, PumasModelRef,
+    RuntimeIntentId,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -17,7 +18,7 @@ use crate::dispatch_selection_validation::{
 };
 use crate::error::SchedulerContractError;
 use crate::intent::{SchedulableTaskIntent, SchedulerTraitSetting};
-use crate::readiness::SchedulerDependencyReadinessProof;
+use crate::readiness::validate_ready_proof_for_intent;
 use crate::resource::{SchedulerResourceFitAssessment, SchedulerResourceReservation};
 
 /// Current contract version for scheduler dispatch selection.
@@ -232,7 +233,7 @@ pub struct SchedulerDispatchSelectionRequest {
     #[serde(default = "default_scheduler_dispatch_selection_contract_version")]
     pub contract_version: u16,
     pub task_intent: SchedulableTaskIntent,
-    pub readiness_proof: SchedulerDependencyReadinessProof,
+    pub readiness_proof: DependencyReadinessProofEnvelope,
     pub environment_ref: DependencyEnvironmentRef,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub candidates: Vec<SchedulerDispatchCandidate>,
@@ -244,8 +245,7 @@ impl SchedulerDispatchSelectionRequest {
     pub fn validate(&self) -> Result<(), SchedulerContractError> {
         validate_contract_version(self.contract_version)?;
         self.task_intent.validate()?;
-        self.readiness_proof
-            .validate_for_intent(&self.task_intent)?;
+        validate_ready_proof_for_intent(&self.readiness_proof, &self.task_intent)?;
         self.environment_ref
             .validate()
             .map_err(map_dependency_error)?;

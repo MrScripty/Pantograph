@@ -14090,12 +14090,52 @@ Worker rules:
     pantograph-workflow-service executable_validation_snapshot --lib --
     --nocapture`. Existing warning: `set_active_run_execution_plan` remains a
     pre-existing unused store method.
-  - Remaining follow-up: scheduler readiness/admission still retains the
-    admitted ready proof as the older `SchedulerDependencyReadinessProof`
-    wrapper. The next slice must either replace that scheduler proof wrapper
-    with the validated readiness proof envelope or add a workflow-service
-    active-run proof store keyed by task/state identity before runtime dispatch
-    selection is allowed to consume ready runtime tasks.
+  - Follow-up resolved by the 2026-05-27 scheduler readiness proof envelope
+    slice below: scheduler readiness/admission no longer retains the admitted
+    ready proof as the older `SchedulerDependencyReadinessProof` wrapper.
+- 2026-05-27 Milestone 5d scheduler readiness proof envelope slice:
+  - Smallest useful vertical slice: remove the scheduler-local ready-proof
+    wrapper and make scheduler readiness admission, dispatch selection,
+    dispatch decision, runtime handoff, workflow-service admission bridging,
+    and runtime-host request fixtures consume the shared
+    `DependencyReadinessProofEnvelope` directly.
+  - Allowed files touched:
+    `crates/pantograph-scheduler/src/readiness.rs`,
+    `crates/pantograph-scheduler/src/dispatch.rs`,
+    `crates/pantograph-scheduler/src/dispatch_selection.rs`,
+    `crates/pantograph-scheduler/src/dispatch_selection_validation.rs`,
+    `crates/pantograph-scheduler/src/handoff.rs`,
+    `crates/pantograph-scheduler/src/lib.rs`, scheduler fixtures/tests,
+    scheduler README, `crates/pantograph-workflow-service/src/scheduler`
+    source/tests/README, runtime-host fixture, this milestone, and this
+    execution log.
+  - No-fallback/no-legacy result: `SchedulerDependencyReadinessProof` was
+    removed instead of kept as an alias or compatibility shim. Scheduler
+    validation now requires a ready `DependencyReadinessProofEnvelope` whose
+    preflight identity and execution context match the admitted
+    workflow/run/node/scheduler-task before dispatch selection or runtime
+    handoff can proceed. Workflow-service converts provider preflight output
+    into the validated proof envelope before calling scheduler admission rather
+    than passing a detached preflight result.
+  - Verification passed: `cargo fmt -p pantograph-scheduler -p
+    pantograph-workflow-service -p pantograph-runtime-host-contracts`; `cargo
+    check -p pantograph-workflow-service`; `cargo test -p pantograph-scheduler
+    --test readiness_admission -- --nocapture`; `cargo test -p
+    pantograph-scheduler --test dispatch_selection -- --nocapture`; `cargo
+    test -p pantograph-scheduler --test dispatch_decision -- --nocapture`;
+    `cargo test -p pantograph-scheduler --test runtime_handoff --
+    --nocapture`; `cargo test -p pantograph-workflow-service
+    readiness_lifecycle --lib -- --nocapture`; `cargo test -p
+    pantograph-workflow-service task_orchestrator --lib -- --nocapture`; and
+    `cargo test -p pantograph-runtime-host-contracts -- --nocapture`; `git
+    diff --check`; targeted source search proving `SchedulerDependencyReadinessProof`
+    is absent from scheduler/workflow-service/runtime-host source; and targeted
+    retired path/load-target search over touched scheduler/workflow-service/
+    runtime-host areas. Search matches are only rejection tests and README
+    prohibitions. Existing warning: `set_active_run_execution_plan` remains a
+    pre-existing unused store method.
+  - Remaining follow-up: continue with Frontend/Tauri publish-before-run wiring
+    and TypeScript contract mirrors.
 
 ### Traceability Links
 

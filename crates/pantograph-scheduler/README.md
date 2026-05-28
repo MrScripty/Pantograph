@@ -86,11 +86,12 @@ resolver behavior.
   scheduler decision fields.
 - `SchedulerReadinessAdmissionDecision` is the scheduler-owned admission result
   before runtime host handoff. A ready decision must carry
-  `SchedulerDependencyReadinessProof`, whose `DependencyPreflightResult` is
-  validated as path-free and ready. Deferred, retryable failed, and terminal
-  failed decisions must carry typed diagnostics and must not carry ready proof.
+  `DependencyReadinessProofEnvelope`, whose execution context and
+  `DependencyPreflightResult` are validated as path-free, ready, and matched to
+  the admitted task. Deferred, retryable failed, and terminal failed decisions
+  must carry typed diagnostics and must not carry ready proof.
   `plan_scheduler_readiness_admission` owns the check/install/defer/retry/fail
-  policy mapping from host preflight state into scheduler admission decisions.
+  policy mapping from host proof state into scheduler admission decisions.
 - `SchedulerRuntimeHandoff` is the path-free host-facing envelope after
   readiness admission. It carries task correlation, task intent, scheduler-owned
   readiness proof, matching dependency environment ref, and optionally the
@@ -195,8 +196,9 @@ let _validated = ValidatedSchedulableTaskIntent::try_from(intent)?;
   validated that ready decisions carry matching path-free dependency readiness
   proof. Scheduler admission policy may call
   `plan_scheduler_readiness_admission` with a validated request and optional
-  preflight result to produce check, install-missing, defer, retry, fail, or
-  admit decisions without node-engine resolver discovery. Runtime hosts may
+  dependency readiness proof envelope to produce check, install-missing, defer,
+  retry, fail, or admit decisions without node-engine resolver discovery.
+  Runtime hosts may
   consume `ValidatedSchedulerRuntimeHandoff` values once correlation,
   environment refs, readiness proof, and optional dispatch decision have been
   validated. Queue persistence and replay consumers may use

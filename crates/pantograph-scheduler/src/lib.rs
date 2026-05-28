@@ -80,12 +80,12 @@ pub use queue::{
     SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
 pub use readiness::{
-    plan_scheduler_readiness_admission, SchedulerDependencyReadinessProof,
-    SchedulerReadinessAdmissionAction, SchedulerReadinessAdmissionDecision,
-    SchedulerReadinessAdmissionDiagnostic, SchedulerReadinessAdmissionDiagnosticCode,
-    SchedulerReadinessAdmissionRequest, SchedulerReadinessAdmissionSeverity,
-    SchedulerReadinessAdmissionState, ValidatedSchedulerReadinessAdmissionDecision,
-    ValidatedSchedulerReadinessAdmissionRequest, SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
+    plan_scheduler_readiness_admission, SchedulerReadinessAdmissionAction,
+    SchedulerReadinessAdmissionDecision, SchedulerReadinessAdmissionDiagnostic,
+    SchedulerReadinessAdmissionDiagnosticCode, SchedulerReadinessAdmissionRequest,
+    SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState,
+    ValidatedSchedulerReadinessAdmissionDecision, ValidatedSchedulerReadinessAdmissionRequest,
+    SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
 };
 pub use resource::{
     SchedulerBatchingMemoryImpact, SchedulerDeviceResourceSnapshot, SchedulerLoadWarmupEstimate,

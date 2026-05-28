@@ -1,10 +1,12 @@
-use pantograph_dependency_planning::{DependencyEnvironmentRef, DependencyPlanningContractError};
+use pantograph_dependency_planning::{
+    DependencyEnvironmentRef, DependencyPlanningContractError, DependencyReadinessProofEnvelope,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::dispatch::SchedulerDispatchDecision;
 use crate::error::SchedulerContractError;
 use crate::intent::SchedulableTaskIntent;
-use crate::readiness::{SchedulerDependencyReadinessProof, SchedulerReadinessAdmissionDiagnostic};
+use crate::readiness::{validate_ready_proof_for_intent, SchedulerReadinessAdmissionDiagnostic};
 
 /// Current contract version for scheduler-owned runtime handoff.
 pub const SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION: u16 = 1;
@@ -34,7 +36,7 @@ pub struct SchedulerRuntimeHandoff {
     pub task_id: crate::SchedulerTaskId,
     pub task_intent: SchedulableTaskIntent,
     pub state: SchedulerRuntimeHandoffState,
-    pub readiness_proof: SchedulerDependencyReadinessProof,
+    pub readiness_proof: DependencyReadinessProofEnvelope,
     pub environment_ref: DependencyEnvironmentRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispatch_decision: Option<SchedulerDispatchDecision>,
@@ -47,8 +49,7 @@ impl SchedulerRuntimeHandoff {
     pub fn validate(&self) -> Result<(), SchedulerContractError> {
         validate_contract_version(self.contract_version)?;
         self.task_intent.validate()?;
-        self.readiness_proof
-            .validate_for_intent(&self.task_intent)?;
+        validate_ready_proof_for_intent(&self.readiness_proof, &self.task_intent)?;
         self.environment_ref
             .validate()
             .map_err(map_dependency_error)?;

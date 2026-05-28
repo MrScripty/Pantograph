@@ -130,9 +130,9 @@ The first concrete lifecycle provider adapter is the canonical
 `DependencyEnvironmentService` facade. It converts the readiness request into a
 path-free dependency-environment resolve request, validates provider output,
 projects it through `pantograph-dependency-planning` into
-`DependencyPreflightResult`, and never synthesizes proof from graph node data,
-technical-fit preview facts, reduced execution-plan projections, or
-frontend/Tauri display state.
+`DependencyReadinessProofEnvelope` before scheduler admission, and never
+synthesizes proof from graph node data, technical-fit preview facts, reduced
+execution-plan projections, or frontend/Tauri display state.
 Runtime inference tasks that depend on upstream task outputs initialize as
 `AwaitingInputs` even when their schedulable intent is otherwise complete.
 They may become dispatch candidates only after scheduler-owned input-readiness
@@ -212,8 +212,8 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   dependency readiness proof and can produce a dispatch-selected runtime
   handoff.
 - Dependency readiness admission for runtime tasks must consume
-  `DependencyPreflightResult` through `pantograph-scheduler` and persist only
-  scheduler task-state transitions. It must not call
+  `DependencyReadinessProofEnvelope` through `pantograph-scheduler` and persist
+  only scheduler task-state transitions. It must not call
   `ModelDependencyRequest`, build `ModelRefV2`, read graph `modelPath`, or
   synthesize executable load targets.
 - Dependency readiness request construction for admitted runtime tasks must

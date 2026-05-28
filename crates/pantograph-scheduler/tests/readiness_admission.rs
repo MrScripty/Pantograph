@@ -199,14 +199,14 @@ fn rejects_unsupported_readiness_admission_contract_version() {
 }
 
 #[test]
-fn scheduler_policy_admits_ready_preflight_result() {
+fn scheduler_policy_admits_ready_readiness_proof() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
     );
-    let preflight = ready_preflight_result();
+    let proof = ready_readiness_proof();
 
-    let decision = plan_scheduler_readiness_admission(request, Some(preflight))
-        .expect("ready preflight should admit for dispatch");
+    let decision = plan_scheduler_readiness_admission(request, Some(proof))
+        .expect("ready proof should admit for dispatch");
 
     assert_eq!(
         decision.as_ref().action,
@@ -220,13 +220,13 @@ fn scheduler_policy_admits_ready_preflight_result() {
 }
 
 #[test]
-fn scheduler_policy_checks_when_no_preflight_result_exists() {
+fn scheduler_policy_checks_when_no_readiness_proof_exists() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::AutoInstallMissing,
     );
 
     let decision = plan_scheduler_readiness_admission(request, None)
-        .expect("missing preflight should produce a scheduler check action");
+        .expect("missing proof should produce a scheduler check action");
 
     assert_eq!(
         decision.as_ref().action,
@@ -243,13 +243,13 @@ fn scheduler_policy_installs_missing_dependencies_when_allowed() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::AutoInstallMissing,
     );
-    let mut preflight = ready_preflight_result();
-    preflight.readiness_state =
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.readiness_state =
         pantograph_dependency_planning::DependencyEnvironmentReadinessState::Missing;
-    preflight.dependency_requirements_id = None;
-    preflight.environment_ref = None;
+    proof.preflight_result.dependency_requirements_id = None;
+    proof.preflight_result.environment_ref = None;
 
-    let decision = plan_scheduler_readiness_admission(request, Some(preflight))
+    let decision = plan_scheduler_readiness_admission(request, Some(proof))
         .expect("missing dependencies should defer to install action when policy allows it");
 
     assert_eq!(
@@ -267,13 +267,13 @@ fn scheduler_policy_defers_missing_dependencies_when_install_is_not_allowed() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
     );
-    let mut preflight = ready_preflight_result();
-    preflight.readiness_state =
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.readiness_state =
         pantograph_dependency_planning::DependencyEnvironmentReadinessState::Missing;
-    preflight.dependency_requirements_id = None;
-    preflight.environment_ref = None;
+    proof.preflight_result.dependency_requirements_id = None;
+    proof.preflight_result.environment_ref = None;
 
-    let decision = plan_scheduler_readiness_admission(request, Some(preflight))
+    let decision = plan_scheduler_readiness_admission(request, Some(proof))
         .expect("check-only policy should defer missing dependencies");
 
     assert_eq!(
@@ -291,13 +291,13 @@ fn scheduler_policy_marks_failed_readiness_as_retryable() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
     );
-    let mut preflight = ready_preflight_result();
-    preflight.readiness_state =
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.readiness_state =
         pantograph_dependency_planning::DependencyEnvironmentReadinessState::Failed;
-    preflight.dependency_requirements_id = None;
-    preflight.environment_ref = None;
+    proof.preflight_result.dependency_requirements_id = None;
+    proof.preflight_result.environment_ref = None;
 
-    let decision = plan_scheduler_readiness_admission(request, Some(preflight))
+    let decision = plan_scheduler_readiness_admission(request, Some(proof))
         .expect("failed readiness should produce a retryable scheduler decision");
 
     assert_eq!(
@@ -315,13 +315,13 @@ fn scheduler_policy_fails_terminal_unavailable_readiness() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::AutoInstallMissing,
     );
-    let mut preflight = ready_preflight_result();
-    preflight.readiness_state =
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.readiness_state =
         pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented;
-    preflight.dependency_requirements_id = None;
-    preflight.environment_ref = None;
+    proof.preflight_result.dependency_requirements_id = None;
+    proof.preflight_result.environment_ref = None;
 
-    let decision = plan_scheduler_readiness_admission(request, Some(preflight))
+    let decision = plan_scheduler_readiness_admission(request, Some(proof))
         .expect("not implemented readiness should fail terminally");
 
     assert_eq!(
@@ -339,10 +339,10 @@ fn scheduler_policy_fails_mismatched_readiness_proof_without_legacy_bridge() {
     let request = valid_admission_request(
         pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
     );
-    let mut preflight = ready_preflight_result();
-    preflight.identity_key.model_ref.model_id = "pumas://models/other".to_string();
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.identity_key.model_ref.model_id = "pumas://models/other".to_string();
 
-    let decision = plan_scheduler_readiness_admission(request, Some(preflight))
+    let decision = plan_scheduler_readiness_admission(request, Some(proof))
         .expect("mismatched proof should become a typed terminal decision");
 
     assert_eq!(
@@ -369,7 +369,7 @@ fn valid_admission_request(
     .expect("test admission request must validate")
 }
 
-fn ready_preflight_result() -> pantograph_dependency_planning::DependencyPreflightResult {
+fn ready_readiness_proof() -> pantograph_dependency_planning::DependencyReadinessProofEnvelope {
     let decision: SchedulerReadinessAdmissionDecision = serde_json::from_str(include_str!(
         "fixtures/readiness_admission_decision_ready.json"
     ))
@@ -377,5 +377,4 @@ fn ready_preflight_result() -> pantograph_dependency_planning::DependencyPreflig
     decision
         .readiness_proof
         .expect("ready decision fixture carries proof")
-        .preflight_result
 }

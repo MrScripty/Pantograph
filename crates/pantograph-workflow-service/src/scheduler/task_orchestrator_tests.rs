@@ -2,9 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use pantograph_dependency_planning::{
-    DependencyEnvironmentReadinessState, DependencyOverrideFingerprint, DependencyPreflightResult,
+    DependencyEnvironmentReadinessState, DependencyOverrideFingerprint,
     DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
-    DependencyReadinessPolicy, DependencyReadinessValidationSessionId, DependencyRequirementsId,
+    DependencyReadinessPolicy, DependencyReadinessProofEnvelope,
+    DependencyReadinessValidationSessionId, DependencyRequirementsId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionPort,
@@ -239,7 +240,7 @@ fn orchestrator_admits_runtime_task_after_ready_dependency_proof() {
             task_intent.workflow_run_id.as_str(),
             task_intent.task_id.as_str(),
             DependencyReadinessPolicy::CheckOnly,
-            Some(ready_preflight_result()),
+            Some(ready_readiness_proof()),
         )
         .expect("ready dependency proof should admit runtime task");
 
@@ -298,8 +299,8 @@ fn orchestrator_defers_non_ready_dependency_proof_without_legacy_bridge() {
             task_graph,
         )
         .expect("initialize active run task state");
-    let mut preflight = ready_preflight_result();
-    preflight.readiness_state = DependencyEnvironmentReadinessState::Missing;
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.readiness_state = DependencyEnvironmentReadinessState::Missing;
 
     let record = orchestrator
         .apply_runtime_dependency_readiness_admission(
@@ -308,7 +309,7 @@ fn orchestrator_defers_non_ready_dependency_proof_without_legacy_bridge() {
             task_intent.workflow_run_id.as_str(),
             task_intent.task_id.as_str(),
             DependencyReadinessPolicy::CheckOnly,
-            Some(preflight),
+            Some(proof),
         )
         .expect("non-ready dependency proof should fail through scheduler policy");
 
@@ -1189,11 +1190,8 @@ fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     .expect("runtime host request fixture")
 }
 
-fn ready_preflight_result() -> DependencyPreflightResult {
-    runtime_host_request_fixture()
-        .handoff
-        .readiness_proof
-        .preflight_result
+fn ready_readiness_proof() -> DependencyReadinessProofEnvelope {
+    runtime_host_request_fixture().handoff.readiness_proof
 }
 
 fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {

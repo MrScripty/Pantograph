@@ -134,9 +134,11 @@ impl WorkflowDependencyReadinessLifecycle {
         let preflight_result = provider
             .resolve_dependency_readiness(&request)
             .map_err(WorkflowDependencyReadinessLifecycleError::Provider)?;
-        if let Some(preflight_result) = preflight_result.as_ref() {
-            validate_preflight_result_matches_readiness_envelope(&request, preflight_result)?;
-        }
+        let readiness_proof = preflight_result
+            .map(|preflight_result| {
+                dependency_readiness_proof_from_preflight_result(&request, preflight_result)
+            })
+            .transpose()?;
         self.orchestrator
             .apply_runtime_dependency_readiness_admission(
                 store,
@@ -144,7 +146,7 @@ impl WorkflowDependencyReadinessLifecycle {
                 workflow_run_id,
                 task_id,
                 policy,
-                preflight_result,
+                readiness_proof,
             )
             .map_err(WorkflowDependencyReadinessLifecycleError::Orchestrator)
     }
@@ -400,17 +402,17 @@ fn dependency_readiness_execution_context_from_task_context(
 }
 
 #[allow(dead_code)]
-fn validate_preflight_result_matches_readiness_envelope(
+fn dependency_readiness_proof_from_preflight_result(
     request: &ValidatedDependencyReadinessRequestEnvelope,
-    result: &DependencyPreflightResult,
-) -> Result<(), WorkflowDependencyReadinessLifecycleError> {
+    result: DependencyPreflightResult,
+) -> Result<DependencyReadinessProofEnvelope, WorkflowDependencyReadinessLifecycleError> {
     let context = request.as_envelope().execution_context.clone();
     let proof_id =
         DependencyReadinessProofId::parse(format!("{}-proof", context.correlation_id.as_str()))
             .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
     let proof = DependencyReadinessProofEnvelope::new(
         context,
-        result.clone(),
+        result,
         proof_id,
         DependencyReadinessProofVersion::parse(1)
             .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
@@ -420,7 +422,8 @@ fn validate_preflight_result_matches_readiness_envelope(
     proof
         .as_envelope()
         .validate_matches_request_envelope(request)
-        .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
+        .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
+    Ok(proof.into_inner())
 }
 
 #[allow(dead_code)]

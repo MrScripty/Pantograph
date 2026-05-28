@@ -1,6 +1,7 @@
 use pantograph_dependency_planning::{
     DependencyEnvironmentReadinessState, DependencyPlanningContractError,
-    DependencyPreflightResult, DependencyReadinessPolicy, ValidatedDependencyPreflightResult,
+    DependencyReadinessPolicy, DependencyReadinessProofEnvelope,
+    ValidatedDependencyReadinessProofEnvelope,
 };
 use serde::{Deserialize, Serialize};
 
@@ -81,46 +82,6 @@ impl SchedulerReadinessAdmissionDiagnostic {
     }
 }
 
-/// Host-produced dependency readiness proof admitted by scheduler policy.
-///
-/// This wrapper intentionally carries the path-free dependency preflight
-/// result, not `ModelRefV2`, executable load targets, or local model paths.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct SchedulerDependencyReadinessProof {
-    pub preflight_result: DependencyPreflightResult,
-}
-
-impl SchedulerDependencyReadinessProof {
-    pub(crate) fn validate_for_intent(
-        &self,
-        intent: &SchedulableTaskIntent,
-    ) -> Result<(), SchedulerContractError> {
-        let _validated =
-            ValidatedDependencyPreflightResult::try_from(self.preflight_result.clone())
-                .map_err(map_dependency_error)?;
-        if self.preflight_result.readiness_state != DependencyEnvironmentReadinessState::Ready {
-            return Err(SchedulerContractError::InvalidField {
-                field: "readiness_proof.preflight_result.readiness_state",
-                reason: "ready scheduler admission requires ready dependency preflight proof",
-            });
-        }
-        if self.preflight_result.identity_key.model_ref != intent.model_ref {
-            return Err(SchedulerContractError::InvalidField {
-                field: "readiness_proof.preflight_result.identity_key.model_ref",
-                reason: "readiness proof model ref must match scheduler task intent",
-            });
-        }
-        if self.preflight_result.identity_key.task_id != intent.task_type {
-            return Err(SchedulerContractError::InvalidField {
-                field: "readiness_proof.preflight_result.identity_key.task_id",
-                reason: "readiness proof task id must match scheduler task type",
-            });
-        }
-        Ok(())
-    }
-}
-
 /// Scheduler input for dependency readiness admission.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -150,7 +111,7 @@ pub struct SchedulerReadinessAdmissionDecision {
     pub action: SchedulerReadinessAdmissionAction,
     pub state: SchedulerReadinessAdmissionState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub readiness_proof: Option<SchedulerDependencyReadinessProof>,
+    pub readiness_proof: Option<DependencyReadinessProofEnvelope>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<SchedulerReadinessAdmissionDiagnostic>,
 }
@@ -176,7 +137,7 @@ impl SchedulerReadinessAdmissionDecision {
                         field: "readiness_proof",
                     });
                 };
-                proof.validate_for_intent(&self.task_intent)
+                validate_ready_proof_for_intent(proof, &self.task_intent)
             }
             SchedulerReadinessAdmissionState::Deferred => {
                 if self.readiness_proof.is_some() {
@@ -250,10 +211,10 @@ impl SchedulerReadinessAdmissionDecision {
 /// Applies scheduler-owned dependency readiness policy to one task.
 pub fn plan_scheduler_readiness_admission(
     request: ValidatedSchedulerReadinessAdmissionRequest,
-    preflight_result: Option<DependencyPreflightResult>,
+    readiness_proof: Option<DependencyReadinessProofEnvelope>,
 ) -> Result<ValidatedSchedulerReadinessAdmissionDecision, SchedulerContractError> {
     let request = request.into_inner();
-    let decision = match preflight_result {
+    let decision = match readiness_proof {
         None => build_non_ready_decision(
             request,
             SchedulerReadinessAdmissionState::Deferred,
@@ -261,9 +222,25 @@ pub fn plan_scheduler_readiness_admission(
             SchedulerReadinessAdmissionDiagnosticCode::DependencyNotReady,
             "Dependency readiness has not been checked for this task.",
         ),
-        Some(result) => plan_from_preflight_result(request, result)?,
+        Some(proof) => plan_from_readiness_proof(request, proof)?,
     };
     ValidatedSchedulerReadinessAdmissionDecision::try_from(decision)
+}
+
+pub(crate) fn validate_ready_proof_for_intent(
+    proof: &DependencyReadinessProofEnvelope,
+    intent: &SchedulableTaskIntent,
+) -> Result<(), SchedulerContractError> {
+    let _validated = ValidatedDependencyReadinessProofEnvelope::try_from(proof.clone())
+        .map_err(map_dependency_error)?;
+    if proof.preflight_result.readiness_state != DependencyEnvironmentReadinessState::Ready {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.preflight_result.readiness_state",
+            reason: "ready scheduler admission requires ready dependency preflight proof",
+        });
+    }
+    validate_proof_identity_for_intent(proof, intent)?;
+    validate_proof_execution_context_for_intent(proof, intent)
 }
 
 /// Validated scheduler readiness admission request for internal policy.
@@ -318,15 +295,13 @@ impl TryFrom<SchedulerReadinessAdmissionDecision> for ValidatedSchedulerReadines
     }
 }
 
-fn plan_from_preflight_result(
+fn plan_from_readiness_proof(
     request: SchedulerReadinessAdmissionRequest,
-    result: DependencyPreflightResult,
+    proof: DependencyReadinessProofEnvelope,
 ) -> Result<SchedulerReadinessAdmissionDecision, SchedulerContractError> {
-    let _validated = ValidatedDependencyPreflightResult::try_from(result.clone())
+    let _validated = ValidatedDependencyReadinessProofEnvelope::try_from(proof.clone())
         .map_err(map_dependency_error)?;
-    if result.identity_key.model_ref != request.task_intent.model_ref
-        || result.identity_key.task_id != request.task_intent.task_type
-    {
+    if validate_proof_identity_for_intent(&proof, &request.task_intent).is_err() {
         return Ok(build_non_ready_decision(
             request,
             SchedulerReadinessAdmissionState::TerminalFailed,
@@ -335,17 +310,24 @@ fn plan_from_preflight_result(
             "Dependency readiness proof does not match the scheduler task intent.",
         ));
     }
+    if validate_proof_execution_context_for_intent(&proof, &request.task_intent).is_err() {
+        return Ok(build_non_ready_decision(
+            request,
+            SchedulerReadinessAdmissionState::TerminalFailed,
+            SchedulerReadinessAdmissionAction::Fail,
+            SchedulerReadinessAdmissionDiagnosticCode::StaleReadinessProof,
+            "Dependency readiness proof execution context does not match the active scheduler task.",
+        ));
+    }
 
-    match result.readiness_state {
+    match proof.preflight_result.readiness_state {
         DependencyEnvironmentReadinessState::Ready => Ok(SchedulerReadinessAdmissionDecision {
             contract_version: SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
             task_intent: request.task_intent,
             policy: request.policy,
             action: SchedulerReadinessAdmissionAction::AdmitForDispatch,
             state: SchedulerReadinessAdmissionState::Ready,
-            readiness_proof: Some(SchedulerDependencyReadinessProof {
-                preflight_result: result,
-            }),
+            readiness_proof: Some(proof),
             diagnostics: Vec::new(),
         }),
         DependencyEnvironmentReadinessState::Missing
@@ -398,6 +380,57 @@ fn plan_from_preflight_result(
             "Dependency readiness state is not supported by scheduler policy.",
         )),
     }
+}
+
+fn validate_proof_identity_for_intent(
+    proof: &DependencyReadinessProofEnvelope,
+    intent: &SchedulableTaskIntent,
+) -> Result<(), SchedulerContractError> {
+    if proof.preflight_result.identity_key.model_ref != intent.model_ref {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.preflight_result.identity_key.model_ref",
+            reason: "readiness proof model ref must match scheduler task intent",
+        });
+    }
+    if proof.preflight_result.identity_key.task_id != intent.task_type {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.preflight_result.identity_key.task_id",
+            reason: "readiness proof task id must match scheduler task type",
+        });
+    }
+    Ok(())
+}
+
+fn validate_proof_execution_context_for_intent(
+    proof: &DependencyReadinessProofEnvelope,
+    intent: &SchedulableTaskIntent,
+) -> Result<(), SchedulerContractError> {
+    let context = &proof.execution_context;
+    if context.workflow_id.as_str() != intent.workflow_id.as_str() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.execution_context.workflow_id",
+            reason: "readiness proof workflow id must match scheduler task intent",
+        });
+    }
+    if context.workflow_run_id.as_str() != intent.workflow_run_id.as_str() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.execution_context.workflow_run_id",
+            reason: "readiness proof workflow run id must match scheduler task intent",
+        });
+    }
+    if context.node_id.as_str() != intent.node_id.as_str() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.execution_context.node_id",
+            reason: "readiness proof node id must match scheduler task intent",
+        });
+    }
+    if context.scheduler_task_id.as_str() != intent.task_id.as_str() {
+        return Err(SchedulerContractError::InvalidField {
+            field: "readiness_proof.execution_context.scheduler_task_id",
+            reason: "readiness proof scheduler task id must match scheduler task intent",
+        });
+    }
+    Ok(())
 }
 
 fn build_non_ready_decision(

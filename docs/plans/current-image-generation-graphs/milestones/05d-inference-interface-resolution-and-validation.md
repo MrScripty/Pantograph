@@ -1173,13 +1173,16 @@ defining an image-only inference-node interface.
     `dependency_readiness_source`; the readiness lifecycle builds and validates
     a shared `DependencyReadinessRequestEnvelope` from that source before
     dependency-environment provider calls and scheduler readiness admission.
-  - Remaining follow-up: scheduler readiness/admission still retains ready
-    proof as the older `SchedulerDependencyReadinessProof` wrapper. Replace it
-    with the validated readiness proof envelope, or add a workflow-service
-    active-run proof store keyed by task/state identity, before runtime
-    dispatch selection is allowed to consume ready runtime tasks.
-    Frontend/Tauri publish-before-run wiring and TypeScript contract mirrors
-    remain pending slices.
+  - 2026-05-27 follow-up slice completed: scheduler readiness admission,
+    dispatch selection, dispatch decision, runtime handoff, workflow-service
+    readiness lifecycle, and runtime-host request fixtures now consume the
+    shared `DependencyReadinessProofEnvelope` directly. The older
+    scheduler-local ready-proof wrapper was removed rather than preserved as a
+    compatibility shim, and scheduler validation now checks proof execution
+    context against workflow/run/node/task identity before admitting or
+    dispatching runtime work.
+  - Remaining follow-up: Frontend/Tauri publish-before-run wiring and
+    TypeScript contract mirrors remain pending slices.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

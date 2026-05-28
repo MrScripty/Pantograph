@@ -1,4 +1,4 @@
-use pantograph_dependency_planning::{DependencyPreflightResult, DependencyReadinessPolicy};
+use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
 use pantograph_runtime_host_contracts::{RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher};
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
@@ -423,7 +423,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         workflow_run_id: &str,
         task_id: &str,
         policy: DependencyReadinessPolicy,
-        preflight_result: Option<DependencyPreflightResult>,
+        readiness_proof: Option<DependencyReadinessProofEnvelope>,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
         let (task_graph, records) = store
             .active_run_scheduler_task_state(session_id, workflow_run_id)
@@ -501,7 +501,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             request
                 .try_into()
                 .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?,
-            preflight_result,
+            readiness_proof,
         )
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
         .into_inner();
