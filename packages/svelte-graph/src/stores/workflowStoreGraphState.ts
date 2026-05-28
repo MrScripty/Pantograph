@@ -17,6 +17,7 @@ import {
   projectWorkflowGraphStoreState,
   type WorkflowGraphMaterialization,
 } from './workflowStoreMaterialization.ts';
+import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 
 export interface WorkflowStoreGraphState {
   applyWorkflowGraph: (graph: WorkflowGraph) => WorkflowGraphMaterialization;
@@ -42,9 +43,17 @@ export function createWorkflowStoreGraphState(params: {
   const structuralNodes = writable<Node[]>([]);
   const nodeRuntimeOverlays = writable<Map<string, Record<string, unknown>>>(new Map());
   const nodes = derived(
-    [structuralNodes, nodeRuntimeOverlays],
-    ([$structuralNodes, $nodeRuntimeOverlays]) =>
-      mergeNodeRuntimeOverlays($structuralNodes, $nodeRuntimeOverlays),
+    [structuralNodes, nodeRuntimeOverlays, params.nodeDefinitions],
+    ([$structuralNodes, $nodeRuntimeOverlays, $nodeDefinitions]) =>
+      mergeNodeRuntimeOverlays($structuralNodes, $nodeRuntimeOverlays).map((node) => {
+        const nodeType = node.type ?? 'unknown';
+        const definition = resolveNodeDefinitionOverlay(
+          nodeType,
+          node.data,
+          $nodeDefinitions,
+        );
+        return definition ? { ...node, data: { ...node.data, definition } } : node;
+      }),
   );
   const edges = writable<Edge[]>([]);
   const derivedGraph = writable<WorkflowGraph['derived_graph']>(undefined);

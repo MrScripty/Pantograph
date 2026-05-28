@@ -219,6 +219,9 @@ stores.setConnectionIntent({
   `node.data.inference_interface_snapshot`. Retired `node.data.definition`
   overlays are ignored for inference nodes so the graph package does not keep a
   frontend-owned inference-interface source alive.
+- Runtime overlays may carry `inference_interface_snapshot` for display while a
+  backend validation session is current. Store materialization recomputes the
+  displayed definition from that overlay but keeps it out of `workflowGraph`.
 - When an inference node is synchronized from an `inference_settings` source,
   settings promoted into that shared schema surface must not remain duplicated
   as direct static inputs in the node-visible definition.

@@ -319,6 +319,75 @@ test('createWorkflowStores keeps runtime overlays out of structural workflow gra
   assert.equal(structuralData.streamContent, undefined);
 });
 
+test('createWorkflowStores recomputes displayed inference ports from runtime snapshot overlays', () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'infer-1',
+        node_type: 'llm-inference',
+        position: { x: 0, y: 0 },
+        data: { label: 'Inference' },
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(backend, {
+    groupStack: writable<string[]>([]),
+    async tabOutOfGroup() {},
+  });
+  stores.nodeDefinitions.set([
+    {
+      node_type: 'llm-inference',
+      category: 'processing',
+      label: 'Inference',
+      description: 'Run inference',
+      io_binding_origin: 'integrated',
+      inputs: [
+        { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: true, multiple: false },
+      ],
+      outputs: [],
+      execution_mode: 'manual',
+    },
+  ]);
+
+  stores.loadWorkflow(graph);
+  stores.updateNodeRuntimeData('infer-1', {
+    inference_interface_snapshot: {
+      contract_version: 1,
+      descriptor_fingerprint: 'descriptor.image_generation.1',
+      task_kind: 'image_generation',
+      inputs: [
+        {
+          port_id: 'prompt',
+          label: 'Prompt',
+          direction: 'input',
+          requirement: 'required',
+          value_type: { category: 'scalar', kind: 'string' },
+          availability: { status: 'available' },
+        },
+      ],
+      outputs: [
+        {
+          port_id: 'image',
+          label: 'Image',
+          direction: 'output',
+          requirement: 'required',
+          value_type: { category: 'artifact', kind: 'image' },
+          availability: { status: 'available' },
+        },
+      ],
+    },
+  });
+
+  const displayedDefinition = get(stores.nodes)[0].data.definition as NodeDefinition;
+  assert.deepEqual(displayedDefinition.inputs.map((port) => port.id), ['prompt']);
+  assert.deepEqual(displayedDefinition.outputs.map((port) => port.id), ['image']);
+
+  const structuralData = (get(stores.workflowGraph) as WorkflowGraph).nodes[0].data;
+  assert.equal(structuralData.inference_interface_snapshot, undefined);
+});
+
 test('createWorkflowStores preserves backend-provided derived graph metadata', async () => {
   const graph = {
     nodes: [

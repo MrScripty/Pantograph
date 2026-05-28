@@ -1449,6 +1449,13 @@ defining an image-only inference-node interface.
       submit-gate authority.
       Verification passed: `npm run test:frontend --
       definitionOverlay.test.ts`; `npm run typecheck`; and `git diff --check`.
+      2026-05-27 follow-up slice in progress: graph store display overlays now
+      need to recompute node definitions after runtime overlays merge, so
+      validation projection snapshots can update visible inference ports without
+      writing to the persisted graph or reusing retired `node.data.definition`.
+      Verification passed: `npm run test:frontend --
+      createWorkflowStores.test.ts definitionOverlay.test.ts`; `npm run
+      typecheck`; and `git diff --check`.
 - [ ] Ensure runtime/device constraints narrow interface validation without
       becoming scheduler decisions. Explicit invalid constraints block enqueue
       and may include typed advisory alternatives when they can be computed

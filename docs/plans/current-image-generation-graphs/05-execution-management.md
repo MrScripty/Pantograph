@@ -14357,6 +14357,22 @@ Worker rules:
     inference-node ports in the graph package.
   - Verification passed: `npm run test:frontend -- definitionOverlay.test.ts`;
     `npm run typecheck`; and `git diff --check`.
+- 2026-05-27 Milestone 5d runtime projection display overlay slice:
+  - Smallest useful vertical slice: recompute displayed node definitions after
+    runtime overlays merge so backend validation projections can carry
+    `inference_interface_snapshot` for visible ports without changing the
+    persisted workflow graph.
+  - Allowed files touched:
+    `packages/svelte-graph/src/stores/workflowStoreGraphState.ts`,
+    `packages/svelte-graph/src/stores/createWorkflowStores.test.ts`,
+    svelte-graph stores README, this milestone, and this execution log.
+  - No-fallback/no-legacy result: validation projection overlays can update
+    displayed inference ports from authored snapshots while `workflowGraph`
+    remains structural and path-free. This avoids reviving
+    `node.data.definition` as an inference source and avoids dirtying the graph
+    just to display backend validation results.
+  - Verification passed: `npm run test:frontend -- createWorkflowStores.test.ts
+    definitionOverlay.test.ts`; `npm run typecheck`; and `git diff --check`.
 
 ### Traceability Links
 
