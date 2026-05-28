@@ -1456,6 +1456,13 @@ defining an image-only inference-node interface.
       Verification passed: `npm run test:frontend --
       createWorkflowStores.test.ts definitionOverlay.test.ts`; `npm run
       typecheck`; and `git diff --check`.
+      2026-05-27 follow-up slice in progress: toolbar validation refresh should
+      consume backend `node_projections` by projecting authored snapshots into
+      display-only runtime overlays. Submit state must still come only from the
+      backend summary/gate.
+      Verification passed: `npm run test:frontend --
+      workflowValidationProjectionOverlays.test.ts workflowToolbarEvents.test.ts`;
+      `npm run typecheck`; and `git diff --check`.
 - [ ] Ensure runtime/device constraints narrow interface validation without
       becoming scheduler decisions. Explicit invalid constraints block enqueue
       and may include typed advisory alternatives when they can be computed

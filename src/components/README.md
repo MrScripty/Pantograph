@@ -71,6 +71,9 @@ as the package graph so GUI behavior and backend validation stay aligned.
   dependency proof, Pumas readiness, runtime, or scheduler eligibility locally.
   Descriptor/authored-port projection data returned by validation refresh is
   display data only; it must not become a second frontend submit policy.
+- Validation refresh may project authored inference snapshots into node runtime
+  overlays so the graph can display descriptor-backed ports without mutating the
+  persisted workflow graph or reviving `node.data.definition` inference ports.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.

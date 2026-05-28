@@ -44,6 +44,10 @@
     nextWorkflowPatchSemanticVersion,
     workflowSubmitDisabledReason,
   } from './workflowToolbarEvents';
+  import {
+    INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY,
+    workflowValidationProjectionOverlays,
+  } from './workflowValidationProjectionOverlays';
 
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
   const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
@@ -140,10 +144,14 @@
     if ($currentGraphType !== 'workflow' || !graphSessionId || !graphRevision || $isDirty) {
       currentValidationSummary = null;
       currentValidationSummaryKey = null;
+      clearNodeRuntimeData([INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]);
       return;
     }
 
     const requestKey = `${graphSessionId}:${graphRevision}`;
+    if (currentValidationSummaryKey !== requestKey) {
+      clearNodeRuntimeData([INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]);
+    }
     currentValidationSummaryKey = requestKey;
     let cancelled = false;
 
@@ -155,6 +163,11 @@
       .then((refresh) => {
         if (!cancelled && currentValidationSummaryKey === requestKey) {
           currentValidationSummary = refresh.summary;
+          for (const overlay of workflowValidationProjectionOverlays(
+            refresh.node_projections ?? [],
+          )) {
+            updateNodeRuntimeData(overlay.nodeId, overlay.data);
+          }
         }
       })
       .catch(() => {

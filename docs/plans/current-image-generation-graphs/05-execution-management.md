@@ -14373,6 +14373,22 @@ Worker rules:
     just to display backend validation results.
   - Verification passed: `npm run test:frontend -- createWorkflowStores.test.ts
     definitionOverlay.test.ts`; `npm run typecheck`; and `git diff --check`.
+- 2026-05-27 Milestone 5d validation refresh display wiring slice:
+  - Smallest useful vertical slice: consume backend validation refresh
+    `node_projections` in the toolbar by projecting each authored snapshot into
+    node runtime overlay data, while continuing to take Submit state only from
+    `response.summary.submit_gate`.
+  - Allowed files touched: `src/components/WorkflowToolbar.svelte`,
+    `src/components/workflowValidationProjectionOverlays.ts`,
+    `src/components/workflowValidationProjectionOverlays.test.ts`,
+    components README, this milestone, and this execution log.
+  - No-fallback/no-legacy result: graph-editor display can now show
+    descriptor-backed authored ports from workflow-service validation refresh
+    without mutating the persisted graph, resolving descriptors in frontend, or
+    reusing retired inference `definition` overlays as an authority.
+  - Verification passed: `npm run test:frontend --
+    workflowValidationProjectionOverlays.test.ts workflowToolbarEvents.test.ts`;
+    `npm run typecheck`; and `git diff --check`.
 
 ### Traceability Links
 
