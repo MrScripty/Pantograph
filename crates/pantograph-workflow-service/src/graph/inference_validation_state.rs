@@ -413,7 +413,10 @@ impl CurrentInferenceValidationStateStore {
 
         let mut projections = Vec::with_capacity(record.nodes.len());
         for node in record.nodes.values() {
-            projections.push(node.scheduler_inference_task_projection()?);
+            projections.push(node.scheduler_inference_task_projection(
+                &key.graph_revision,
+                &record.validation_session_id,
+            )?);
         }
         WorkflowSchedulerInferenceTaskProjections::from_records(projections).map_err(|error| {
             CurrentInferenceSchedulerProjectionError::InvalidProjection {
@@ -802,6 +805,8 @@ impl CurrentInferenceValidationNodeRecord {
 
     fn scheduler_inference_task_projection(
         &self,
+        graph_revision: &WorkflowGraphRevision,
+        validation_session_id: &DraftGraphValidationSessionId,
     ) -> Result<WorkflowSchedulerInferenceTaskProjection, CurrentInferenceSchedulerProjectionError>
     {
         if !self.has_dependency_basis() {
@@ -817,6 +822,14 @@ impl CurrentInferenceValidationNodeRecord {
         if self.validation_status == DraftGraphValidationStatus::Executable
             && self.availability_status == InferenceAvailabilityStatus::Available
         {
+            let dependency_requirements_proof = self
+                .current_dependency_requirements_proof(graph_revision, validation_session_id)
+                .map_err(
+                    |error| CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
+                        node_id: self.node_id.clone(),
+                        message: format!("dependency requirements proof is not current: {error:?}"),
+                    },
+                )?;
             return Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
                 WorkflowSchedulerReadyInferenceTaskProjection {
                     node_id: pantograph_scheduler::SchedulerNodeId::parse(self.node_id.as_str())
@@ -840,6 +853,15 @@ impl CurrentInferenceValidationNodeRecord {
                     },
                     trait_settings: Vec::new(),
                     estimate_hints: Vec::new(),
+                    dependency_requirements_id: dependency_requirements_proof
+                        .dependency_requirements_id
+                        .clone(),
+                    selected_binding_ids: dependency_requirements_proof
+                        .selected_binding_ids
+                        .clone(),
+                    dependency_override_fingerprint: dependency_requirements_proof
+                        .dependency_override_fingerprint
+                        .clone(),
                 },
             ));
         }
@@ -1681,6 +1703,17 @@ mod tests {
             )
             .await
             .expect("record publication");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Current,
+            ))
+            .await
+            .expect("record proof");
 
         let error = store
             .scheduler_inference_task_projections(scheduler_projection_request(
@@ -1745,6 +1778,17 @@ mod tests {
             )
             .await
             .expect("record publication");
+        store
+            .record_dependency_requirements_proof(proof_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "infer",
+                "requirements.image_generation.cuda0",
+                CurrentDependencyRequirementsProofStatus::Current,
+            ))
+            .await
+            .expect("record proof");
 
         let projections = store
             .scheduler_inference_task_projections(scheduler_projection_request(
@@ -1775,6 +1819,11 @@ mod tests {
                 .map(|runtime| runtime.as_str()),
             Some("pytorch")
         );
+        assert_eq!(
+            projection.dependency_requirements_id.as_str(),
+            "requirements.image_generation.cuda0"
+        );
+        assert_eq!(projection.selected_binding_ids.len(), 1);
     }
 
     #[tokio::test]

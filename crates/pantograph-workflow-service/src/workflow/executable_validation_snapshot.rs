@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
+use pantograph_dependency_planning::{
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, DependencyTaskId,
+    PumasModelRef,
+};
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
     InferenceAvailabilityStatus, InferenceDiagnosticSeverity, InferenceInterfaceDiagnostic,
@@ -27,11 +30,12 @@ use super::task_graph::{
     WorkflowSchedulerReadyInferenceTaskProjection,
 };
 use crate::graph::{
+    CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
     InferenceInterfaceNodeProjectionRecord, WorkflowGraph,
     WorkflowGraphInferenceValidationPublication,
 };
 
-pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION: u16 = 1;
+pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION: u16 = 2;
 pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_NODES: usize = 512;
 pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_DIAGNOSTICS_PER_NODE: usize = 64;
 pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_TRAIT_SETTINGS_PER_NODE: usize = 128;
@@ -144,6 +148,18 @@ pub struct WorkflowExecutableValidationSnapshotPublishRequest {
     pub validation_snapshot_id: Option<WorkflowExecutableValidationSnapshotId>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+    pub workflow_id: String,
+    pub workflow_semantic_version: String,
+    pub graph_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_snapshot_id: Option<WorkflowExecutableValidationSnapshotId>,
+}
+
 impl WorkflowExecutableValidationSnapshotLookupRequest {
     pub fn validate(&self) -> Result<(), WorkflowExecutableValidationSnapshotError> {
         validate_text(
@@ -174,14 +190,22 @@ pub struct WorkflowExecutableValidationSnapshotRecord {
 
 impl WorkflowExecutableValidationSnapshotRecord {
     pub fn from_validation_publication(
+        _workflow_version: &WorkflowVersionRecord,
+        _validation_snapshot_id: WorkflowExecutableValidationSnapshotId,
+        _publication: &WorkflowGraphInferenceValidationPublication,
+    ) -> Result<Self, WorkflowExecutableValidationSnapshotError> {
+        Err(WorkflowExecutableValidationSnapshotError::MissingDependencyProof)
+    }
+
+    pub(crate) fn from_snapshot_source(
         workflow_version: &WorkflowVersionRecord,
         validation_snapshot_id: WorkflowExecutableValidationSnapshotId,
-        publication: &WorkflowGraphInferenceValidationPublication,
+        source: &CurrentExecutableValidationSnapshotSource,
     ) -> Result<Self, WorkflowExecutableValidationSnapshotError> {
-        let nodes = publication
-            .node_projections
+        let nodes = source
+            .nodes
             .iter()
-            .map(WorkflowExecutableValidationSnapshotNode::from_projection_record)
+            .map(WorkflowExecutableValidationSnapshotNode::from_snapshot_source)
             .collect::<Result<Vec<_>, _>>()?;
         let snapshot = Self {
             schema_version: WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION,
@@ -191,9 +215,9 @@ impl WorkflowExecutableValidationSnapshotRecord {
             workflow_semantic_version: workflow_version.semantic_version.clone(),
             workflow_execution_fingerprint: workflow_version.execution_fingerprint.clone(),
             descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
-            graph_revision: publication.validation_session.graph_revision.clone(),
-            validation_session_id: publication.validation_session.validation_session_id.clone(),
-            validation_summary: publication.validation_session.summary.clone(),
+            graph_revision: source.graph_revision.clone(),
+            validation_session_id: source.validation_session_id.clone(),
+            validation_summary: source.validation_summary.clone(),
             nodes,
         };
         snapshot.validate()?;
@@ -295,6 +319,10 @@ pub struct WorkflowExecutableValidationSnapshotNode {
     pub trait_settings: Vec<SchedulerTraitSetting>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub estimate_hints: Vec<SchedulerEstimateHint>,
+    pub dependency_requirements_id: DependencyRequirementsId,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_binding_ids: Vec<DependencyBindingId>,
+    pub dependency_override_fingerprint: DependencyOverrideFingerprint,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocking_diagnostics: Vec<WorkflowExecutableValidationSnapshotDiagnostic>,
 }
@@ -302,6 +330,9 @@ pub struct WorkflowExecutableValidationSnapshotNode {
 impl WorkflowExecutableValidationSnapshotNode {
     fn from_projection_record(
         record: &InferenceInterfaceNodeProjectionRecord,
+        dependency_requirements_id: DependencyRequirementsId,
+        selected_binding_ids: Vec<DependencyBindingId>,
+        dependency_override_fingerprint: DependencyOverrideFingerprint,
     ) -> Result<Self, WorkflowExecutableValidationSnapshotError> {
         record.descriptor.validate().map_err(|error| {
             WorkflowExecutableValidationSnapshotError::InvalidDescriptor {
@@ -328,12 +359,35 @@ impl WorkflowExecutableValidationSnapshotNode {
             validation_status: record.validation_summary.status,
             trait_settings: Vec::new(),
             estimate_hints: Vec::new(),
+            dependency_requirements_id,
+            selected_binding_ids,
+            dependency_override_fingerprint,
             blocking_diagnostics: snapshot_diagnostics_from_descriptor(
                 &record.descriptor.diagnostics,
             ),
         };
         node.validate()?;
         Ok(node)
+    }
+
+    fn from_snapshot_source(
+        source: &CurrentExecutableValidationSnapshotNodeSource,
+    ) -> Result<Self, WorkflowExecutableValidationSnapshotError> {
+        Self::from_projection_record(
+            &source.projection,
+            source
+                .dependency_requirements_proof
+                .dependency_requirements_id
+                .clone(),
+            source
+                .dependency_requirements_proof
+                .selected_binding_ids
+                .clone(),
+            source
+                .dependency_requirements_proof
+                .dependency_override_fingerprint
+                .clone(),
+        )
     }
 
     pub fn validate(&self) -> Result<(), WorkflowExecutableValidationSnapshotError> {
@@ -361,6 +415,7 @@ impl WorkflowExecutableValidationSnapshotNode {
         for diagnostic in &self.blocking_diagnostics {
             diagnostic.validate()?;
         }
+        validate_unique_binding_ids(&self.node_id, &self.selected_binding_ids)?;
         if self.validation_status != DraftGraphValidationStatus::Executable {
             return Err(
                 WorkflowExecutableValidationSnapshotError::NonExecutableNode {
@@ -404,6 +459,9 @@ impl WorkflowExecutableValidationSnapshotNode {
                 constraints: self.constraints.clone(),
                 trait_settings: self.trait_settings.clone(),
                 estimate_hints: self.estimate_hints.clone(),
+                dependency_requirements_id: self.dependency_requirements_id.clone(),
+                selected_binding_ids: self.selected_binding_ids.clone(),
+                dependency_override_fingerprint: self.dependency_override_fingerprint.clone(),
             },
         ))
     }
@@ -714,6 +772,87 @@ pub enum WorkflowExecutableValidationSnapshotError {
         field: &'static str,
         workflow_version_id: WorkflowVersionId,
     },
+    #[error("executable validation snapshot publication is missing dependency proof freshness")]
+    MissingDependencyProof,
+    #[error("node '{node_id}' has duplicate selected dependency binding '{binding_id}'")]
+    DuplicateSelectedBinding {
+        node_id: WorkflowNodeId,
+        binding_id: DependencyBindingId,
+    },
+    #[error("executable validation snapshot dependency proof changed for workflow version '{workflow_version_id}'")]
+    DependencyProofFreshnessMismatch {
+        workflow_version_id: WorkflowVersionId,
+        node_id: WorkflowNodeId,
+    },
+    #[error("executable validation snapshot freshness field '{field}' changed for workflow version '{workflow_version_id}'")]
+    SnapshotFreshnessMismatch {
+        workflow_version_id: WorkflowVersionId,
+        field: &'static str,
+    },
+}
+
+impl WorkflowExecutableValidationSnapshotRecord {
+    pub fn validate_dependency_proof_freshness_matches(
+        &self,
+        existing: &Self,
+    ) -> Result<(), WorkflowExecutableValidationSnapshotError> {
+        if self.graph_revision != existing.graph_revision {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::SnapshotFreshnessMismatch {
+                    workflow_version_id: self.workflow_version_id.clone(),
+                    field: "graph_revision",
+                },
+            );
+        }
+        if self.validation_session_id != existing.validation_session_id {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::SnapshotFreshnessMismatch {
+                    workflow_version_id: self.workflow_version_id.clone(),
+                    field: "validation_session_id",
+                },
+            );
+        }
+        if self.nodes.len() != existing.nodes.len() {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::SnapshotFreshnessMismatch {
+                    workflow_version_id: self.workflow_version_id.clone(),
+                    field: "nodes",
+                },
+            );
+        }
+        let existing_by_node = existing
+            .nodes
+            .iter()
+            .map(|node| (&node.node_id, node))
+            .collect::<BTreeMap<_, _>>();
+        for node in &self.nodes {
+            let Some(existing_node) = existing_by_node.get(&node.node_id) else {
+                return Err(
+                    WorkflowExecutableValidationSnapshotError::DependencyProofFreshnessMismatch {
+                        workflow_version_id: self.workflow_version_id.clone(),
+                        node_id: node.node_id.clone(),
+                    },
+                );
+            };
+            if node.descriptor_fingerprint != existing_node.descriptor_fingerprint
+                || node.model_ref != existing_node.model_ref
+                || node.task_kind != existing_node.task_kind
+                || node.constraints != existing_node.constraints
+                || node.dependency_requirements_id != existing_node.dependency_requirements_id
+                || node.selected_binding_ids != existing_node.selected_binding_ids
+                || node.dependency_override_fingerprint
+                    != existing_node.dependency_override_fingerprint
+            {
+                return Err(
+                    WorkflowExecutableValidationSnapshotError::DependencyProofFreshnessMismatch {
+                        workflow_version_id: self.workflow_version_id.clone(),
+                        node_id: node.node_id.clone(),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 fn validate_attribution_metadata(
@@ -845,6 +984,24 @@ fn validate_collection_len(
     Ok(())
 }
 
+fn validate_unique_binding_ids(
+    node_id: &WorkflowNodeId,
+    binding_ids: &[DependencyBindingId],
+) -> Result<(), WorkflowExecutableValidationSnapshotError> {
+    let mut seen = BTreeSet::new();
+    for binding_id in binding_ids {
+        if !seen.insert(binding_id.clone()) {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::DuplicateSelectedBinding {
+                    node_id: node_id.clone(),
+                    binding_id: binding_id.clone(),
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
 fn snapshot_diagnostics_from_descriptor(
     diagnostics: &[InferenceInterfaceDiagnostic],
 ) -> Vec<WorkflowExecutableValidationSnapshotDiagnostic> {
@@ -863,7 +1020,10 @@ fn snapshot_diagnostics_from_descriptor(
 
 #[cfg(test)]
 mod tests {
-    use pantograph_dependency_planning::{DeviceIntentId, RuntimeIntentId};
+    use pantograph_dependency_planning::{
+        DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId,
+        DeviceIntentId, RuntimeIntentId,
+    };
     use pantograph_inference_interface_contracts::{
         AuthoredInferenceInterfaceSnapshot, DraftGraphEnqueueDisabledReason, InferenceAvailability,
         InferenceInterfaceDescriptor,
@@ -875,6 +1035,8 @@ mod tests {
     };
 
     use crate::graph::{
+        CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofStatus,
+        CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
         InferenceInterfaceNodeProjectionRecord, WorkflowGraphInferenceValidationPublication,
         WorkflowGraphInferenceValidationSession,
     };
@@ -882,7 +1044,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compacts_validation_publication_into_executable_snapshot() {
+    fn validation_publication_without_dependency_proof_fails_closed() {
         let workflow_version = workflow_version_fixture();
         let publication = publication_fixture();
         let snapshot_id = WorkflowExecutableValidationSnapshotId::parse(
@@ -890,12 +1052,34 @@ mod tests {
         )
         .expect("valid snapshot id");
 
-        let snapshot = WorkflowExecutableValidationSnapshotRecord::from_validation_publication(
+        let error = WorkflowExecutableValidationSnapshotRecord::from_validation_publication(
             &workflow_version,
             snapshot_id.clone(),
             &publication,
         )
-        .expect("publication should compact to snapshot");
+        .expect_err("caller-supplied publication must not build runtime snapshot");
+
+        assert!(matches!(
+            error,
+            WorkflowExecutableValidationSnapshotError::MissingDependencyProof
+        ));
+    }
+
+    #[test]
+    fn compacts_graph_session_snapshot_source_with_dependency_proof() {
+        let workflow_version = workflow_version_fixture();
+        let source = snapshot_source_fixture();
+        let snapshot_id = WorkflowExecutableValidationSnapshotId::parse(
+            "wfvalsnap_00000000-0000-4000-8000-000000000002",
+        )
+        .expect("valid snapshot id");
+
+        let snapshot = WorkflowExecutableValidationSnapshotRecord::from_snapshot_source(
+            &workflow_version,
+            snapshot_id.clone(),
+            &source,
+        )
+        .expect("source should compact to snapshot");
 
         assert_eq!(snapshot.validation_snapshot_id, snapshot_id);
         assert_eq!(
@@ -906,10 +1090,7 @@ mod tests {
             snapshot.workflow_execution_fingerprint,
             workflow_version.execution_fingerprint
         );
-        assert_eq!(
-            snapshot.graph_revision,
-            publication.validation_session.graph_revision
-        );
+        assert_eq!(snapshot.graph_revision, source.graph_revision);
         assert_eq!(
             snapshot.validation_summary.status,
             DraftGraphValidationStatus::Executable
@@ -918,15 +1099,10 @@ mod tests {
         assert_eq!(snapshot.nodes[0].node_id.as_str(), "infer_node");
         assert_eq!(snapshot.nodes[0].task_kind.as_str(), "image_generation");
         assert_eq!(
-            snapshot.nodes[0]
-                .constraints
-                .requested_runtime_id
-                .as_ref()
-                .map(|id| id.as_str()),
-            Some("pytorch")
+            snapshot.nodes[0].dependency_requirements_id.as_str(),
+            "requirements.image_generation.cuda0"
         );
-        assert!(snapshot.nodes[0].trait_settings.is_empty());
-        assert!(snapshot.nodes[0].estimate_hints.is_empty());
+        assert_eq!(snapshot.nodes[0].selected_binding_ids.len(), 1);
     }
 
     #[test]
@@ -956,6 +1132,11 @@ mod tests {
                 );
                 assert_eq!(ready.trait_settings.len(), 1);
                 assert_eq!(ready.estimate_hints.len(), 1);
+                assert_eq!(
+                    ready.dependency_requirements_id.as_str(),
+                    "requirements.image_generation.cuda0"
+                );
+                assert_eq!(ready.selected_binding_ids.len(), 1);
             }
             WorkflowSchedulerInferenceTaskProjection::Blocked(_) => {
                 panic!("executable snapshot must produce ready projection")
@@ -963,6 +1144,24 @@ mod tests {
         }
 
         assert_eq!(validated.as_record(), &snapshot);
+    }
+
+    #[test]
+    fn rejects_changed_dependency_proof_freshness_for_existing_snapshot() {
+        let existing = snapshot_fixture();
+        let mut changed = existing.clone();
+        changed.nodes[0].dependency_requirements_id =
+            DependencyRequirementsId::parse("requirements.image_generation.cuda1")
+                .expect("valid requirements id");
+
+        let error = changed
+            .validate_dependency_proof_freshness_matches(&existing)
+            .expect_err("changed proof freshness must fail closed");
+
+        assert!(matches!(
+            error,
+            WorkflowExecutableValidationSnapshotError::DependencyProofFreshnessMismatch { .. }
+        ));
     }
 
     #[test]
@@ -1108,6 +1307,17 @@ mod tests {
                     kind: SchedulerEstimateHintKind::PeakVramBytes,
                     value: 4_294_967_296,
                 }],
+                dependency_requirements_id: DependencyRequirementsId::parse(
+                    "requirements.image_generation.cuda0",
+                )
+                .expect("valid requirements id"),
+                selected_binding_ids: vec![
+                    DependencyBindingId::parse("torch-diffusers").expect("valid binding id")
+                ],
+                dependency_override_fingerprint: DependencyOverrideFingerprint::parse(
+                    "override.none",
+                )
+                .expect("valid override fingerprint"),
                 blocking_diagnostics: Vec::new(),
             }],
         }
@@ -1127,6 +1337,49 @@ mod tests {
             execution_fingerprint: "workflow-fingerprint".to_string(),
             executable_topology_json: "{}".to_string(),
             created_at_ms: 1,
+        }
+    }
+
+    fn snapshot_source_fixture() -> CurrentExecutableValidationSnapshotSource {
+        let publication = publication_fixture();
+        let validation_session = publication.validation_session;
+        let projection = publication
+            .node_projections
+            .into_iter()
+            .next()
+            .expect("projection");
+        CurrentExecutableValidationSnapshotSource {
+            graph_session_id: "graph-session-1".parse().expect("valid graph session id"),
+            graph_revision: validation_session.graph_revision.clone(),
+            validation_session_id: validation_session.validation_session_id.clone(),
+            validation_summary: validation_session.summary,
+            nodes: vec![CurrentExecutableValidationSnapshotNodeSource {
+                dependency_requirements_proof: CurrentDependencyRequirementsProof {
+                    inference_node_id: projection.node_id.clone(),
+                    graph_revision: validation_session.graph_revision,
+                    validation_session_id: validation_session.validation_session_id,
+                    descriptor_fingerprint: projection.descriptor.descriptor_fingerprint.clone(),
+                    pumas_model_ref: projection.descriptor.model_ref.clone(),
+                    task_kind: projection.descriptor.task_kind.clone(),
+                    runtime_constraint: projection.runtime_constraint.clone(),
+                    device_constraint: projection.device_constraint.clone(),
+                    trait_constraints: Vec::new(),
+                    dependency_requirements_id: DependencyRequirementsId::parse(
+                        "requirements.image_generation.cuda0",
+                    )
+                    .expect("valid requirements id"),
+                    selected_binding_ids: vec![
+                        DependencyBindingId::parse("torch-diffusers").expect("valid binding id")
+                    ],
+                    dependency_override_fingerprint: DependencyOverrideFingerprint::parse(
+                        "override.none",
+                    )
+                    .expect("valid override fingerprint"),
+                    status: CurrentDependencyRequirementsProofStatus::Current,
+                    diagnostics: Vec::new(),
+                },
+                projection,
+            }],
         }
     }
 

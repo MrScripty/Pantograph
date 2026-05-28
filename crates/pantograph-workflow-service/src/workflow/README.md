@@ -12,11 +12,12 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `artifact_api.rs` | WorkflowService ArtifactStore facade methods for descriptor lookup, binary body reads, consume acknowledgement, policy updates, cleanup, and stats. |
-| `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
+| `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version, presentation-revision, and proof-aware executable validation snapshot publication against the durable attribution store. |
 | `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, format-default, and conversion-attribution DTOs for binary-safe media payload handling. |
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `diagnostic_errors.rs` | Typed workflow error phase registry, scoped diagnostics recorder API, and durable error-event append helpers. |
+| `executable_validation_snapshot.rs` | Durable executable validation snapshot contract, proof freshness validation, attribution-store compaction, and scheduler inference projection helpers. |
 | `execution_plan.rs` | Run-scoped workflow execution-plan DTOs produced by scheduler admission and consumed through embedded-runtime projection. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
@@ -71,6 +72,11 @@ service configuration methods, diagnostics projection and audit helpers,
 workflow run execution, workflow I/O derivation, runtime readiness,
 session-runtime workflows, run-scoped execution-plan contracts, and the root
 facade test module.
+Runtime executable validation snapshots are published from backend-owned graph
+session validation state. The old caller-supplied publication DTO remains only
+as a fail-closed boundary for runtime-containing publications; it must not
+successfully assemble inference snapshots without current dependency proof
+freshness.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -192,6 +198,15 @@ facade test module.
   version/run snapshot and emits a `run.snapshot_accepted` event with the node
   behavior-version set and workflow execution-session id before handing the
   run to scheduler admission.
+- Executable validation snapshots persist path-free dependency requirements
+  freshness for each runtime inference node: requirements id, selected binding
+  ids, override fingerprint, descriptor fingerprint, graph revision, validation
+  session id, model ref, task kind, and runtime/device constraints. Queue
+  admission must consume this durable snapshot rather than live draft graph
+  state, frontend/Tauri state, or caller-supplied validation publications.
+- Publishing a second executable validation snapshot for the same workflow
+  version must reject changed dependency proof freshness instead of silently
+  overwriting the durable snapshot.
 - Session run I/O artifact events use diagnostics-ledger typed artifact roles
   for workflow inputs and outputs. Workflow-service should pass role enums to
   the ledger and use string labels only for deterministic artifact ids.

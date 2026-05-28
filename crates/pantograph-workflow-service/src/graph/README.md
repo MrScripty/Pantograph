@@ -18,6 +18,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `effective_definition_tests.rs` | Effective-definition tests for dynamic overlays, inference authored snapshots, and no-fallback inference definition rejection. |
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
+| `executable_validation_snapshot_source.rs` | Current graph-session executable snapshot source read model that joins current validation projections with current dependency proof freshness before durable workflow snapshot publication. |
 | `presentation_revision.rs` | Canonical display-metadata projection and BLAKE3 presentation fingerprint calculation for historic graph presentation revisions. |
 | `run_settings.rs` | Canonical node settings projection used by immutable workflow-run audit snapshots. |
 | `contract_validation.rs` | Whole-graph contract validation and structured stale graph diagnostic classification. |
@@ -35,7 +36,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_resolver.rs` | Synchronous facts-in descriptor resolver boundary that combines path-free Pumas model state, inference capability facts, runtime availability, and graph-authored constraints into typed inference descriptors. |
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
 | `dependency_environment_subject.rs` | Workflow-service-owned dependency-environment action subject resolver for typed sidecar associations between dependency-environment control nodes and inference nodes. |
-| `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks and dependency-environment action diagnostics. |
+| `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks, dependency-environment action diagnostics, and proof-aware scheduler/executable snapshot projections. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -86,6 +87,11 @@ to match the stored dependency requirements proof. Workflow-service then passes
 the validated request to the canonical dependency-environment service outside
 the graph/session lock; the graph action response remains an intent response
 while full dependency-environment results stay backend-owned.
+Graph-session executable validation snapshot publication consumes the current
+validation-state read model rather than caller-supplied publications. That
+read model must include current path-free dependency requirements proof
+freshness for each executable inference node before workflow-service may
+persist a runtime-admissible executable snapshot.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.
@@ -213,6 +219,10 @@ while full dependency-environment results stay backend-owned.
   inference capability facts, and runtime availability facts. The resolver
   assembles descriptors and typed unavailable diagnostics without guessing from
   names, paths, package facts, or runtime-host payloads.
+- Scheduler inference projections and executable snapshot source projections
+  require current dependency requirements proof for executable inference
+  nodes. Missing, stale, unavailable, or invalid proof is a typed validation
+  state failure, not a best-effort scheduler projection.
 - Draft graph inference-interface request extraction accepts only canonical
   `pumas_model_ref` values from a connected source node or the inference node's
   own typed input value. It must not inspect `model_ref`, `model_path`, package

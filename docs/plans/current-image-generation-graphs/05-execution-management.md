@@ -14008,6 +14008,49 @@ Worker rules:
   - Follow-up: remove temporary `dead_code` allowances for the snapshot source
     read model when the graph-session executable publish command consumes it in
     the next slice.
+- 2026-05-27 Milestone 5d graph-session executable snapshot proof promotion
+  slice:
+  - Smallest useful vertical slice: combined the required executable snapshot
+    schema extension, graph-session-owned publish command, and fail-closed
+    caller-supplied runtime publication restriction. This resolved the
+    re-plan boundary where optional proof fields would have preserved a legacy
+    path and required proof fields without a publisher would have created a
+    broken intermediate state.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow/attribution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/task_graph.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`, focused
+    workflow-service tests, and Milestone 5d plan/status docs.
+  - No-fallback/no-legacy result: executable snapshots require path-free
+    dependency proof freshness fields, scheduler inference projections from
+    current validation state require current dependency proof, and
+    caller-supplied runtime validation publications now fail closed instead of
+    building snapshots from reduced projection data.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    check -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service executable_validation_snapshot
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    inference_validation_state --lib -- --nocapture`; `cargo test -p
+    pantograph-workflow-service task_graph --lib -- --nocapture`; and `cargo
+    test -p pantograph-workflow-service task_binding_resolution --lib --
+    --nocapture`; `cargo test -p pantograph-workflow-service workflow_version
+    --lib -- --nocapture`; `git diff --check`; and targeted source search over
+    changed workflow-service source/test files for `ModelDependencyRequest`,
+    `ModelRefV2`, `modelPath`, `model_path`, `local_load_path`,
+    `load_target`, `selected_artifact_path`, `package_facts`, and
+    `runtime_load_target`. Search matches are existing path-sanitization/test
+    assertions and `PumasModelRef.selected_artifact_path: None` fixture
+    values. Existing warning: `set_active_run_execution_plan` remains a
+    pre-existing unused store method.
+  - Remaining follow-up: queue admission must consume the saved executable
+    snapshot proof freshness to build the dependency readiness execution
+    context/envelope. Frontend/Tauri publish-before-run wiring and TypeScript
+    contract mirrors remain pending.
 
 ### Traceability Links
 

@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
+use pantograph_dependency_planning::{
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, DependencyTaskId,
+    PumasModelRef,
+};
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_node_contracts::NodeTypeContract;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -83,6 +86,9 @@ pub struct WorkflowSchedulerReadyInferenceTaskProjection {
     pub constraints: SchedulerRuntimeDeviceConstraints,
     pub trait_settings: Vec<SchedulerTraitSetting>,
     pub estimate_hints: Vec<SchedulerEstimateHint>,
+    pub dependency_requirements_id: DependencyRequirementsId,
+    pub selected_binding_ids: Vec<DependencyBindingId>,
+    pub dependency_override_fingerprint: DependencyOverrideFingerprint,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

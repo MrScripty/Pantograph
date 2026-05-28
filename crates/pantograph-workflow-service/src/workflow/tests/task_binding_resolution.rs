@@ -1,4 +1,7 @@
-use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef, RuntimeIntentId};
+use pantograph_dependency_planning::{
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, DependencyTaskId,
+    PumasModelRef, RuntimeIntentId,
+};
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{SchedulerNodeId, SchedulerRuntimeDeviceConstraints};
@@ -40,6 +43,17 @@ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
                 },
                 trait_settings: Vec::new(),
                 estimate_hints: Vec::new(),
+                dependency_requirements_id: DependencyRequirementsId::parse(
+                    "requirements.image_generation.cuda0",
+                )
+                .expect("requirements id"),
+                selected_binding_ids: vec![
+                    DependencyBindingId::parse("torch-diffusers").expect("binding id")
+                ],
+                dependency_override_fingerprint: DependencyOverrideFingerprint::parse(
+                    "override.none",
+                )
+                .expect("override fingerprint"),
             },
         ),
     ])

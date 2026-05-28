@@ -1111,10 +1111,67 @@ defining an image-only inference-node interface.
     Search matches are existing path-sanitization/test assertions. Existing
     warning: `set_active_run_execution_plan` remains a pre-existing unused
     store method.
-  - Deviation/follow-up: the new read model is intentionally marked
-    `dead_code` until the graph-session executable publish command consumes it
-    in the next slice. Remove those temporary allowances when the consumer is
-    wired.
+  - Follow-up completed by the next slice: the graph-session executable publish
+    command now consumes this read model, so the temporary module-level
+    `dead_code` allowance was removed.
+- [x] 2026-05-27 graph-session executable snapshot proof promotion slice:
+  - Smallest useful vertical slice: combined the required snapshot contract
+    extension with graph-session-owned executable snapshot publication and
+    fail-closed rejection of caller-supplied runtime publications. This was
+    required because adding optional proof fields would preserve a legacy
+    successful path, while making them required without a graph-session
+    publisher would leave a broken intermediate state.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow/attribution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/task_graph.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    workflow-service graph/workflow READMEs, focused workflow-service tests,
+    and this plan/status log.
+  - No-fallback/no-legacy confirmation: executable snapshots now require
+    path-free dependency proof freshness for each runtime inference node.
+    Caller-supplied runtime validation publications fail closed and cannot
+    assemble executable snapshots from reduced projection data. Scheduler
+    inference projections from current validation state also require current
+    dependency requirements proof; missing/stale/unavailable/invalid proof is a
+    typed failure rather than a best-effort projection.
+  - Implementation completed: bumped
+    `WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION` to 2; added
+    required node fields for `dependency_requirements_id`,
+    `selected_binding_ids`, and `dependency_override_fingerprint`; added
+    source-based snapshot construction from the validation-state read model;
+    added `WorkflowGraphSessionExecutableValidationSnapshotPublishRequest` and
+    `WorkflowService::publish_graph_session_executable_validation_snapshot`;
+    rejected changed dependency proof freshness when a snapshot already exists
+    for the same workflow version; and restricted
+    `publish_workflow_executable_validation_snapshot` so runtime-containing
+    caller-supplied publications are no longer a successful path.
+  - Focused tests updated/added: source-to-snapshot proof compaction,
+    caller-supplied publication proof rejection, caller-supplied runtime
+    service publish rejection, proof-aware scheduler projection, and existing
+    snapshot round-trip/projection tests updated for schema 2 fields.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    check -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service executable_validation_snapshot
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    inference_validation_state --lib -- --nocapture`; `cargo test -p
+    pantograph-workflow-service task_graph --lib -- --nocapture`; and `cargo
+    test -p pantograph-workflow-service task_binding_resolution --lib --
+    --nocapture`; `cargo test -p pantograph-workflow-service workflow_version
+    --lib -- --nocapture`; `git diff --check`; and targeted source search over
+    changed workflow-service source/test files for `ModelDependencyRequest`,
+    `ModelRefV2`, `modelPath`, `model_path`, `local_load_path`,
+    `load_target`, `selected_artifact_path`, `package_facts`, and
+    `runtime_load_target`. Search matches are existing path-sanitization/test
+    assertions and `PumasModelRef.selected_artifact_path: None` fixture
+    values. Existing warning: `set_active_run_execution_plan` remains a
+    pre-existing unused store method.
+  - Remaining follow-up: queue admission must consume the saved snapshot
+    freshness fields to build the dependency readiness execution
+    context/envelope. Frontend/Tauri publish-before-run wiring and TypeScript
+    contract mirrors remain pending slices.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

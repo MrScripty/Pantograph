@@ -1,4 +1,6 @@
-use pantograph_dependency_planning::PumasModelRef;
+use pantograph_dependency_planning::{
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, PumasModelRef,
+};
 use pantograph_inference_interface_contracts::{
     AuthoredInferenceInterfaceSnapshot, DraftGraphValidationSessionId, DraftGraphValidationStatus,
     DraftGraphValidationSummary, InferenceAvailability, InferenceAvailabilityStatus,
@@ -226,11 +228,11 @@ fn workflow_executable_validation_snapshot_lookup_rejects_stale_fingerprint() {
 }
 
 #[test]
-fn publish_workflow_executable_validation_snapshot_persists_publication() {
+fn publish_workflow_executable_validation_snapshot_rejects_runtime_publication() {
     let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
     let graph = graph();
     let validation_publication = executable_validation_publication(&graph);
-    let published = service
+    let err = service
         .publish_workflow_executable_validation_snapshot(
             WorkflowExecutableValidationSnapshotPublishRequest {
                 workflow_id: "workflow-versioned".to_string(),
@@ -245,30 +247,16 @@ fn publish_workflow_executable_validation_snapshot_persists_publication() {
                 ),
             },
         )
-        .expect("publish executable snapshot");
+        .expect_err("caller-supplied runtime publication must fail closed");
 
-    let loaded = service
-        .workflow_executable_validation_snapshot(
-            WorkflowExecutableValidationSnapshotLookupRequest {
-                workflow_version_id: published.as_record().workflow_version_id.clone(),
-                workflow_execution_fingerprint: published
-                    .as_record()
-                    .workflow_execution_fingerprint
-                    .clone(),
-                descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
-            },
-        )
-        .expect("published snapshot should be stored");
-
-    assert_eq!(loaded.as_record(), published.as_record());
-    assert_eq!(
-        loaded.as_record().validation_snapshot_id.as_str(),
-        "wfvalsnap_00000000-0000-4000-8000-000000000011"
+    assert!(
+        matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("graph-session validation state"))
     );
 }
 
 #[test]
-fn publish_workflow_executable_validation_snapshot_rejects_stale_publication() {
+fn publish_workflow_executable_validation_snapshot_rejects_stale_runtime_publication_before_revision_check(
+) {
     let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
     let graph = graph();
     let mut validation_publication = executable_validation_publication(&graph);
@@ -285,10 +273,10 @@ fn publish_workflow_executable_validation_snapshot_rejects_stale_publication() {
                 validation_snapshot_id: None,
             },
         )
-        .expect_err("stale publication should fail closed");
+        .expect_err("caller-supplied runtime publication should fail closed");
 
     assert!(
-        matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("graph revision"))
+        matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("graph-session validation state"))
     );
 }
 
@@ -335,6 +323,15 @@ fn executable_validation_snapshot(
             validation_status: DraftGraphValidationStatus::Executable,
             trait_settings: Vec::new(),
             estimate_hints: Vec::new(),
+            dependency_requirements_id: DependencyRequirementsId::parse(
+                "requirements.image_generation.cuda0",
+            )
+            .expect("valid requirements id"),
+            selected_binding_ids: vec![
+                DependencyBindingId::parse("torch-diffusers").expect("valid binding id")
+            ],
+            dependency_override_fingerprint: DependencyOverrideFingerprint::parse("override.none")
+                .expect("valid override fingerprint"),
             blocking_diagnostics: Vec::new(),
         }],
     }

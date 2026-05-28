@@ -5,12 +5,16 @@ use pantograph_inference_interface_contracts::{
 use crate::workflow::WorkflowSchedulerInferenceTaskProjections;
 use crate::workflow::WorkflowServiceError;
 
+use super::super::executable_validation_snapshot_source::{
+    CurrentExecutableValidationSnapshotSource, CurrentExecutableValidationSnapshotSourceRequest,
+};
 use super::super::inference_interface_publication::{
     publish_inference_validation_for_resolution_inputs, WorkflowGraphInferenceValidationPublication,
 };
 use super::super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
 use super::super::inference_validation_state::CurrentInferenceSchedulerProjectionRequest;
+use super::super::types::WorkflowGraph;
 use super::GraphSessionStore;
 
 impl GraphSessionStore {
@@ -111,5 +115,37 @@ impl GraphSessionStore {
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
         Ok(publication)
+    }
+
+    pub(crate) async fn executable_validation_snapshot_source_for_session(
+        &self,
+        session_id: &str,
+        validation_session_id: Option<DraftGraphValidationSessionId>,
+    ) -> Result<(WorkflowGraph, CurrentExecutableValidationSnapshotSource), WorkflowServiceError>
+    {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let graph = state.graph.clone();
+        let graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        let source = self
+            .validation_state
+            .current_executable_validation_snapshot_source(
+                CurrentExecutableValidationSnapshotSourceRequest {
+                    graph_session_id,
+                    graph_revision,
+                    validation_session_id,
+                },
+            )
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+
+        Ok((graph, source))
     }
 }

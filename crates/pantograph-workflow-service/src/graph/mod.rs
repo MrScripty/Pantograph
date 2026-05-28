@@ -7,7 +7,6 @@ mod effective_definition;
 #[cfg(test)]
 mod effective_definition_tests;
 mod executable_topology;
-#[allow(dead_code)]
 mod executable_validation_snapshot_source;
 mod group_mutation;
 mod inference_interface_facts;
@@ -56,6 +55,9 @@ pub use executable_topology::{
     workflow_execution_fingerprint, workflow_execution_fingerprint_for_topology,
     WorkflowExecutableTopology, WorkflowExecutableTopologyEdge, WorkflowExecutableTopologyNode,
 };
+pub(crate) use executable_validation_snapshot_source::{
+    CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
+};
 pub use inference_interface_facts::{
     InferenceInterfaceFactsProvider, InferenceInterfaceFactsProviderError,
     UnavailableInferenceInterfaceFactsProvider,
@@ -89,6 +91,10 @@ pub use inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationEvent,
     WorkflowGraphInferenceValidationEventPayload, WorkflowGraphInferenceValidationEventScope,
     WorkflowGraphInferenceValidationSession,
+};
+#[cfg(test)]
+pub(crate) use inference_validation_state::{
+    CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofStatus,
 };
 pub use inspection::{
     inspect_workflow_graph, inspect_workflow_graph_with_run_context,

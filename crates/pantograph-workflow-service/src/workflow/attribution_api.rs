@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use pantograph_inference_interface_contracts::WorkflowGraphRevision;
 use pantograph_runtime_attribution::{
-    BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
-    ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
-    ClientSessionRecord, ClientSessionResumeRequest,
+    AttributionError, BucketCreateRequest, BucketDeleteRequest, BucketRecord,
+    ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
+    ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
     WorkflowExecutableValidationSnapshotLookupRequest as AttributionWorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowId, WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
     WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunVersionProjection, WorkflowVersionId,
@@ -24,8 +24,9 @@ use super::{
     ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowExecutableValidationSnapshotError,
     WorkflowExecutableValidationSnapshotId, WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutableValidationSnapshotPublishRequest, WorkflowExecutableValidationSnapshotRecord,
-    WorkflowRunGraphProjection, WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse,
-    WorkflowService, WorkflowServiceError,
+    WorkflowGraphSessionExecutableValidationSnapshotPublishRequest, WorkflowRunGraphProjection,
+    WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse, WorkflowService,
+    WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -199,6 +200,12 @@ impl WorkflowService {
         &self,
         request: WorkflowExecutableValidationSnapshotPublishRequest,
     ) -> Result<ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowServiceError> {
+        if !request.validation_publication.node_projections.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "runtime executable validation snapshots must be published from the current graph-session validation state"
+                    .to_string(),
+            ));
+        }
         validate_workflow_id(&request.workflow_id)?;
         let graph_revision = WorkflowGraphRevision::parse(&request.graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
@@ -228,6 +235,79 @@ impl WorkflowService {
         )
         .map_err(workflow_executable_validation_snapshot_service_error)?;
         self.store_workflow_executable_validation_snapshot(snapshot)
+    }
+
+    pub async fn publish_graph_session_executable_validation_snapshot(
+        &self,
+        request: WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
+    ) -> Result<ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowServiceError> {
+        validate_workflow_id(&request.workflow_id)?;
+        let (graph, source) = self
+            .graph_session_store
+            .executable_validation_snapshot_source_for_session(
+                &request.graph_session_id,
+                request.validation_session_id.clone(),
+            )
+            .await?;
+        let graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        if graph_revision != source.graph_revision {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "current graph revision does not match executable snapshot source".to_string(),
+            ));
+        }
+        let workflow_version = self.resolve_workflow_graph_version(
+            &request.workflow_id,
+            &request.workflow_semantic_version,
+            &graph,
+        )?;
+        let snapshot_id = request
+            .validation_snapshot_id
+            .unwrap_or_else(WorkflowExecutableValidationSnapshotId::generate);
+        let snapshot = WorkflowExecutableValidationSnapshotRecord::from_snapshot_source(
+            &workflow_version,
+            snapshot_id,
+            &source,
+        )
+        .map_err(workflow_executable_validation_snapshot_service_error)?;
+        self.reject_changed_dependency_proof_freshness(&snapshot)?;
+        self.store_workflow_executable_validation_snapshot(snapshot)
+    }
+
+    fn reject_changed_dependency_proof_freshness(
+        &self,
+        snapshot: &WorkflowExecutableValidationSnapshotRecord,
+    ) -> Result<(), WorkflowServiceError> {
+        let request = WorkflowExecutableValidationSnapshotLookupRequest {
+            workflow_version_id: snapshot.workflow_version_id.clone(),
+            workflow_execution_fingerprint: snapshot.workflow_execution_fingerprint.clone(),
+            descriptor_contract_version: snapshot.descriptor_contract_version,
+        };
+        request
+            .validate()
+            .map_err(workflow_executable_validation_snapshot_service_error)?;
+        let stored = {
+            let store = self.attribution_store_guard()?;
+            match store.workflow_executable_validation_snapshot(
+                AttributionWorkflowExecutableValidationSnapshotLookupRequest {
+                    workflow_version_id: request.workflow_version_id.clone(),
+                },
+            ) {
+                Ok(stored) => stored,
+                Err(AttributionError::NotFound {
+                    entity: "workflow_executable_validation_snapshot",
+                }) => return Ok(()),
+                Err(error) => return Err(WorkflowServiceError::from(error)),
+            }
+        };
+        let existing =
+            ValidatedWorkflowExecutableValidationSnapshotRecord::from_attribution_record(
+                stored, &request,
+            )
+            .map_err(workflow_executable_validation_snapshot_service_error)?;
+        snapshot
+            .validate_dependency_proof_freshness_matches(existing.as_record())
+            .map_err(workflow_executable_validation_snapshot_service_error)
     }
 
     pub fn workflow_run_graph_query(
