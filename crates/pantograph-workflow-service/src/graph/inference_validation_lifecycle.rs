@@ -153,6 +153,25 @@ impl WorkflowGraphValidationLifecycleOwner {
         closed.map(|record| record.validation_session_id)
     }
 
+    pub(crate) async fn cancel_active_validation_for_graph_change(
+        &self,
+        graph_session_id: &WorkflowGraphSessionId,
+    ) -> Option<DraftGraphValidationSessionId> {
+        let cancelled = self.active.write().await.remove(graph_session_id);
+        if let Some(record) = cancelled.as_ref() {
+            let reason = WorkflowGraphValidationCancellationReason::GraphRevisionChanged;
+            let _ = record.cancellation_tx.send(Some(reason));
+            self.push_event(
+                graph_session_id.clone(),
+                record.graph_revision.clone(),
+                record.validation_session_id.clone(),
+                WorkflowGraphValidationLifecycleEventKind::ValidationCancelled { reason },
+            )
+            .await;
+        }
+        cancelled.map(|record| record.validation_session_id)
+    }
+
     async fn push_event(
         &self,
         graph_session_id: WorkflowGraphSessionId,
@@ -220,6 +239,8 @@ struct WorkflowGraphValidationLifecycleRecord {
 pub(crate) enum WorkflowGraphValidationCancellationReason {
     #[error("validation session was superseded")]
     Superseded,
+    #[error("graph revision changed")]
+    GraphRevisionChanged,
     #[error("graph validation session is closed")]
     GraphSessionClosed,
 }
@@ -245,6 +266,9 @@ enum WorkflowGraphValidationLifecycleEventKind {
     ValidationPending,
     ValidationSuperseded {
         superseded_validation_session_id: DraftGraphValidationSessionId,
+    },
+    ValidationCancelled {
+        reason: WorkflowGraphValidationCancellationReason,
     },
     PublicationAccepted,
     PublicationRejected {
@@ -388,6 +412,49 @@ mod tests {
             .await;
         assert!(events.events.is_empty());
         assert_eq!(events.dropped_event_count, 0);
+    }
+
+    #[tokio::test]
+    async fn graph_revision_change_cancels_active_session() {
+        let owner = WorkflowGraphValidationLifecycleOwner::new();
+        let graph_session_id: WorkflowGraphSessionId =
+            "graph-session-1".parse().expect("valid graph session id");
+        let graph_revision: WorkflowGraphRevision =
+            "aaaaaaaaaaaaaaaa".parse().expect("valid graph revision");
+        let validation_session_id: DraftGraphValidationSessionId = "validation.session.1"
+            .parse()
+            .expect("valid validation session id");
+        let cancellation = owner
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                validation_session_id.clone(),
+            )
+            .await
+            .expect("begin validation");
+
+        let cancelled = owner
+            .cancel_active_validation_for_graph_change(&graph_session_id)
+            .await;
+
+        assert_eq!(cancelled, Some(validation_session_id.clone()));
+        assert_eq!(
+            *cancellation.borrow(),
+            Some(WorkflowGraphValidationCancellationReason::GraphRevisionChanged)
+        );
+        assert_eq!(
+            owner
+                .accept_publication(&graph_session_id, &graph_revision, &validation_session_id)
+                .await,
+            Err(WorkflowGraphValidationLifecycleError::ValidationSessionMissing)
+        );
+        let events = owner.event_snapshot(&graph_session_id).await.events;
+        assert!(events.iter().any(|event| matches!(
+            event.kind,
+            WorkflowGraphValidationLifecycleEventKind::ValidationCancelled {
+                reason: WorkflowGraphValidationCancellationReason::GraphRevisionChanged,
+            }
+        )));
     }
 
     #[tokio::test]

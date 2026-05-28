@@ -274,8 +274,9 @@ the summary/gate remains the only submit authority.
   session, publication is accepted only for the active graph revision and
   validation-session id, and session close rejects later validation publication.
   Each active validation session also has an owner-issued cancellation receiver;
-  starting a replacement validation session or closing the graph edit session
-  signals typed cancellation before stale provider results can publish.
+  starting a replacement validation session, mutating the graph revision, or
+  closing the graph edit session signals typed cancellation before stale
+  provider results can publish.
 - Validation-session lifecycle events are retained in a bounded workflow-service
   buffer keyed by graph edit-session identity. Events use backend-owned graph
   session id, graph revision, validation-session id, and monotonic per-session

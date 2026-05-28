@@ -35,6 +35,7 @@ pub(crate) enum WorkflowGraphValidationPublishAttemptOutcome {
         reason: WorkflowGraphValidationLifecycleError,
     },
     Cancelled {
+        current_graph_revision: WorkflowGraphRevision,
         reason: WorkflowGraphValidationCancellationReason,
     },
 }
@@ -65,11 +66,14 @@ where
         .await
         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
+    let current_graph_revision = current_graph_revision_after_facts().await?;
     if let Some(reason) = *cancellation.borrow() {
-        return Ok(WorkflowGraphValidationPublishAttemptOutcome::Cancelled { reason });
+        return Ok(WorkflowGraphValidationPublishAttemptOutcome::Cancelled {
+            current_graph_revision,
+            reason,
+        });
     }
 
-    let current_graph_revision = current_graph_revision_after_facts().await?;
     if current_graph_revision != request.graph_revision {
         return Ok(
             WorkflowGraphValidationPublishAttemptOutcome::StaleGraphRevision {

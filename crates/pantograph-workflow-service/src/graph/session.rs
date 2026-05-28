@@ -184,6 +184,18 @@ impl GraphSessionStore {
         Ok(WorkflowGraphEditSessionCloseResponse { ok: true })
     }
 
+    async fn cancel_active_validation_after_graph_mutation(
+        &self,
+        session_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        self.validation_lifecycle
+            .cancel_active_validation_for_graph_change(&graph_session_id)
+            .await;
+        Ok(())
+    }
+
     #[cfg(test)]
     pub(crate) async fn validation_state_record_count_for_session(
         &self,
@@ -371,42 +383,49 @@ impl GraphSessionStore {
         &self,
         request: WorkflowGraphRemoveEdgeRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        let before_graph = state.graph.clone();
-        state.push_undo_snapshot();
-        let target_node_id = state
-            .graph
-            .edges
-            .iter()
-            .find(|edge| edge.id == request.edge_id)
-            .map(|edge| edge.target.clone());
-        state.graph.edges.retain(|edge| edge.id != request.edge_id);
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        let dirty_tasks = target_node_id
-            .as_ref()
-            .map(|node_id| dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)))
-            .unwrap_or_default();
-        let memory_impact = target_node_id.as_ref().and_then(|node_id| {
-            graph_memory_impact_from_graph_change(
-                &before_graph,
-                &state.graph,
-                &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)),
+        let response = {
+            let handle = self.get_session_handle(&request.session_id).await?;
+            let mut state = handle.lock().await;
+            state.touch();
+            let before_graph = state.graph.clone();
+            state.push_undo_snapshot();
+            let target_node_id = state
+                .graph
+                .edges
+                .iter()
+                .find(|edge| edge.id == request.edge_id)
+                .map(|edge| edge.target.clone());
+            state.graph.edges.retain(|edge| edge.id != request.edge_id);
+            sync_embedding_emit_metadata_flags(&mut state.graph);
+            let dirty_tasks = target_node_id
+                .as_ref()
+                .map(|node_id| {
+                    dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id))
+                })
+                .unwrap_or_default();
+            let memory_impact = target_node_id.as_ref().and_then(|node_id| {
+                graph_memory_impact_from_graph_change(
+                    &before_graph,
+                    &state.graph,
+                    &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)),
+                )
+            });
+            let workflow_event = graph_modified_event(
+                &request.session_id,
+                &request.session_id,
+                dirty_tasks,
+                memory_impact.clone(),
+            );
+            let projection = phase6_memory_impact_projection(memory_impact);
+            state.snapshot_response_with_state(
+                &request.session_id,
+                Some(workflow_event),
+                projection,
             )
-        });
-        let workflow_event = graph_modified_event(
-            &request.session_id,
-            &request.session_id,
-            dirty_tasks,
-            memory_impact.clone(),
-        );
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(state.snapshot_response_with_state(
-            &request.session_id,
-            Some(workflow_event),
-            projection,
-        ))
+        };
+        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+            .await?;
+        Ok(response)
     }
 
     pub async fn remove_edges(

@@ -109,9 +109,10 @@ impl GraphSessionStore {
                 current_graph_revision,
                 ..
             } => (current_graph_revision, Vec::new()),
-            WorkflowGraphValidationPublishAttemptOutcome::Cancelled { .. } => {
-                (current_graph_revision.clone(), Vec::new())
-            }
+            WorkflowGraphValidationPublishAttemptOutcome::Cancelled {
+                current_graph_revision,
+                ..
+            } => (current_graph_revision, Vec::new()),
         };
 
         let summary = self
@@ -224,7 +225,7 @@ impl GraphSessionStore {
             WorkflowGraphValidationPublishAttemptOutcome::PublicationRejected {
                 reason, ..
             } => Err(WorkflowServiceError::InvalidRequest(reason.to_string())),
-            WorkflowGraphValidationPublishAttemptOutcome::Cancelled { reason } => {
+            WorkflowGraphValidationPublishAttemptOutcome::Cancelled { reason, .. } => {
                 Err(WorkflowServiceError::InvalidRequest(format!(
                     "validation publication cancelled: {reason}"
                 )))

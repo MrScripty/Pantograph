@@ -14653,6 +14653,39 @@ Worker rules:
     path; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d graph revision validation cancellation slice:
+  - Smallest useful vertical slice: add a graph-revision-changed lifecycle
+    cancellation reason and wire the `remove_edge` mutation path to cancel the
+    active validation session after a successful graph mutation.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: graph revision changes cancel validation via
+    workflow-service lifecycle state and typed cancellation diagnostics instead
+    of frontend filtering, transport retry behavior, or a parallel stale-output
+    publication path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    publish_inference_validation_session_rejects_graph_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary_rejects_revision_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service refresh_current_validation_summary --lib`;
+    `cargo test -p pantograph-workflow-service remove_edges --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for
+    retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls in the lifecycle/publisher
+    path; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 

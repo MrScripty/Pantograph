@@ -803,7 +803,7 @@ async fn publish_inference_validation_session_records_current_summary() {
 }
 
 #[tokio::test]
-async fn publish_inference_validation_session_rejects_revision_changed_during_fact_lookup() {
+async fn publish_inference_validation_session_rejects_graph_changed_during_fact_lookup() {
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
     let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
@@ -841,11 +841,11 @@ async fn publish_inference_validation_session_rejects_revision_changed_during_fa
     let error = publish
         .await
         .expect("publish task should not panic")
-        .expect_err("publish should reject stale graph revision");
+        .expect_err("publish should reject cancelled validation session");
     assert!(
         error
             .to_string()
-            .contains("validation graph revision changed before publication"),
+            .contains("validation publication cancelled: graph revision changed"),
         "unexpected error: {error}"
     );
 }
