@@ -215,9 +215,10 @@ stores.setConnectionIntent({
   invalid once `workflowGraph.derived_graph.graph_fingerprint` changes.
 - Missing `connectionIntent` means “no active connect/reconnect interaction,”
   not “no compatible targets exist.”
-- Dynamic inference-setting ports are additive overlays on `node.data.definition`;
-  saved graphs may persist them, but the authoritative shape is regenerated from
-  schema sync when model metadata changes.
+- Generic inference nodes render authored ports from
+  `node.data.inference_interface_snapshot`. Retired `node.data.definition`
+  overlays are ignored for inference nodes so the graph package does not keep a
+  frontend-owned inference-interface source alive.
 - When an inference node is synchronized from an `inference_settings` source,
   settings promoted into that shared schema surface must not remain duplicated
   as direct static inputs in the node-visible definition.

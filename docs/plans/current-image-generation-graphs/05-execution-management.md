@@ -14343,6 +14343,20 @@ Worker rules:
     remains blocked by the pre-existing
     `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
     missing-method error, unrelated to this slice.
+- 2026-05-27 Milestone 5d authored inference snapshot rendering slice:
+  - Smallest useful vertical slice: update frontend graph materialization so
+    generic inference nodes render ports from saved
+    `node.data.inference_interface_snapshot` and ignore retired
+    `node.data.definition` dynamic inference overlays.
+  - Allowed files touched: `packages/svelte-graph/src/stores/definitionOverlay.ts`,
+    `packages/svelte-graph/src/stores/definitionOverlay.test.ts`,
+    svelte-graph stores README, this milestone, and this execution log.
+  - No-fallback/no-legacy result: frontend graph rendering now follows the same
+    authored-snapshot source as workflow-service effective definitions for
+    `llm-inference`; legacy `definition` overlays no longer provide successful
+    inference-node ports in the graph package.
+  - Verification passed: `npm run test:frontend -- definitionOverlay.test.ts`;
+    `npm run typecheck`; and `git diff --check`.
 
 ### Traceability Links
 

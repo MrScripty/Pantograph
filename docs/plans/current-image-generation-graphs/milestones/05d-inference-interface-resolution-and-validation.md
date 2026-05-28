@@ -1439,6 +1439,16 @@ defining an image-only inference-node interface.
       backend validation summary, and gates frontend submit plus backend
       admission without invoking retired `inference_settings`,
       `expand-settings`, static all-port, or model-path paths.
+      2026-05-27 follow-up slice in progress: frontend graph materialization
+      now needs to match the backend effective-definition rule. Generic
+      inference nodes must render authored ports from
+      `node.data.inference_interface_snapshot` and ignore retired
+      `node.data.definition` overlays, so saved authored snapshots can display
+      without preserving frontend-owned dynamic inference-setting ports. This is
+      display-only and must not make the frontend a descriptor resolver or
+      submit-gate authority.
+      Verification passed: `npm run test:frontend --
+      definitionOverlay.test.ts`; `npm run typecheck`; and `git diff --check`.
 - [ ] Ensure runtime/device constraints narrow interface validation without
       becoming scheduler decisions. Explicit invalid constraints block enqueue
       and may include typed advisory alternatives when they can be computed
