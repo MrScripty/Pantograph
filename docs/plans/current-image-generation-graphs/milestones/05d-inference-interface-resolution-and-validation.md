@@ -1463,10 +1463,24 @@ defining an image-only inference-node interface.
       Verification passed: `npm run test:frontend --
       workflowValidationProjectionOverlays.test.ts workflowToolbarEvents.test.ts`;
       `npm run typecheck`; and `git diff --check`.
-- [ ] Ensure runtime/device constraints narrow interface validation without
+- [x] Ensure runtime/device constraints narrow interface validation without
       becoming scheduler decisions. Explicit invalid constraints block enqueue
       and may include typed advisory alternatives when they can be computed
       safely; alternatives must not become fallback execution choices.
+      2026-05-27 implementation slice: tightened
+      `resolve_inference_interface_from_facts` so runtime alternatives are
+      computed only from runtimes that are both available and supported by the
+      resolved capability, and device validation is scoped through the same
+      eligible runtime set. When an explicit runtime is present, an explicit
+      device must be available on that runtime; a device on a different runtime
+      remains an invalid explicit device constraint rather than a fallback
+      placement. The scheduler still receives only validated constraints from
+      the validation projection path and does not choose advisory alternatives.
+      Verification passed: `cargo fmt --manifest-path
+      crates/pantograph-workflow-service/Cargo.toml`; `cargo test -p
+      pantograph-workflow-service inference_interface_resolver`; `cargo check
+      -p pantograph-workflow-service` (existing warning:
+      `WorkflowExecutionSessionStore::set_active_run_execution_plan` is unused).
 - [ ] Wire graph editor draft validation to request and render the descriptor
       for unsaved graph state through the live validation session model. The
       editor renders saved authored ports immediately, overlays pending/stale/

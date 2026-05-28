@@ -242,9 +242,9 @@ fn apply_runtime_diagnostics(
     availability: &mut InferenceAvailability,
     diagnostics: &mut Vec<InferenceInterfaceDiagnostic>,
 ) {
-    let available_runtime_ids = runtimes
+    let eligible_available_runtimes = eligible_available_runtimes(capability, runtimes);
+    let eligible_available_runtime_ids = eligible_available_runtimes
         .iter()
-        .filter(|runtime| runtime.state == InferenceRuntimeAvailabilityState::Available)
         .map(|runtime| runtime.runtime_id.as_str())
         .collect::<Vec<_>>();
 
@@ -266,12 +266,12 @@ fn apply_runtime_diagnostics(
             .unwrap_or(false);
 
         if !supported_by_capability || !runtime_available {
-            let hint = if available_runtime_ids.is_empty() {
+            let hint = if eligible_available_runtime_ids.is_empty() {
                 "No alternative runtime is currently available".to_string()
             } else {
                 format!(
                     "Available alternatives: {}",
-                    available_runtime_ids.join(", ")
+                    eligible_available_runtime_ids.join(", ")
                 )
             };
             mark_unavailable(
@@ -283,7 +283,7 @@ fn apply_runtime_diagnostics(
                 Some(&hint),
             );
         }
-    } else if capability.is_some() && available_runtime_ids.is_empty() {
+    } else if capability.is_some() && eligible_available_runtime_ids.is_empty() {
         mark_unavailable(
             availability,
             diagnostics,
@@ -294,27 +294,68 @@ fn apply_runtime_diagnostics(
         );
     }
 
-    if let Some(device_constraint) = &request.device_constraint {
-        let device_available = runtimes
+    if let (Some(_), Some(device_constraint)) = (capability, request.device_constraint.as_ref()) {
+        let device_runtimes = eligible_available_runtimes
             .iter()
-            .filter(|runtime| runtime.state == InferenceRuntimeAvailabilityState::Available)
-            .any(|runtime| {
-                runtime
-                    .device_ids
-                    .iter()
-                    .any(|device_id| device_id == device_constraint)
-            });
+            .filter(|runtime| {
+                request
+                    .runtime_constraint
+                    .as_ref()
+                    .map(|runtime_constraint| runtime.runtime_id == *runtime_constraint)
+                    .unwrap_or(true)
+            })
+            .collect::<Vec<_>>();
+        let device_available = device_runtimes.iter().any(|runtime| {
+            runtime
+                .device_ids
+                .iter()
+                .any(|device_id| device_id == device_constraint)
+        });
+
         if !device_available {
+            let alternative_devices = eligible_available_runtimes
+                .iter()
+                .flat_map(|runtime| runtime.device_ids.iter().map(|device| device.as_str()))
+                .collect::<Vec<_>>();
+            let hint = if alternative_devices.is_empty() {
+                "No alternative device is currently available".to_string()
+            } else {
+                format!(
+                    "Available device alternatives: {}",
+                    alternative_devices.join(", ")
+                )
+            };
             mark_unavailable(
                 availability,
                 diagnostics,
                 InferenceAvailabilityReason::ExplicitDeviceInvalid,
                 InferenceDiagnosticCode::InvalidDeviceConstraint,
                 "The explicit device constraint is not available for this inference interface",
-                Some("Choose an available device or leave device selection to scheduler policy"),
+                Some(&hint),
             );
         }
     }
+}
+
+fn eligible_available_runtimes<'a>(
+    capability: Option<&InferenceCapabilityFacts>,
+    runtimes: &'a [InferenceRuntimeAvailabilityFact],
+) -> Vec<&'a InferenceRuntimeAvailabilityFact> {
+    runtimes
+        .iter()
+        .filter(|runtime| runtime.state == InferenceRuntimeAvailabilityState::Available)
+        .filter(|runtime| {
+            capability
+                .map(|capability| {
+                    capability.supported_runtime_ids.is_empty()
+                        || capability
+                            .supported_runtime_ids
+                            .iter()
+                            .any(|runtime_id| runtime_id == &runtime.runtime_id)
+                })
+                .unwrap_or(false)
+        })
+        .collect()
 }
 
 fn mark_unavailable(
@@ -425,6 +466,82 @@ mod tests {
                     .as_deref()
                     .is_some_and(|hint| hint.contains("pytorch"))
         }));
+    }
+
+    #[test]
+    fn explicit_invalid_runtime_advisory_excludes_unsupported_available_runtimes() {
+        let mut facts = ready_facts();
+        facts.runtimes.push(InferenceRuntimeAvailabilityFact {
+            runtime_id: runtime_id("onnx"),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec![device_id("cpu")],
+        });
+
+        let descriptor =
+            resolve_inference_interface_from_facts(request(Some(runtime_id("vllm")), None), facts)
+                .expect("descriptor");
+
+        let diagnostic = descriptor
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == InferenceDiagnosticCode::InvalidRuntimeConstraint)
+            .expect("runtime diagnostic");
+        let hint = diagnostic.hint.as_deref().expect("runtime hint");
+        assert!(hint.contains("pytorch"));
+        assert!(!hint.contains("onnx"));
+    }
+
+    #[test]
+    fn explicit_device_constraint_is_scoped_to_explicit_runtime() {
+        let mut facts = ready_facts();
+        facts
+            .capability
+            .as_mut()
+            .expect("capability")
+            .supported_runtime_ids
+            .push(runtime_id("vllm"));
+        facts.runtimes.push(InferenceRuntimeAvailabilityFact {
+            runtime_id: runtime_id("vllm"),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec![device_id("cpu")],
+        });
+
+        let descriptor = resolve_inference_interface_from_facts(
+            request(Some(runtime_id("vllm")), Some(device_id("cuda.0"))),
+            facts,
+        )
+        .expect("descriptor");
+
+        assert_eq!(
+            descriptor.availability.status,
+            InferenceAvailabilityStatus::Unavailable
+        );
+        assert!(descriptor
+            .availability
+            .reasons
+            .contains(&InferenceAvailabilityReason::ExplicitDeviceInvalid));
+        assert!(descriptor.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == InferenceDiagnosticCode::InvalidDeviceConstraint
+                && diagnostic
+                    .hint
+                    .as_deref()
+                    .is_some_and(|hint| hint.contains("cuda.0") && hint.contains("cpu"))
+        }));
+    }
+
+    #[test]
+    fn explicit_runtime_and_device_pass_when_device_belongs_to_runtime() {
+        let descriptor = resolve_inference_interface_from_facts(
+            request(Some(runtime_id("pytorch")), Some(device_id("cuda.0"))),
+            ready_facts(),
+        )
+        .expect("descriptor");
+
+        assert_eq!(
+            descriptor.availability.status,
+            InferenceAvailabilityStatus::Available
+        );
+        assert!(descriptor.diagnostics.is_empty());
     }
 
     #[test]
