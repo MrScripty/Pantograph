@@ -14165,11 +14165,28 @@ Worker rules:
     `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
     missing-method error, which is unrelated to this slice and was already
     recorded by earlier Milestone 5d checks.
-  - Remaining follow-up: wire the saved-run submit flow to call the publisher
-    before scheduler execution-session run admission once backend validation
-    state exposes the active graph-session validation session identity. Do not
-    reintroduce direct edit-session execution or frontend/Tauri validation
-    identity synthesis.
+  - Follow-up resolved by the 2026-05-27 saved-run executable snapshot publish
+    submit slice below: the toolbar now calls the publisher before scheduler
+    execution-session run admission.
+- 2026-05-27 Milestone 5d saved-run executable snapshot publish submit slice:
+  - Smallest useful vertical slice: wire saved workflow Submit to publish the
+    current graph-session executable validation snapshot before each scheduler
+    execution-session run attempt.
+  - Allowed files touched: `src/components/WorkflowToolbar.svelte`,
+    `src/components/README.md`, this milestone, and this execution log.
+  - No-fallback/no-legacy result: Submit passes only active graph session id,
+    saved workflow id, explicit workflow semantic version, and null optional
+    validation/snapshot ids. Workflow-service remains responsible for resolving
+    current validation state and failing closed when it is missing or stale.
+    Direct edit-session execution remains disabled, and the frontend does not
+    synthesize validation identity or executable snapshot contents.
+  - Verification passed: `npm run typecheck`; `node
+    --experimental-strip-types --test src/components/workflowToolbarEvents.test.ts
+    src/services/workflow/WorkflowService.commands.test.ts`; and `git diff
+    --check`.
+  - Remaining follow-up: live validation summary state still needs to feed the
+    submit disabled reason so missing/stale validation is visible before the
+    publish command rejects the submit attempt.
 
 ### Traceability Links
 

@@ -1189,12 +1189,18 @@ defining an image-only inference-node interface.
     `WorkflowExecutableValidationSnapshotRecord`; Tauri and TypeScript do not
     compute validation freshness, workflow version fingerprints, dependency
     proof freshness, or scheduler admission authority.
-  - Remaining follow-up: wire the saved-run submit flow to call this publisher
-    before scheduler execution-session admission once the active graph session
-    id, workflow id/version, and current validation session identity are
-    available from backend-owned validation state. The next slice must not
-    re-enable direct edit-session execution or synthesize missing validation
-    identity in Tauri/frontend code.
+  - 2026-05-27 follow-up slice completed: saved-run submit now calls the
+    graph-session executable validation snapshot publisher before each
+    scheduler execution-session run attempt. The toolbar passes only the active
+    graph session id, saved workflow id, explicit workflow semantic version,
+    and null optional validation/snapshot ids so workflow-service resolves the
+    current validation state or fails closed. Direct edit-session execution
+    remains disabled. Verification passed with TypeScript typecheck, focused
+    toolbar/command tests, and `git diff --check`.
+  - Remaining follow-up: wire live validation state into the submit gate so
+    users receive current backend summary feedback before pressing Submit,
+    instead of discovering missing/stale validation only from the publish
+    command error.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

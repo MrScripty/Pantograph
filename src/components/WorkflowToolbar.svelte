@@ -16,6 +16,7 @@
     availableWorkflows,
     currentGraphId,
     currentGraphType,
+    currentSessionId,
     isReadOnly,
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
@@ -167,6 +168,7 @@
     resetExecutionStates();
     clearStreamContent();
     const submittedWorkflowId = $currentGraphId;
+    const submittedGraphSessionId = $currentSessionId;
 
     try {
       if ($isReadOnly) {
@@ -177,6 +179,9 @@
       }
       if (!currentSavedWorkflow || !submittedWorkflowId) {
         throw new Error('Save the workflow before submitting');
+      }
+      if (!submittedGraphSessionId) {
+        throw new Error('No active workflow graph session');
       }
       if (!isNumericWorkflowSemanticVersion(workflowSemanticVersion)) {
         throw new Error('Workflow version must use numeric major.minor.patch format');
@@ -206,6 +211,13 @@
             workflowSemanticVersion = submittedVersion;
           }
           try {
+            await workflowService.publishGraphSessionExecutableValidationSnapshot({
+              workflow_id: submittedWorkflowId,
+              workflow_semantic_version: submittedVersion,
+              graph_session_id: submittedGraphSessionId,
+              validation_session_id: null,
+              validation_snapshot_id: null,
+            });
             response = await workflowService.runWorkflowExecutionSession({
               ...runRequestBase,
               workflow_semantic_version: submittedVersion,

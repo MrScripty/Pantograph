@@ -61,7 +61,10 @@ as the package graph so GUI behavior and backend validation stay aligned.
 - Diagnostics rendering should be owned by the workbench Diagnostics page. Graph
   execution controls should not subscribe to diagnostics state.
 - Graph editor workflow submission must use the scheduler execution session
-  boundary and must not directly execute the edit-session graph.
+  boundary and must not directly execute the edit-session graph. Saved workflow
+  submission must publish the current graph-session executable validation
+  snapshot through the workflow service before run admission; the toolbar only
+  passes graph-session/workflow identity and does not compute validation facts.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.
