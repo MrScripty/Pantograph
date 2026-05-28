@@ -258,7 +258,10 @@ the summary/gate remains the only submit authority.
   snapshots graph state under the session lock, runs descriptor projection after
   the graph lock is released, emits node-scoped descriptor events plus a
   graph-scoped summary event, and records current graph/node validation state
-  for later dependency actions and scheduler admission.
+  for later dependency actions and scheduler admission. Publication rejects
+  graphs whose inference-node projection count exceeds the explicit bounded
+  projection policy instead of serializing or emitting unbounded projection
+  records.
 - Validation publication attempts use the dedicated workflow-service publisher
   boundary after graph state has been snapshotted. Refresh and explicit
   publication entrypoints share that publisher so fact lookup, lifecycle

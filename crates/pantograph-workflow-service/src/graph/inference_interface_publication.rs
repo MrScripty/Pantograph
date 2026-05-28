@@ -23,6 +23,8 @@ use super::inference_interface_validation::{
     WorkflowGraphInferenceValidationSession,
 };
 
+pub(crate) const MAX_VALIDATION_NODE_PROJECTIONS: usize = 512;
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum InferenceInterfacePublicationError {
@@ -35,6 +37,8 @@ pub enum InferenceInterfacePublicationError {
     Contract(#[from] InferenceInterfaceContractError),
     #[error("inference validation session error: {0}")]
     ValidationSession(#[from] InferenceInterfaceValidationSessionError),
+    #[error("validation node projection count {count} exceeds maximum {max}")]
+    TooManyNodeProjections { count: usize, max: usize },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -89,6 +93,13 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
     resolution_inputs: InferenceInterfaceGraphResolutionInputs,
     facts_by_node_id: BTreeMap<String, InferenceInterfaceResolverFacts>,
 ) -> Result<WorkflowGraphInferenceValidationPublication, InferenceInterfacePublicationError> {
+    if resolution_inputs.requests.len() > MAX_VALIDATION_NODE_PROJECTIONS {
+        return Err(InferenceInterfacePublicationError::TooManyNodeProjections {
+            count: resolution_inputs.requests.len(),
+            max: MAX_VALIDATION_NODE_PROJECTIONS,
+        });
+    }
+
     let mut node_projections = Vec::new();
 
     for input in &resolution_inputs.requests {
@@ -356,6 +367,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn publication_rejects_unbounded_node_projection_records() {
+        let graph = graph_with_inference_node_count(MAX_VALIDATION_NODE_PROJECTIONS + 1);
+        let error = publish_inference_validation_for_graph(
+            validation_session_id(),
+            graph_revision(),
+            &graph,
+            BTreeMap::new(),
+        )
+        .expect_err("projection count should be bounded");
+
+        assert!(matches!(
+            error,
+            InferenceInterfacePublicationError::TooManyNodeProjections {
+                count,
+                max: MAX_VALIDATION_NODE_PROJECTIONS,
+            } if count == MAX_VALIDATION_NODE_PROJECTIONS + 1
+        ));
+    }
+
     fn graph_with_connected_model() -> WorkflowGraph {
         WorkflowGraph {
             nodes: vec![
@@ -389,6 +420,47 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+
+    fn graph_with_inference_node_count(count: usize) -> WorkflowGraph {
+        let mut graph = WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "model".to_string(),
+                node_type: "puma-lib".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({
+                    "pumas_model_ref": {
+                        "model_id": "image/example/tiny",
+                        "selected_artifact_id": "diffusers"
+                    }
+                }),
+            }],
+            edges: Vec::new(),
+            derived_graph: None,
+        };
+        for index in 0..count {
+            let node_id = format!("infer-{index}");
+            graph.nodes.push(GraphNode {
+                id: node_id.clone(),
+                node_type: "llm-inference".to_string(),
+                position: Position {
+                    x: 200.0,
+                    y: index as f64,
+                },
+                data: json!({
+                    "task_kind": "image_generation",
+                    "runtime": "pytorch"
+                }),
+            });
+            graph.edges.push(GraphEdge {
+                id: format!("model-to-{node_id}"),
+                source: "model".to_string(),
+                source_handle: "pumas_model_ref".to_string(),
+                target: node_id,
+                target_handle: "pumas_model_ref".to_string(),
+            });
+        }
+        graph
     }
 
     fn ready_facts() -> InferenceInterfaceResolverFacts {

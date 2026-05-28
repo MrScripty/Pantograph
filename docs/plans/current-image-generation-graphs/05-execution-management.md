@@ -14550,6 +14550,28 @@ Worker rules:
     API; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d validation node projection bound slice:
+  - Smallest useful vertical slice: enforce an explicit maximum validation node
+    projection count in synchronous publication before projection records are
+    allocated or emitted.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: oversized projection output fails at the
+    workflow-service publisher boundary with a typed error instead of relying
+    on transport truncation, frontend filtering, or alternate validation paths.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_interface_publication --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for the
+    projection bound and typed error; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 

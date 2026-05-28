@@ -3135,6 +3135,37 @@ defining an image-only inference-node interface.
     publisher API, add the explicit bounded node-projection policy, and then
     add task ownership/cancellation around the publisher before transport
     delivery.
+- [x] 2026-05-28 validation node projection bound slice completed:
+  - Smallest useful vertical slice: added an explicit
+    `MAX_VALIDATION_NODE_PROJECTIONS` policy to synchronous validation
+    publication and a typed `TooManyNodeProjections` publication error before
+    node projection records are allocated or emitted.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: oversized projection output fails at
+    the workflow-service publisher boundary instead of falling back to truncated
+    serialization, frontend filtering, transport-side caps, or alternate
+    validation paths.
+  - Standards result: the bound is enforced by a typed Rust error and a focused
+    unit test that constructs more inference requests than the maximum without
+    sleeps, external services, or raw JSON transport contracts.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_interface_publication --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for the
+    projection bound and typed error; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: project this typed publication error into
+    transport-visible validation diagnostics when the dedicated live validation
+    transport is added.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
