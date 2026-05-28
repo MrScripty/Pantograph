@@ -30,7 +30,8 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailability,
     InferenceDiagnosticCode, InferencePortDescriptor, InferencePortDirection, InferencePortId,
     InferencePortOptions, InferencePortRequirement, InferenceScalarType, InferenceTaskKind,
-    InferenceValueType, RuntimeIntentId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    InferenceValueType, RuntimeIntentId, WorkflowGraphRevision,
+    INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -552,7 +553,7 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
     let session = store
         .create_session(dependency_inference_graph(), None)
         .await;
-    let requested_revision = session
+    let requested_revision: WorkflowGraphRevision = session
         .graph_revision
         .parse()
         .expect("valid graph revision");
@@ -605,6 +606,80 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
     assert_eq!(
         current.state,
         WorkflowGraphCurrentValidationSummaryState::Missing
+    );
+}
+
+#[tokio::test]
+async fn refresh_current_validation_summary_rejects_superseded_validation_session() {
+    let first_entered = Arc::new(Notify::new());
+    let first_release = Arc::new(Notify::new());
+    let second_entered = Arc::new(Notify::new());
+    let second_release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(SequencedBlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            calls: std::sync::Mutex::new(0),
+            first_entered: Arc::clone(&first_entered),
+            first_release: Arc::clone(&first_release),
+            second_entered: Arc::clone(&second_entered),
+            second_release: Arc::clone(&second_release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let requested_revision: WorkflowGraphRevision = session
+        .graph_revision
+        .parse()
+        .expect("valid graph revision");
+    let first_revision = requested_revision.clone();
+    let second_revision = requested_revision;
+    let first_store = Arc::clone(&store);
+    let first_session_id = session.session_id.clone();
+    let first = tokio::spawn(async move {
+        first_store
+            .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: first_session_id,
+                graph_revision: first_revision,
+            })
+            .await
+    });
+    first_entered.notified().await;
+
+    let second_store = Arc::clone(&store);
+    let second_session_id = session.session_id.clone();
+    let second = tokio::spawn(async move {
+        second_store
+            .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: second_session_id,
+                graph_revision: second_revision,
+            })
+            .await
+    });
+    second_entered.notified().await;
+    second_release.notify_one();
+    let second_response = second
+        .await
+        .expect("second refresh task should not panic")
+        .expect("second refresh response");
+    assert_eq!(
+        second_response.summary.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+
+    first_release.notify_one();
+    let first_response = first
+        .await
+        .expect("first refresh task should not panic")
+        .expect("first refresh response");
+    assert_eq!(
+        first_response.summary.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert!(first_response.node_projections.is_empty());
+    assert_eq!(
+        first_response.summary.validation_session_id,
+        second_response.summary.validation_session_id
     );
 }
 
@@ -999,6 +1074,57 @@ impl InferenceInterfaceFactsProvider for BlockingInferenceFactsProvider {
     > {
         self.entered.notify_one();
         self.release.notified().await;
+        Ok(inputs
+            .iter()
+            .filter_map(|input| {
+                self.facts
+                    .get(&input.node_id)
+                    .cloned()
+                    .map(|facts| (input.node_id.clone(), facts))
+            })
+            .collect())
+    }
+}
+
+#[derive(Debug)]
+struct SequencedBlockingInferenceFactsProvider {
+    facts: BTreeMap<String, InferenceInterfaceResolverFacts>,
+    calls: std::sync::Mutex<usize>,
+    first_entered: Arc<Notify>,
+    first_release: Arc<Notify>,
+    second_entered: Arc<Notify>,
+    second_release: Arc<Notify>,
+}
+
+#[async_trait]
+impl InferenceInterfaceFactsProvider for SequencedBlockingInferenceFactsProvider {
+    async fn facts_for_resolution_inputs(
+        &self,
+        inputs: &[InferenceInterfaceGraphResolutionInput],
+    ) -> Result<
+        BTreeMap<String, InferenceInterfaceResolverFacts>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        let call_index = {
+            let mut calls = self.calls.lock().expect("call counter lock");
+            *calls += 1;
+            *calls
+        };
+        match call_index {
+            1 => {
+                self.first_entered.notify_one();
+                self.first_release.notified().await;
+            }
+            2 => {
+                self.second_entered.notify_one();
+                self.second_release.notified().await;
+            }
+            _ => {
+                return Err(InferenceInterfaceFactsProviderError::Resolve(
+                    "unexpected validation facts call".to_string(),
+                ));
+            }
+        }
         Ok(inputs
             .iter()
             .filter_map(|input| {

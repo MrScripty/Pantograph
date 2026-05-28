@@ -16,6 +16,7 @@ mod inference_interface_publication;
 mod inference_interface_request;
 mod inference_interface_resolver;
 mod inference_interface_validation;
+mod inference_validation_lifecycle;
 mod inference_validation_state;
 mod inspection;
 mod memory_impact;

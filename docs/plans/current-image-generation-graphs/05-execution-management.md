@@ -14437,6 +14437,35 @@ Worker rules:
     check -p pantograph-workflow-service`; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d validation lifecycle identity slice:
+  - Smallest useful vertical slice: add the workflow-service validation
+    lifecycle owner for active validation-session identity, supersession,
+    session-close rejection, and publication freshness checks.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: only the active backend-owned validation
+    session for the current graph revision may publish. Superseded validation
+    results return the current backend summary without recording stale node
+    projections, and session close rejects later publication.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_state
+    --lib`; `cargo check -p pantograph-workflow-service`; and `git diff
+    --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 

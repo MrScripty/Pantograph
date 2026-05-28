@@ -83,6 +83,14 @@ impl GraphSessionStore {
             DraftGraphValidationSessionId::parse(format!("validation.session.{}", Uuid::new_v4()))
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         let resolution_inputs = inference_interface_resolution_inputs_from_graph(&graph);
+        self.validation_lifecycle
+            .begin_validation(
+                graph_session_id.clone(),
+                current_graph_revision.clone(),
+                validation_session_id.clone(),
+            )
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         let facts_by_node_id = self
             .inference_interface_facts_provider
             .facts_for_resolution_inputs(&resolution_inputs.requests)
@@ -98,6 +106,29 @@ impl GraphSessionStore {
                     graph_session_id,
                     requested_graph_revision: request.graph_revision,
                     current_graph_revision: current_graph_revision_after_facts,
+                })
+                .await;
+            return Ok(WorkflowGraphCurrentValidationRefreshResponse {
+                summary,
+                node_projections: Vec::new(),
+            });
+        }
+        if self
+            .validation_lifecycle
+            .accept_publication(
+                &graph_session_id,
+                &current_graph_revision,
+                &validation_session_id,
+            )
+            .await
+            .is_err()
+        {
+            let summary = self
+                .validation_state
+                .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
+                    graph_session_id,
+                    requested_graph_revision: request.graph_revision,
+                    current_graph_revision,
                 })
                 .await;
             return Ok(WorkflowGraphCurrentValidationRefreshResponse {
@@ -212,6 +243,14 @@ impl GraphSessionStore {
         drop(state);
 
         let resolution_inputs = inference_interface_resolution_inputs_from_graph(&graph);
+        self.validation_lifecycle
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                validation_session_id.clone(),
+            )
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         let facts_by_node_id = self
             .inference_interface_facts_provider
             .facts_for_resolution_inputs(&resolution_inputs.requests)
@@ -225,6 +264,10 @@ impl GraphSessionStore {
                 "validation graph revision changed before publication".to_string(),
             ));
         }
+        self.validation_lifecycle
+            .accept_publication(&graph_session_id, &graph_revision, &validation_session_id)
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
         let publication = publish_inference_validation_for_resolution_inputs(
             validation_session_id,

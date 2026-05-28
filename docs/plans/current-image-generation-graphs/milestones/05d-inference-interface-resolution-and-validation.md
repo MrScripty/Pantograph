@@ -2980,6 +2980,46 @@ defining an image-only inference-node interface.
     publisher that rejects stale post-provider results, but it still needs task
     ownership, cancellation/supersession, bounded event state, and transport
     event delivery slices.
+- [x] 2026-05-28 validation lifecycle owner identity slice completed:
+  - Smallest useful vertical slice: added a workflow-service
+    `inference_validation_lifecycle` owner for active validation-session
+    identity, supersession, session-close rejection, and publication freshness
+    checks, then composed it into `GraphSessionStore`.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: validation publications are accepted
+    only for the active backend-owned graph session, graph revision, and
+    validation-session id. Superseded validation results return the current
+    backend summary without recording stale node projections; no Tauri/frontend
+    validation state, raw facts, or compatibility resolver path was added.
+  - Standards result: lifecycle policy is isolated in a dedicated
+    workflow-service module, uses typed ids/revisions/session ids, keeps async
+    at lock boundaries only, adds deterministic supersession/close tests, and
+    updates the graph README. No spawned tasks or new dependencies were added
+    in this slice.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_state
+    --lib`; `cargo check -p pantograph-workflow-service`; and `git diff
+    --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: add task ownership/cancellation and bounded event
+    buffers around this lifecycle owner before exposing dedicated
+    graph-validation transport events.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

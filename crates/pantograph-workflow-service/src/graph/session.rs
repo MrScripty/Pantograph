@@ -27,6 +27,7 @@ use super::group_mutation::{
 use super::inference_interface_facts::{
     InferenceInterfaceFactsProvider, UnavailableInferenceInterfaceFactsProvider,
 };
+use super::inference_validation_lifecycle::WorkflowGraphValidationLifecycleOwner;
 use super::inference_validation_state::{
     CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
     DependencyEnvironmentActionIntentStateResolution,
@@ -72,6 +73,7 @@ fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]
 pub struct GraphSessionStore {
     sessions: RwLock<HashMap<String, GraphSessionHandle>>,
     validation_state: CurrentInferenceValidationStateStore,
+    validation_lifecycle: WorkflowGraphValidationLifecycleOwner,
     inference_interface_facts_provider: Arc<dyn InferenceInterfaceFactsProvider>,
     dependency_environment_service: SharedDependencyEnvironmentService,
     stale_timeout: Duration,
@@ -131,6 +133,7 @@ impl GraphSessionStore {
         Self {
             sessions: RwLock::new(HashMap::new()),
             validation_state: CurrentInferenceValidationStateStore::new(),
+            validation_lifecycle: WorkflowGraphValidationLifecycleOwner::new(),
             inference_interface_facts_provider: inference_provider,
             dependency_environment_service: DependencyEnvironmentService::new(dependency_provider),
             stale_timeout: timeout,
@@ -172,6 +175,9 @@ impl GraphSessionStore {
                 session_id
             )));
         }
+        self.validation_lifecycle
+            .close_graph_session(&graph_session_id)
+            .await;
         self.validation_state
             .clear_graph_session(&graph_session_id)
             .await;
