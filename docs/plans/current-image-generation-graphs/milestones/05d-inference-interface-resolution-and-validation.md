@@ -3316,6 +3316,37 @@ defining an image-only inference-node interface.
     through the rest of the graph-revision-changing edit operations, then use
     tracked spawned validation tasks and observe task completion,
     cancellation, and panic paths at the lifecycle owner.
+- [x] 2026-05-28 node-data validation cancellation slice completed:
+  - Smallest useful vertical slice: wire node-data graph mutations through the
+    workflow-service validation cancellation helper after graph state is
+    snapshotted and the graph session lock is released.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_node_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and the execution log.
+  - No-fallback/no-legacy confirmation: inference-node data changes cancel
+    active validation through the canonical lifecycle owner instead of letting
+    stale provider results publish, relying on frontend invalidation, or
+    preserving a parallel stale-output validation path.
+  - Standards result: the production mutation path does not hold the graph
+    session lock while notifying the lifecycle owner, uses the existing typed
+    graph-revision-changed cancellation reason, and adds a focused race test.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_node_data_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    update_node_data_merges_patch_into_existing_data --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; production source-search
+    verification for retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls in `session_node_api.rs`; and
+    `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: wire the lifecycle cancellation helper through the
+    remaining graph-revision-changing node, edge, connection, grouping, undo,
+    and redo mutations.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

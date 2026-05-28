@@ -14686,6 +14686,29 @@ Worker rules:
     path; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d node-data validation cancellation slice:
+  - Smallest useful vertical slice: wire node-data graph mutations through the
+    workflow-service validation cancellation helper after graph state is
+    snapshotted and the graph session lock is released.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_node_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: inference-node data changes cancel active
+    validation through the canonical lifecycle owner, with no frontend
+    invalidation fallback or parallel stale-output publication path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_node_data_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    update_node_data_merges_patch_into_existing_data --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; production source-search
+    verification for retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls in `session_node_api.rs`; and
+    `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 
 ### Traceability Links
 
