@@ -23,6 +23,7 @@ import type {
   WorkflowAdminQueueReprioritizeResponse,
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
+  WorkflowExecutableValidationSnapshotRecord,
   InferencePortPayloadContract,
   WorkflowBackendTaskCapability,
   WorkflowManagedMediaDependencyStatus,
@@ -506,11 +507,27 @@ test('execution session commands preserve scheduler-backed request boundaries', 
     outputs: [],
     timing_ms: 45,
   };
+  const snapshotResponse: WorkflowExecutableValidationSnapshotRecord = {
+    schema_version: 2,
+    validation_snapshot_id: 'wfvalsnap_test',
+    workflow_id: 'workflow-a',
+    workflow_version_id: 'workflow-version-a',
+    workflow_semantic_version: '0.1.0',
+    workflow_execution_fingerprint: 'workflow-fingerprint-a',
+    descriptor_contract_version: 1,
+    graph_revision: 'graph-revision-a',
+    validation_session_id: 'validation-session-a',
+    validation_summary: null,
+    nodes: [],
+  };
   const closeResponse: WorkflowExecutionSessionCloseResponse = { ok: true };
   mockIPC((cmd, args) => {
     calls.push({ cmd, args });
     if (cmd === 'workflow_create_execution_session') {
       return createResponse;
+    }
+    if (cmd === 'publish_graph_session_executable_validation_snapshot') {
+      return snapshotResponse;
     }
     if (cmd === 'workflow_run_execution_session') {
       return runResponse;
@@ -524,6 +541,13 @@ test('execution session commands preserve scheduler-backed request boundaries', 
       workflow_id: 'workflow-a',
       usage_profile: null,
       keep_alive: false,
+    });
+    const snapshot = await service.publishGraphSessionExecutableValidationSnapshot({
+      workflow_id: 'workflow-a',
+      workflow_semantic_version: '0.1.0',
+      graph_session_id: 'graph-session-a',
+      validation_session_id: 'validation-session-a',
+      validation_snapshot_id: null,
     });
     const run = await service.runWorkflowExecutionSession({
       session_id: created.session_id,
@@ -539,9 +563,10 @@ test('execution session commands preserve scheduler-backed request boundaries', 
     });
 
     assert.deepEqual(created, createResponse);
+    assert.deepEqual(snapshot, snapshotResponse);
     assert.deepEqual(run, runResponse);
     assert.deepEqual(closed, closeResponse);
-    const runArgs = calls[1]?.args as { request?: unknown; channel?: unknown };
+    const runArgs = calls[2]?.args as { request?: unknown; channel?: unknown };
     assert.equal(typeof runArgs.channel, 'object');
     assert.deepEqual(calls, [
       {
@@ -551,6 +576,18 @@ test('execution session commands preserve scheduler-backed request boundaries', 
             workflow_id: 'workflow-a',
             usage_profile: null,
             keep_alive: false,
+          },
+        },
+      },
+      {
+        cmd: 'publish_graph_session_executable_validation_snapshot',
+        args: {
+          request: {
+            workflow_id: 'workflow-a',
+            workflow_semantic_version: '0.1.0',
+            graph_session_id: 'graph-session-a',
+            validation_session_id: 'validation-session-a',
+            validation_snapshot_id: null,
           },
         },
       },

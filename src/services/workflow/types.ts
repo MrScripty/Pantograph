@@ -964,6 +964,50 @@ export interface WorkflowExecutionSessionRunRequest {
   priority?: number | null;
 }
 
+export interface WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+  workflow_id: string;
+  workflow_semantic_version: string;
+  graph_session_id: string;
+  validation_session_id?: string | null;
+  validation_snapshot_id?: string | null;
+}
+
+export interface WorkflowExecutableValidationSnapshotDiagnostic {
+  severity: string;
+  code: string;
+  message: string;
+}
+
+export interface WorkflowExecutableValidationSnapshotNode {
+  node_id: string;
+  descriptor_fingerprint: string;
+  task_kind: string;
+  model_ref: unknown;
+  constraints?: unknown;
+  availability_status: string;
+  validation_status: string;
+  trait_settings?: unknown[];
+  estimate_hints?: unknown[];
+  dependency_requirements_id: string;
+  selected_binding_ids?: string[];
+  dependency_override_fingerprint: string;
+  blocking_diagnostics?: WorkflowExecutableValidationSnapshotDiagnostic[];
+}
+
+export interface WorkflowExecutableValidationSnapshotRecord {
+  schema_version: number;
+  validation_snapshot_id: string;
+  workflow_id: string;
+  workflow_version_id: string;
+  workflow_semantic_version: string;
+  workflow_execution_fingerprint: string;
+  descriptor_contract_version: number;
+  graph_revision: string;
+  validation_session_id: string;
+  validation_summary: unknown;
+  nodes: WorkflowExecutableValidationSnapshotNode[];
+}
+
 export interface WorkflowExecutionSessionCloseRequest {
   session_id: string;
 }

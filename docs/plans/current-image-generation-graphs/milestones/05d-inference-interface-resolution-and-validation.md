@@ -1181,8 +1181,20 @@ defining an image-only inference-node interface.
     compatibility shim, and scheduler validation now checks proof execution
     context against workflow/run/node/task identity before admitting or
     dispatching runtime work.
-  - Remaining follow-up: Frontend/Tauri publish-before-run wiring and
-    TypeScript contract mirrors remain pending slices.
+  - 2026-05-27 follow-up slice completed: Frontend/Tauri transport now exposes
+    the graph-session executable validation snapshot publisher as a typed
+    Tauri command and TypeScript service method. The command forwards the
+    `WorkflowGraphSessionExecutableValidationSnapshotPublishRequest` directly
+    to workflow-service and returns the backend-owned
+    `WorkflowExecutableValidationSnapshotRecord`; Tauri and TypeScript do not
+    compute validation freshness, workflow version fingerprints, dependency
+    proof freshness, or scheduler admission authority.
+  - Remaining follow-up: wire the saved-run submit flow to call this publisher
+    before scheduler execution-session admission once the active graph session
+    id, workflow id/version, and current validation session identity are
+    available from backend-owned validation state. The next slice must not
+    re-enable direct edit-session execution or synthesize missing validation
+    identity in Tauri/frontend code.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and

@@ -14134,8 +14134,42 @@ Worker rules:
     runtime-host areas. Search matches are only rejection tests and README
     prohibitions. Existing warning: `set_active_run_execution_plan` remains a
     pre-existing unused store method.
-  - Remaining follow-up: continue with Frontend/Tauri publish-before-run wiring
-    and TypeScript contract mirrors.
+  - Follow-up resolved by the 2026-05-27 Frontend/Tauri executable snapshot
+    publish transport slice below: TypeScript contract mirrors and the thin
+    graph-session publish command now exist for saved-run submit integration.
+- 2026-05-27 Milestone 5d Frontend/Tauri executable snapshot publish transport
+  slice:
+  - Smallest useful vertical slice: expose the existing workflow-service
+    graph-session executable validation snapshot publisher through a thin Tauri
+    command and TypeScript workflow service method, with focused command-boundary
+    coverage.
+  - Allowed files touched:
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/README.md`, this milestone, and this execution log.
+  - No-fallback/no-legacy result: the new command only transports
+    `WorkflowGraphSessionExecutableValidationSnapshotPublishRequest` into
+    workflow-service and returns the backend-owned snapshot record. Tauri and
+    TypeScript do not resolve validation sessions, compute graph freshness,
+    create dependency proof freshness, synthesize workflow versions, or
+    re-enable direct edit-session execution.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+    --check`; `node --experimental-strip-types --test
+    src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+    typecheck`; and `git diff --check`.
+  - Verification blocked: `cargo check --manifest-path src-tauri/Cargo.toml`
+    still fails on the pre-existing
+    `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
+    missing-method error, which is unrelated to this slice and was already
+    recorded by earlier Milestone 5d checks.
+  - Remaining follow-up: wire the saved-run submit flow to call the publisher
+    before scheduler execution-session run admission once backend validation
+    state exposes the active graph-session validation session identity. Do not
+    reintroduce direct edit-session execution or frontend/Tauri validation
+    identity synthesis.
 
 ### Traceability Links
 

@@ -41,7 +41,9 @@ import type {
   WorkflowExecutionSessionCreateRequest,
   WorkflowExecutionSessionCreateResponse,
   WorkflowExecutionSessionRunRequest,
+  WorkflowExecutableValidationSnapshotRecord,
   WorkflowEvent,
+  WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
   WorkflowManagedMediaDependencyId,
   WorkflowManagedMediaDependencyInstallFromStagingRequest,
   WorkflowManagedMediaDependencyStatus,
@@ -99,6 +101,31 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       request,
       channel,
     });
+  }
+
+  async publishGraphSessionExecutableValidationSnapshot(
+    request: WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
+  ): Promise<WorkflowExecutableValidationSnapshotRecord> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        schema_version: 2,
+        validation_snapshot_id: request.validation_snapshot_id ?? 'mock-validation-snapshot',
+        workflow_id: request.workflow_id,
+        workflow_version_id: `${request.workflow_id}@${request.workflow_semantic_version}`,
+        workflow_semantic_version: request.workflow_semantic_version,
+        workflow_execution_fingerprint: 'mock-workflow-execution-fingerprint',
+        descriptor_contract_version: 1,
+        graph_revision: 'mock-graph-revision',
+        validation_session_id: request.validation_session_id ?? 'mock-validation-session',
+        validation_summary: null,
+        nodes: [],
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowExecutableValidationSnapshotRecord>(
+      'publish_graph_session_executable_validation_snapshot',
+      { request },
+    );
   }
 
   async closeWorkflowExecutionSession(

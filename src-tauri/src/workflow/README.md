@@ -188,6 +188,11 @@ Saved graph inspection is exposed through the thin `workflow_graph_inspect`
 command, which delegates to `pantograph-workflow-service` and returns
 `WorkflowGraphInspectionProjection` directly instead of constructing run-shaped
 compatibility data in Tauri.
+Graph-session executable validation snapshot publication is exposed through a
+thin edit-session transport command. Tauri forwards the typed publish request
+to `pantograph-workflow-service` and returns the backend-owned snapshot record;
+it does not compute validation freshness, workflow version fingerprints,
+dependency proof freshness, or scheduler admission authority.
 Managed media conversion is injected into the shared workflow service at
 startup from `app_setup.rs`. The neutral conversion request/result contract
 stays in `pantograph-media-conversion`; the Tauri adapter only resolves

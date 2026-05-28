@@ -93,6 +93,11 @@ Dependency-environment action intents are forwarded as graph-session commands.
 Frontend service code may carry the typed action intent and result DTOs, but it
 does not build dependency planning or dependency-environment requests, resolve
 Pumas paths/facts, or own validation freshness policy.
+Graph-session executable validation snapshot publication is also forwarded as a
+typed command before saved-run admission wiring consumes it. The service mirrors
+the Rust request and snapshot record shape, but workflow-service remains the
+owner of graph revision checks, validation-session freshness, executable
+snapshot compaction, attribution persistence, and enqueue gating.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.
