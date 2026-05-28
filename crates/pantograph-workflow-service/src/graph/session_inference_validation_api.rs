@@ -16,7 +16,8 @@ use super::super::inference_interface_request::inference_interface_resolution_in
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
 use super::super::inference_validation_state::{
     CurrentInferenceSchedulerProjectionRequest, WorkflowGraphCurrentValidationRefreshRequest,
-    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
+    WorkflowGraphCurrentValidationRefreshResponse, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphCurrentValidationSummaryStateRequest,
 };
 use super::super::types::WorkflowGraph;
@@ -51,7 +52,7 @@ impl GraphSessionStore {
     pub async fn refresh_current_validation_summary(
         &self,
         request: WorkflowGraphCurrentValidationRefreshRequest,
-    ) -> Result<WorkflowGraphCurrentValidationSummaryResponse, WorkflowServiceError> {
+    ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
         let graph_session_id = WorkflowGraphSessionId::parse(&request.graph_session_id)
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         let handle = self.get_session_handle(&request.graph_session_id).await?;
@@ -64,14 +65,18 @@ impl GraphSessionStore {
         drop(state);
 
         if current_graph_revision != request.graph_revision {
-            return Ok(self
+            let summary = self
                 .validation_state
                 .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
                     graph_session_id,
                     requested_graph_revision: request.graph_revision,
                     current_graph_revision,
                 })
-                .await);
+                .await;
+            return Ok(WorkflowGraphCurrentValidationRefreshResponse {
+                summary,
+                node_projections: Vec::new(),
+            });
         }
 
         let validation_session_id =
@@ -92,6 +97,7 @@ impl GraphSessionStore {
         )
         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
+        let node_projections = publication.node_projections.clone();
         self.validation_state
             .record_validation_publication(
                 graph_session_id.clone(),
@@ -101,14 +107,19 @@ impl GraphSessionStore {
             .await
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
 
-        Ok(self
+        let summary = self
             .validation_state
             .current_validation_summary(WorkflowGraphCurrentValidationSummaryStateRequest {
                 graph_session_id,
                 requested_graph_revision: request.graph_revision,
                 current_graph_revision,
             })
-            .await)
+            .await;
+
+        Ok(WorkflowGraphCurrentValidationRefreshResponse {
+            summary,
+            node_projections,
+        })
     }
 
     pub async fn scheduler_inference_task_projections_for_session(

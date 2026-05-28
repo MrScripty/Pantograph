@@ -69,6 +69,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
   submit gate for the saved graph revision. Components may display the
   backend-provided message, but must not rebuild inference validation,
   dependency proof, Pumas readiness, runtime, or scheduler eligibility locally.
+  Descriptor/authored-port projection data returned by validation refresh is
+  display data only; it must not become a second frontend submit policy.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.

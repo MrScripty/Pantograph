@@ -105,8 +105,10 @@ descriptors or infer queue eligibility from local node data.
 Current graph validation refreshes are forwarded as typed graph-session
 commands using the caller-observed graph revision. The service does not mint
 validation session ids or provide descriptor/Pumas/runtime facts; it preserves
-the backend summary response exactly so stale revisions and unavailable facts
-remain backend-owned gate states.
+the backend refresh response exactly so stale revisions and unavailable facts
+remain backend-owned gate states. The refresh response may include typed
+descriptor/authored-port projection records for editor rendering; service code
+must not turn those records into local submit or scheduler eligibility policy.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.

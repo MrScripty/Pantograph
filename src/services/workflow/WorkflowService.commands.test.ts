@@ -21,6 +21,7 @@ import type {
   WorkflowAdminQueueCancelResponse,
   WorkflowAdminQueuePushFrontResponse,
   WorkflowAdminQueueReprioritizeResponse,
+  WorkflowGraphCurrentValidationRefreshResponse,
   WorkflowGraphCurrentValidationSummaryResponse,
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
@@ -674,37 +675,40 @@ test('workflow command service forwards current validation summary requests', as
 test('workflow command service forwards current validation refresh requests', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];
-  const summaryResponse: WorkflowGraphCurrentValidationSummaryResponse = {
-    graph_session_id: 'graph-session-a',
-    requested_graph_revision: 'graph-revision-a',
-    current_graph_revision: 'graph-revision-a',
-    validation_session_id: 'validation-session-refreshed',
-    state: 'current',
+  const refreshResponse: WorkflowGraphCurrentValidationRefreshResponse = {
     summary: {
-      status: 'executable',
-      executable: true,
-      enqueue_disabled_reasons: [],
-      diagnostics_count: 0,
-      blocking_diagnostics_count: 0,
+      graph_session_id: 'graph-session-a',
+      requested_graph_revision: 'graph-revision-a',
+      current_graph_revision: 'graph-revision-a',
+      validation_session_id: 'validation-session-refreshed',
+      state: 'current',
+      summary: {
+        status: 'executable',
+        executable: true,
+        enqueue_disabled_reasons: [],
+        diagnostics_count: 0,
+        blocking_diagnostics_count: 0,
+      },
+      submit_gate: {
+        allowed: true,
+      },
+      diagnostics: [],
     },
-    submit_gate: {
-      allowed: true,
-    },
-    diagnostics: [],
+    node_projections: [],
   };
   mockIPC((cmd, args) => {
     calls.push({ cmd, args });
-    return summaryResponse;
+    return refreshResponse;
   });
 
   try {
     const service = new WorkflowCommandService();
-    const summary = await service.refreshCurrentGraphValidationSummary({
+    const refresh = await service.refreshCurrentGraphValidationSummary({
       graph_session_id: 'graph-session-a',
       graph_revision: 'graph-revision-a',
     });
 
-    assert.deepEqual(summary, summaryResponse);
+    assert.deepEqual(refresh, refreshResponse);
     assert.deepEqual(calls, [
       {
         cmd: 'refresh_current_graph_validation_summary',

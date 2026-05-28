@@ -14309,6 +14309,40 @@ Worker rules:
   - Remaining follow-up: continue live-validation UX/event lifecycle work by
     reusing this backend refresh and summary/gate owner; do not add polling or
     a second validation interpretation path in frontend/Tauri.
+- 2026-05-27 Milestone 5d current validation refresh projection slice:
+  - Smallest useful vertical slice: replace the refresh command return shape
+    with a typed response that contains the current validation summary/gate and
+    bounded per-node `InferenceInterfaceNodeProjectionRecord` values from the
+    same backend descriptor-publication pass.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    workflow-service graph README,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/components/WorkflowToolbar.svelte`, components README, this
+    milestone, and this execution log.
+  - No-fallback/no-legacy result: graph-editor follow-up work can consume
+    descriptor/authored-port projection data from the workflow-service
+    validation refresh response without resolving descriptors, Pumas facts,
+    runtime facts, dependency proofs, or scheduler policy in Tauri/frontend
+    code. Submit remains controlled only by `response.summary.submit_gate`; node
+    projections are display/review data and not a second validation authority.
+  - Verification passed: `cargo fmt`; `cargo test -p
+    pantograph-workflow-service current_validation_summary`; `npm run
+    test:frontend -- WorkflowService.commands.test.ts
+    workflowToolbarEvents.test.ts`; `npm run typecheck`; and `git diff
+    --check`.
+  - Verification blocked: `cargo check --manifest-path src-tauri/Cargo.toml`
+    remains blocked by the pre-existing
+    `src-tauri/src/app_setup.rs:96 Arc<WorkflowService>::set_media_conversion_executor`
+    missing-method error, unrelated to this slice.
 
 ### Traceability Links
 

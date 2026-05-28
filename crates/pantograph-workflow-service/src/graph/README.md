@@ -103,7 +103,10 @@ request carries graph-session identity and the graph revision observed by the
 caller; workflow-service snapshots the current graph, rejects stale requested
 revisions as typed summary responses, generates the validation-session id,
 runs the existing descriptor publication core outside the graph lock, records
-current validation state, and returns the same summary/gate DTO used by submit.
+current validation state, and returns the same summary/gate DTO used by submit
+plus bounded per-node projection records from that validation pass. The
+projection records are transport data for editor port rendering and review;
+the summary/gate remains the only submit authority.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.

@@ -1295,11 +1295,21 @@ defining an image-only inference-node interface.
     expose thin refresh commands, and the toolbar uses refresh instead of a
     passive read so a clean saved graph can obtain a backend validation session
     without frontend-owned validation identity.
+  - 2026-05-27 follow-up slice completed: current validation refresh now
+    returns a dedicated typed response containing the summary/gate plus bounded
+    `InferenceInterfaceNodeProjectionRecord` values from the same backend
+    descriptor-publication pass. This gives graph-editor follow-up work access
+    to descriptor/authored-port projection data without asking Tauri or
+    frontend code to resolve descriptors, read Pumas facts, infer scheduler
+    policy, or reinterpret submit eligibility. The toolbar continues to consume
+    only `response.summary.submit_gate` for Submit.
   - No-fallback/no-legacy confirmation: refresh requests do not accept
     caller-minted validation session ids, raw Pumas facts, runtime facts,
     dependency proofs, package summaries, load targets, local paths, or
     scheduler policy. The default fact-provider path still reports typed
     unavailable/not-implemented states rather than synthesizing support.
+    Projection records are display/review data only and must not become a
+    second validation or submit-gate authority.
   - Verification passed: `cargo fmt`; `cargo test -p
     pantograph-workflow-service current_validation_summary`; `npm run
     test:frontend -- WorkflowService.commands.test.ts

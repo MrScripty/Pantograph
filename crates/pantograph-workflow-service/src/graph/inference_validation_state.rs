@@ -571,6 +571,14 @@ pub struct WorkflowGraphCurrentValidationRefreshRequest {
     pub graph_revision: WorkflowGraphRevision,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphCurrentValidationRefreshResponse {
+    pub summary: WorkflowGraphCurrentValidationSummaryResponse,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_projections: Vec<InferenceInterfaceNodeProjectionRecord>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct WorkflowGraphCurrentValidationSummaryResponse {

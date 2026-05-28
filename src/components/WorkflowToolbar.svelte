@@ -152,9 +152,9 @@
         graph_session_id: graphSessionId,
         graph_revision: graphRevision,
       })
-      .then((summary) => {
+      .then((refresh) => {
         if (!cancelled && currentValidationSummaryKey === requestKey) {
-          currentValidationSummary = summary;
+          currentValidationSummary = refresh.summary;
         }
       })
       .catch(() => {

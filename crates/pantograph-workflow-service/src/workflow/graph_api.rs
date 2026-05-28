@@ -3,9 +3,9 @@ use crate::graph::{
     EdgeInsertionPreviewResponse, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
     NodeRegistry, WorkflowFile, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
-    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationSummaryRequest,
-    WorkflowGraphCurrentValidationSummaryResponse, WorkflowGraphDeleteRequest,
-    WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
+    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
+    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
+    WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
@@ -85,7 +85,7 @@ impl WorkflowService {
     pub async fn workflow_graph_refresh_current_validation_summary(
         &self,
         request: WorkflowGraphCurrentValidationRefreshRequest,
-    ) -> Result<WorkflowGraphCurrentValidationSummaryResponse, WorkflowServiceError> {
+    ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
         self.graph_session_store
             .refresh_current_validation_summary(request)
             .await

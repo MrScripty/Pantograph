@@ -59,9 +59,9 @@ while still handling desktop runtime execution concerns.
   must not resolve inference descriptors, Pumas model state, dependency
   requirements, or scheduler eligibility locally.
 - Current graph validation refresh commands follow the same transport rule.
-  Tauri forwards the expected graph revision and returns the backend summary;
-  workflow-service owns validation-session id generation and descriptor
-  publication.
+  Tauri forwards the expected graph revision and returns the backend refresh
+  response; workflow-service owns validation-session id generation, descriptor
+  publication, summary/gate policy, and projection records.
 - Public GUI workflow submission must enter through scheduler execution-session
   commands. The legacy edit-session run command must stay unregistered.
 - Retention cleanup command handlers must stay transport-thin and delegate to
@@ -161,7 +161,8 @@ fallback validation path or infer queue eligibility from frontend graph data.
 Current graph validation refresh commands are thin wrappers over the
 workflow-service refresh API. They do not accept caller-minted validation
 session ids, raw descriptor facts, Pumas facts, dependency proofs, or runtime
-facts.
+facts, and they must not reinterpret returned node projections as submit
+policy.
 The legacy Tauri-local node registry mirror has also been removed; definition
 commands now use the service-owned registry directly.
 The legacy Tauri-local execution manager has been removed; undo/redo and

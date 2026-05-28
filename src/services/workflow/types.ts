@@ -982,6 +982,166 @@ export interface WorkflowGraphCurrentValidationRefreshRequest {
   graph_revision: string;
 }
 
+export interface PumasModelRefMigrationDiagnostic {
+  code: string;
+  message: string;
+  input?: string | null;
+}
+
+export interface PumasModelRef {
+  model_id: string;
+  revision?: string | null;
+  selected_artifact_id?: string | null;
+  selected_artifact_path?: string | null;
+  migration_diagnostics?: PumasModelRefMigrationDiagnostic[];
+}
+
+export type InferenceAvailabilityStatus =
+  | 'available'
+  | 'unavailable'
+  | 'not_implemented'
+  | 'unsupported'
+  | 'pending'
+  | 'stale';
+
+export type InferenceAvailabilityReason =
+  | 'missing_model_facts'
+  | 'missing_selected_artifact'
+  | 'missing_runtime_capability'
+  | 'runtime_not_installed'
+  | 'feature_not_implemented'
+  | 'unsupported_model_family'
+  | 'unsupported_task_kind'
+  | 'explicit_runtime_invalid'
+  | 'explicit_device_invalid'
+  | 'stale_facts'
+  | 'drift_detected'
+  | 'missing_required_input'
+  | 'invalid_option'
+  | 'backend_validation_pending';
+
+export interface InferenceAvailability {
+  status: InferenceAvailabilityStatus;
+  reasons?: InferenceAvailabilityReason[];
+}
+
+export type InferencePortDirection = 'input' | 'output';
+export type InferencePortRequirement = 'required' | 'optional';
+export type InferenceScalarType = 'string' | 'bool' | 'i64' | 'u64' | 'f64';
+export type InferenceArtifactType = 'image' | 'audio' | 'video' | 'tensor' | 'document' | 'media';
+export type InferenceReferenceType =
+  | 'pumas_model'
+  | 'media_artifact'
+  | 'runtime_artifact'
+  | 'scheduler_task_result';
+export type InferenceConstraintType = 'runtime' | 'device' | 'denoising_scheduler' | 'sampling_method';
+
+export type InferenceValueType =
+  | { category: 'scalar'; kind: InferenceScalarType }
+  | { category: 'artifact'; kind: InferenceArtifactType }
+  | { category: 'reference'; kind: InferenceReferenceType }
+  | { category: 'constraint'; kind: InferenceConstraintType };
+
+export type InferenceDefaultValue =
+  | { kind: 'use_backend_default' }
+  | { kind: 'string'; value: string }
+  | { kind: 'bool'; value: boolean }
+  | { kind: 'i64'; value: number }
+  | { kind: 'u64'; value: number }
+  | { kind: 'f64'; value: number };
+
+export type InferenceOptionScalar =
+  | { kind: 'string'; value: string }
+  | { kind: 'bool'; value: boolean }
+  | { kind: 'i64'; value: number }
+  | { kind: 'u64'; value: number }
+  | { kind: 'f64'; value: number };
+
+export interface InferenceOptionValue {
+  option_id: string;
+  label: string;
+  value: InferenceOptionScalar;
+  availability: InferenceAvailability;
+  diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
+export interface InferenceNumericRange {
+  min: number;
+  max: number;
+  step?: number | null;
+  default?: number | null;
+}
+
+export type InferencePortOptions =
+  | { kind: 'none' }
+  | { kind: 'any' }
+  | { kind: 'enum'; values: InferenceOptionValue[] }
+  | { kind: 'numeric_range'; range: InferenceNumericRange };
+
+export type InferenceRuntimeConditionKind =
+  | 'runtime'
+  | 'device'
+  | 'runtime_feature'
+  | 'model_family'
+  | 'artifact_kind';
+
+export interface InferenceRuntimeCondition {
+  condition: InferenceRuntimeConditionKind;
+  value: string;
+}
+
+export interface InferencePortDescriptor {
+  port_id: string;
+  label: string;
+  direction: InferencePortDirection;
+  requirement: InferencePortRequirement;
+  value_type: InferenceValueType;
+  default?: InferenceDefaultValue | null;
+  options: InferencePortOptions;
+  availability: InferenceAvailability;
+  runtime_conditions?: InferenceRuntimeCondition[];
+  diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
+export interface InferenceInterfaceDescriptor {
+  contract_version?: number;
+  model_ref: PumasModelRef;
+  task_kind: string;
+  descriptor_fingerprint: string;
+  runtime_conditions?: InferenceRuntimeCondition[];
+  inputs?: InferencePortDescriptor[];
+  outputs?: InferencePortDescriptor[];
+  availability: InferenceAvailability;
+  diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
+export interface AuthoredInferencePortSnapshot {
+  port_id: string;
+  label: string;
+  direction: InferencePortDirection;
+  requirement: InferencePortRequirement;
+  value_type: InferenceValueType;
+  default?: InferenceDefaultValue | null;
+  availability: InferenceAvailability;
+}
+
+export interface AuthoredInferenceInterfaceSnapshot {
+  contract_version?: number;
+  descriptor_fingerprint: string;
+  task_kind: string;
+  inputs?: AuthoredInferencePortSnapshot[];
+  outputs?: AuthoredInferencePortSnapshot[];
+}
+
+export interface InferenceInterfaceNodeProjectionRecord {
+  node_id: string;
+  descriptor: InferenceInterfaceDescriptor;
+  authored_snapshot: AuthoredInferenceInterfaceSnapshot;
+  validation_summary: WorkflowGraphValidationSummary;
+  runtime_constraint?: string | null;
+  device_constraint?: string | null;
+}
+
 export type WorkflowGraphCurrentValidationSummaryState =
   | 'current'
   | 'pending'
@@ -1058,6 +1218,11 @@ export interface WorkflowGraphCurrentValidationSummaryResponse {
   summary?: WorkflowGraphValidationSummary | null;
   submit_gate: WorkflowGraphValidationSubmitGate;
   diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
+export interface WorkflowGraphCurrentValidationRefreshResponse {
+  summary: WorkflowGraphCurrentValidationSummaryResponse;
+  node_projections?: InferenceInterfaceNodeProjectionRecord[];
 }
 
 export interface WorkflowExecutableValidationSnapshotDiagnostic {

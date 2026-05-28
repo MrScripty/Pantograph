@@ -447,11 +447,12 @@ async fn refresh_current_validation_summary_generates_backend_validation_session
         .expect("refresh current validation summary");
 
     assert_eq!(
-        response.state,
+        response.summary.state,
         WorkflowGraphCurrentValidationSummaryState::Current
     );
-    assert!(response.submit_gate.allowed);
+    assert!(response.summary.submit_gate.allowed);
     let validation_session_id = response
+        .summary
         .validation_session_id
         .as_ref()
         .expect("backend generated validation session id");
@@ -459,6 +460,8 @@ async fn refresh_current_validation_summary_generates_backend_validation_session
         .as_str()
         .starts_with("validation.session."));
     assert_ne!(validation_session_id.as_str(), "validation.session.1");
+    assert_eq!(response.node_projections.len(), 1);
+    assert_eq!(response.node_projections[0].node_id.as_str(), "infer");
 }
 
 #[tokio::test]
@@ -481,13 +484,14 @@ async fn refresh_current_validation_summary_rejects_stale_requested_revision() {
         .expect("refresh current validation summary");
 
     assert_eq!(
-        response.state,
+        response.summary.state,
         WorkflowGraphCurrentValidationSummaryState::Stale
     );
-    assert!(!response.submit_gate.allowed);
-    assert!(response.validation_session_id.is_none());
+    assert!(!response.summary.submit_gate.allowed);
+    assert!(response.summary.validation_session_id.is_none());
+    assert!(response.node_projections.is_empty());
     assert_eq!(
-        response.submit_gate.reason_code,
+        response.summary.submit_gate.reason_code,
         Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
     );
 }
