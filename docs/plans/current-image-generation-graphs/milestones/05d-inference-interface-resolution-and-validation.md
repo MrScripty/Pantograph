@@ -3347,6 +3347,40 @@ defining an image-only inference-node interface.
   - Remaining follow-up: wire the lifecycle cancellation helper through the
     remaining graph-revision-changing node, edge, connection, grouping, undo,
     and redo mutations.
+- [x] 2026-05-28 validation graph revision re-plan boundary recorded:
+  - Discovered issue: `WorkflowGraph::compute_fingerprint()` currently derives
+    graph revision from node ids/types and edge endpoints/handles only. It does
+    not include `node.data`, even though inference validation resolver inputs
+    can come from graph-authored node data such as model refs, selected
+    artifact refs, explicit runtime/device constraints, descriptor snapshots,
+    authored port snapshots, literals, defaults, and dependency-environment
+    sidecar choices.
+  - Why implementation stops: continuing to wire graph-revision-change
+    cancellation through more edit operations would harden a stale freshness
+    contract. The validation lifecycle, current validation state, submit gate,
+    scheduler admission, and saved authored snapshot drift checks all depend on
+    a revision/fingerprint that must change when validation-relevant graph data
+    changes. Otherwise node-data edits can retain the same validation revision
+    and make stale summaries appear current.
+  - Required re-plan decision: define the canonical validation freshness key.
+    It must either be the graph revision updated to include a stable,
+    validation-relevant projection of graph node data, or a separate typed
+    validation-input fingerprint stored beside graph revision in validation
+    state, events, submit gates, scheduler projections, and saved graph
+    authored snapshots.
+  - No-fallback/no-legacy confirmation: do not compensate with incidental
+    cancellation calls, frontend cache busting, timestamps, or transport-side
+    invalidation. The freshness key must be canonical, deterministic, and owned
+    by workflow-service/shared contracts as appropriate.
+  - Files inspected: `crates/pantograph-workflow-service/src/graph/types.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_node_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+    and this milestone.
+  - Remaining follow-up: decide the freshness-key design before wiring
+    cancellation into the remaining graph edit operations or closing the live
+    validation lifecycle owner item.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

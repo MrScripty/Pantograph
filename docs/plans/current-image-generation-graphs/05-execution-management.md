@@ -14709,6 +14709,19 @@ Worker rules:
     `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
+  - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
+    `node.data`, but inference validation resolver inputs can be authored in
+    node data. Current validation state and submit gating are keyed by graph
+    revision, so validation-relevant edits can otherwise keep stale validation
+    summaries looking current.
+  - Why implementation stops: wiring more mutation-side cancellation would
+    preserve an incidental invalidation workaround instead of fixing the
+    canonical freshness key.
+  - Required re-plan decision: choose whether graph revision itself must include
+    a stable validation-relevant node-data projection, or whether validation
+    state/events/scheduler projections/saved authored snapshots need a separate
+    typed validation-input fingerprint.
 
 ### Traceability Links
 
