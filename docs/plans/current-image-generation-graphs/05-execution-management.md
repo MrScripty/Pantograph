@@ -13890,6 +13890,101 @@ Worker rules:
     publish command, or persisting dependency readiness freshness as a separate
     validation-snapshot-linked artifact. Recommendation to evaluate: the
     backend-owned graph-session publish command is the clean long-term owner.
+- 2026-05-27 Milestone 5d executable snapshot dependency proof promotion
+  decision:
+  - Decision: use option 2. Replace caller-supplied executable validation
+    snapshot publication with a workflow-service owned graph-session publish
+    command. The command snapshots the draft graph under the graph-session lock,
+    releases the lock before provider/store work, validates current inference
+    validation publication plus dependency requirements proof freshness,
+    resolves the durable workflow version, and persists the executable
+    validation snapshot with dependency proof freshness included.
+  - Ownership/no-fallback rule: workflow-service owns the publish lifecycle and
+    durable snapshot shape. Tauri, frontend, node-engine, runtime-host,
+    scheduler, Pumas providers, and callers must not assemble executable
+    snapshots or dependency proof freshness. Queue admission consumes the saved
+    executable validation snapshot only and must not reach into live draft graph
+    state or current validation side tables.
+  - Contract/staging update: executable snapshot node records must persist
+    path-free dependency requirements id, selected binding ids, dependency
+    override fingerprint, graph revision, validation session id, descriptor
+    fingerprint, model ref, task kind, runtime/device constraints, and typed
+    diagnostics. Next slices are: add a current validation read API for
+    executable nodes plus proof, extend snapshot/projection contracts and
+    fixtures, add the graph-session publish command, update queue admission to
+    build `DependencyReadinessExecutionContext` from saved snapshot fields, and
+    remove or restrict the old caller-supplied runtime snapshot publication
+    path.
+  - Review tightening: executable topology fingerprints exclude node data and
+    dependency selections, while executable validation snapshots are stored one
+    per workflow version. The graph-session publish command must reject changed
+    dependency proof freshness for an existing workflow version with a typed
+    conflict unless the incoming compact snapshot is identical; it must not
+    overwrite an existing snapshot or silently reuse the semantic version when
+    requirements id, selected bindings, override fingerprint, validation
+    session, graph revision, or descriptor fingerprint differ.
+  - Review tightening: add a workflow-service owned executable snapshot source
+    read model that joins current validation publication with current dependency
+    requirements proof before persistence. Queue admission consumes persisted
+    snapshot fields only and must not reach into live validation side tables,
+    draft graph node data, frontend/Tauri state, or provider-private payloads.
+  - Review tightening: queue admission builds the shared
+    `DependencyReadinessExecutionContext` from saved snapshot freshness plus
+    active workflow-run and scheduler-task identity, then hands scheduler
+    readiness a validated request/proof envelope or a documented
+    workflow-service wrapper around that envelope. Scheduler readiness must not
+    reconstruct selected bindings or override state from active task intent.
+  - Review tightening: frontend/Tauri submission must add a thin
+    publish-before-run transport path for the active graph session. The
+    frontend may request publish and display backend validation state, but it
+    must not assemble executable snapshots, dependency proof freshness, Pumas
+    facts, runtime choices, or dependency policy. Tauri remains a pass-through
+    adapter.
+  - Maintainability tightening: implement the next slices in focused modules
+    for snapshot source/read-model construction, graph-session executable
+    publish orchestration, executable snapshot contracts, and queue-admission
+    proof projection instead of adding more bulk to existing oversized
+    workflow-service files.
+  - Standards tightening: persisted and wire contract changes require explicit
+    executable-contract revisions. Bump executable validation snapshot schema
+    version and scheduler task graph schema version when those persisted shapes
+    change, keep serde defaults/unknown-field handling intentional, add typed
+    errors for old-schema/stale-proof/conflict cases, and reject retired schema
+    shapes rather than keeping fallback readers.
+  - Standards tightening: Rust DTOs, Tauri command wrappers, TypeScript
+    workflow-service types, command-service methods, and any intentionally
+    supported UniFFI binding surface must be updated together with matching
+    field names, casing, optionality, and error mapping. If UniFFI is not part
+    of the slice product surface, document it as intentionally out of scope.
+  - Standards tightening: keep sync core/async shell. Graph-session publish may
+    await provider/transport work, but snapshot-source construction,
+    validation, conflict classification, and projection should be synchronous
+    typed helpers. Locks protect only graph/session snapshots and validation
+    reads; provider calls, store writes, and transport work happen after locks
+    are released.
+  - Standards tightening: durable publish must be retry-safe. If cancellation
+    or failure happens after workflow-version resolution but before snapshot
+    persistence, queue admission fails closed with the missing-snapshot
+    diagnostic and a later publish retry either stores an identical compact
+    snapshot or returns the typed changed-proof/version conflict.
+  - Standards tightening: the first implementation slice needs a vertical
+    acceptance path before broad horizontal expansion: graph-session validation
+    publication plus dependency proof -> graph-session executable publish ->
+    persisted snapshot lookup -> saved workflow run admission -> dependency
+    readiness execution-context/envelope construction.
+  - Standards tightening: shared contracts, persisted DTOs, schema versions,
+    frontend TypeScript types, Tauri command wrappers, generated/binding files,
+    and plan files remain serial integration-owner work. Parallel workers may
+    only own non-overlapping implementation modules and must report required
+    shared contract changes instead of editing them.
+  - Verification update: require stale graph/session, missing proof, mismatched
+    requirements id, mismatched selected bindings, stale override fingerprint,
+    changed proof freshness under the same workflow semantic version, snapshot
+    round-trip, compact snapshot path-field rejection/search,
+    queue-admission projection, scheduler envelope validation, publish retry
+    after partial durable state, frontend/Tauri publish-before-run transport,
+    TypeScript/Rust contract field alignment, and direct caller-supplied runtime
+    snapshot rejection tests before active runtime readiness wiring continues.
 
 ### Traceability Links
 

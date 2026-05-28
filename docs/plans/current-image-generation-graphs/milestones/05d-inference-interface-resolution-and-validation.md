@@ -934,6 +934,153 @@ defining an image-only inference-node interface.
     lifecycle and reject stale dependency proof before snapshot persistence.
     Option 1 may be viable as a thinner intermediate only if it is explicitly
     replaced by option 2 and does not become a compatibility path.
+- [x] 2026-05-27 executable snapshot dependency proof promotion decision:
+  - Decision: use option 2. Replace caller-supplied executable validation
+    snapshot publication with a workflow-service owned graph-session publish
+    command. The command owns the full lifecycle: snapshot the draft graph under
+    the graph-session lock, release the lock before provider/store work,
+    resolve or consume the current inference validation publication, require a
+    matching current dependency requirements proof for every executable
+    runtime inference node, validate the durable workflow version/fingerprint,
+    and persist the executable validation snapshot with dependency proof
+    freshness included.
+  - Ownership boundary: workflow-service is the only owner of this publish
+    lifecycle. Tauri, frontend, node-engine, runtime-host, scheduler, Pumas
+    providers, and callers must not assemble executable validation snapshots or
+    dependency proof freshness themselves. The saved executable validation
+    snapshot becomes the durable source for queue admission; queue admission
+    must not reach into live draft graph state or current validation side
+    tables.
+  - Snapshot contract update: add path-free dependency proof freshness to
+    executable validation snapshot node records. Each runtime inference node
+    that is executable must persist dependency requirements id, selected
+    binding ids, dependency override fingerprint, graph revision, validation
+    session id, descriptor fingerprint, model ref, task kind, runtime/device
+    constraints, and typed diagnostics needed to explain stale or unavailable
+    proof. Do not persist local paths, Pumas package facts, load targets, raw
+    dependency override patches, provider-private request payloads, frontend
+    display state, or runtime-host payloads.
+  - API shape: add a backend-owned graph-session publish request that takes the
+    graph session id, workflow id, workflow semantic version, optional
+    validation snapshot id, and validation session id or explicit "publish
+    latest current executable validation" selector. The response remains a
+    `ValidatedWorkflowExecutableValidationSnapshotRecord`. Existing lower-level
+    store/read APIs may remain as persistence helpers, but callers should use
+    the graph-session publish API for executable workflow submission
+    preparation.
+  - Replaced behavior: retire direct caller assembly of
+    `WorkflowExecutableValidationSnapshotPublishRequest` for the production
+    executable publish path once the graph-session publish command is wired.
+    Do not keep a compatibility path that accepts stale caller-supplied
+    publications for runtime-containing workflows.
+  - Review tightening: executable topology fingerprints currently exclude node
+    data and dependency selections by design, while executable validation
+    snapshots are stored one per workflow version. The graph-session publish
+    command must therefore treat changed dependency proof freshness for the
+    same workflow version as a typed conflict unless the incoming compact
+    snapshot is byte-for-byte identical. It must not overwrite the existing
+    snapshot or silently reuse a semantic version when dependency requirements
+    id, selected binding ids, override fingerprint, validation session, graph
+    revision, or descriptor fingerprint differ.
+  - Review tightening: add a workflow-service owned
+    `ExecutableValidationSnapshotSource` read model, or equivalently named
+    internal DTO, that joins the current inference validation publication with
+    current dependency requirements proof before snapshot persistence. Queue
+    admission must consume only the persisted snapshot fields; it must not join
+    live validation side tables, draft graph node data, frontend state, Tauri
+    state, or provider-private payloads after a workflow run is admitted.
+  - Review tightening: queue admission must build the shared
+    `DependencyReadinessExecutionContext` from saved snapshot freshness plus
+    the active workflow run id and scheduler task id. Scheduler readiness must
+    consume a validated request/proof envelope or an explicitly documented
+    workflow-service wrapper around that envelope; it must not reconstruct
+    selected binding ids or dependency override state from active task intent.
+  - Review tightening: desktop submission needs a thin transport integration
+    for the graph-session publish command. The graph editor/frontend may
+    request publish for the active graph session before creating/running the
+    execution session, but it must not assemble executable snapshots,
+    dependency proof freshness, Pumas facts, runtime choices, or dependency
+    policy. Tauri commands remain pass-through adapters only.
+  - Maintainability tightening: do not add the new publish lifecycle as more
+    bulk inside the existing oversized workflow-service files. Split the next
+    code slices into focused modules for snapshot source/read-model construction,
+    graph-session executable publish orchestration, executable snapshot
+    contracts, and queue-admission proof projection.
+  - Standards tightening: persisted and wire contract changes must be explicit
+    executable-contract revisions. Bump executable validation snapshot schema
+    version and scheduler task graph schema version when their persisted shapes
+    change, keep serde `deny_unknown_fields`/default semantics intentional, add
+    typed errors for old-schema/stale-proof/conflict cases, and reject retired
+    schema shapes rather than preserving fallback readers.
+  - Standards tightening: cross-language and transport contract changes must be
+    updated together in the owning slice. Rust request/response DTOs, Tauri
+    command wrappers, TypeScript workflow-service types, command-service
+    methods, and any intentionally supported UniFFI binding surface must agree
+    on field names, casing, optionality, and error mapping. If UniFFI is not
+    part of this product surface for the slice, document it as intentionally
+    out of scope rather than leaving a partial binding.
+  - Standards tightening: keep a sync-core/async-shell shape. Graph-session
+    publish may await provider/transport work, but snapshot-source construction,
+    validation, conflict classification, and projection should be synchronous
+    typed helpers. Locks must only protect graph/session snapshots and current
+    validation reads; provider calls, attribution-store writes, and frontend
+    transport work must run after locks are released.
+  - Standards tightening: durable publish must be retry-safe. If cancellation
+    or failure occurs after workflow-version resolution but before snapshot
+    persistence, queue admission must fail closed with the missing-snapshot
+    diagnostic and a later publish retry must either store an identical compact
+    snapshot or return the typed changed-proof/version conflict.
+  - Standards tightening: the first implementation slice must include a
+    vertical acceptance path before broad horizontal expansion: graph-session
+    validation publication plus dependency proof -> graph-session executable
+    publish -> persisted snapshot lookup -> saved workflow run admission ->
+    dependency readiness execution-context/envelope construction. Focused unit
+    tests can cover each contract branch, but they do not replace this path.
+  - Standards tightening: shared contracts, persisted DTOs, schema versions,
+    frontend TypeScript types, Tauri command wrappers, generated/binding files,
+    and plan files remain serial integration-owner work. Do not split these
+    across parallel workers. Sub-agents, if used later, may only own
+    non-overlapping implementation modules and must report required shared
+    contract changes instead of editing them.
+  - Implementation staging:
+    1. Extend `CurrentInferenceValidationStateStore` with a read API that
+       returns current executable node projection plus current dependency
+       requirements proof for a graph session/revision/validation session,
+       without exposing mutable side-table access to queue admission.
+    2. Extend executable validation snapshot node records and scheduler
+       inference projections with dependency proof freshness fields. Add
+       schema version bumps, schema/fixture tests for persisted snapshots, and
+       fail-closed diagnostics when an executable runtime inference node lacks
+       current proof.
+    3. Add the workflow-service graph-session publish command that snapshots
+       the graph, validates current publication/proof freshness, resolves the
+       workflow version, rejects changed proof freshness for an existing
+       workflow version with a typed conflict, and persists the executable
+       validation snapshot.
+    4. Update queue admission to consume only the saved snapshot freshness
+       fields when building `DependencyReadinessExecutionContext` and the
+       scheduler-facing readiness request/proof envelope.
+    5. Add frontend/Tauri submit integration that calls the graph-session
+       publish command as a transport operation before running a saved workflow
+       execution session. Update TypeScript command/service types in the same
+       slice, keep validation summary and submit gating backend owned, and use
+       event/subscription-backed state instead of adding UI polling.
+    6. Remove or restrict the old caller-supplied executable publication path
+       for runtime-containing workflows so it cannot bypass dependency proof
+       promotion.
+  - Verification gates: add focused tests for stale graph revision, stale
+    validation session, missing dependency proof, mismatched dependency
+    requirements id, mismatched selected binding ids, stale dependency override
+    fingerprint, changed proof freshness under the same workflow semantic
+    version, snapshot persistence round trip, compact snapshot path-field
+    rejection/search, queue-admission freshness projection, scheduler envelope
+    validation, publish retry after partial durable state, frontend/Tauri
+    publish-before-run transport, TypeScript/Rust contract field alignment, and
+    rejection of direct caller-supplied runtime snapshot publication after
+    cutover. Run workflow-service validation-state, executable snapshot,
+    session execution, scheduler task graph/readiness, dependency-planning
+    envelope, frontend command-service/toolbar, and Tauri command tests plus
+    `git diff --check`.
 - [ ] After model-ref-only authoring is validated, wire live validation so model
       selection/change starts backend descriptor validation, renders authored
       ports immediately, overlays pending/stale/unavailable/invalid state, and
