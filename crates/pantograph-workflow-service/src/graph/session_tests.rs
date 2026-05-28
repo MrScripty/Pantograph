@@ -851,6 +851,75 @@ async fn publish_inference_validation_session_rejects_revision_changed_during_fa
 }
 
 #[tokio::test]
+async fn publish_inference_validation_session_rejects_superseded_validation_session() {
+    let first_entered = Arc::new(Notify::new());
+    let first_release = Arc::new(Notify::new());
+    let second_entered = Arc::new(Notify::new());
+    let second_release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(SequencedBlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            calls: std::sync::Mutex::new(0),
+            first_entered: Arc::clone(&first_entered),
+            first_release: Arc::clone(&first_release),
+            second_entered: Arc::clone(&second_entered),
+            second_release: Arc::clone(&second_release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    let first_store = Arc::clone(&store);
+    let first_session_id = session.session_id.clone();
+    let first = tokio::spawn(async move {
+        first_store
+            .publish_inference_validation_session(
+                &first_session_id,
+                DraftGraphValidationSessionId::parse("validation.session.superseded.publish")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    first_entered.notified().await;
+
+    let second_store = Arc::clone(&store);
+    let second_session_id = session.session_id.clone();
+    let second = tokio::spawn(async move {
+        second_store
+            .publish_inference_validation_session(
+                &second_session_id,
+                DraftGraphValidationSessionId::parse("validation.session.current.publish")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    second_entered.notified().await;
+    second_release.notify_one();
+
+    let second_publication = second
+        .await
+        .expect("second publish task should not panic")
+        .expect("second publish response");
+    assert_eq!(
+        second_publication.validation_session.summary.status,
+        DraftGraphValidationStatus::Executable
+    );
+
+    first_release.notify_one();
+    let error = first
+        .await
+        .expect("first publish task should not panic")
+        .expect_err("first publish should reject superseded validation session");
+    assert!(
+        error
+            .to_string()
+            .contains("validation publication cancelled: validation session was superseded"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn dependency_environment_action_intent_blocks_invalid_service_output() {
     let store = GraphSessionStore::with_timeout_and_providers(
         std::time::Duration::from_secs(5 * 60),

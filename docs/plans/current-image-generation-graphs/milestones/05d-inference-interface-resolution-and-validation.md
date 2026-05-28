@@ -3234,6 +3234,45 @@ defining an image-only inference-node interface.
   - Remaining follow-up: have the validation publisher consume typed
     cancellation reasons before accepting provider results, then use them from
     tracked spawned validation tasks.
+- [x] 2026-05-28 validation publisher cancellation consumption slice completed:
+  - Smallest useful vertical slice: have the shared validation publisher
+    consume the lifecycle cancellation receiver after fact lookup and stop
+    before publication acceptance or current-state recording when a validation
+    session has been superseded or its graph session was closed.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: stale provider results are rejected by
+    the workflow-service lifecycle owner and shared publisher instead of a
+    transport retry, frontend filter, legacy validation path, or inferred graph
+    metadata. Cancellation remains a typed lifecycle outcome.
+  - Standards result: the cancellation outcome is typed, displayable for the
+    existing service error envelope, and checked before publication acceptance
+    so async fact lookup cannot publish a superseded graph shape.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    publish_inference_validation_session_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for
+    retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls in the lifecycle/publisher
+    path; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: use the same cancellation receiver from tracked
+    spawned validation tasks and observe task completion, cancellation, and
+    panic paths at the lifecycle owner.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

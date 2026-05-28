@@ -12,7 +12,8 @@ use super::inference_interface_publication::{
 };
 use super::inference_interface_request::inference_interface_resolution_inputs_from_graph;
 use super::inference_validation_lifecycle::{
-    WorkflowGraphValidationLifecycleError, WorkflowGraphValidationLifecycleOwner,
+    WorkflowGraphValidationCancellationReason, WorkflowGraphValidationLifecycleError,
+    WorkflowGraphValidationLifecycleOwner,
 };
 use super::inference_validation_state::CurrentInferenceValidationStateStore;
 use super::types::WorkflowGraph;
@@ -33,6 +34,9 @@ pub(crate) enum WorkflowGraphValidationPublishAttemptOutcome {
         current_graph_revision: WorkflowGraphRevision,
         reason: WorkflowGraphValidationLifecycleError,
     },
+    Cancelled {
+        reason: WorkflowGraphValidationCancellationReason,
+    },
 }
 
 pub(crate) async fn publish_workflow_graph_validation_attempt<F, Fut>(
@@ -47,7 +51,7 @@ where
     Fut: Future<Output = Result<WorkflowGraphRevision, WorkflowServiceError>>,
 {
     let resolution_inputs = inference_interface_resolution_inputs_from_graph(&request.graph);
-    validation_lifecycle
+    let cancellation = validation_lifecycle
         .begin_validation(
             request.graph_session_id.clone(),
             request.graph_revision.clone(),
@@ -60,6 +64,10 @@ where
         .facts_for_resolution_inputs(&resolution_inputs.requests)
         .await
         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+
+    if let Some(reason) = *cancellation.borrow() {
+        return Ok(WorkflowGraphValidationPublishAttemptOutcome::Cancelled { reason });
+    }
 
     let current_graph_revision = current_graph_revision_after_facts().await?;
     if current_graph_revision != request.graph_revision {

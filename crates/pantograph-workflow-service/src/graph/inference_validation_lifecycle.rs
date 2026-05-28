@@ -216,9 +216,11 @@ struct WorkflowGraphValidationLifecycleRecord {
     cancellation_tx: watch::Sender<Option<WorkflowGraphValidationCancellationReason>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkflowGraphValidationCancellationReason {
+    #[error("validation session was superseded")]
     Superseded,
+    #[error("graph validation session is closed")]
     GraphSessionClosed,
 }
 
