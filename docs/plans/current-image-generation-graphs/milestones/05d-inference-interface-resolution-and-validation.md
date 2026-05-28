@@ -3201,6 +3201,39 @@ defining an image-only inference-node interface.
   - Remaining follow-up: use these cancellation receivers from tracked spawned
     validation tasks and observe task completion, cancellation, and panic paths
     at the lifecycle owner.
+- [x] 2026-05-28 validation lifecycle typed cancellation reason slice completed:
+  - Smallest useful vertical slice: changed lifecycle cancellation receivers
+    from boolean cancellation to typed cancellation reasons for supersession and
+    graph-session close.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: cancellation reason ownership remains
+    inside workflow-service and uses explicit typed lifecycle state instead of
+    inferring cancellation source from incidental metadata, strings, transport
+    state, or frontend policy.
+  - Standards result: cancellation causes are typed, deterministic lifecycle
+    tests assert the exact reason, and no new dependency, spawned task, or
+    transport event path was added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    inference_validation_lifecycle --lib`; `cargo test -p
+    pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for
+    retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls in the lifecycle owner; and
+    `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` continues to
+    report the pre-existing dead-code warning for
+    `WorkflowExecutionSessionStore::set_active_run_execution_plan`.
+  - Remaining follow-up: have the validation publisher consume typed
+    cancellation reasons before accepting provider results, then use them from
+    tracked spawned validation tasks.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
