@@ -3235,6 +3235,30 @@ defining an image-only inference-node interface.
     4. Update the C# native smoke fixture to the canonical
        `puma-lib -> llm-inference -> image-output` shape without `modelPath` as
        a fixture slice after the graph node deletions stabilize.
+       - 2026-05-29 implementation slice completed: rewrote the opt-in C#
+         native diffusion smoke fixture to author
+         `puma-lib -> llm-inference -> image-output` with
+         `pumas_model_ref` and no graph-authored `modelPath`, `model_path`,
+         `inference_settings`, or direct `diffusion-inference` node. The
+         smoke script now requires `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`,
+         accepts optional `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, and
+         rejects retired model-path environment variables instead of adapting
+         them into graph data.
+       - No-fallback/no-legacy gate: the fixture is path-free and descriptor
+         aligned. The only remaining path-environment references in the touched
+         script are explicit fail-closed rejection messages for retired
+         variables.
+       - Verification passed: `bash -n
+         scripts/check-uniffi-csharp-diffusion-smoke.sh`; C# compile-only
+         check against the generated UniFFI binding; targeted source search
+         over the touched fixture/script/docs for retired path, settings, and
+         direct diffusion node terms; `git diff --check` for the touched files.
+       - Discovered issue: full `./scripts/check-uniffi-csharp-smoke.sh`
+         compiled the Rust/C# harness but failed during the existing text
+         workflow runtime path with `saved executable validation snapshot was
+         not found for workflow version`. That is a validation-snapshot
+         lifecycle issue outside this fixture rewrite and remains a follow-up
+         before using the full smoke as a runtime acceptance gate.
     5. Defer runtime/backend `model_path`/`entry_path` findings to the
        runtime-dispatch milestone; do not delete them from inference backends in
        this milestone.

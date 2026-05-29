@@ -107,7 +107,7 @@ public static class Program
 
         string queryable = runtime.WorkflowGraphGetQueryablePorts();
         if (!queryable.Contains("\"node_type\":\"puma-lib\"", StringComparison.Ordinal)
-            || !queryable.Contains("\"port_id\":\"model_path\"", StringComparison.Ordinal))
+            || !queryable.Contains("\"port_id\":\"pumas_model_ref\"", StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Unexpected queryable ports: {queryable}");
         }
@@ -115,14 +115,14 @@ public static class Program
 
     private static async Task RunDiffusionSmoke(FfiPantographRuntime runtime, string projectRoot)
     {
-        string modelPath = RequireEnv("PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH");
-        string modelId = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID")
-            ?? "diffusion/smoke/imported-model";
+        string modelId = RequireEnv("PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID");
+        string pumasArtifactId = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID")
+            ?? "diffusers";
         string prompt = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_PROMPT")
             ?? "paper lantern in the rain";
         string outputPath = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_OUTPUT") ?? "";
 
-        WriteDiffusionWorkflow(projectRoot, DiffusionWorkflowId, modelPath, modelId);
+        WriteDiffusionWorkflow(projectRoot, DiffusionWorkflowId, modelId, pumasArtifactId);
 
         string createResponse = await runtime.WorkflowCreateSession(
             $$"""{"workflow_id":"{{DiffusionWorkflowId}}","keep_alive":true}""");
@@ -424,8 +424,8 @@ public static class Program
     private static void WriteDiffusionWorkflow(
         string projectRoot,
         string workflowId,
-        string modelPath,
-        string modelId)
+        string modelId,
+        string artifactId)
     {
         string workflowPath = PrepareWorkflowPath(projectRoot, workflowId);
         string workflowJson = $$"""
@@ -444,26 +444,13 @@ public static class Program
                 "data": {
                   "label": "Puma-Lib Model",
                   "selectionMode": "library",
-                  "modelPath": {{JsonSerializer.Serialize(modelPath)}},
+                  "modelName": {{JsonSerializer.Serialize(modelId)}},
                   "model_id": {{JsonSerializer.Serialize(modelId)}},
-                  "model_type": "diffusion",
-                  "task_type_primary": "text-to-image",
-                  "recommended_backend": "diffusers",
-                  "runtime_engine_hints": ["diffusers", "pytorch"],
-                  "selected_binding_ids": [],
-                  "dependency_bindings": [],
-                  "dependency_requirements": {
+                  "pumas_model_ref": {
+                    "model_ref_contract_version": 1,
                     "model_id": {{JsonSerializer.Serialize(modelId)}},
-                    "platform_key": "smoke",
-                    "backend_key": "pytorch",
-                    "dependency_contract_version": 1,
-                    "validation_state": "resolved",
-                    "validation_errors": [],
-                    "bindings": [],
-                    "selected_binding_ids": []
-                  },
-                  "dependency_requirements_id": {{JsonSerializer.Serialize(modelId)}},
-                  "inference_settings": []
+                    "selected_artifact_id": {{JsonSerializer.Serialize(artifactId)}}
+                  }
                 },
                 "position": { "x": 240.0, "y": -160.0 }
               },
@@ -484,19 +471,15 @@ public static class Program
                 "position": { "x": 0.0, "y": 0.0 }
               },
               {
-                "id": "diffusion-inference-1",
-                "node_type": "diffusion-inference",
+                "id": "llm-inference-1",
+                "node_type": "llm-inference",
                 "data": {
-                  "model_type": "diffusion",
+                  "task_kind": "image_generation",
                   "steps": 1,
                   "guidance_scale": 0.0,
                   "width": 64,
                   "height": 64,
-                  "seed": 42,
-                  "environment_ref": {
-                    "state": "ready",
-                    "env_ids": []
-                  }
+                  "seed": 42
                 },
                 "position": { "x": 240.0, "y": 0.0 }
               },
@@ -518,29 +501,22 @@ public static class Program
             ],
             "edges": [
               {
-                "id": "e-model-path",
+                "id": "e-model-ref",
                 "source": "puma-lib-model",
-                "source_handle": "model_path",
-                "target": "diffusion-inference-1",
-                "target_handle": "model_path"
-              },
-              {
-                "id": "e-model-settings",
-                "source": "puma-lib-model",
-                "source_handle": "inference_settings",
-                "target": "diffusion-inference-1",
-                "target_handle": "inference_settings"
+                "source_handle": "pumas_model_ref",
+                "target": "llm-inference-1",
+                "target_handle": "pumas_model_ref"
               },
               {
                 "id": "e-prompt",
                 "source": "text-input-1",
                 "source_handle": "text",
-                "target": "diffusion-inference-1",
+                "target": "llm-inference-1",
                 "target_handle": "prompt"
               },
               {
                 "id": "e-image",
-                "source": "diffusion-inference-1",
+                "source": "llm-inference-1",
                 "source_handle": "image",
                 "target": "image-output-1",
                 "target_handle": "image"

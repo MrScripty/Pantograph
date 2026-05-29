@@ -105,8 +105,8 @@ npm run release:sbom -- 0.1.0
 ./scripts/check-uniffi-csharp-smoke.sh
 PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh
 ./scripts/check-packaged-csharp-quickstart.sh
-PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/tiny-sd-turbo \
-  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
+PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers \
   PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
   ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```

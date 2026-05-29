@@ -16190,6 +16190,30 @@ Worker rules:
     check -p workflow-nodes --all-features`; `cargo check -p workflow-nodes
     --no-default-features`; targeted source search for retired graph-visible
     node/component/task names.
+- 2026-05-29 Milestone 5d C# native diffusion smoke fixture rewrite completed:
+  - Slice scope: `bindings/csharp/Pantograph.NativeSmoke/Program.cs`, the
+    diffusion smoke shell script, the C# binding README, the scripts README,
+    and plan records.
+  - Implementation: rewrote the opt-in diffusion workflow fixture to author
+    `puma-lib -> llm-inference -> image-output` with `pumas_model_ref` and
+    no graph-authored `modelPath`, `model_path`, `inference_settings`, or
+    direct `diffusion-inference` node. The shell script now requires
+    `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, accepts optional
+    `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, and rejects retired model
+    path environment variables instead of translating them.
+  - No-fallback/no-legacy gate: old path variables are fail-closed script
+    errors, not compatibility inputs; the generated workflow no longer carries
+    path/settings authority from graph data.
+  - Verification passed: `bash -n
+    scripts/check-uniffi-csharp-diffusion-smoke.sh`; C# compile-only check
+    against the generated UniFFI binding; targeted source search over touched
+    fixture/script/docs for retired path/settings/direct-diffusion terms; `git
+    diff --check` for touched files.
+  - Verification caveat: full `./scripts/check-uniffi-csharp-smoke.sh`
+    compiles the harness but currently fails during the existing text workflow
+    runtime path because the saved executable validation snapshot is missing
+    for the workflow version. That runtime acceptance blocker is recorded as a
+    follow-up and was not fixed in this fixture-only slice.
 
 ### Traceability Links
 

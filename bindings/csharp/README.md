@@ -21,8 +21,8 @@ To run the opt-in diffusion path through generated C#, the embedded Rust
 runtime, the process Python adapter, and the real torch/diffusers worker:
 
 ```bash
-PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/tiny-sd-turbo \
-  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
+PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers \
   PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
   ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```
@@ -64,6 +64,6 @@ run it against the packaged native library without NuGet/network restore:
   to prove that the generated binding names are present.
 - Keep the default runtime smoke model-free.
 - Keep real-model image acceptance opt-in and explicitly configured with a
-  caller-supplied Puma-Lib node selection and Python executable.
+  caller-supplied Puma-Lib model reference and Python executable.
 - Keep runtime execution smokes session-first: create a workflow session before
   submitting workflow runs.
