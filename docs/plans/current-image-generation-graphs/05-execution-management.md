@@ -16029,6 +16029,38 @@ Worker rules:
   - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
     the pre-existing `set_active_run_execution_plan` dead-code warning outside
     this slice.
+- 2026-05-29 Milestone 5d submit/queue-admission fail-closed regression
+  slice:
+  - Smallest useful vertical slice: strengthen the runtime-inference saved-run
+    admission regression so a runtime inference graph without a saved
+    executable validation snapshot fails closed with the canonical snapshot
+    diagnostic, leaves the session queue empty, and does not invoke runtime
+    load or retired whole-run host execution.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/attribution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: saved-run queue admission now exposes the
+    missing executable snapshot as the typed backend gate instead of a generic
+    attribution not-found error. Runtime inference admission remains blocked
+    before queue insertion, queue-placement event recording, scheduler state
+    mutation, runtime load, or whole-run host execution when executable
+    validation authority is missing.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow_executable_validation_snapshot --lib`; `cargo check -p
+    pantograph-workflow-service`.
+  - Verification blocked: `cargo test -p pantograph-workflow-service
+    session_execution --lib` still fails in legacy/runtime session cases that
+    expect whole-run runtime behavior, non-source input handling, or
+    runtime-ready errors before scheduler task/input materialization. These are
+    the existing broader session-execution cleanup targets; this slice did not
+    add a compatibility path to keep them green.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
 
 ### Traceability Links
 

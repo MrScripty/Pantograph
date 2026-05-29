@@ -1,9 +1,8 @@
 use super::*;
 use crate::{
-    GraphEdge, GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary,
-    WorkflowTechnicalFitDecisionCode, WorkflowTechnicalFitDeviceClass,
-    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitPolicyPhase,
-    WorkflowTechnicalFitSelectionPolicyTrace,
+    GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitHistoryThresholdState,
+    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitSelectionPolicyTrace,
 };
 
 #[tokio::test]
@@ -142,7 +141,7 @@ async fn workflow_execution_session_timeout_applies_to_scheduler_task_runner() {
 #[tokio::test]
 async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launch() {
     let host = RuntimeInferenceSessionHost::new();
-    let service = WorkflowService::with_max_sessions(2);
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
     let created = service
         .create_workflow_execution_session(
             &host,
@@ -154,6 +153,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         )
         .await
         .expect("create session");
+    let session_id = created.session_id.clone();
 
     let error = service
         .run_workflow_execution_session(
@@ -176,6 +176,19 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         .expect_err("runtime-containing scheduler run should fail closed");
 
     assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert!(
+        error
+            .message()
+            .contains("saved executable validation snapshot"),
+        "unexpected error: {error}"
+    );
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id,
+        })
+        .await
+        .expect("list queue after rejected runtime inference run");
+    assert!(queue.items.is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
@@ -2283,13 +2296,7 @@ fn runtime_inference_session_graph() -> WorkflowGraph {
                 }),
             },
         ],
-        edges: vec![GraphEdge {
-            id: "edge-prompt-infer".to_string(),
-            source: "prompt".to_string(),
-            source_handle: "text".to_string(),
-            target: "infer".to_string(),
-            target_handle: "prompt".to_string(),
-        }],
+        edges: Vec::new(),
         derived_graph: None,
     }
 }

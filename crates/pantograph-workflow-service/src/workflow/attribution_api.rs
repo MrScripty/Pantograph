@@ -183,13 +183,22 @@ impl WorkflowService {
             .validate()
             .map_err(workflow_executable_validation_snapshot_service_error)?;
         let store = self.attribution_store_guard()?;
-        let stored = store
-            .workflow_executable_validation_snapshot(
-                AttributionWorkflowExecutableValidationSnapshotLookupRequest {
-                    workflow_version_id: request.workflow_version_id.clone(),
-                },
-            )
-            .map_err(WorkflowServiceError::from)?;
+        let stored = match store.workflow_executable_validation_snapshot(
+            AttributionWorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: request.workflow_version_id.clone(),
+            },
+        ) {
+            Ok(stored) => stored,
+            Err(AttributionError::NotFound {
+                entity: "workflow_executable_validation_snapshot",
+            }) => {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "saved executable validation snapshot was not found for workflow version"
+                        .to_string(),
+                ));
+            }
+            Err(error) => return Err(WorkflowServiceError::from(error)),
+        };
         ValidatedWorkflowExecutableValidationSnapshotRecord::from_attribution_record(
             stored, &request,
         )
