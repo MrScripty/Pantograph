@@ -16361,6 +16361,27 @@ Worker rules:
     touched mapper/orchestrator/README files; and `git diff --check`.
   - Verification caveat: `cargo check -p pantograph-workflow-service` still
     emits the known unused `set_active_run_execution_plan` warning.
+- 2026-05-29 Milestone 5b scheduler state-machine re-plan recorded:
+  - Boundary: workflow-service can now materialize runtime-host inputs from
+    completed scheduler task results, but dependent runtime inference tasks
+    cannot legally move from `AwaitingInputs` to
+    `WaitingDependencyReadiness`; `pantograph-scheduler` currently permits
+    `AwaitingInputs` to advance to `Ready`, `InputUnavailable`, `Invalid`,
+    `TerminalFailed`, or `Completed` only.
+  - Selected option: add the direct scheduler-contract transition
+    `AwaitingInputs -> WaitingDependencyReadiness` for runtime inference tasks
+    with materialized upstream inputs, and require a runtime execution intent
+    on that state. Workflow-service may then add runtime input advancement on
+    top of the scheduler contract.
+  - Rejected options: routing runtime inference through `Ready` before
+    dependency readiness admission; adding a new runtime-specific state before
+    the lifecycle needs that extra distinction; or encoding a workflow-service
+    exception that bypasses the scheduler domain contract.
+  - Standards alignment: this keeps lifecycle policy in the scheduler core
+    contract, preserves correct-by-construction Rust state-machine behavior,
+    avoids fallback/compatibility detours, and requires focused scheduler
+    transition tests plus workflow-service orchestration tests before runtime
+    dispatch wiring continues.
 
 ### Traceability Links
 

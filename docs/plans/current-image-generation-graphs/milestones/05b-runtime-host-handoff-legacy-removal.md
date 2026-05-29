@@ -30,6 +30,15 @@ deletion. It must not be implemented as another graph-authoring cleanup slice
 or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
 `ModelRefV2`, or `model_path` success behavior.
 
+Selected scheduler state-machine re-plan as of 2026-05-29: use the direct
+scheduler-contract transition path. Runtime inference tasks with upstream graph
+inputs must progress from `AwaitingInputs` to `WaitingDependencyReadiness`
+after their connected inputs materialize, then proceed through canonical
+dependency readiness admission and dispatch selection. Do not route runtime
+tasks through `Ready` as a temporary compatibility detour, and do not encode
+this transition only in workflow-service; the legal lifecycle belongs in the
+`pantograph-scheduler` task-state contract.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -55,6 +64,13 @@ or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
   `RuntimeHostExecutionResponse`, and keep request/cancellation/retry
   correlation in scheduler/application orchestration rather than runtime
   adapters.
+- [ ] Update the scheduler task-state transition contract to allow runtime
+  inference tasks with materialized upstream inputs to transition directly from
+  `AwaitingInputs` to `WaitingDependencyReadiness`. The scheduler contract
+  must require a runtime execution intent for that state, keep non-runtime
+  input advancement on the existing `AwaitingInputs` to `Ready` path, and
+  reject any attempt to use this transition as a generic shortcut around
+  dependency readiness.
 - [ ] Complete Milestone 5c task-level scheduler orchestration before
   continuing production runtime-host wiring. The scheduler must own durable
   task graph/state/result progression so runtime-host dispatch receives actual
@@ -129,6 +145,11 @@ or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
   resume between tasks, admit work from another workflow while one run is
   waiting, and dispatch runtime tasks from scheduler task state rather than
   whole-workflow output demand.
+- Scheduler task-state contract tests proving `AwaitingInputs` can advance
+  directly to `WaitingDependencyReadiness` only with a runtime execution
+  intent; non-runtime tasks still advance to `Ready`; invalid, unavailable, or
+  missing inputs fail closed without readiness admission or runtime-host
+  dispatch.
 - PyTorch, llama.cpp, and audio tests proving successful execution no longer
   reads graph `model_path`, launches from reduced execution-plan projections,
   or emits `ModelRefV2`.
@@ -151,6 +172,8 @@ or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
   `ModelDependencyRequest` or path-shaped dependency requests.
 - Do not synthesize scheduler handoff from reduced workflow execution-plan
   facts or backend execution projections.
+- Do not route runtime inference tasks through `Ready` as a workaround for
+  missing scheduler lifecycle support before dependency readiness admission.
 - Do not preserve `model_path`/`modelPath` as successful runtime execution
   identity.
 - Do not leave old resolver calls as alternate successful execution branches.
@@ -306,3 +329,16 @@ or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
   and `git diff --check`. Existing caveat: `cargo check -p
   pantograph-workflow-service` still emits the known unused
   `set_active_run_execution_plan` warning.
+- 2026-05-29 scheduler state-machine re-plan recorded. Re-plan boundary:
+  workflow-service can now materialize runtime-host inputs, but dependent
+  runtime inference tasks cannot advance from `AwaitingInputs` to
+  `WaitingDependencyReadiness` because the scheduler transition contract does
+  not permit that edge. Selected option: update `pantograph-scheduler` first
+  so the domain state machine owns the legal transition and requires a runtime
+  execution intent. Rejected options: route through `Ready` as a temporary
+  bridge, add a new runtime-specific state before it is needed, or put the
+  lifecycle exception only in workflow-service. Standards alignment: this keeps
+  lifecycle policy in the scheduler core contract, preserves correct-by-
+  construction state transitions, avoids compatibility/fallback behavior, and
+  requires focused scheduler contract tests before workflow-service runtime
+  input advancement is retried.
