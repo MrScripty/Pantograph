@@ -1,7 +1,8 @@
 use pantograph_inference_interface_contracts::{
-    AuthoredInferenceInterfaceSnapshot, InferenceInterfaceContractError,
-    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceInterfaceFingerprint,
-    InferencePortId, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    AuthoredInferenceInterfaceSnapshot, DraftGraphValidationSessionId,
+    InferenceInterfaceContractError, InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport,
+    InferenceInterfaceFingerprint, InferencePortId, WorkflowGraphRevision, WorkflowGraphSessionId,
+    WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -81,8 +82,131 @@ pub enum InferenceInterfaceGraphPatchError {
         field: &'static str,
         reason: &'static str,
     },
+    #[error("proposal apply request was not explicitly confirmed")]
+    ProposalApplyNotConfirmed,
+    #[error("proposal apply request does not match {field}")]
+    ProposalApplyMismatch { field: &'static str },
+    #[error("proposal apply supports one operation; received {actual_len}")]
+    ProposalApplyOperationCount { actual_len: usize },
+    #[error("proposal apply does not support {operation} operations")]
+    UnsupportedProposalApplyOperation { operation: &'static str },
+    #[error("proposal apply does not support destructive proposals")]
+    UnsupportedDestructiveProposal,
     #[error("inference interface contract error: {0}")]
     InferenceContract(#[from] InferenceInterfaceContractError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct InferenceInterfaceApplyProposalRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u32,
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: DraftGraphValidationSessionId,
+    pub node_id: WorkflowNodeId,
+    pub proposal_id: GraphPatchProposalId,
+    pub current_descriptor_fingerprint: InferenceInterfaceFingerprint,
+    pub confirmation: InferenceInterfaceProposalApplyConfirmation,
+}
+
+impl InferenceInterfaceApplyProposalRequest {
+    pub fn replacement_snapshot<'proposal>(
+        &self,
+        proposal: &'proposal InferenceInterfaceUpdateProposal,
+    ) -> Result<&'proposal AuthoredInferenceInterfaceSnapshot, InferenceInterfaceGraphPatchError>
+    {
+        if self.contract_version != INFERENCE_INTERFACE_CONTRACT_VERSION {
+            return Err(InferenceInterfaceGraphPatchError::InvalidField {
+                field: "request.contract_version",
+                reason: "unsupported inference interface contract version",
+            });
+        }
+        if self.confirmation != InferenceInterfaceProposalApplyConfirmation::Confirmed {
+            return Err(InferenceInterfaceGraphPatchError::ProposalApplyNotConfirmed);
+        }
+        proposal.validate()?;
+        if self.proposal_id != proposal.proposal_id {
+            return Err(InferenceInterfaceGraphPatchError::ProposalApplyMismatch {
+                field: "proposal_id",
+            });
+        }
+        if self.node_id != proposal.node_id {
+            return Err(InferenceInterfaceGraphPatchError::ProposalApplyMismatch {
+                field: "node_id",
+            });
+        }
+        if self.current_descriptor_fingerprint != proposal.current_descriptor_fingerprint {
+            return Err(InferenceInterfaceGraphPatchError::ProposalApplyMismatch {
+                field: "current_descriptor_fingerprint",
+            });
+        }
+        if proposal.operations.len() != 1 {
+            return Err(
+                InferenceInterfaceGraphPatchError::ProposalApplyOperationCount {
+                    actual_len: proposal.operations.len(),
+                },
+            );
+        }
+
+        match &proposal.operations[0] {
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id,
+                snapshot,
+            } => {
+                if proposal.destructive {
+                    return Err(InferenceInterfaceGraphPatchError::UnsupportedDestructiveProposal);
+                }
+                if node_id != &self.node_id {
+                    return Err(InferenceInterfaceGraphPatchError::ProposalApplyMismatch {
+                        field: "operation.node_id",
+                    });
+                }
+                Ok(snapshot)
+            }
+            operation => Err(
+                InferenceInterfaceGraphPatchError::UnsupportedProposalApplyOperation {
+                    operation: operation.kind(),
+                },
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum InferenceInterfaceProposalApplyConfirmation {
+    NotConfirmed,
+    Confirmed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct InferenceInterfaceApplyProposalResponse {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u32,
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub previous_graph_revision: WorkflowGraphRevision,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: DraftGraphValidationSessionId,
+    pub node_id: WorkflowNodeId,
+    pub proposal_id: GraphPatchProposalId,
+    pub current_descriptor_fingerprint: InferenceInterfaceFingerprint,
+    pub applied_operation: InferenceInterfaceAppliedProposalOperation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "operation",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum InferenceInterfaceAppliedProposalOperation {
+    ReplaceAuthoredSnapshot {
+        node_id: WorkflowNodeId,
+        descriptor_fingerprint: InferenceInterfaceFingerprint,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -197,6 +321,14 @@ impl InferenceInterfaceGraphPatchOperation {
     pub fn destructive(&self) -> bool {
         !matches!(self, Self::ReplaceAuthoredSnapshot { .. })
     }
+
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::ReplaceAuthoredSnapshot { .. } => "replace_authored_snapshot",
+            Self::RemoveInvalidEdge { .. } => "remove_invalid_edge",
+            Self::ClearInvalidLiteral { .. } => "clear_invalid_literal",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -302,6 +434,126 @@ mod tests {
     }
 
     #[test]
+    fn apply_request_accepts_single_snapshot_replacement() {
+        let proposal = proposal_fixture(vec![
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id("infer_1"),
+                snapshot: snapshot_fixture(),
+            },
+        ]);
+        let request = apply_request_fixture();
+
+        let snapshot = request
+            .replacement_snapshot(&proposal)
+            .expect("replacement snapshot should be accepted");
+
+        assert_eq!(snapshot.descriptor_fingerprint, fingerprint());
+    }
+
+    #[test]
+    fn apply_request_requires_explicit_confirmation() {
+        let proposal = proposal_fixture(vec![
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id("infer_1"),
+                snapshot: snapshot_fixture(),
+            },
+        ]);
+        let mut request = apply_request_fixture();
+        request.confirmation = InferenceInterfaceProposalApplyConfirmation::NotConfirmed;
+
+        assert_eq!(
+            request
+                .replacement_snapshot(&proposal)
+                .expect_err("unconfirmed apply must fail"),
+            InferenceInterfaceGraphPatchError::ProposalApplyNotConfirmed
+        );
+    }
+
+    #[test]
+    fn apply_request_rejects_mismatched_proposal_identity() {
+        let proposal = proposal_fixture(vec![
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id("infer_1"),
+                snapshot: snapshot_fixture(),
+            },
+        ]);
+        let mut request = apply_request_fixture();
+        request.proposal_id = GraphPatchProposalId::parse("proposal.other").unwrap();
+
+        assert_eq!(
+            request
+                .replacement_snapshot(&proposal)
+                .expect_err("wrong proposal id must fail"),
+            InferenceInterfaceGraphPatchError::ProposalApplyMismatch {
+                field: "proposal_id"
+            }
+        );
+    }
+
+    #[test]
+    fn apply_request_rejects_destructive_proposals() {
+        let mut proposal = proposal_fixture(vec![
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id("infer_1"),
+                snapshot: snapshot_fixture(),
+            },
+        ]);
+        proposal.destructive = true;
+        let request = apply_request_fixture();
+
+        assert_eq!(
+            request
+                .replacement_snapshot(&proposal)
+                .expect_err("destructive proposal must fail"),
+            InferenceInterfaceGraphPatchError::UnsupportedDestructiveProposal
+        );
+    }
+
+    #[test]
+    fn apply_request_rejects_unsupported_operations() {
+        let mut proposal = proposal_fixture(vec![
+            InferenceInterfaceGraphPatchOperation::RemoveInvalidEdge {
+                edge: affected_edge_fixture(),
+                reason: InferenceInterfaceEdgeRemovalReason::TargetPortRemoved,
+            },
+        ]);
+        proposal.destructive = true;
+        proposal.requires_confirmation = true;
+        let request = apply_request_fixture();
+
+        assert_eq!(
+            request
+                .replacement_snapshot(&proposal)
+                .expect_err("edge removal must be unsupported in option-2 apply"),
+            InferenceInterfaceGraphPatchError::UnsupportedProposalApplyOperation {
+                operation: "remove_invalid_edge"
+            }
+        );
+    }
+
+    #[test]
+    fn apply_request_rejects_multiple_operations() {
+        let proposal = proposal_fixture(vec![
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id("infer_1"),
+                snapshot: snapshot_fixture(),
+            },
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id("infer_1"),
+                snapshot: snapshot_fixture(),
+            },
+        ]);
+        let request = apply_request_fixture();
+
+        assert_eq!(
+            request
+                .replacement_snapshot(&proposal)
+                .expect_err("multi-operation apply must fail"),
+            InferenceInterfaceGraphPatchError::ProposalApplyOperationCount { actual_len: 2 }
+        );
+    }
+
+    #[test]
     fn destructive_operation_requires_confirmation() {
         let mut proposal = proposal_fixture(vec![
             InferenceInterfaceGraphPatchOperation::RemoveInvalidEdge {
@@ -321,6 +573,24 @@ mod tests {
                 reason: "destructive proposals require explicit confirmation"
             }
         );
+    }
+
+    #[test]
+    fn apply_request_rejects_unknown_fields() {
+        let json = serde_json::json!({
+            "graph_session_id": "graph.session.1",
+            "graph_revision": "graph.revision.1",
+            "validation_session_id": "validation.session.1",
+            "node_id": "infer_1",
+            "proposal_id": "proposal.1",
+            "current_descriptor_fingerprint": "iface.test.v1",
+            "confirmation": "confirmed",
+            "unknown_extra": {}
+        });
+
+        let error = serde_json::from_value::<InferenceInterfaceApplyProposalRequest>(json)
+            .expect_err("unknown fields must be rejected");
+        assert!(error.to_string().contains("unknown field"));
     }
 
     #[test]
@@ -352,8 +622,22 @@ mod tests {
             operations,
             affected_edges: vec![affected_edge_fixture()],
             requires_confirmation: true,
-            destructive: true,
+            destructive: false,
             diagnostics: Vec::new(),
+        }
+    }
+
+    fn apply_request_fixture() -> InferenceInterfaceApplyProposalRequest {
+        InferenceInterfaceApplyProposalRequest {
+            contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+            graph_session_id: WorkflowGraphSessionId::parse("graph.session.1").unwrap(),
+            graph_revision: WorkflowGraphRevision::parse("graph.revision.1").unwrap(),
+            validation_session_id: DraftGraphValidationSessionId::parse("validation.session.1")
+                .unwrap(),
+            node_id: node_id("infer_1"),
+            proposal_id: GraphPatchProposalId::parse("proposal.1").unwrap(),
+            current_descriptor_fingerprint: fingerprint(),
+            confirmation: InferenceInterfaceProposalApplyConfirmation::Confirmed,
         }
     }
 

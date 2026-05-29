@@ -2704,6 +2704,34 @@ defining an image-only inference-node interface.
     editing remains unblocked, requires explicit confirmation for destructive
     operations, and applies proposals only through workflow-service graph-patch
     APIs.
+- [x] 2026-05-28 option-2 apply contract DTO slice:
+  - Smallest useful vertical slice: add workflow-service request/response DTOs
+    and focused validation tests for applying a backend-authored inference
+    interface update proposal only when it is a single non-destructive
+    `ReplaceAuthoredSnapshot` operation.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_patch.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this Milestone 5d
+    file, and `05-execution-management.md`.
+  - No-fallback/no-legacy result: the new request parses graph session id,
+    graph revision, validation session id, node id, proposal id, descriptor
+    fingerprint, and explicit confirmation into typed boundary DTOs. Contract
+    validation rejects unconfirmed, mismatched, destructive, multi-operation,
+    edge-removal, and literal-clearing proposal shapes instead of applying or
+    interpreting them locally. No graph mutation, Tauri command, frontend apply
+    logic, compatibility shim, or stale proposal fallback was added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_interface_patch --lib`;
+    `cargo check -p pantograph-workflow-service`; `git diff --check`.
+  - Deviation/discovered issue: `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing dead-code warning for
+    `set_active_run_execution_plan`; it is outside this DTO contract slice.
+  - Remaining follow-up: implement the graph-session apply method that re-reads
+    current validation state, proves proposal freshness/identity against the
+    active graph revision and validation session, mutates only the authored
+    snapshot, and cancels/supersedes stale validation for the changed graph.
 - [ ] Wire staged graph editor drift presentation and update preview.
       Option-2 scope: the editor shows authored-current diffs visually on
       nodes/ports/edges, keeps invalid edges visible, displays

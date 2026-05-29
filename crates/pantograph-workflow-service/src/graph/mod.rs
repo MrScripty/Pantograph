@@ -66,9 +66,12 @@ pub use inference_interface_facts::{
     UnavailableInferenceInterfaceFactsProvider,
 };
 pub use inference_interface_patch::{
-    GraphPatchProposalId, InferenceInterfaceAffectedEdge, InferenceInterfaceEdgeRemovalReason,
+    GraphPatchProposalId, InferenceInterfaceAffectedEdge,
+    InferenceInterfaceAppliedProposalOperation, InferenceInterfaceApplyProposalRequest,
+    InferenceInterfaceApplyProposalResponse, InferenceInterfaceEdgeRemovalReason,
     InferenceInterfaceGraphPatchError, InferenceInterfaceGraphPatchOperation,
-    InferenceInterfaceLiteralRemovalReason, InferenceInterfaceUpdateProposal, WorkflowEdgeId,
+    InferenceInterfaceLiteralRemovalReason, InferenceInterfaceProposalApplyConfirmation,
+    InferenceInterfaceUpdateProposal, WorkflowEdgeId,
 };
 pub use inference_interface_projection::{
     authored_snapshot_from_descriptor, resolve_inference_interface_projection,

@@ -15799,6 +15799,33 @@ Worker rules:
   - No-fallback/no-legacy follow-up: do not add frontend-local graph patching,
     raw JSON patch maps, compatibility shims for stale proposals, or
     Tauri-owned business logic while implementing the staged apply path.
+- 2026-05-28 Milestone 5d option-2 apply contract DTO slice:
+  - Smallest useful vertical slice: add backend-owned
+    `InferenceInterfaceApplyProposalRequest`,
+    `InferenceInterfaceApplyProposalResponse`, explicit confirmation, and
+    applied-operation DTOs plus contract validation for the first supported
+    proposal application shape.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_patch.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, the Milestone 5d
+    file, and this execution log.
+  - No-fallback/no-legacy result: validation accepts only an explicitly
+    confirmed single `ReplaceAuthoredSnapshot` proposal matching proposal id,
+    node id, and descriptor fingerprint. Destructive, multi-operation, edge
+    removal, literal clearing, unconfirmed, and mismatched proposals fail with
+    typed graph-patch errors. This slice does not mutate graphs or add
+    frontend/Tauri application behavior.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_interface_patch --lib`;
+    `cargo check -p pantograph-workflow-service`; `git diff --check`.
+  - Deviation/discovered issue: crate check still emits the existing
+    `set_active_run_execution_plan` dead-code warning; it is unrelated to this
+    contract slice and remains deferred.
+  - Remaining follow-up: add the graph-session apply method that owns freshness
+    checks, graph mutation, validation cancellation/supersession, and updated
+    graph/revision response assembly.
 
 ### Traceability Links
 

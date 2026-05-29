@@ -346,6 +346,12 @@ the summary/gate remains the only submit authority.
   snapshots, but typed operations that replace snapshots, remove invalid
   edges, or clear invalid literals live in this module because graph mutation
   ownership belongs to workflow-service.
+- Inference-interface proposal apply requests are also graph-service
+  contracts. The first supported apply boundary accepts only one explicitly
+  confirmed, non-destructive `ReplaceAuthoredSnapshot` operation whose
+  proposal id, node id, and current descriptor fingerprint match the active
+  backend proposal. Destructive edge removal or literal clearing remains
+  rejected until the full backend preview/confirmation workflow is implemented.
 - Destructive inference-interface patch operations must mark the proposal
   destructive and require explicit confirmation before a later apply endpoint
   mutates graph state.
