@@ -16151,6 +16151,23 @@ Worker rules:
     --experimental-strip-types
     packages/svelte-graph/src/stores/definitionOverlay.test.ts`; targeted
     source search for retired expand-settings terms.
+- 2026-05-29 Milestone 5d `model-provider` narrowing slice completed:
+  - Slice scope: `crates/workflow-nodes/src/input/model_provider.rs`,
+    workflow-nodes READMEs, and plan records.
+  - Implementation: kept `model-provider` as a non-Pumas display selector while
+    removing the graph-visible `model_path` and `inference_settings` outputs.
+    `ModelInfo` is now display-only and rejects legacy executable authority
+    fields at deserialization.
+  - No-fallback/no-legacy gate: no compatibility port or legacy output was
+    added. `model-provider` no longer functions as an alternate
+    inference-interface or model-load authority; backend descriptors remain the
+    source for model-specific inference options.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo test
+    -p workflow-nodes model_provider --lib`; `cargo test -p workflow-nodes
+    --lib`; `cargo check -p workflow-nodes`; `cargo check -p workflow-nodes
+    --all-features`; `cargo check -p workflow-nodes --no-default-features`;
+    targeted source search for `model-provider`/`ModelProviderTask` with
+    `model_path` and `inference_settings`.
 
 ### Traceability Links
 

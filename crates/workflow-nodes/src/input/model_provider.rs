@@ -1,8 +1,7 @@
 //! Model Provider Task
 //!
-//! This task provides model information to inference nodes.
-//! It can be configured with a model name which is then passed
-//! to downstream inference nodes.
+//! This task provides display-only generic model identity for workflows that
+//! are not backed by the Pumas library.
 
 use async_trait::async_trait;
 use graph_flow::{Context, NextAction, Task, TaskResult};
@@ -12,32 +11,30 @@ use node_engine::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Model information output by the Model Provider
+/// Display-only model information output by the Model Provider.
+///
+/// This contract intentionally excludes executable paths, runtime load targets,
+/// dependency requirements, and inference option schemas. Canonical inference
+/// interfaces are resolved by backend descriptors after graph authoring.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModelInfo {
     /// Model name/identifier (e.g., "llama2", "codellama:7b")
     pub name: String,
-    /// Optional model path (for local models)
-    pub path: Option<String>,
     /// Model type (e.g., "llm", "embedding")
     pub model_type: Option<String>,
-    /// Pumas model UUID (if resolved from library)
+    /// Optional external model id when the selector knows one.
     pub id: Option<String>,
-    /// Canonical name from pumas-core
+    /// Canonical display name from the selector.
     pub official_name: Option<String>,
-    /// Inference parameter schema from model metadata
-    #[serde(default)]
-    pub inference_settings: Option<Vec<serde_json::Value>>,
 }
 
 // Port constants
 const PORT_MODEL_NAME: &str = "model_name";
 const PORT_SEARCH_QUERY: &str = "search_query";
 const PORT_MODEL_NAME_OUT: &str = "model_name";
-const PORT_MODEL_PATH: &str = "model_path";
 const PORT_MODEL_INFO: &str = "model_info";
 const PORT_SEARCH_RESULTS: &str = "search_results";
-const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
 
 /// Model Provider Task
 ///
@@ -50,8 +47,7 @@ const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
 ///
 /// # Outputs (to context)
 /// - `{task_id}.output.model_name` - The selected model name
-/// - `{task_id}.output.model_path` - The model's path (if known)
-/// - `{task_id}.output.model_info` - Full model info as JSON
+/// - `{task_id}.output.model_info` - Display-only model info as JSON
 /// - `{task_id}.output.search_results` - Search results as JSON (when search_query provided)
 #[derive(Clone)]
 pub struct ModelProviderTask {
@@ -62,10 +58,8 @@ impl ModelProviderTask {
     pub const PORT_MODEL_NAME: &'static str = PORT_MODEL_NAME;
     pub const PORT_SEARCH_QUERY: &'static str = PORT_SEARCH_QUERY;
     pub const PORT_MODEL_NAME_OUT: &'static str = PORT_MODEL_NAME_OUT;
-    pub const PORT_MODEL_PATH: &'static str = PORT_MODEL_PATH;
     pub const PORT_MODEL_INFO: &'static str = PORT_MODEL_INFO;
     pub const PORT_SEARCH_RESULTS: &'static str = PORT_SEARCH_RESULTS;
-    pub const PORT_INFERENCE_SETTINGS: &'static str = PORT_INFERENCE_SETTINGS;
 
     pub fn new(task_id: impl Into<String>) -> Self {
         Self {
@@ -91,14 +85,8 @@ impl TaskDescriptor for ModelProviderTask {
             ],
             outputs: vec![
                 PortMetadata::required(PORT_MODEL_NAME_OUT, "Model Name", PortDataType::String),
-                PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_INFO, "Model Info", PortDataType::Json),
                 PortMetadata::optional(PORT_SEARCH_RESULTS, "Search Results", PortDataType::Json),
-                PortMetadata::optional(
-                    PORT_INFERENCE_SETTINGS,
-                    "Inference Settings",
-                    PortDataType::Json,
-                ),
             ],
             execution_mode: ExecutionMode::Reactive,
         }
@@ -122,11 +110,9 @@ impl Task for ModelProviderTask {
 
         let model_info = ModelInfo {
             name: model_name.clone(),
-            path: None,
             model_type: Some("llm".to_string()),
             id: None,
             official_name: None,
-            inference_settings: None,
         };
 
         let name_out_key = ContextKeys::output(&self.task_id, PORT_MODEL_NAME_OUT);
@@ -187,29 +173,47 @@ mod tests {
         let meta = ModelProviderTask::descriptor();
 
         assert_eq!(meta.node_type, "model-provider");
-        assert_eq!(meta.outputs.len(), 5);
+        assert_eq!(meta.outputs.len(), 3);
         assert!(meta.outputs.iter().any(|p| p.id == "model_name"));
+        assert!(meta.outputs.iter().any(|p| p.id == "model_info"));
         assert!(meta.outputs.iter().any(|p| p.id == "search_results"));
-        assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"));
+        assert!(!meta.outputs.iter().any(|p| p.id == "model_path"));
+        assert!(!meta.outputs.iter().any(|p| p.id == "inference_settings"));
     }
 
     #[test]
     fn test_model_info_serialization() {
         let info = ModelInfo {
             name: "test-model".to_string(),
-            path: Some("/path/to/model".to_string()),
             model_type: Some("llm".to_string()),
             id: Some("uuid-123".to_string()),
             official_name: Some("Test Model".to_string()),
-            inference_settings: None,
         };
         let json = serde_json::to_value(&info).unwrap();
         assert_eq!(json["name"], "test-model");
         assert_eq!(json["id"], "uuid-123");
         assert_eq!(json["official_name"], "Test Model");
+        assert!(json.get("path").is_none());
+        assert!(json.get("inference_settings").is_none());
 
         let deserialized: ModelInfo = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.name, info.name);
         assert_eq!(deserialized.id, info.id);
+    }
+
+    #[test]
+    fn test_model_info_rejects_legacy_authority_fields() {
+        let legacy = serde_json::json!({
+            "name": "test-model",
+            "path": "/path/to/model",
+            "model_type": "llm",
+            "id": "uuid-123",
+            "official_name": "Test Model",
+            "inference_settings": []
+        });
+
+        let error = serde_json::from_value::<ModelInfo>(legacy)
+            .expect_err("legacy executable authority fields must fail closed");
+        assert!(error.to_string().contains("unknown field"));
     }
 }

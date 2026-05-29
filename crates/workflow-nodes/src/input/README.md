@@ -18,8 +18,10 @@ and library-provided metadata before host-specific executors take over.
 
 ## Problem
 Workflow graphs need stable input contracts that can be shared across hosts.
-Model-selection nodes in particular must emit enough metadata for downstream
-routing without hardcoding runtime choices into the UI or executor.
+Model-selection nodes in particular must emit only display identity or
+path-free model references. Runtime choices, executable paths, dependency
+requirements, and inference option schemas are resolved by backend validation,
+dependency planning, scheduler, and runtime-host systems after graph authoring.
 
 ## Constraints
 - Input descriptors must stay host-agnostic.
@@ -28,6 +30,9 @@ routing without hardcoding runtime choices into the UI or executor.
 - Runtime-executable artifact paths must come from the Pumas artifact
   load-target contract at the host/planning boundary, not from graph-visible
   input-node outputs.
+- Generic `model-provider` must not expose `model_path`, runtime load targets,
+  dependency requirements, or `inference_settings` as graph-visible ports or
+  `ModelInfo` fields.
 - Model-list/package-fact summary details must come from Pumas summary snapshot
   and summary resolution APIs, not Pumas storage internals.
 - Model selector rows must come from Pumas `ModelLibrarySelectorSnapshot`
@@ -42,12 +47,14 @@ routing without hardcoding runtime choices into the UI or executor.
 
 ## Decision
 Keep input nodes as descriptor-first modules. `puma_lib.rs` emits the selected
-`pumas_model_ref`, task metadata, recommended backend display metadata,
-dependency requirements, and inference settings so downstream routing can
-distinguish text, audio, and diffusion flows without accepting local paths as
-model identity. The graph-facing executable selection value is
+`pumas_model_ref` and display identity only. Backend descriptor validation,
+dependency planning, scheduler admission, and runtime-host dispatch own task
+metadata, dependency requirements, runtime selection, inference settings, and
+load targets. The graph-facing executable selection value is
 `pumas_model_ref`; raw artifact paths and backend keys are not current
-execution outputs. The model option provider populates rows from Pumas
+execution outputs. Generic `model-provider` remains a non-Pumas display
+identity selector and does not emit model paths or inference settings. The
+model option provider populates rows from Pumas
 `ModelLibrarySelectorSnapshot`, captures package-fact summary status, summary
 payload, readiness state, storage/validation state, and the producer cursor for
 the populated page so UI/model-list consumers can refresh from Pumas update
@@ -67,6 +74,9 @@ feeds without inspecting Pumas storage.
 - Generic `model-provider` remains a descriptor/task contract; active runtime
   projection for model-provider nodes is owned by `node-engine` core executor
   handlers rather than an unregistered workflow-nodes executor.
+- Generic `model-provider` is not an inference-interface source. Its
+  `model_info` output is display identity only and rejects legacy executable
+  authority fields such as `path` and `inference_settings`.
 - `puma-lib` metadata is the primary workflow-facing bridge from Pumas-Library
   into Pantograph routing.
 - `puma-lib` option metadata may cache bounded Pumas package summaries for the
@@ -131,6 +141,10 @@ assert_eq!(metadata.node_type, "model-provider");
   inference settings, package facts, load targets, and executable paths are
   resolved by backend validation, dependency planning, scheduler, and
   runtime-host systems after graph authoring.
+- `model-provider` emits only `model_name`, optional search results, and
+  display-only `model_info`. It must not be used to carry executable model
+  paths, runtime load targets, package facts, dependency requirements, or
+  inference option schemas.
 - `puma-lib` option values are typed Pumas model-reference payloads. Option
   metadata may include display/debug paths, readiness state, storage kind,
   validation state, and package summary facts; those fields are not executable

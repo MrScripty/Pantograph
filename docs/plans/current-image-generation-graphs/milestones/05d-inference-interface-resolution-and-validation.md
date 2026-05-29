@@ -3133,12 +3133,12 @@ defining an image-only inference-node interface.
   - 2026-05-29 re-plan boundary: the search gate found multiple distinct
     retired surfaces with different owners, so a single deletion slice would
     cross too much code:
-    - Graph-visible deletion targets: `workflow-nodes` still registers
-      `expand-settings`; `model-provider` still exposes `model_path` and
-      `inference_settings`; legacy processing nodes such as
-      `audio-generation`, `onnx-inference`, and `depth-estimation` still expose
-      path-shaped inference ports; the C# native smoke workflow still authors
-      `modelPath`.
+    - Graph-visible deletion targets: `workflow-nodes` previously registered
+      `expand-settings` and exposed `model-provider` `model_path`/
+      `inference_settings` ports; both have now been removed in separate
+      validated slices. Legacy processing nodes such as `audio-generation`,
+      `onnx-inference`, and `depth-estimation` still expose path-shaped
+      inference ports; the C# native smoke workflow still authors `modelPath`.
     - Already-modernized but still visible as review context: `puma-lib`
       descriptor output is model-ref-only, and existing tests assert it does not
       expose `model_path` or `inference_settings`, but its option provider still
@@ -3180,6 +3180,28 @@ defining an image-only inference-node interface.
        `inference_settings` outputs as a separate input-node slice. This needs a
        decision about whether `model-provider` remains a non-Pumas selector or
        is fully superseded by `puma-lib` plus backend descriptors.
+       - 2026-05-29 implementation slice completed: kept `model-provider` as
+         a non-Pumas display selector and removed graph-visible executable
+         authority from its Rust descriptor. The descriptor now emits only
+         `model_name`, display-only `model_info`, and optional
+         `search_results`; `ModelInfo` no longer contains `path` or
+         `inference_settings` and rejects those legacy fields at the typed
+         serde boundary. Frontend mocks/components already matched the narrowed
+         `model-provider` shape, so no frontend code change was required.
+       - No-fallback/no-legacy gate: no compatibility output or shim was added.
+         `model-provider` is not an inference-interface source; backend
+         inference-interface descriptors remain the owner for model-specific
+         inference ports and options. Targeted source search found no
+         `model-provider` `model_path` or `inference_settings` descriptor
+         output; the remaining active `inference_settings` mock hit belongs to
+         the separately planned `llm-inference` static-port cleanup.
+       - Verification passed: `cargo fmt -p workflow-nodes -- --check`;
+         `cargo test -p workflow-nodes model_provider --lib`; `cargo test -p
+         workflow-nodes --lib`; `cargo check -p workflow-nodes`; `cargo check
+         -p workflow-nodes --all-features`; `cargo check -p workflow-nodes
+         --no-default-features`; targeted source search for
+         `model-provider`/`ModelProviderTask` with `model_path` and
+         `inference_settings`.
     3. Retire legacy graph-visible processing inference nodes with path-shaped
        ports (`audio-generation`, `onnx-inference`, `depth-estimation`) in a
        separate registry slice, or explicitly reclassify any retained node as a
