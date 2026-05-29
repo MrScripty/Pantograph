@@ -14903,6 +14903,32 @@ Worker rules:
     untracked task ownership. `cargo check -p pantograph-workflow-service`
     still reports the pre-existing `set_active_run_execution_plan` dead-code
     warning.
+- 2026-05-28 Milestone 5d delete-selection validation cancellation slice:
+  - Smallest useful vertical slice: wire `delete_selection` through the
+    existing workflow-service validation lifecycle cancellation helper after
+    successful semantic graph mutation, while preserving the empty-selection
+    no-op response path without cancellation.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_node_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: mixed node/edge selection deletion now uses
+    the canonical validation lifecycle owner and typed cancellation path, with
+    no frontend invalidation, timestamp, transport request id, or alternate
+    publication fallback.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_delete_selection_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    delete_selection_removes_mixed_selection_with_one_undo_snapshot --lib`;
+    `cargo check -p pantograph-workflow-service`; source-search verification
+    for touched production code; and `git diff --check`.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in
