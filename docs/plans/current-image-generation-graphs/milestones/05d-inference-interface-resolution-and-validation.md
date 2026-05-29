@@ -4152,6 +4152,31 @@ defining an image-only inference-node interface.
     validation event transport. Stop if implementation would require a
     compatibility shim for retired static task ports or a second inference-port
     authority outside descriptor-backed validation.
+- [x] 2026-05-28 descriptor-backed inference connection contract slice
+  completed:
+  - Smallest useful vertical slice: added the shared inference connection surface
+    contract to `pantograph-inference-interface-contracts` without wiring
+    workflow-service, frontend, scheduler, runtime-host, or Tauri consumers.
+  - Files touched by the slice:
+    `crates/pantograph-inference-interface-contracts/src/lib.rs`,
+    `crates/pantograph-inference-interface-contracts/README.md`,
+    `crates/pantograph-inference-interface-contracts/tests/contract.rs`,
+    `crates/pantograph-inference-interface-contracts/tests/fixtures/README.md`,
+    `crates/pantograph-inference-interface-contracts/tests/fixtures/connection_surface_image_generation_current.json`,
+    `crates/pantograph-inference-interface-contracts/tests/fixtures/connection_surface_image_generation_drift_blocked.json`,
+    this milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the contract is path-free and rejects
+    unknown legacy/backend-owned fields through `serde(deny_unknown_fields)`.
+    Current surfaces require a descriptor fingerprint. Non-current surfaces fail
+    closed and must not be executable. Drift-blocked surfaces require a drift
+    report and diagnostics. No static `llm-inference` task ports were restored.
+  - Verification passed: `cargo fmt -p pantograph-inference-interface-contracts`;
+    `cargo test -p pantograph-inference-interface-contracts`; and
+    `cargo check -p pantograph-inference-interface-contracts`.
+  - Remaining follow-up: add the workflow-service publication/adapter slice that
+    builds this connection surface from existing validation projection records
+    and rejects stale/missing surfaces with typed diagnostics before wiring
+    connection candidates, insert-on-edge preview, or commits.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

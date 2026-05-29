@@ -34,6 +34,12 @@ facts, executable paths, scheduler choices, or frontend-only metadata.
   resolve/check/install action only. They must not carry model paths, Pumas
   facts, platform context, identity keys, dependency-planning requests, or
   dependency-environment requests.
+- Inference connection surfaces carry graph revision, optional validation-session
+  identity, target node id, descriptor fingerprint, descriptor-backed port
+  descriptors, validation summary, optional drift report, and bounded
+  diagnostics only. They must not carry Pumas package facts, runtime-host
+  payloads, scheduler placement decisions, local paths, frontend layout state, or
+  live validation transport events.
 
 ## API Consumer Contract
 
@@ -54,6 +60,14 @@ association failures are represented by the typed `DependencySidecar*`
 diagnostic codes, not by message parsing, frontend path inference, or partial
 request construction.
 
+Graph connection callers consume `InferenceConnectionSurface` for generic
+`llm-inference` dynamic task ports. Workflow-service validates that the surface
+matches the current graph revision and validation session before using it for
+connection candidates, insert-on-edge preview, connection commits, or queue
+submission gating. Missing, pending, stale, unavailable, blocked, or
+drift-blocked surfaces return typed diagnostics and must not fall back to static
+task ports or frontend-invented ports.
+
 ## Structured Producer Contract
 
 Backend producers build descriptors from Pumas model references, selected
@@ -61,6 +75,14 @@ artifact facts, inference capability facts, runtime availability facts, and
 optional graph-authored constraints. Producers must emit unavailable or
 not-implemented diagnostics when facts are missing. They must not guess from
 model names, paths, runtime-specific blobs, or package-fact metadata bags.
+
+Backend producers build connection surfaces from current descriptor projection
+records, authored snapshots, drift reports, and draft validation summaries. A
+surface is a presentation/admission contract over backend-owned validation state;
+it is not a scheduler dispatch request and not a runtime-host execution payload.
+Saved graph artifacts may keep authored snapshots for historical shape and drift
+explanation, but executable queue admission must use current backend validation
+authority.
 
 ## Revisit Triggers
 

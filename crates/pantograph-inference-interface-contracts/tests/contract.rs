@@ -3,17 +3,23 @@ use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
     DependencyEnvironmentActionIntentStatus, DraftGraphEnqueueDisabledReason,
     DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailabilityStatus,
-    InferenceDiagnosticCode, InferenceDiagnosticSeverity, InferenceInterfaceContractError,
-    InferenceInterfaceDescriptor, InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport,
-    InferencePortOptions, InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
+    InferenceConnectionSurface, InferenceConnectionSurfaceStatus, InferenceDiagnosticCode,
+    InferenceDiagnosticSeverity, InferenceInterfaceContractError, InferenceInterfaceDescriptor,
+    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferencePortOptions,
+    InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
     ValidatedDependencyEnvironmentActionIntent, ValidatedDependencyEnvironmentActionIntentResult,
-    ValidatedDraftGraphValidationSummary, ValidatedInferenceInterfaceDescriptor,
+    ValidatedDraftGraphValidationSummary, ValidatedInferenceConnectionSurface,
+    ValidatedInferenceInterfaceDescriptor,
 };
 
 const DESCRIPTOR: &str = include_str!("fixtures/descriptor_image_generation_ready.json");
 const AUTHORED_SNAPSHOT: &str = include_str!("fixtures/authored_snapshot_image_generation.json");
 const DRIFT_REPORT: &str = include_str!("fixtures/drift_report_blocking.json");
 const VALIDATION_SUMMARY: &str = include_str!("fixtures/validation_summary_blocked.json");
+const CONNECTION_SURFACE_CURRENT: &str =
+    include_str!("fixtures/connection_surface_image_generation_current.json");
+const CONNECTION_SURFACE_DRIFT_BLOCKED: &str =
+    include_str!("fixtures/connection_surface_image_generation_drift_blocked.json");
 
 #[test]
 fn descriptor_fixture_decodes_validates_and_round_trips() {
@@ -305,4 +311,169 @@ fn dependency_environment_sidecar_diagnostics_are_typed_contract_codes() {
             serde_json::from_value(encoded).expect("diagnostic code should decode");
         assert_eq!(decoded, code);
     }
+}
+
+#[test]
+fn connection_surface_fixture_decodes_validates_and_round_trips() {
+    let surface: InferenceConnectionSurface =
+        serde_json::from_str(CONNECTION_SURFACE_CURRENT).expect("surface fixture should decode");
+
+    let validated = ValidatedInferenceConnectionSurface::try_from(surface)
+        .expect("surface fixture should validate");
+
+    assert_eq!(
+        validated.as_surface().status,
+        InferenceConnectionSurfaceStatus::Current
+    );
+    assert_eq!(
+        validated
+            .as_surface()
+            .descriptor_fingerprint
+            .as_ref()
+            .expect("current surface has descriptor fingerprint")
+            .as_str(),
+        "iface.sd15.text_to_image.v1"
+    );
+    assert_eq!(validated.as_surface().inputs.len(), 2);
+    assert_eq!(validated.as_surface().outputs.len(), 1);
+    assert!(validated.as_surface().validation_summary.executable);
+
+    let encoded =
+        serde_json::to_string(validated.as_surface()).expect("surface fixture should re-encode");
+    let decoded: InferenceConnectionSurface =
+        serde_json::from_str(&encoded).expect("encoded surface should decode");
+    decoded.validate().expect("encoded surface should validate");
+}
+
+#[test]
+fn connection_surface_fixture_carries_blocking_drift_diagnostics() {
+    let surface: InferenceConnectionSurface =
+        serde_json::from_str(CONNECTION_SURFACE_DRIFT_BLOCKED)
+            .expect("blocked surface fixture should decode");
+
+    let validated = ValidatedInferenceConnectionSurface::try_from(surface)
+        .expect("blocked surface fixture should validate");
+
+    assert_eq!(
+        validated.as_surface().status,
+        InferenceConnectionSurfaceStatus::DriftBlocked
+    );
+    assert!(!validated.as_surface().validation_summary.executable);
+    assert!(
+        validated
+            .as_surface()
+            .drift_report
+            .as_ref()
+            .expect("blocked surface has drift report")
+            .blocking
+    );
+    assert_eq!(
+        validated.as_surface().diagnostics[0].code,
+        InferenceDiagnosticCode::InferenceConnectionSurfaceBlocked
+    );
+}
+
+#[test]
+fn connection_surface_current_requires_descriptor_fingerprint() {
+    let surface = InferenceConnectionSurface {
+        contract_version: 1,
+        graph_revision: "77f4c49c8a1b68d2".parse().expect("valid revision"),
+        validation_session_id: None,
+        node_id: "inference-node-1".parse().expect("valid node id"),
+        descriptor_fingerprint: None,
+        status: InferenceConnectionSurfaceStatus::Current,
+        inputs: Vec::new(),
+        outputs: Vec::new(),
+        validation_summary: DraftGraphValidationSummary {
+            status: DraftGraphValidationStatus::Executable,
+            executable: true,
+            enqueue_disabled_reasons: Vec::new(),
+            diagnostics_count: 0,
+            blocking_diagnostics_count: 0,
+        },
+        drift_report: None,
+        diagnostics: Vec::new(),
+    };
+
+    let error = surface
+        .validate()
+        .expect_err("current surfaces must identify the descriptor");
+
+    assert_eq!(
+        error,
+        InferenceInterfaceContractError::MissingField {
+            field: "connection_surface.descriptor_fingerprint"
+        }
+    );
+}
+
+#[test]
+fn connection_surface_rejects_legacy_or_backend_owned_fields() {
+    let error = serde_json::from_value::<InferenceConnectionSurface>(serde_json::json!({
+        "contract_version": 1,
+        "graph_revision": "77f4c49c8a1b68d2",
+        "node_id": "inference-node-1",
+        "status": "missing",
+        "validation_summary": {
+            "status": "unresolved",
+            "executable": false,
+            "enqueue_disabled_reasons": ["descriptor_unresolved"],
+            "diagnostics_count": 1,
+            "blocking_diagnostics_count": 1
+        },
+        "diagnostics": [{
+            "severity": "error",
+            "code": "inference_connection_surface_missing",
+            "message": "The inference connection surface has not been resolved."
+        }],
+        "model_path": "/models/sd15",
+        "scheduler_decision": {"device": "cuda:0"},
+        "runtime_host_payload": {"task": "generate_image"},
+        "frontend_position": {"x": 1, "y": 2}
+    }))
+    .expect_err("surface must deny paths, scheduler decisions, runtime payloads, and UI state");
+
+    assert!(
+        error.to_string().contains("unknown field"),
+        "unexpected serde error: {error}"
+    );
+}
+
+#[test]
+fn connection_surface_non_current_requires_diagnostics_and_is_not_executable() {
+    let surface = InferenceConnectionSurface {
+        contract_version: 1,
+        graph_revision: "77f4c49c8a1b68d2".parse().expect("valid revision"),
+        validation_session_id: None,
+        node_id: "inference-node-1".parse().expect("valid node id"),
+        descriptor_fingerprint: Some(
+            "iface.sd15.text_to_image.v1"
+                .parse()
+                .expect("valid fingerprint"),
+        ),
+        status: InferenceConnectionSurfaceStatus::Stale,
+        inputs: Vec::new(),
+        outputs: Vec::new(),
+        validation_summary: DraftGraphValidationSummary {
+            status: DraftGraphValidationStatus::Executable,
+            executable: true,
+            enqueue_disabled_reasons: Vec::new(),
+            diagnostics_count: 0,
+            blocking_diagnostics_count: 0,
+        },
+        drift_report: None,
+        diagnostics: Vec::new(),
+    };
+
+    let error = surface
+        .validate()
+        .expect_err("stale surfaces must fail closed");
+
+    assert_eq!(
+        error,
+        InferenceInterfaceContractError::InvalidField {
+            field: "connection_surface.validation_summary",
+            reason: "non-current surfaces must not be executable"
+        }
+    );
 }

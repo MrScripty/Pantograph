@@ -15288,6 +15288,28 @@ Worker rules:
     unbounded diagnostics, or live validation event transport; stop if the
     implementation needs compatibility shims for retired static task ports or a
     second inference-port authority outside descriptor-backed validation.
+- 2026-05-28 Milestone 5d descriptor-backed inference connection contract slice:
+  - Smallest useful vertical slice: added the shared inference connection surface
+    contract to `pantograph-inference-interface-contracts` without wiring
+    workflow-service, frontend, scheduler, runtime-host, or Tauri consumers.
+  - Allowed files touched:
+    `crates/pantograph-inference-interface-contracts/src/lib.rs`,
+    `crates/pantograph-inference-interface-contracts/README.md`,
+    `crates/pantograph-inference-interface-contracts/tests/contract.rs`,
+    `crates/pantograph-inference-interface-contracts/tests/fixtures/README.md`,
+    `crates/pantograph-inference-interface-contracts/tests/fixtures/connection_surface_image_generation_current.json`,
+    `crates/pantograph-inference-interface-contracts/tests/fixtures/connection_surface_image_generation_drift_blocked.json`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: the DTO remains path-free, denies unknown
+    legacy/backend-owned fields, requires descriptor identity for current
+    surfaces, and makes non-current surfaces fail closed instead of restoring
+    static `llm-inference` task ports.
+  - Verification passed: `cargo fmt -p pantograph-inference-interface-contracts`;
+    `cargo test -p pantograph-inference-interface-contracts`; and
+    `cargo check -p pantograph-inference-interface-contracts`.
+  - Remaining follow-up: add workflow-service publication/adapter behavior from
+    validation projection records to the shared connection surface before wiring
+    connection candidates, insert-on-edge preview, or commits.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in

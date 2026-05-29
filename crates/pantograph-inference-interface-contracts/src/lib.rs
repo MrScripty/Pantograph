@@ -570,6 +570,9 @@ pub enum InferenceDiagnosticCode {
     DependencySidecarDescriptorStale,
     DependencySidecarDescriptorUnavailable,
     DependencySidecarDescriptorInvalid,
+    InferenceConnectionSurfaceMissing,
+    InferenceConnectionSurfaceStale,
+    InferenceConnectionSurfaceBlocked,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -869,6 +872,99 @@ pub enum DraftGraphEnqueueDisabledReason {
     DriftRequiresReview,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct InferenceConnectionSurface {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u32,
+    pub graph_revision: WorkflowGraphRevision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+    pub node_id: WorkflowNodeId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_fingerprint: Option<InferenceInterfaceFingerprint>,
+    pub status: InferenceConnectionSurfaceStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<InferencePortDescriptor>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<InferencePortDescriptor>,
+    pub validation_summary: DraftGraphValidationSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_report: Option<InferenceInterfaceDriftReport>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
+}
+
+impl InferenceConnectionSurface {
+    pub fn validate(&self) -> Result<(), InferenceInterfaceContractError> {
+        validate_contract_version(self.contract_version)?;
+        validate_collection_len("connection_surface.inputs", self.inputs.len(), MAX_PORTS)?;
+        validate_collection_len("connection_surface.outputs", self.outputs.len(), MAX_PORTS)?;
+        validate_collection_len(
+            "connection_surface.diagnostics",
+            self.diagnostics.len(),
+            MAX_DIAGNOSTICS,
+        )?;
+        for port in self.inputs.iter().chain(&self.outputs) {
+            port.validate()?;
+        }
+        self.validation_summary.validate()?;
+        if let Some(drift_report) = &self.drift_report {
+            drift_report.validate()?;
+            if drift_report.blocking && self.status == InferenceConnectionSurfaceStatus::Current {
+                return Err(InferenceInterfaceContractError::InvalidField {
+                    field: "connection_surface.status",
+                    reason: "current surfaces must not carry blocking drift",
+                });
+            }
+        }
+        for diagnostic in &self.diagnostics {
+            diagnostic.validate()?;
+        }
+        if self.status == InferenceConnectionSurfaceStatus::Current
+            && self.descriptor_fingerprint.is_none()
+        {
+            return Err(InferenceInterfaceContractError::MissingField {
+                field: "connection_surface.descriptor_fingerprint",
+            });
+        }
+        if self.status != InferenceConnectionSurfaceStatus::Current
+            && self.validation_summary.executable
+        {
+            return Err(InferenceInterfaceContractError::InvalidField {
+                field: "connection_surface.validation_summary",
+                reason: "non-current surfaces must not be executable",
+            });
+        }
+        if self.status == InferenceConnectionSurfaceStatus::DriftBlocked
+            && self.drift_report.is_none()
+        {
+            return Err(InferenceInterfaceContractError::MissingField {
+                field: "connection_surface.drift_report",
+            });
+        }
+        if self.status != InferenceConnectionSurfaceStatus::Current && self.diagnostics.is_empty() {
+            return Err(InferenceInterfaceContractError::MissingField {
+                field: "connection_surface.diagnostics",
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum InferenceConnectionSurfaceStatus {
+    Pending,
+    Current,
+    Missing,
+    Stale,
+    Unavailable,
+    Blocked,
+    DriftBlocked,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatedInferenceInterfaceDescriptor(InferenceInterfaceDescriptor);
 
@@ -933,6 +1029,29 @@ impl TryFrom<DraftGraphValidationSummary> for ValidatedDraftGraphValidationSumma
     type Error = InferenceInterfaceContractError;
 
     fn try_from(value: DraftGraphValidationSummary) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidatedInferenceConnectionSurface(InferenceConnectionSurface);
+
+impl ValidatedInferenceConnectionSurface {
+    #[must_use]
+    pub fn as_surface(&self) -> &InferenceConnectionSurface {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> InferenceConnectionSurface {
+        self.0
+    }
+}
+
+impl TryFrom<InferenceConnectionSurface> for ValidatedInferenceConnectionSurface {
+    type Error = InferenceInterfaceContractError;
+
+    fn try_from(value: InferenceConnectionSurface) -> Result<Self, Self::Error> {
         value.validate()?;
         Ok(Self(value))
     }

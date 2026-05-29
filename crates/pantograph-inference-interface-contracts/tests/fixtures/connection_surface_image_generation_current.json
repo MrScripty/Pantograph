@@ -1,0 +1,83 @@
+{
+  "contract_version": 1,
+  "graph_revision": "77f4c49c8a1b68d2",
+  "validation_session_id": "validation-session-1",
+  "node_id": "inference-node-1",
+  "descriptor_fingerprint": "iface.sd15.text_to_image.v1",
+  "status": "current",
+  "inputs": [
+    {
+      "port_id": "prompt",
+      "label": "Prompt",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "any"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "steps",
+      "label": "Steps",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "u64"
+      },
+      "default": {
+        "kind": "u64",
+        "value": 30
+      },
+      "options": {
+        "kind": "numeric_range",
+        "range": {
+          "min": 1.0,
+          "max": 150.0,
+          "step": 1.0,
+          "default": 30.0
+        }
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "image",
+      "label": "Image",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "artifact",
+        "kind": "image"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "validation_summary": {
+    "status": "executable",
+    "executable": true,
+    "diagnostics_count": 0,
+    "blocking_diagnostics_count": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "descriptor_resolved",
+      "message": "The inference connection surface is current for this graph revision."
+    }
+  ]
+}

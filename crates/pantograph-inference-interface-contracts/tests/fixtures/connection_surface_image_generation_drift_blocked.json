@@ -1,0 +1,89 @@
+{
+  "contract_version": 1,
+  "graph_revision": "77f4c49c8a1b68d2",
+  "validation_session_id": "validation-session-2",
+  "node_id": "inference-node-1",
+  "descriptor_fingerprint": "iface.sd15.text_to_image.v2",
+  "status": "drift_blocked",
+  "inputs": [
+    {
+      "port_id": "prompt",
+      "label": "Prompt",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "any"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "image",
+      "label": "Image",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "artifact",
+        "kind": "image"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "stale",
+        "reasons": [
+          "drift_detected"
+        ]
+      }
+    }
+  ],
+  "validation_summary": {
+    "status": "blocked",
+    "executable": false,
+    "enqueue_disabled_reasons": [
+      "drift_requires_review",
+      "blocking_diagnostics"
+    ],
+    "diagnostics_count": 3,
+    "blocking_diagnostics_count": 2
+  },
+  "drift_report": {
+    "authored_fingerprint": "iface.sd15.text_to_image.v1",
+    "current_fingerprint": "iface.sd15.text_to_image.v2",
+    "severity": "blocking",
+    "blocking": true,
+    "changes": [
+      {
+        "kind": "port_removed",
+        "port_id": "steps",
+        "message": "The authored steps input is no longer exposed by the resolved descriptor."
+      },
+      {
+        "kind": "port_type_changed",
+        "port_id": "image",
+        "message": "The image output type changed and connected edges must be reviewed."
+      }
+    ],
+    "diagnostics": [
+      {
+        "severity": "error",
+        "code": "drift_detected",
+        "message": "The current descriptor is not shape-compatible with the authored inference node."
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "inference_connection_surface_blocked",
+      "message": "The inference connection surface is blocked by descriptor drift."
+    }
+  ]
+}
