@@ -2879,6 +2879,7 @@ mod tests {
                 blocking_diagnostics_count: 0,
             },
             drift_report: None,
+            update_proposal: None,
             runtime_constraint: Some("pytorch".parse().expect("runtime id")),
             device_constraint: Some("cuda.0".parse().expect("device id")),
         }

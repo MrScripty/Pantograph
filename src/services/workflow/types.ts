@@ -1165,12 +1165,70 @@ export interface InferenceInterfaceDriftReport {
   diagnostics?: WorkflowGraphValidationDiagnostic[];
 }
 
+export interface InferenceInterfaceAffectedEdge {
+  edge_id: string;
+  source_node_id: string;
+  source_port_id: string;
+  target_node_id: string;
+  target_port_id: string;
+}
+
+export type InferenceInterfaceEdgeRemovalReason =
+  | 'source_port_removed'
+  | 'target_port_removed'
+  | 'port_type_changed'
+  | 'requirement_changed';
+
+export type InferenceInterfaceLiteralRemovalReason =
+  | 'port_removed'
+  | 'port_type_changed'
+  | 'option_unavailable'
+  | 'default_changed';
+
+export type InferenceInterfaceGraphPatchOperation =
+  | {
+      operation: 'replace_authored_snapshot';
+      value: {
+        node_id: string;
+        snapshot: AuthoredInferenceInterfaceSnapshot;
+      };
+    }
+  | {
+      operation: 'remove_invalid_edge';
+      value: {
+        edge: InferenceInterfaceAffectedEdge;
+        reason: InferenceInterfaceEdgeRemovalReason;
+      };
+    }
+  | {
+      operation: 'clear_invalid_literal';
+      value: {
+        node_id: string;
+        port_id: string;
+        reason: InferenceInterfaceLiteralRemovalReason;
+      };
+    };
+
+export interface InferenceInterfaceUpdateProposal {
+  contract_version?: number;
+  proposal_id: string;
+  node_id: string;
+  current_descriptor_fingerprint: string;
+  drift_report: InferenceInterfaceDriftReport;
+  operations?: InferenceInterfaceGraphPatchOperation[];
+  affected_edges?: InferenceInterfaceAffectedEdge[];
+  requires_confirmation: boolean;
+  destructive: boolean;
+  diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
 export interface InferenceInterfaceNodeProjectionRecord {
   node_id: string;
   descriptor: InferenceInterfaceDescriptor;
   authored_snapshot: AuthoredInferenceInterfaceSnapshot;
   validation_summary: WorkflowGraphValidationSummary;
   drift_report?: InferenceInterfaceDriftReport | null;
+  update_proposal?: InferenceInterfaceUpdateProposal | null;
   runtime_constraint?: string | null;
   device_constraint?: string | null;
 }

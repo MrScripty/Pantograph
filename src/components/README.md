@@ -134,9 +134,9 @@ invalid, the toolbar displays the backend gate message and leaves graph
 editing unblocked.
 For inference nodes, the toolbar also applies display-only runtime overlays
 from backend node validation projections: the authored interface snapshot and
-the current node validation summary plus any backend-authored drift report.
-These overlays are cleared when the graph revision key changes and are not
-saved back into graph data or used as submit authority.
+the current node validation summary plus any backend-authored drift report or
+update proposal. These overlays are cleared when the graph revision key changes
+and are not saved back into graph data or used as submit authority.
 Submit disabled reasons are rendered visibly below the toolbar rather than
 being available only as button titles, because Puma-Lib selection and other
 node edits mark workflows dirty and require a save before scheduler submission.

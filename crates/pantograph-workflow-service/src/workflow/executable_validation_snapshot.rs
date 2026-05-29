@@ -1489,6 +1489,7 @@ mod tests {
                 },
                 validation_summary: summary,
                 drift_report: None,
+                update_proposal: None,
                 runtime_constraint: Some(RuntimeIntentId::parse("pytorch").unwrap()),
                 device_constraint: Some(DeviceIntentId::parse("cuda:0").unwrap()),
             }],

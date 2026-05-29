@@ -12,8 +12,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::inference_interface_facts::missing_model_facts;
+use super::inference_interface_patch::{
+    GraphPatchProposalId, InferenceInterfaceGraphPatchError, InferenceInterfaceGraphPatchOperation,
+    InferenceInterfaceUpdateProposal,
+};
 use super::inference_interface_projection::{
-    resolve_inference_interface_projection, InferenceInterfaceProjectionError,
+    authored_snapshot_from_descriptor, resolve_inference_interface_projection,
+    InferenceInterfaceProjectionError,
 };
 use super::inference_interface_request::{
     InferenceInterfaceGraphResolutionDiagnostic, InferenceInterfaceGraphResolutionInputs,
@@ -39,6 +44,8 @@ pub enum InferenceInterfacePublicationError {
     Contract(#[from] InferenceInterfaceContractError),
     #[error("inference validation session error: {0}")]
     ValidationSession(#[from] InferenceInterfaceValidationSessionError),
+    #[error("inference interface patch contract error: {0}")]
+    GraphPatch(#[from] InferenceInterfaceGraphPatchError),
     #[error("validation node projection count {count} exceeds maximum {max}")]
     TooManyNodeProjections { count: usize, max: usize },
 }
@@ -79,6 +86,8 @@ pub struct InferenceInterfaceNodeProjectionRecord {
     pub validation_summary: DraftGraphValidationSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_report: Option<InferenceInterfaceDriftReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_proposal: Option<InferenceInterfaceUpdateProposal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_constraint: Option<RuntimeIntentId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -240,12 +249,15 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
             node_id: input.node_id.clone(),
             source,
         })?;
+        let node_id = WorkflowNodeId::parse(&input.node_id)?;
+        let update_proposal = update_proposal_for_projection(&node_id, &projection)?;
         node_projections.push(InferenceInterfaceNodeProjectionRecord {
-            node_id: WorkflowNodeId::parse(&input.node_id)?,
+            node_id,
             descriptor: projection.descriptor,
             authored_snapshot: projection.authored_snapshot,
             validation_summary: projection.validation_summary,
             drift_report: projection.drift_report,
+            update_proposal,
             runtime_constraint: input.request.runtime_constraint.clone(),
             device_constraint: input.request.device_constraint.clone(),
         });
@@ -358,6 +370,43 @@ fn status_rank(status: DraftGraphValidationStatus) -> u8 {
     }
 }
 
+fn update_proposal_for_projection(
+    node_id: &WorkflowNodeId,
+    projection: &super::inference_interface_projection::InferenceInterfaceResolutionProjection,
+) -> Result<Option<InferenceInterfaceUpdateProposal>, InferenceInterfacePublicationError> {
+    let Some(drift_report) = &projection.drift_report else {
+        return Ok(None);
+    };
+    let snapshot = authored_snapshot_from_descriptor(&projection.descriptor).map_err(|source| {
+        InferenceInterfacePublicationError::Projection {
+            node_id: node_id.as_str().to_string(),
+            source,
+        }
+    })?;
+    let proposal = InferenceInterfaceUpdateProposal {
+        contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        proposal_id: GraphPatchProposalId::parse(format!(
+            "inference-interface-update/{}",
+            node_id.as_str()
+        ))?,
+        node_id: node_id.clone(),
+        current_descriptor_fingerprint: projection.descriptor.descriptor_fingerprint.clone(),
+        drift_report: drift_report.clone(),
+        operations: vec![
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot {
+                node_id: node_id.clone(),
+                snapshot,
+            },
+        ],
+        affected_edges: Vec::new(),
+        requires_confirmation: true,
+        destructive: false,
+        diagnostics: drift_report.diagnostics.clone(),
+    };
+    proposal.validate()?;
+    Ok(Some(proposal))
+}
+
 fn validation_events(
     validation_session_id: &DraftGraphValidationSessionId,
     graph_revision: &WorkflowGraphRevision,
@@ -389,6 +438,20 @@ fn validation_events(
                 },
                 payload: WorkflowGraphInferenceValidationEventPayload::DriftReported(
                     drift_report.clone(),
+                ),
+            });
+            sequence += 1;
+        }
+        if let Some(update_proposal) = &projection.update_proposal {
+            events.push(WorkflowGraphInferenceValidationEvent {
+                validation_session_id: validation_session_id.clone(),
+                graph_revision: graph_revision.clone(),
+                sequence,
+                scope: WorkflowGraphInferenceValidationEventScope::Node {
+                    node_id: projection.node_id.clone(),
+                },
+                payload: WorkflowGraphInferenceValidationEventPayload::UpdateProposal(
+                    update_proposal.clone(),
                 ),
             });
             sequence += 1;
@@ -506,7 +569,17 @@ mod tests {
 
         let projection = &publication.node_projections[0];
         let drift_report = projection.drift_report.as_ref().expect("drift report");
+        let update_proposal = projection
+            .update_proposal
+            .as_ref()
+            .expect("update proposal");
         assert!(drift_report.blocking);
+        assert_eq!(update_proposal.node_id.as_str(), "infer");
+        assert_eq!(update_proposal.operations.len(), 1);
+        assert!(matches!(
+            update_proposal.operations[0],
+            InferenceInterfaceGraphPatchOperation::ReplaceAuthoredSnapshot { .. }
+        ));
         assert!(drift_report
             .changes
             .iter()
@@ -519,6 +592,12 @@ mod tests {
             matches!(
                 event.payload,
                 WorkflowGraphInferenceValidationEventPayload::DriftReported(_)
+            )
+        }));
+        assert!(publication.validation_session.events.iter().any(|event| {
+            matches!(
+                event.payload,
+                WorkflowGraphInferenceValidationEventPayload::UpdateProposal(_)
             )
         }));
 

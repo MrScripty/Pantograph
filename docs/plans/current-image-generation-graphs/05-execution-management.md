@@ -15702,6 +15702,36 @@ Worker rules:
   - Remaining follow-up: generate typed update proposals from drift reports and
     render graph-editor badges/update-preview controls without moving patch
     authority into the frontend.
+- 2026-05-28 Milestone 5d backend update-proposal projection slice:
+  - Smallest useful vertical slice: attach backend-authored
+    `InferenceInterfaceUpdateProposal` records to drifted validation node
+    projections, emit the existing node-scoped `UpdateProposal` validation
+    event, and mirror the optional proposal DTO through frontend workflow types
+    and display-only runtime overlays.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_version.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/README.md`,
+    `src/components/workflowValidationProjectionOverlays.ts`,
+    `src/components/workflowValidationProjectionOverlays.test.ts`,
+    `src/components/README.md`, the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: update proposals are preview data generated
+    by workflow-service from current descriptor state. The frontend does not
+    synthesize patches, mutate graph data, compare ports, infer submit
+    permission, or route proposal data into scheduler/runtime authority.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_interface_publication --lib`;
+    `cargo check -p pantograph-workflow-service` with the pre-existing
+    `set_active_run_execution_plan` dead-code warning; `node
+    --experimental-strip-types --test
+    src/components/workflowValidationProjectionOverlays.test.ts`; `npm run
+    typecheck`.
+  - Remaining follow-up: implement graph-editor badge/preview rendering and
+    backend-owned proposal application.
 
 ### Traceability Links
 

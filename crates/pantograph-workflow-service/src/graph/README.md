@@ -269,7 +269,9 @@ the summary/gate remains the only submit authority.
   authored snapshots are projected from validated descriptors when no saved
   snapshot exists, current validation summaries are derived from descriptor
   availability plus authored/current drift, and typed drift reports remain
-  backend-authored projection data.
+  backend-authored projection data. Drifted projections include backend-authored
+  update proposals; frontend code may display them, but graph mutation remains
+  behind workflow-service patch application APIs.
 - Dependency-environment service calls happen after graph/session state has
   been snapshotted and released. Provider output is accepted only after the
   canonical dependency-environment service validates the result contract.
@@ -277,9 +279,10 @@ the summary/gate remains the only submit authority.
   instead of inferring enqueue permission from raw diagnostics.
 - Synchronous inference-validation publication is workflow-service owned. It
   snapshots graph state under the session lock, runs descriptor projection after
-  the graph lock is released, emits node-scoped descriptor/drift events plus a
-  graph-scoped summary event, and records current graph/node validation state
-  for later dependency actions and scheduler admission. Publication rejects
+  the graph lock is released, emits node-scoped descriptor/drift/update
+  proposal events plus a graph-scoped summary event, and records current
+  graph/node validation state for later dependency actions and scheduler
+  admission. Publication rejects
   graphs whose inference-node projection count exceeds the explicit bounded
   projection policy instead of serializing or emitting unbounded projection
   records.

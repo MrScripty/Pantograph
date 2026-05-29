@@ -2595,6 +2595,29 @@ defining an image-only inference-node interface.
       - Remaining follow-up: generate typed update proposals from the drift
         report and render graph-editor badges/preview UI without introducing a
         frontend-owned patch authority.
+      - 2026-05-28 backend update-proposal projection slice completed:
+        drifted validation projections now include a backend-authored
+        `InferenceInterfaceUpdateProposal` with a
+        `ReplaceAuthoredSnapshot` operation for the current descriptor. The
+        publication session emits the existing node-scoped `UpdateProposal`
+        event, and frontend workflow DTO/runtime-overlay mirrors carry the
+        proposal as optional display/preview data.
+      - No-fallback/no-legacy result: proposals are produced only from
+        workflow-service authored/current projection state and are not applied
+        by this slice. Frontend code does not synthesize patches, compare ports,
+        mutate graph data, infer submit permission, or use proposal data as
+        scheduler/runtime authority.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+        `cargo test -p pantograph-workflow-service
+        inference_interface_publication --lib`; `cargo check -p
+        pantograph-workflow-service` with the pre-existing
+        `set_active_run_execution_plan` dead-code warning; `node
+        --experimental-strip-types --test
+        src/components/workflowValidationProjectionOverlays.test.ts`; `npm run
+        typecheck`.
+      - Remaining follow-up: render graph-editor badges/update-preview controls
+        and wire proposal application through backend graph-patch APIs after
+        the UX surface is implemented.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

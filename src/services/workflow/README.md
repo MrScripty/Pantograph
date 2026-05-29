@@ -235,9 +235,10 @@ missing `events` array as empty rather than a transport failure.
 - Mock projection states should use the shared `mockProjectionState` helper so
   additive backend projection metadata does not drift across service mocks.
 - Frontend inference-validation DTO mirrors include backend-authored drift
-  reports as optional projection data. Callers may display them, but must not
-  derive submit permission, scheduler admission, or replacement graph patches
-  from frontend-local comparison logic.
+  reports and update proposals as optional projection data. Callers may display
+  or request application of those proposals through backend graph-patch APIs,
+  but must not derive submit permission, scheduler admission, or replacement
+  graph patches from frontend-local comparison logic.
 - Built-in template tests must scan every registered starter template for
   retired direct inference node types so new examples stay on canonical
   `llm-inference` task shapes.
