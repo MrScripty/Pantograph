@@ -15424,6 +15424,37 @@ Worker rules:
     responses, connection stale checks, validation state/lifecycle, dependency
     intents, submit gate, scheduler projections, executable validation
     snapshots, saved graph drift diagnostics, and graph README contracts.
+- 2026-05-28 Milestone 5d validation lifecycle event read-model slice:
+  - Smallest useful vertical slice: expose the existing workflow-service
+    validation lifecycle event buffer through typed DTOs on `GraphSessionStore`,
+    and add focused serialization/read-API coverage before any Tauri/frontend
+    event delivery is wired.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, the Milestone 5d
+    file, and this execution log.
+  - No-fallback/no-legacy result: lifecycle event snapshots carry only
+    backend-owned validation identity, monotonic sequence, event kind, typed
+    cancellation/rejection reasons, and dropped-event count. They do not carry
+    resolver facts, Pumas facts, local paths, scheduler decisions, frontend
+    state, runtime-host payloads, or unbounded node projections.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service inference_validation_lifecycle
+    --lib`; `cargo test -p pantograph-workflow-service
+    validation_lifecycle_event_snapshot_reports_backend_refresh_events --lib`;
+    `cargo check -p pantograph-workflow-service`; touched-source added-line
+    search for retired path/proof/transport terms; and `git diff --check`.
+    `cargo check` still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning in scheduler store; this
+    slice added no new warnings.
+  - Remaining follow-up: add the dedicated graph-validation transport/event API
+    on top of this read model only after backend lifecycle tests cover close
+    cleanup, supersession, stale-result rejection, and bounded delivery
+    semantics. Do not reuse execution-run `WorkflowEvent` channels or add
+    frontend/Tauri validation policy.
 
 ### Traceability Links
 

@@ -2409,6 +2409,31 @@ defining an image-only inference-node interface.
       owner can call provider -> sync publisher -> current-state recorder without
       accepting raw facts from transport callers or duplicating descriptor
       resolution policy.
+      - 2026-05-28 lifecycle event read-model sub-slice completed:
+        `inference_validation_lifecycle.rs` now exposes a typed lifecycle event
+        snapshot read model through `GraphSessionStore` for later transport
+        wiring. The snapshot carries only graph-session identity, graph
+        revision, validation-session identity, monotonic sequence, event kind,
+        typed cancellation/rejection reason, and bounded dropped-event count.
+        It does not expose resolver facts, Pumas/package facts, paths,
+        scheduler decisions, frontend state, runtime-host payloads, or
+        unbounded projection data.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service` and
+        `cargo test -p pantograph-workflow-service
+        inference_validation_lifecycle --lib`; and `cargo test -p
+        pantograph-workflow-service
+        validation_lifecycle_event_snapshot_reports_backend_refresh_events
+        --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+        added-line search for retired path/proof/transport terms; and `git diff
+        --check`. Focused coverage now includes serialization of the typed event
+        snapshot shape and the graph-session read API. `cargo check` still
+        reports the pre-existing `set_active_run_execution_plan` dead-code
+        warning.
+      - Remaining follow-up: expose this read model through a dedicated
+        graph-validation transport/event API after backend lifecycle tests prove
+        close cleanup, supersession, stale-result rejection, and bounded
+        delivery semantics. Do not reuse execution-run `WorkflowEvent`
+        channels or add frontend/Tauri validation policy.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply

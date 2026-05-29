@@ -302,6 +302,13 @@ the summary/gate remains the only submit authority.
   validation lifecycle diagnostics rather than replaying unbounded history.
   Closing a graph edit session removes the session's buffered lifecycle events
   so stale validation events cannot be delivered after close.
+- The validation lifecycle event read model is a typed workflow-service DTO
+  surface exposed from `GraphSessionStore`. It may expose only graph-session
+  identity, graph revision, validation-session identity, sequence number, event
+  kind, typed cancellation or rejection reasons, and bounded dropped-event
+  count. It must not carry raw resolver facts, Pumas package facts, local
+  paths, scheduler decisions, frontend state, runtime-host payloads, or
+  unbounded projection data.
 - Current inference-validation state may store a bounded, path-free dependency
   requirements proof keyed to the associated inference node, graph revision,
   validation session, descriptor fingerprint, model ref, task kind, and

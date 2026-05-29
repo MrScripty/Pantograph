@@ -95,6 +95,11 @@ pub use inference_interface_validation::{
     WorkflowGraphInferenceValidationEventPayload, WorkflowGraphInferenceValidationEventScope,
     WorkflowGraphInferenceValidationSession,
 };
+pub use inference_validation_lifecycle::{
+    WorkflowGraphValidationCancellationReason, WorkflowGraphValidationLifecycleError,
+    WorkflowGraphValidationLifecycleEvent, WorkflowGraphValidationLifecycleEventKind,
+    WorkflowGraphValidationLifecycleEventSnapshot,
+};
 #[cfg(test)]
 pub(crate) use inference_validation_state::{
     CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofStatus,

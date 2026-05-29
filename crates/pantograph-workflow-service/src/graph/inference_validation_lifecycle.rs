@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::{watch, RwLock};
 
@@ -204,8 +205,7 @@ impl WorkflowGraphValidationLifecycleOwner {
         }
     }
 
-    #[cfg(test)]
-    async fn event_snapshot(
+    pub(crate) async fn event_snapshot(
         &self,
         graph_session_id: &WorkflowGraphSessionId,
     ) -> WorkflowGraphValidationLifecycleEventSnapshot {
@@ -235,8 +235,9 @@ struct WorkflowGraphValidationLifecycleRecord {
     cancellation_tx: watch::Sender<Option<WorkflowGraphValidationCancellationReason>>,
 }
 
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkflowGraphValidationCancellationReason {
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowGraphValidationCancellationReason {
     #[error("validation session was superseded")]
     Superseded,
     #[error("graph revision changed")]
@@ -252,17 +253,19 @@ struct WorkflowGraphValidationLifecycleEventLog {
     dropped_event_count: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct WorkflowGraphValidationLifecycleEvent {
-    graph_session_id: WorkflowGraphSessionId,
-    graph_revision: WorkflowGraphRevision,
-    validation_session_id: DraftGraphValidationSessionId,
-    sequence: u64,
-    kind: WorkflowGraphValidationLifecycleEventKind,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowGraphValidationLifecycleEvent {
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: DraftGraphValidationSessionId,
+    pub sequence: u64,
+    pub kind: WorkflowGraphValidationLifecycleEventKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum WorkflowGraphValidationLifecycleEventKind {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+#[non_exhaustive]
+pub enum WorkflowGraphValidationLifecycleEventKind {
     ValidationPending,
     ValidationSuperseded {
         superseded_validation_session_id: DraftGraphValidationSessionId,
@@ -276,16 +279,16 @@ enum WorkflowGraphValidationLifecycleEventKind {
     },
 }
 
-#[cfg(test)]
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-struct WorkflowGraphValidationLifecycleEventSnapshot {
-    events: Vec<WorkflowGraphValidationLifecycleEvent>,
-    dropped_event_count: u64,
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowGraphValidationLifecycleEventSnapshot {
+    pub events: Vec<WorkflowGraphValidationLifecycleEvent>,
+    pub dropped_event_count: u64,
 }
 
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub(crate) enum WorkflowGraphValidationLifecycleError {
+pub enum WorkflowGraphValidationLifecycleError {
     #[error("graph validation session is closed")]
     GraphSessionClosed,
     #[error("graph validation session is missing")]
@@ -498,5 +501,34 @@ mod tests {
         assert_eq!(events.events.len(), 2);
         assert_eq!(events.events[0].sequence, 1);
         assert_eq!(events.events[1].sequence, 2);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_event_snapshot_serializes_typed_event_identity() {
+        let owner = WorkflowGraphValidationLifecycleOwner::new();
+        let graph_session_id: WorkflowGraphSessionId =
+            "graph-session-1".parse().expect("valid graph session id");
+        let graph_revision: WorkflowGraphRevision =
+            "aaaaaaaaaaaaaaaa".parse().expect("valid graph revision");
+        let validation_session_id: DraftGraphValidationSessionId = "validation.session.1"
+            .parse()
+            .expect("valid validation session id");
+
+        owner
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision,
+                validation_session_id,
+            )
+            .await
+            .expect("begin validation");
+
+        let snapshot = owner.event_snapshot(&graph_session_id).await;
+        let encoded = serde_json::to_value(&snapshot).expect("serialize snapshot");
+
+        assert_eq!(encoded["dropped_event_count"], 0);
+        assert_eq!(encoded["events"][0]["graph_session_id"], "graph-session-1");
+        assert_eq!(encoded["events"][0]["sequence"], 0);
+        assert_eq!(encoded["events"][0]["kind"]["kind"], "validation_pending");
     }
 }

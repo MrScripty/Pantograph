@@ -11,6 +11,7 @@ use super::super::executable_validation_snapshot_source::{
 };
 use super::super::inference_interface_publication::WorkflowGraphInferenceValidationPublication;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
+use super::super::inference_validation_lifecycle::WorkflowGraphValidationLifecycleEventSnapshot;
 use super::super::inference_validation_publisher::{
     publish_workflow_graph_validation_attempt, WorkflowGraphValidationPublishAttempt,
     WorkflowGraphValidationPublishAttemptOutcome,
@@ -153,6 +154,18 @@ impl GraphSessionStore {
             })
             .await
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
+    }
+
+    pub async fn validation_lifecycle_event_snapshot(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowGraphValidationLifecycleEventSnapshot, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        Ok(self
+            .validation_lifecycle
+            .event_snapshot(&graph_session_id)
+            .await)
     }
 
     pub async fn record_inference_validation_session(

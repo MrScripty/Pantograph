@@ -13,7 +13,8 @@ use crate::graph::{
     WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphValidationLifecycleEventKind,
+    WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
@@ -630,6 +631,50 @@ async fn refresh_current_validation_summary_generates_backend_validation_session
     assert_ne!(validation_session_id.as_str(), "validation.session.1");
     assert_eq!(response.node_projections.len(), 1);
     assert_eq!(response.node_projections[0].node_id.as_str(), "infer");
+}
+
+#[tokio::test]
+async fn validation_lifecycle_event_snapshot_reports_backend_refresh_events() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    let _response = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+
+    let snapshot = store
+        .validation_lifecycle_event_snapshot(&session.session_id)
+        .await
+        .expect("lifecycle event snapshot");
+
+    assert_eq!(snapshot.dropped_event_count, 0);
+    assert_eq!(snapshot.events.len(), 2);
+    assert_eq!(snapshot.events[0].sequence, 0);
+    assert_eq!(
+        snapshot.events[0].graph_session_id.as_str(),
+        session.session_id
+    );
+    assert!(matches!(
+        snapshot.events[0].kind,
+        WorkflowGraphValidationLifecycleEventKind::ValidationPending
+    ));
+    assert!(matches!(
+        snapshot.events[1].kind,
+        WorkflowGraphValidationLifecycleEventKind::PublicationAccepted
+    ));
 }
 
 #[tokio::test]
