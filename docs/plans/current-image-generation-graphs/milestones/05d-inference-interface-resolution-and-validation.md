@@ -3543,6 +3543,29 @@ defining an image-only inference-node interface.
   - Remaining follow-up: continue the revision-consumer audit with executable
     validation snapshot sources, saved graph drift diagnostics, and
     dependency-environment action intents.
+- [x] 2026-05-28 executable snapshot semantic revision regression slice
+      completed:
+  - Smallest useful vertical slice: add graph-session coverage proving the
+    executable validation snapshot source refuses to produce an executable
+    snapshot after inference-node semantic data changes stale the previously
+    published validation summary.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: executable snapshot sourcing is
+    validated through the canonical current semantic graph revision and
+    validation-state lookup. The slice adds no compatibility snapshot path,
+    graph-data fallback, timestamp, or frontend invalidation path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    executable_validation_snapshot_source_rejects_semantic_node_data_stale_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    scheduler_inference_task_projections --lib`; `cargo check -p
+    pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: continue the revision-consumer audit with saved graph
+    drift diagnostics and dependency-environment action intents.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
