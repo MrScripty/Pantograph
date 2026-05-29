@@ -10,7 +10,7 @@ use crate::graph::{
     WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationSummaryRequest,
     WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest, WorkflowGraphUngroupRequest,
     WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
@@ -1363,6 +1363,71 @@ async fn publish_inference_validation_session_rejects_create_group_changed_durin
             session_id: session.session_id,
             name: "Model Inputs".to_string(),
             selected_node_ids: vec!["model".to_string(), "dep-env".to_string()],
+        })
+        .await
+        .expect("mutate graph while validation facts are pending");
+    release.notify_one();
+
+    let error = publish
+        .await
+        .expect("publish task should not panic")
+        .expect_err("publish should reject cancelled validation session");
+    assert!(
+        error
+            .to_string()
+            .contains("validation publication cancelled: graph revision changed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn publish_inference_validation_session_rejects_ungroup_changed_during_fact_lookup() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let grouped = store
+        .create_group(WorkflowGraphCreateGroupRequest {
+            session_id: session.session_id.clone(),
+            name: "Model Inputs".to_string(),
+            selected_node_ids: vec!["model".to_string(), "dep-env".to_string()],
+        })
+        .await
+        .expect("create group before validation starts");
+    let group_id = grouped
+        .graph
+        .nodes
+        .iter()
+        .find(|node| node.node_type == "node-group")
+        .expect("group node")
+        .id
+        .clone();
+
+    let publish_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let publish = tokio::spawn(async move {
+        publish_store
+            .publish_inference_validation_session(
+                &session_id,
+                DraftGraphValidationSessionId::parse("validation.session.ungroup.changed")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    entered.notified().await;
+
+    store
+        .ungroup(WorkflowGraphUngroupRequest {
+            session_id: session.session_id,
+            group_id,
         })
         .await
         .expect("mutate graph while validation facts are pending");
