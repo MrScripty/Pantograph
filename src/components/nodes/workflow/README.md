@@ -174,6 +174,10 @@ and finality metadata in runtime data while the component reads bytes lazily wit
 - `LLMInferenceNode.svelte` must keep task and diagnostics display derived from
   `inference_payloads` role metadata only; it must not inspect backend runtime
   internals or infer scheduler/runtime selection.
+- `LLMInferenceNode.svelte` may render backend graph-validation summary
+  overlays for the current graph revision, but those overlays are display-only;
+  submit gating, scheduler admission, and runtime execution must continue to
+  consume backend validation authority directly.
 - `PumaLibNode.svelte` must consume the shared Pumas model-option cache from
   `src/services/workflow/pumaModelOptionsCache.ts`; selector cursor handoff and
   invalidation logic belong in that service, not in component module state.

@@ -48,7 +48,7 @@
     workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
   import {
-    INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY,
+    INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS,
     workflowValidationProjectionOverlays,
   } from './workflowValidationProjectionOverlays';
 
@@ -152,12 +152,12 @@
     if (!requestKey) {
       currentValidationSummary = null;
       currentValidationSummaryKey = null;
-      clearNodeRuntimeData([INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]);
+      clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
       return;
     }
 
     if (currentValidationSummaryKey !== requestKey) {
-      clearNodeRuntimeData([INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]);
+      clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
     }
     currentValidationSummaryKey = requestKey;
     let cancelled = false;

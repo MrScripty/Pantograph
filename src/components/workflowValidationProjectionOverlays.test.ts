@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import type { InferenceInterfaceNodeProjectionRecord } from '../services/workflow/types.ts';
 import {
   INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY,
+  INFERENCE_INTERFACE_VALIDATION_SUMMARY_RUNTIME_KEY,
   workflowValidationProjectionOverlays,
 } from './workflowValidationProjectionOverlays.ts';
 
-test('workflowValidationProjectionOverlays projects authored snapshots for display overlays', () => {
+test('workflowValidationProjectionOverlays projects backend inference validation facts for display overlays', () => {
   const projection = {
     node_id: 'infer-1',
     authored_snapshot: {
@@ -39,6 +40,7 @@ test('workflowValidationProjectionOverlays projects authored snapshots for displ
       nodeId: 'infer-1',
       data: {
         [INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]: projection.authored_snapshot,
+        [INFERENCE_INTERFACE_VALIDATION_SUMMARY_RUNTIME_KEY]: projection.validation_summary,
       },
     },
   ]);

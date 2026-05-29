@@ -1,13 +1,18 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition } from '../../../services/workflow/types';
+  import type {
+    NodeDefinition,
+    WorkflowGraphValidationSummary,
+  } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
   import { buildInferencePayloadDisplay } from './inferencePayloadDisplay';
+  import { buildInferenceValidationDisplay } from './inferenceValidationDisplay';
 
   interface Props {
     id: string;
     data: {
       definition?: NodeDefinition;
+      inference_interface_validation_summary?: WorkflowGraphValidationSummary | null;
       label?: string;
       modelName?: string;
       streamContent?: string;
@@ -23,6 +28,9 @@
   let modelName = $derived(data.modelName || 'Local LLM');
   let streamContent = $derived(data.streamContent || '');
   let inferenceDisplay = $derived(buildInferencePayloadDisplay(data.definition));
+  let validationDisplay = $derived(
+    buildInferenceValidationDisplay(data.inference_interface_validation_summary),
+  );
 
   let statusColor = $derived(
     {
@@ -86,6 +94,17 @@
             {/each}
           </div>
         {/if}
+        {#if validationDisplay}
+          <div
+            class="inference-validation inference-validation--{validationDisplay.tone}"
+            title={validationDisplay.detail ?? validationDisplay.label}
+          >
+            <span class="truncate">{validationDisplay.label}</span>
+            {#if validationDisplay.detail}
+              <span class="shrink-0">{validationDisplay.detail}</span>
+            {/if}
+          </div>
+        {/if}
         {#if streamContent}
           <div class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-20 overflow-y-auto">
             {streamContent}
@@ -103,5 +122,41 @@
   .llm-node-wrapper :global(.node-header) {
     background-color: rgba(22, 163, 74, 0.2);
     border-color: rgba(22, 163, 74, 0.3);
+  }
+
+  .inference-validation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid #404040;
+    padding: 0.25rem 0.375rem;
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+  }
+
+  .inference-validation--info {
+    border-color: #1d4ed8;
+    background: rgba(30, 64, 175, 0.24);
+    color: #bfdbfe;
+  }
+
+  .inference-validation--warning {
+    border-color: #a16207;
+    background: rgba(113, 63, 18, 0.24);
+    color: #fde68a;
+  }
+
+  .inference-validation--error {
+    border-color: #991b1b;
+    background: rgba(127, 29, 29, 0.28);
+    color: #fecaca;
+  }
+
+  .inference-validation--success {
+    border-color: #166534;
+    background: rgba(20, 83, 45, 0.24);
+    color: #bbf7d0;
   }
 </style>

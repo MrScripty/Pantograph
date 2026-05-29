@@ -15619,6 +15619,32 @@ Worker rules:
     --lib`; `cargo check -p pantograph-workflow-service`; touched-source
     added-line search for retired path fields, execution event transports, raw
     JSON, `Result<T, String>`, and spawned tasks; and `git diff --check`.
+- 2026-05-28 Milestone 5d inference-node validation summary overlay slice:
+  - Smallest useful vertical slice: carry backend per-node inference validation
+    summaries in the same runtime overlay path as authored interface snapshots,
+    clear both overlay keys on active graph-revision changes, and render a
+    compact display-only validation status inside the generic inference node.
+  - Allowed files touched:
+    `src/components/workflowValidationProjectionOverlays.ts`,
+    `src/components/workflowValidationProjectionOverlays.test.ts`,
+    `src/components/WorkflowToolbar.svelte`,
+    `src/components/nodes/workflow/LLMInferenceNode.svelte`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.ts`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.test.ts`,
+    `src/components/README.md`,
+    `src/components/nodes/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: validation summaries remain backend-authored
+    presentation facts. The frontend does not infer submit authority, scheduler
+    admission, descriptor validity, Pumas/model paths, runtime selection, or
+    saved graph semantics from the overlay.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/workflowValidationProjectionOverlays.test.ts
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts`; `npm
+    run typecheck`.
+  - Remaining follow-up: render backend-authored port/edge drift and
+    update-preview overlays without deriving those facts in the graph package
+    or making them submit authority.
 
 ### Traceability Links
 

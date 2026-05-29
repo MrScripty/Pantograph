@@ -2530,6 +2530,25 @@ defining an image-only inference-node interface.
       - Remaining follow-up: render node/port-level drift and pending
         validation overlays from the backend descriptor projection rather than
         only toolbar submit state.
+      - 2026-05-28 inference-node validation summary overlay slice completed:
+        `workflowValidationProjectionOverlays` now carries the backend
+        per-node validation summary beside the authored interface snapshot, and
+        `WorkflowToolbar.svelte` clears both runtime overlay keys whenever the
+        active graph revision key changes. `LLMInferenceNode.svelte` renders a
+        compact display-only status from that backend summary, while submit
+        gating, scheduler admission, and runtime execution continue to consume
+        backend validation authority directly.
+      - No-fallback/no-legacy result: the frontend does not compute descriptor
+        validity, infer enqueue permission, inspect Pumas facts, inspect model
+        paths, or persist validation summary overlays into saved graph data.
+        The overlay is a current-revision presentation fact only.
+      - Verification passed: `node --experimental-strip-types --test
+        src/components/workflowValidationProjectionOverlays.test.ts
+        src/components/nodes/workflow/inferenceValidationDisplay.test.ts`;
+        `npm run typecheck`.
+      - Remaining follow-up: add port/edge-level drift badges and update-preview
+        rendering from backend descriptor/drift records. Do not derive those
+        facts in the graph package or make them submit authority.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending
