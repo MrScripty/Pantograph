@@ -1,4 +1,8 @@
-import type { WorkflowGraphValidationSummary } from '../../../services/workflow/types.ts';
+import type {
+  InferenceInterfaceDriftReport,
+  InferenceInterfaceUpdateProposal,
+  WorkflowGraphValidationSummary,
+} from '../../../services/workflow/types.ts';
 
 export type InferenceValidationTone = 'neutral' | 'info' | 'warning' | 'error' | 'success';
 
@@ -37,6 +41,27 @@ export function buildInferenceValidationDisplay(
     label: STATUS_LABELS[summary.status],
     detail: formatValidationDetail(summary),
     tone: STATUS_TONES[summary.status],
+  };
+}
+
+export function buildInferenceDriftDisplay(
+  driftReport: InferenceInterfaceDriftReport | null | undefined,
+  updateProposal: InferenceInterfaceUpdateProposal | null | undefined,
+): InferenceValidationDisplay | null {
+  if (!driftReport) {
+    return null;
+  }
+
+  const changeCount = driftReport.changes?.length ?? 0;
+  const operationCount = updateProposal?.operations?.length ?? 0;
+  return {
+    label: driftReport.blocking ? 'Interface drift' : 'Interface changed',
+    detail: operationCount > 0
+      ? formatCount(operationCount, 'proposed update')
+      : changeCount > 0
+        ? formatCount(changeCount, 'interface change')
+        : 'review required',
+    tone: driftReport.blocking ? 'error' : 'warning',
   };
 }
 

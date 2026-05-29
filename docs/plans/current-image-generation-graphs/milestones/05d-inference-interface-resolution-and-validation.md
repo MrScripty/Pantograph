@@ -2618,6 +2618,19 @@ defining an image-only inference-node interface.
       - Remaining follow-up: render graph-editor badges/update-preview controls
         and wire proposal application through backend graph-patch APIs after
         the UX surface is implemented.
+      - 2026-05-28 inference-node drift badge slice completed:
+        `LLMInferenceNode.svelte` now renders a compact display-only
+        drift/update badge when backend runtime overlays include a drift report
+        or update proposal. The presenter prefers backend proposal operation
+        counts and falls back to backend drift-change counts.
+      - No-fallback/no-legacy result: the node component does not compare ports,
+        author graph patches, apply proposal operations, infer submit
+        authority, or route drift/proposal data into scheduler/runtime state.
+      - Verification passed: `node --experimental-strip-types --test
+        src/components/nodes/workflow/inferenceValidationDisplay.test.ts`;
+        `npm run typecheck`.
+      - Remaining follow-up: implement the full editor-side update-preview
+        panel/control and backend-owned proposal application path.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

@@ -1,17 +1,24 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
   import type {
+    InferenceInterfaceDriftReport,
+    InferenceInterfaceUpdateProposal,
     NodeDefinition,
     WorkflowGraphValidationSummary,
   } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
   import { buildInferencePayloadDisplay } from './inferencePayloadDisplay';
-  import { buildInferenceValidationDisplay } from './inferenceValidationDisplay';
+  import {
+    buildInferenceDriftDisplay,
+    buildInferenceValidationDisplay,
+  } from './inferenceValidationDisplay';
 
   interface Props {
     id: string;
     data: {
       definition?: NodeDefinition;
+      inference_interface_drift_report?: InferenceInterfaceDriftReport | null;
+      inference_interface_update_proposal?: InferenceInterfaceUpdateProposal | null;
       inference_interface_validation_summary?: WorkflowGraphValidationSummary | null;
       label?: string;
       modelName?: string;
@@ -30,6 +37,12 @@
   let inferenceDisplay = $derived(buildInferencePayloadDisplay(data.definition));
   let validationDisplay = $derived(
     buildInferenceValidationDisplay(data.inference_interface_validation_summary),
+  );
+  let driftDisplay = $derived(
+    buildInferenceDriftDisplay(
+      data.inference_interface_drift_report,
+      data.inference_interface_update_proposal,
+    ),
   );
 
   let statusColor = $derived(
@@ -102,6 +115,17 @@
             <span class="truncate">{validationDisplay.label}</span>
             {#if validationDisplay.detail}
               <span class="shrink-0">{validationDisplay.detail}</span>
+            {/if}
+          </div>
+        {/if}
+        {#if driftDisplay}
+          <div
+            class="inference-validation inference-validation--{driftDisplay.tone}"
+            title={driftDisplay.detail ?? driftDisplay.label}
+          >
+            <span class="truncate">{driftDisplay.label}</span>
+            {#if driftDisplay.detail}
+              <span class="shrink-0">{driftDisplay.detail}</span>
             {/if}
           </div>
         {/if}

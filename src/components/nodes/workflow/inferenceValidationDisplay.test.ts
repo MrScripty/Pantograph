@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildInferenceValidationDisplay } from './inferenceValidationDisplay.ts';
+import {
+  buildInferenceDriftDisplay,
+  buildInferenceValidationDisplay,
+} from './inferenceValidationDisplay.ts';
 
 test('buildInferenceValidationDisplay formats executable validation summary', () => {
   assert.deepEqual(
@@ -49,6 +52,89 @@ test('buildInferenceValidationDisplay formats pending queue blocks without infer
       label: 'Pending validation',
       detail: '1 queue block',
       tone: 'info',
+    },
+  );
+});
+
+test('buildInferenceDriftDisplay prefers backend update proposal counts', () => {
+  assert.deepEqual(
+    buildInferenceDriftDisplay(
+      {
+        authored_fingerprint: 'descriptor.previous',
+        current_fingerprint: 'descriptor.current',
+        severity: 'blocking',
+        blocking: true,
+        changes: [
+          {
+            kind: 'port_added',
+            port_id: 'prompt',
+            message: 'Current descriptor added input port prompt.',
+          },
+        ],
+        diagnostics: [],
+      },
+      {
+        proposal_id: 'inference-interface-update/infer-1',
+        node_id: 'infer-1',
+        current_descriptor_fingerprint: 'descriptor.current',
+        drift_report: {
+          authored_fingerprint: 'descriptor.previous',
+          current_fingerprint: 'descriptor.current',
+          severity: 'blocking',
+          blocking: true,
+        },
+        operations: [
+          {
+            operation: 'replace_authored_snapshot',
+            value: {
+              node_id: 'infer-1',
+              snapshot: {
+                descriptor_fingerprint: 'descriptor.current',
+                task_kind: 'image_generation',
+              },
+            },
+          },
+        ],
+        requires_confirmation: true,
+        destructive: false,
+      },
+    ),
+    {
+      label: 'Interface drift',
+      detail: '1 proposed update',
+      tone: 'error',
+    },
+  );
+});
+
+test('buildInferenceDriftDisplay falls back to drift change counts', () => {
+  assert.deepEqual(
+    buildInferenceDriftDisplay(
+      {
+        authored_fingerprint: 'descriptor.previous',
+        current_fingerprint: 'descriptor.current',
+        severity: 'non_blocking',
+        blocking: false,
+        changes: [
+          {
+            kind: 'availability_changed',
+            port_id: 'prompt',
+            message: 'Prompt availability changed.',
+          },
+          {
+            kind: 'default_changed',
+            port_id: 'steps',
+            message: 'Steps default changed.',
+          },
+        ],
+        diagnostics: [],
+      },
+      null,
+    ),
+    {
+      label: 'Interface changed',
+      detail: '2 interface changes',
+      tone: 'warning',
     },
   );
 });

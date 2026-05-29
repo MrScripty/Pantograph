@@ -15732,6 +15732,25 @@ Worker rules:
     typecheck`.
   - Remaining follow-up: implement graph-editor badge/preview rendering and
     backend-owned proposal application.
+- 2026-05-28 Milestone 5d inference-node drift badge slice:
+  - Smallest useful vertical slice: render a compact display-only drift/update
+    badge in `LLMInferenceNode.svelte` from backend drift report and update
+    proposal runtime overlays, with presenter tests for proposal-count and
+    drift-change-count display.
+  - Allowed files touched:
+    `src/components/nodes/workflow/LLMInferenceNode.svelte`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.ts`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.test.ts`,
+    `src/components/nodes/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: the frontend node displays backend facts only.
+    It does not compare ports, synthesize patch operations, apply interface
+    updates, infer submit authority, or affect scheduler/runtime state.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts`; `npm run
+    typecheck`.
+  - Remaining follow-up: build the full graph-editor update-preview/apply UX
+    against backend graph-patch APIs.
 
 ### Traceability Links
 
