@@ -20,8 +20,9 @@ use thiserror::Error;
 
 use crate::workflow::{
     execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
-    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
-    WorkflowPortBinding, WorkflowRuntimeHostTaskResultMappingError,
+    materialize_runtime_host_inputs, runtime_host_response_to_task_result,
+    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
+    WorkflowRuntimeHostTaskInputMappingError, WorkflowRuntimeHostTaskResultMappingError,
     WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
     WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
@@ -78,13 +79,16 @@ impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) async fn select_and_dispatch_runtime_task(
         &self,
         execution_request_id: impl Into<String>,
+        task: &WorkflowSchedulerTask,
+        materialized_results: &[WorkflowSchedulerTaskResult],
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
-        materialized_inputs: Vec<RuntimeHostExecutionInput>,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
         let selection = select_scheduler_dispatch(selection_request)
             .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
             .into_inner();
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
+        let materialized_inputs = materialize_runtime_host_inputs(task, materialized_results)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskInputMapping)?;
         self.dispatch_runtime_handoff(execution_request_id, handoff, materialized_inputs)
             .await
     }
@@ -777,6 +781,9 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[allow(dead_code)]
     #[error("runtime-host task result mapping failed")]
     RuntimeHostTaskResultMapping(WorkflowRuntimeHostTaskResultMappingError),
+    #[allow(dead_code)]
+    #[error("runtime-host task input mapping failed")]
+    RuntimeHostTaskInputMapping(WorkflowRuntimeHostTaskInputMappingError),
     #[allow(dead_code)]
     #[error("scheduler dispatch selection did not select a runtime task")]
     RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),

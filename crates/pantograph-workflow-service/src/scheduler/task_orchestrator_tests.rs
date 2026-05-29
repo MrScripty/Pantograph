@@ -8,9 +8,9 @@ use pantograph_dependency_planning::{
     DependencyReadinessValidationSessionId, DependencyRequirementsId,
 };
 use pantograph_runtime_host_contracts::{
-    RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    SchedulerRuntimeHostDispatcher,
+    RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionInputValue,
+    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
+    RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
 };
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerDispatchSelectionRequest, SchedulerDispatchSelectionState,
@@ -148,13 +148,21 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
     let port = Arc::new(RecordingRuntimeHostPort::with_response(response));
     let orchestrator =
         WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+    let mut task = task_from_intent(task_intent);
+    task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
+    task.input_bindings = vec![text_binding("prompt", task.task_id.as_str())];
+    let materialized_results = vec![text_result(
+        "prompt",
+        WorkflowSchedulerTaskResultStatus::Completed,
+    )];
 
     let result = orchestrator
         .select_and_dispatch_runtime_task(
             "workflow-service-runtime-request-2",
+            &task,
+            &materialized_results,
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
                 .expect("selection request fixture must validate"),
-            runtime_host_request_fixture().materialized_inputs,
         )
         .await
         .expect("selected scheduler dispatch should reach runtime host port");
@@ -179,7 +187,12 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
         dispatch_decision.reservation_lease_id.as_str(),
         "reservation.001"
     );
-    assert_eq!(recorded[0].materialized_inputs.len(), 2);
+    assert_eq!(recorded[0].materialized_inputs.len(), 1);
+    assert_eq!(recorded[0].materialized_inputs[0].port_id, "text");
+    assert_eq!(
+        recorded[0].materialized_inputs[0].value,
+        RuntimeHostExecutionInputValue::String("paint a red cube".to_string())
+    );
 }
 
 #[tokio::test]
@@ -191,13 +204,15 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
     ));
     let orchestrator =
         WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+    let task = task_from_intent(selection_request.task_intent.clone());
 
     let error = orchestrator
         .select_and_dispatch_runtime_task(
             "workflow-service-runtime-request-3",
+            &task,
+            &[],
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
                 .expect("selection request without candidates still validates"),
-            runtime_host_request_fixture().materialized_inputs,
         )
         .await
         .expect_err("no-selection diagnostics must stop before runtime host");
@@ -206,6 +221,36 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
         error,
         WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection)
             if selection.state == SchedulerDispatchSelectionState::NoSelection
+    ));
+    assert!(port.requests().is_empty());
+}
+
+#[tokio::test]
+async fn orchestrator_rejects_missing_runtime_input_before_runtime_host_port() {
+    let selection_request = dispatch_selection_request_fixture();
+    let mut task = task_from_intent(selection_request.task_intent.clone());
+    task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
+    task.input_bindings = vec![text_binding("prompt", task.task_id.as_str())];
+    let port = Arc::new(RecordingRuntimeHostPort::with_response(
+        runtime_host_response_fixture(),
+    ));
+    let orchestrator =
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+
+    let error = orchestrator
+        .select_and_dispatch_runtime_task(
+            "workflow-service-runtime-request-4",
+            &task,
+            &[],
+            ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
+                .expect("selection request fixture must validate"),
+        )
+        .await
+        .expect_err("missing runtime input must stop before runtime host");
+
+    assert!(matches!(
+        error,
+        WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskInputMapping(_)
     ));
     assert!(port.requests().is_empty());
 }

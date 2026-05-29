@@ -283,3 +283,26 @@ or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
   `git diff --check`. Existing caveat: `cargo check -p
   pantograph-workflow-service` still emits the known unused
   `set_active_run_execution_plan` warning.
+- 2026-05-29 workflow-service runtime-host task input materialization slice
+  completed. Smallest useful vertical slice: add the workflow-service-owned
+  mapper from completed scheduler task results into typed
+  `RuntimeHostExecutionInput` values and wire selected scheduler dispatch to
+  use it before the runtime-host port is called. Allowed write set:
+  workflow-service runtime-host task input mapping, task orchestrator tests/
+  README, this milestone file, and execution notes. No-fallback confirmation:
+  the mapper consumes only validated completed upstream task results, rejects
+  missing, unavailable, failed, invalid, and unsupported materialized values,
+  and skips Pumas model-ref bindings only on explicit model-ref target ports
+  because model identity remains in scheduler handoff/readiness facts rather
+  than runtime materialized inputs. It does not read graph paths, synthesize
+  model paths, call legacy dependency resolvers, or adapt results into
+  `ModelRefV2`. Verification passed: `cargo fmt -p
+  pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+  runtime_host_task_input_mapping --lib -- --nocapture`; `cargo test -p
+  pantograph-workflow-service task_orchestrator --lib -- --nocapture`;
+  `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; targeted source search over the
+  touched mapper/orchestrator/README files for retired path/model-ref terms;
+  and `git diff --check`. Existing caveat: `cargo check -p
+  pantograph-workflow-service` still emits the known unused
+  `set_active_run_execution_plan` warning.

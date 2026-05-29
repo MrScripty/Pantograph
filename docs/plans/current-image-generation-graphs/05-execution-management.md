@@ -16334,6 +16334,33 @@ Worker rules:
     orchestrator files; and `git diff --check`.
   - Verification caveat: `cargo check -p pantograph-workflow-service` still
     emits the known unused `set_active_run_execution_plan` warning.
+- 2026-05-29 Milestone 5b workflow-service runtime-host task input
+  materialization slice completed:
+  - Slice scope: workflow-service runtime-host task input mapping, task
+    orchestrator selected-dispatch path/tests, workflow README, and plan
+    records.
+  - Implementation: added the workflow-service-owned mapper from completed
+    scheduler task results into typed `RuntimeHostExecutionInput` values and
+    wired selected scheduler dispatch to call it before runtime-host
+    execution. The selected-dispatch path still performs scheduler selection
+    first, so no-candidate decisions stop before materialization and before
+    the runtime-host port.
+  - No-fallback/no-legacy gate: mapper inputs are validated completed
+    scheduler task results only. Missing, unavailable, failed, invalid, and
+    unsupported values fail closed; Pumas model refs are skipped only on
+    explicit model-ref target ports because model identity remains in
+    scheduler handoff/readiness facts. The slice does not read graph paths,
+    synthesize executable paths, call legacy dependency resolvers, or adapt
+    results into `ModelRefV2`.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service runtime_host_task_input_mapping --lib
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    task_orchestrator --lib -- --nocapture`; `cargo check -p
+    pantograph-workflow-service`; `cargo fmt -p pantograph-workflow-service
+    -- --check`; targeted retired path/model-ref source search over the
+    touched mapper/orchestrator/README files; and `git diff --check`.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
 
 ### Traceability Links
 

@@ -81,6 +81,12 @@ Runtime scheduler task graphs carry a typed `dependency_readiness_source`
 copied from the executable validation snapshot. Queue admission and readiness
 lifecycle code must consume that saved source rather than rereading draft graph
 node data, frontend state, or provider-private dependency payloads.
+Runtime-host task input materialization is workflow-service owned. It converts
+completed upstream scheduler task results into typed, path-free
+`RuntimeHostExecutionInput` values before runtime-host dispatch. Pumas model
+reference results are not materialized as runtime-host inputs on model-ref
+binding ports because model identity is carried by scheduler handoff and
+readiness proof.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
