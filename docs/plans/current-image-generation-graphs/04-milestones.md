@@ -51,10 +51,11 @@ milestone status in its file and summarize progress in
    - Add the backend-owned resolver/validator that turns connected model
      references into typed generic inference-node ports, defaults,
      availability, options, and diagnostics.
-   - Graph editor draft validation, workflow save validation, scheduler task
-     materialization, and pre-dispatch validation must consume the same
-     resolved interface descriptor so task execution cannot drift from the
-     ports shown to users.
+   - Graph editor draft validation, executable publish/admission validation,
+     scheduler task materialization, and pre-dispatch validation must consume
+     the same resolved interface descriptor so task execution cannot drift from
+     the ports shown to users. Draft save remains editable graph persistence
+     and does not create scheduler authority.
 
 5b. [Runtime Host Handoff And Legacy Execution Removal](milestones/05b-runtime-host-handoff-legacy-removal.md)
    - Replace successful `model_path`/`ModelRefV2` runtime execution with

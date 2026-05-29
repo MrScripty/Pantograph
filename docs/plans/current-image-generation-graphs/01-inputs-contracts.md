@@ -118,8 +118,10 @@ throughput decisions.
   interface resolution must derive typed ports, defaults, required inputs,
   valid options, unavailable reasons, and diagnostics from canonical Pumas
   facts plus inference/runtime capability facts. Graph draft validation,
-  workflow save validation, scheduler task materialization, and pre-dispatch
-  validation must consume that same resolved interface contract.
+  executable publish/admission validation, scheduler task materialization, and
+  pre-dispatch validation must consume that same resolved interface contract.
+  Draft save is graph persistence for continued editing and must not create
+  executable authority.
 - The scheduler owns backend/device/runtime ranking, resource placement, queue
   policy, explicit preference validation, and future learned throughput policy.
   Inference backend adapters own feasibility facts, diagnostics, resource

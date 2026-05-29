@@ -21,7 +21,7 @@ dispatch.
 | `08-scheduler-owned-dynamic-task-dispatch.md` | Scheduler-owned dynamic task dispatch design for concurrent workflow tasks, batching, resource admission, capability hints, and dispatch decisions. |
 | `09-runtime-host-handoff-legacy-removal.md` | Runtime-host handoff replacement plan for removing `model_path`/`ModelRefV2` successful execution paths. |
 | `10-task-level-scheduler-orchestration.md` | Option 4 target architecture for durable task-level workflow scheduling, task state, orchestration, and runtime-host dispatch integration. |
-| `11-inference-interface-resolution-and-validation.md` | Backend-owned generic inference-node interface resolution and shared validation for graph editor ports, save validation, and execution materialization. |
+| `11-inference-interface-resolution-and-validation.md` | Backend-owned generic inference-node interface resolution and shared validation for graph editor ports, executable publish/admission, and execution materialization. |
 | `milestones/` | Per-slice implementation checklists and verification gates. |
 
 ## Problem

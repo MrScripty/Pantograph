@@ -74,7 +74,8 @@ risk, lifecycle, and execution-management content.
 9. [Inference Interface Resolution And Validation](11-inference-interface-resolution-and-validation.md)
    - Generic inference-node model interface resolution
    - Shared descriptor contract for port discovery and validation
-   - Graph editor draft validation, save validation, and execution revalidation
+   - Graph editor draft validation, executable publish/admission validation,
+     and execution revalidation
    - Scheduler, node-engine, runtime-host, and Pumas ownership boundaries
 
 10. [Risks And Definition Of Done](03-risks-and-definition-of-done.md)

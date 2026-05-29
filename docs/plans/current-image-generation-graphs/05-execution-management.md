@@ -15967,6 +15967,24 @@ Worker rules:
   - Verification passed: `node --experimental-strip-types --test
     src/components/nodes/workflow/selectionInputProviderOptions.test.ts
     src/services/workflow/portOptionsCache.test.ts`; `npm run typecheck`.
+- 2026-05-29 Milestone 5d Draft Save / Executable Publish boundary plan
+  update:
+  - Re-plan trigger: the remaining workflow-save validation checklist item
+    conflated draft graph persistence with executable publish/submit authority.
+    That would either block invalid in-progress graphs from being saved or make
+    save imply scheduler readiness.
+  - Decision recorded: Draft Save persists editable graph state, authored port
+    history, and versioned graph data for later editing and may save invalid
+    inference graphs. Executable Publish, Submit, and Queue Admission consume
+    backend descriptor validation summary/session identity, semantic graph
+    revision, descriptor fingerprint, required/optional/defaulted values,
+    upstream output types, and explicit runtime/device/trait constraints before
+    creating scheduler authority.
+  - No-fallback/no-legacy result: draft save cannot create executable
+    snapshots, scheduler projections, queue admission state, or submit
+    permission. Invalid executable state returns typed diagnostics while the
+    editor remains able to display and edit the draft graph.
+  - Verification passed: `git diff --check`.
 
 ### Traceability Links
 

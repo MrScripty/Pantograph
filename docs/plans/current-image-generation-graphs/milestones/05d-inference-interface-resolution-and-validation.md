@@ -2898,10 +2898,48 @@ defining an image-only inference-node interface.
   - Verification passed: `node --experimental-strip-types --test
     src/components/nodes/workflow/selectionInputProviderOptions.test.ts
     src/services/workflow/portOptionsCache.test.ts`; `npm run typecheck`.
-- [ ] Wire workflow save validation to consume the same descriptor contract.
-      Required inputs, optional defaults, valid options, connected upstream
-      output types, and explicit runtime/device constraints must be validated
-      before a workflow can be saved or submitted as executable.
+- [x] 2026-05-29 Draft Save / Executable Publish boundary re-plan decision:
+  - Re-plan trigger: the previous "workflow save validation" item conflated
+    draft graph persistence with executable publish/submit authority. That
+    would either block users from saving invalid in-progress graphs or make
+    save imply scheduler readiness, both of which violate the graph editor UX
+    and backend-owned execution authority boundaries.
+  - Decision: use an explicit Draft Save and Executable Publish boundary.
+    Draft Save persists editable graph state, authored port history, and
+    versioned graph data for later editing. It may save invalid or
+    non-executable inference graphs and must not create, mutate, infer, or
+    cache executable validation snapshots, scheduler projections, queue
+    admission state, or submit authority.
+  - Executable Publish / Submit / Queue Admission rule: required inputs,
+    optional defaults, valid options, connected upstream output types, explicit
+    runtime/device/trait constraints, validation-session identity, semantic
+    graph revision, descriptor fingerprint, and backend validation summary must
+    be current and executable before a workflow version can be published as
+    executable, submitted, inserted into the queue, recorded as queue-placed, or
+    materialized into a scheduler task graph.
+  - Frontend rule: the graph editor may display and edit invalid graphs while
+    validation is pending, stale, unavailable, or blocked. Submit/enqueue
+    remains disabled from backend-owned validation/publish state; frontend
+    code must not synthesize executable authority from saved graph JSON,
+    proposal presence, descriptors, options, or diagnostics.
+  - No-fallback/no-legacy confirmation: do not preserve any alternate
+    successful route through draft save, raw graph inference fields, current
+    frontend state, Tauri payloads, legacy `inference_settings`,
+    `expand-settings`, static port tables, or whole-run runtime execution.
+    Invalid executable state returns typed diagnostics; invalid draft state can
+    still be persisted as editable graph history.
+- [ ] Wire Draft Save persistence to remain non-executable. Draft Save may
+      validate persisted graph shape, schema version, authored snapshot/history
+      integrity, and canonical graph serialization only. Tests must prove an
+      invalid inference graph can be saved for continued editing without
+      producing executable validation snapshots, scheduler projections, queue
+      admission state, or submit permission.
+- [ ] Wire Executable Publish validation to consume the same descriptor
+      contract. Required inputs, optional defaults, valid options, connected
+      upstream output types, explicit runtime/device/trait constraints,
+      validation session identity, semantic graph revision, descriptor
+      fingerprint, and backend validation summary must be validated before a
+      workflow version can be published, submitted, or admitted as executable.
 - [ ] Wire workflow submit and scheduler queue admission to consume the
       backend validation summary. The frontend submit button and backend queue
       admission must both fail closed while inference validation is pending,
@@ -2926,8 +2964,9 @@ defining an image-only inference-node interface.
       payload guesses.
 - [ ] Add pre-dispatch descriptor revalidation before scheduler dispatch
       selection. If Pumas facts, selected artifact state, runtime capability,
-      or descriptor fingerprint changed since draft/save validation, fail the
-      task with typed diagnostics rather than falling back to stale ports.
+      or descriptor fingerprint changed since executable publish/admission
+      validation, fail the task with typed diagnostics rather than falling back
+      to stale ports.
 - [ ] Delete or rewrite retired inference-node port discovery and validation
       surfaces replaced by this resolver. Do not keep compatibility aliases,
       legacy model-path support checks, planned-inference validation branches,

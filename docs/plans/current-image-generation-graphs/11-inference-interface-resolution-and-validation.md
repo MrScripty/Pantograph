@@ -5,8 +5,9 @@
 Keep workflow graphs simple by using one generic inference node whose effective
 typed inputs and outputs are resolved from the connected model. The same
 backend-owned resolution contract must drive graph editor draft ports,
-workflow save validation, scheduler task materialization, and pre-dispatch
-validation.
+executable publish/admission validation, scheduler task materialization, and
+pre-dispatch validation. Draft save remains graph persistence for continued
+editing and must not create executable authority.
 
 This is not an image-only system. It applies to image generation, text
 generation, audio, multimodal models, diffusion LLMs, and future model
@@ -17,10 +18,11 @@ supported task interface.
 
 If graph editor port discovery, workflow validation, task materialization, and
 runtime dispatch use separate logic, Pantograph can show users ports that save
-validation rejects, save workflows that execution cannot materialize, or submit
-runtime tasks that runtime-host later rejects. The scheduler and runtime-host
-still need fail-closed safeguards, but Pantograph should catch invalid
-inference nodes as early as possible while the graph is being edited.
+executable publish rejects, publish workflows that execution cannot
+materialize, or submit runtime tasks that runtime-host later rejects. The
+scheduler and runtime-host still need fail-closed safeguards, but Pantograph
+should catch invalid inference nodes as early as possible while the graph is
+being edited without blocking draft graph persistence.
 
 ## Scope
 
@@ -70,11 +72,14 @@ Out of scope:
 - **Workflow-service:** owns the resolver application service that combines
   Pumas facts, inference capability facts, graph constraints, and runtime
   availability into a typed `InferenceInterfaceDescriptor`. It also owns draft
-  graph validation, save validation, execution-time revalidation, and
-  materialization of graph literals/defaults/upstream task results into typed
-  runtime-host inputs. Workflow-service is the only owner for live validation
-  event/session envelopes, graph/node event scope, stale-session filtering, and
-  update-proposal transport.
+  graph validation, draft-save schema/canonicalization checks, executable
+  publish validation, execution-time revalidation, and materialization of graph
+  literals/defaults/upstream task results into typed runtime-host inputs. Draft
+  save may persist invalid editable graphs and history, but executable publish,
+  submit, and queue admission must fail closed unless the backend descriptor
+  validation summary is current and executable. Workflow-service is the only
+  owner for live validation event/session envelopes, graph/node event scope,
+  stale-session filtering, and update-proposal transport.
 - **Scheduler:** owns runtime/device/reservation/batch selection. It receives
   validated task intent and explicit user constraints, but it does not own
   prompt/image/mask/settings values, graph port discovery, or model-path
@@ -553,25 +558,34 @@ generic inference node receives or changes model reference
   -> workflow-service queries inference/runtime capability facts
   -> resolver returns InferenceInterfaceDescriptor plus diagnostics
   -> graph editor renders typed inputs/outputs and unavailable reasons
-  -> save validation consumes the same descriptor contract
+  -> draft save persists editable graph/history without executable authority
+  -> executable publish consumes the same descriptor validation contract
   -> execution revalidates descriptor fingerprint before task materialization
   -> workflow-service materializes typed runtime-host inputs after readiness
 ```
 
-Missing required inputs fail draft/save validation when known. Missing optional
-inputs are filled from descriptor defaults at materialization time or omitted
-only when the runtime-host input contract explicitly defines omission as the
-same canonical default. If facts become stale between graph editing and
-execution, execution revalidation fails with typed diagnostics instead of
-falling back to previously rendered ports.
+Missing required inputs fail draft validation and executable publish/admission
+when known. They do not block Draft Save, because users must be able to persist
+and reopen invalid in-progress graphs. Missing optional inputs are filled from
+descriptor defaults at materialization time or omitted only when the
+runtime-host input contract explicitly defines omission as the same canonical
+default. If facts become stale between graph editing and execution, executable
+publish/admission or execution revalidation fails with typed diagnostics
+instead of falling back to previously rendered ports.
 
 ## Validation Uses
 
 - **Draft graph validation:** validates unsaved graph state and returns
   node/port diagnostics for editor display.
-- **Save validation:** verifies that persisted workflow JSON contains only
-  inputs, outputs, constraints, and defaults accepted by the current descriptor
-  contract.
+- **Draft save persistence:** verifies persisted graph JSON shape,
+  canonicalization, versioning, and authored-history integrity. It may persist
+  invalid or non-executable inference graphs, and it must not create, mutate,
+  infer, or cache executable scheduler authority.
+- **Executable publish validation:** verifies required inputs, optional
+  defaults, valid options, connected upstream output types, explicit
+  runtime/device/trait constraints, current validation-session identity, graph
+  revision, descriptor fingerprint, and validation summary before a workflow
+  version can be marked executable or submitted.
 - **Task graph projection:** stores only path-free model refs, typed
   constraints, resolved descriptor task kind, descriptor fingerprint, and
   bindings needed for scheduler task orchestration. Projection must consume the
@@ -811,8 +825,12 @@ falling back to previously rendered ports.
    second descriptor-resolution path.
 9. Wire graph editor draft validation to render descriptor ports and disabled
    reasons without frontend-inferred family logic.
-10. Wire workflow save validation to consume the same descriptor contract and
-   reject stale or invalid ports.
+10. Wire the Draft Save versus Executable Publish boundary explicitly. Draft
+   Save consumes only persisted-graph schema/canonicalization and authored
+   history checks and may save invalid editable graphs. Executable Publish
+   consumes the descriptor validation contract and rejects missing, stale,
+   invalid, unavailable, unresolved, blocked, or contract-incompatible
+   inference interfaces before any submit/queue authority is created.
 11. Wire scheduler task projection/materialization and runtime-host input
     assembly to consume current descriptor-backed validation state: resolved
     descriptor task kind, descriptor defaults, typed constraints, descriptor
@@ -1088,8 +1106,9 @@ falling back to previously rendered ports.
 - Saved workflow graph data contains only the minimal authored interface
   snapshot plus user-authored values/edges; it does not persist package facts,
   local paths, scheduler decisions, runtime load targets, or worker settings.
-- Draft validation, save validation, queue admission, materialization, and
-  pre-dispatch revalidation all consume the same descriptor contract.
+- Draft validation, executable publish, queue admission, materialization, and
+  pre-dispatch revalidation all consume the same descriptor contract. Draft
+  save persists editable graph/history and is not executable validation.
 - Scheduler receives validated task intent and constraints, not prompt/image/
   mask/settings ownership or model-path resolution responsibility.
 - Runtime-host receives scheduler-selected handoff plus typed materialized
