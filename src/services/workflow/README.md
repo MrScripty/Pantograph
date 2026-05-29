@@ -15,6 +15,7 @@ on raw invoke payloads.
 | `WorkflowService.graphInspection.test.ts` | Focused IPC boundary test for saved graph inspection projection requests and backend-owned stale diagnostics. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, run-inspection, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowProjectionSubscriptionService.ts` | Typed diagnostics projection invalidation subscription helper over the Tauri event bridge. |
+| `WorkflowGraphValidationLifecycleSubscriptionService.ts` | Typed graph-validation lifecycle subscription helper over the dedicated Tauri event bridge. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, run-inspection request/response shape, local Network scheduler-load/placement facts, and warm projection freshness state survive the service boundary. |
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
@@ -113,6 +114,11 @@ Graph validation lifecycle snapshots are also forwarded as typed graph-session
 commands. They are read-model recovery and event-delivery support for the graph
 editor, not validation authority: frontend code must not infer descriptor facts,
 queue eligibility, or resolver results from transport timing or missing events.
+Graph validation lifecycle event subscription wiring lives in
+`WorkflowGraphValidationLifecycleSubscriptionService.ts`. It listens only to the
+dedicated graph-validation event name, filters by active graph session, drops
+stale sequence numbers, and leaves initial snapshot/recovery reads to
+`graphValidationLifecycleEventSnapshot`.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.

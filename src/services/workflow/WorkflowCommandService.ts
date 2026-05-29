@@ -202,7 +202,7 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         events: [],
-        dropped_events: 0,
+        dropped_event_count: 0,
       };
     }
 

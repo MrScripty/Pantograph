@@ -736,17 +736,17 @@ test('workflow command service forwards validation lifecycle event snapshot requ
         graph_revision: 'graph-revision-a',
         validation_session_id: 'validation-session-a',
         sequence: 1,
-        kind: 'validation_pending',
+        kind: { kind: 'validation_pending' },
       },
       {
         graph_session_id: 'graph-session-a',
         graph_revision: 'graph-revision-a',
         validation_session_id: 'validation-session-a',
         sequence: 2,
-        kind: 'publication_accepted',
+        kind: { kind: 'publication_accepted' },
       },
     ],
-    dropped_events: 0,
+    dropped_event_count: 0,
   };
   mockIPC((cmd, args) => {
     calls.push({ cmd, args });

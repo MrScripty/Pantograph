@@ -2495,6 +2495,25 @@ defining an image-only inference-node interface.
       - Remaining follow-up: add the frontend subscription service for the
         dedicated graph-validation lifecycle event and wire editor-side
         identity/sequence filtering against the backend snapshot read command.
+      - 2026-05-28 frontend lifecycle-event subscription slice completed:
+        added `WorkflowGraphValidationLifecycleSubscriptionService.ts` for the
+        dedicated graph-validation lifecycle event. The helper filters by
+        active graph session, drops stale sequence numbers, reports handler
+        errors, and leaves initial snapshot/recovery reads to
+        `graphValidationLifecycleEventSnapshot`.
+      - Discovered and fixed contract issue: the previous TypeScript lifecycle
+        snapshot mirror used `dropped_events` and string event kinds, while the
+        Rust DTO serializes `dropped_event_count` and internally tagged
+        `kind` objects. The frontend types, mock response, and command tests now
+        match the Rust serialization contract.
+      - Verification passed: `node --experimental-strip-types --test
+        src/services/workflow/WorkflowGraphValidationLifecycleSubscriptionService.test.ts
+        src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+        typecheck`; added-line source search over touched frontend workflow
+        service files for retired path fields, raw JSON, execution event
+        transports, `Result<T, String>`, and `any`; and `git diff --check`.
+      - Remaining follow-up: wire the graph editor to consume the subscription
+        and snapshot read model without blocking editing while validation runs.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

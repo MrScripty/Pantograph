@@ -15545,6 +15545,37 @@ Worker rules:
   - Remaining follow-up: add the frontend graph-validation lifecycle
     subscription service and wire editor-side identity/sequence filtering
     against the backend snapshot read command.
+- 2026-05-28 Milestone 5d frontend validation lifecycle subscription slice:
+  - Smallest useful vertical slice: add a dedicated frontend workflow service
+    subscription helper for `workflow://graph-validation/lifecycle-event`,
+    correct the TypeScript lifecycle DTO mirror to Rust serialization, and add
+    focused listener tests.
+  - Allowed files touched:
+    `src/services/workflow/WorkflowGraphValidationLifecycleSubscriptionService.ts`,
+    `src/services/workflow/WorkflowGraphValidationLifecycleSubscriptionService.test.ts`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: frontend subscription code only filters
+    active graph-session identity and stale event sequence numbers. It does not
+    infer descriptor facts, submit gates, scheduler decisions, Pumas paths,
+    validation freshness, or fallback behavior from event timing; initial
+    snapshot and recovery remain explicit backend reads.
+  - Discovered issue fixed now: the previous frontend lifecycle snapshot mirror
+    used `dropped_events` and string event-kind values, but Rust serializes
+    `dropped_event_count` and internally tagged event-kind objects. The types,
+    mock response, and command tests now match the Rust contract.
+  - Verification passed: `node --experimental-strip-types --test
+    src/services/workflow/WorkflowGraphValidationLifecycleSubscriptionService.test.ts
+    src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+    typecheck`; touched-source added-line search for retired path fields,
+    execution event transports, raw JSON, `Result<T, String>`, and `any`; and
+    `git diff --check`.
+  - Remaining follow-up: wire graph editor draft-validation state to this
+    subscription plus the backend snapshot read command while keeping editing
+    non-blocking and submit gating backend-owned.
 - 2026-05-28 Milestone 5d validation lifecycle event sink graph-session
   coverage slice:
   - Smallest useful vertical slice: add a focused graph-session integration

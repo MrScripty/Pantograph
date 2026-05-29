@@ -1237,22 +1237,23 @@ export type WorkflowGraphValidationCancellationReason =
   | 'graph_session_closed';
 
 export type WorkflowGraphValidationLifecycleEventKind =
-  | 'validation_pending'
   | {
-      validation_superseded: {
-        superseded_validation_session_id: string;
-      };
-    }
-  | 'publication_accepted'
-  | {
-      publication_rejected: {
-        reason: WorkflowGraphValidationLifecycleError;
-      };
+      kind: 'validation_pending';
     }
   | {
-      validation_cancelled: {
-        reason: WorkflowGraphValidationCancellationReason;
-      };
+      kind: 'validation_superseded';
+      superseded_validation_session_id: string;
+    }
+  | {
+      kind: 'validation_cancelled';
+      reason: WorkflowGraphValidationCancellationReason;
+    }
+  | {
+      kind: 'publication_accepted';
+    }
+  | {
+      kind: 'publication_rejected';
+      reason: WorkflowGraphValidationLifecycleError;
     };
 
 export interface WorkflowGraphValidationLifecycleEvent {
@@ -1265,7 +1266,11 @@ export interface WorkflowGraphValidationLifecycleEvent {
 
 export interface WorkflowGraphValidationLifecycleEventSnapshot {
   events: WorkflowGraphValidationLifecycleEvent[];
-  dropped_events: number;
+  dropped_event_count: number;
+}
+
+export interface WorkflowGraphValidationLifecycleTransportEvent {
+  event: WorkflowGraphValidationLifecycleEvent;
 }
 
 export interface WorkflowExecutableValidationSnapshotDiagnostic {
