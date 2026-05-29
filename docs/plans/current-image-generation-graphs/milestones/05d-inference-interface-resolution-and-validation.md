@@ -3519,6 +3519,30 @@ defining an image-only inference-node interface.
     scheduler admission, executable validation snapshots, saved graph drift
     diagnostics, and dependency-environment action intents before resuming the
     remaining mutation cancellation wiring.
+- [x] 2026-05-28 scheduler projection semantic revision regression slice
+      completed:
+  - Smallest useful vertical slice: add graph-session coverage proving the
+    scheduler inference task projection boundary refuses to materialize tasks
+    after inference-node semantic data changes make the previously published
+    validation summary stale.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: scheduler projection now has focused
+    regression coverage for the canonical validation-state lookup keyed by the
+    current semantic graph revision. The test does not add a compatibility
+    branch, graph-data fallback, timestamp, or frontend invalidation path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    scheduler_inference_task_projections --lib`; `cargo test -p
+    pantograph-workflow-service
+    publish_inference_validation_session_records_current_summary --lib`;
+    `cargo check -p pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: continue the revision-consumer audit with executable
+    validation snapshot sources, saved graph drift diagnostics, and
+    dependency-environment action intents.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

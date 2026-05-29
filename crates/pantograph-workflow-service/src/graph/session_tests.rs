@@ -924,6 +924,58 @@ async fn publish_inference_validation_session_records_current_summary() {
 }
 
 #[tokio::test]
+async fn scheduler_inference_task_projections_reject_semantic_node_data_stale_summary() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .publish_inference_validation_session(
+            &session.session_id,
+            DraftGraphValidationSessionId::parse("validation.session.scheduler.stale")
+                .expect("valid validation session id"),
+        )
+        .await
+        .expect("publish inference validation session");
+
+    let updated = store
+        .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+            session_id: session.session_id.clone(),
+            node_id: "infer".to_string(),
+            data: serde_json::json!({
+                "runtime": "cuda"
+            }),
+        })
+        .await
+        .expect("update semantic inference node data");
+
+    assert_ne!(updated.graph_revision, session.graph_revision);
+
+    let error = store
+        .scheduler_inference_task_projections_for_session(
+            &session.session_id,
+            Some(
+                "validation.session.scheduler.stale"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+        )
+        .await
+        .expect_err("stale validation summary should not project scheduler tasks");
+
+    assert!(
+        error
+            .message()
+            .contains("validation summary is missing for the current graph revision"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn publish_inference_validation_session_rejects_graph_changed_during_fact_lookup() {
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
