@@ -4177,6 +4177,31 @@ defining an image-only inference-node interface.
     builds this connection surface from existing validation projection records
     and rejects stale/missing surfaces with typed diagnostics before wiring
     connection candidates, insert-on-edge preview, or commits.
+- [x] 2026-05-28 descriptor-backed inference connection publication adapter
+  slice completed:
+  - Smallest useful vertical slice: added workflow-service publication behavior
+    that converts existing validation projection records into the shared
+    `InferenceConnectionSurface` contract without changing graph connection
+    candidates, insert-on-edge preview, commits, frontend presentation, or queue
+    admission.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    this milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the adapter consumes descriptor-backed
+    projection records only. It does not parse raw `node.data`, Pumas paths,
+    frontend state, runtime-host payloads, or scheduler decisions as port
+    authority. Non-current surfaces synthesize typed diagnostics when descriptor
+    diagnostics are absent and remain non-executable.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service inference_interface_publication
+    --lib`; and `cargo check -p pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still reports
+    the pre-existing `set_active_run_execution_plan` dead-code warning in
+    `scheduler/store.rs`; this slice added no new warnings.
+  - Remaining follow-up: wire connection candidates, insert-on-edge preview, and
+    connection commits to consume the published connection surface for
+    `llm-inference` dynamic task ports while retaining static bootstrap/control
+    inputs only.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

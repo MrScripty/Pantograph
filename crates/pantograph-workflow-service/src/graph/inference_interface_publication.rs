@@ -3,8 +3,10 @@ use std::collections::BTreeMap;
 use pantograph_inference_interface_contracts::{
     AuthoredInferenceInterfaceSnapshot, DeviceIntentId, DraftGraphEnqueueDisabledReason,
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
-    InferenceInterfaceContractError, InferenceInterfaceDescriptor, InferenceInterfaceFingerprint,
-    RuntimeIntentId, WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    InferenceConnectionSurface, InferenceConnectionSurfaceStatus, InferenceDiagnosticCode,
+    InferenceDiagnosticSeverity, InferenceInterfaceContractError, InferenceInterfaceDescriptor,
+    InferenceInterfaceDiagnostic, InferenceInterfaceFingerprint, RuntimeIntentId,
+    WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -51,6 +53,23 @@ pub struct WorkflowGraphInferenceValidationPublication {
     pub request_diagnostics: Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 }
 
+impl WorkflowGraphInferenceValidationPublication {
+    pub fn connection_surfaces(
+        &self,
+    ) -> Result<Vec<InferenceConnectionSurface>, InferenceInterfacePublicationError> {
+        self.node_projections
+            .iter()
+            .map(|projection| {
+                connection_surface_for_projection(
+                    &self.validation_session.validation_session_id,
+                    &self.validation_session.graph_revision,
+                    projection,
+                )
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct InferenceInterfaceNodeProjectionRecord {
@@ -67,6 +86,109 @@ pub struct InferenceInterfaceNodeProjectionRecord {
 impl InferenceInterfaceNodeProjectionRecord {
     pub fn descriptor_fingerprint(&self) -> &InferenceInterfaceFingerprint {
         &self.descriptor.descriptor_fingerprint
+    }
+}
+
+fn connection_surface_for_projection(
+    validation_session_id: &DraftGraphValidationSessionId,
+    graph_revision: &WorkflowGraphRevision,
+    projection: &InferenceInterfaceNodeProjectionRecord,
+) -> Result<InferenceConnectionSurface, InferenceInterfacePublicationError> {
+    let status = connection_surface_status(&projection.validation_summary);
+    let surface = InferenceConnectionSurface {
+        contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        graph_revision: graph_revision.clone(),
+        validation_session_id: Some(validation_session_id.clone()),
+        node_id: projection.node_id.clone(),
+        descriptor_fingerprint: Some(projection.descriptor.descriptor_fingerprint.clone()),
+        status,
+        inputs: projection.descriptor.inputs.clone(),
+        outputs: projection.descriptor.outputs.clone(),
+        validation_summary: projection.validation_summary.clone(),
+        drift_report: None,
+        diagnostics: connection_surface_diagnostics(status, &projection.descriptor),
+    };
+    surface.validate()?;
+    Ok(surface)
+}
+
+fn connection_surface_status(
+    summary: &DraftGraphValidationSummary,
+) -> InferenceConnectionSurfaceStatus {
+    match summary.status {
+        DraftGraphValidationStatus::Executable => InferenceConnectionSurfaceStatus::Current,
+        DraftGraphValidationStatus::Pending => InferenceConnectionSurfaceStatus::Pending,
+        DraftGraphValidationStatus::Stale => InferenceConnectionSurfaceStatus::Stale,
+        DraftGraphValidationStatus::Unresolved => InferenceConnectionSurfaceStatus::Missing,
+        DraftGraphValidationStatus::Unavailable => InferenceConnectionSurfaceStatus::Unavailable,
+        DraftGraphValidationStatus::Blocked => InferenceConnectionSurfaceStatus::Blocked,
+        _ => InferenceConnectionSurfaceStatus::Blocked,
+    }
+}
+
+fn connection_surface_diagnostics(
+    status: InferenceConnectionSurfaceStatus,
+    descriptor: &InferenceInterfaceDescriptor,
+) -> Vec<InferenceInterfaceDiagnostic> {
+    let mut diagnostics = descriptor.diagnostics.clone();
+    if status == InferenceConnectionSurfaceStatus::Current || !diagnostics.is_empty() {
+        return diagnostics;
+    }
+    diagnostics.push(InferenceInterfaceDiagnostic {
+        severity: InferenceDiagnosticSeverity::Error,
+        code: connection_surface_diagnostic_code(status),
+        message: connection_surface_diagnostic_message(status).to_string(),
+        hint: None,
+        port_id: None,
+    });
+    diagnostics
+}
+
+fn connection_surface_diagnostic_code(
+    status: InferenceConnectionSurfaceStatus,
+) -> InferenceDiagnosticCode {
+    match status {
+        InferenceConnectionSurfaceStatus::Pending => {
+            InferenceDiagnosticCode::GraphValidationPending
+        }
+        InferenceConnectionSurfaceStatus::Missing => {
+            InferenceDiagnosticCode::InferenceConnectionSurfaceMissing
+        }
+        InferenceConnectionSurfaceStatus::Stale => {
+            InferenceDiagnosticCode::InferenceConnectionSurfaceStale
+        }
+        InferenceConnectionSurfaceStatus::Unavailable => {
+            InferenceDiagnosticCode::DescriptorUnavailable
+        }
+        InferenceConnectionSurfaceStatus::Blocked
+        | InferenceConnectionSurfaceStatus::DriftBlocked
+        | InferenceConnectionSurfaceStatus::Current => {
+            InferenceDiagnosticCode::InferenceConnectionSurfaceBlocked
+        }
+        _ => InferenceDiagnosticCode::InferenceConnectionSurfaceBlocked,
+    }
+}
+
+fn connection_surface_diagnostic_message(status: InferenceConnectionSurfaceStatus) -> &'static str {
+    match status {
+        InferenceConnectionSurfaceStatus::Pending => {
+            "Inference connection surface is waiting for validation."
+        }
+        InferenceConnectionSurfaceStatus::Missing => {
+            "Inference connection surface has not been resolved for this graph revision."
+        }
+        InferenceConnectionSurfaceStatus::Stale => {
+            "Inference connection surface is stale for this graph revision."
+        }
+        InferenceConnectionSurfaceStatus::Unavailable => {
+            "Inference connection surface is unavailable for this descriptor."
+        }
+        InferenceConnectionSurfaceStatus::Blocked
+        | InferenceConnectionSurfaceStatus::DriftBlocked
+        | InferenceConnectionSurfaceStatus::Current => {
+            "Inference connection surface is blocked by validation diagnostics."
+        }
+        _ => "Inference connection surface is blocked by validation diagnostics.",
     }
 }
 
@@ -317,6 +439,38 @@ mod tests {
     }
 
     #[test]
+    fn publication_builds_current_connection_surface_from_projection() {
+        let graph = graph_with_connected_model();
+        let publication = publish_inference_validation_for_graph(
+            validation_session_id(),
+            graph_revision(),
+            &graph,
+            BTreeMap::from([("infer".to_string(), ready_facts())]),
+        )
+        .expect("publication");
+
+        let surfaces = publication
+            .connection_surfaces()
+            .expect("connection surfaces should validate");
+
+        assert_eq!(surfaces.len(), 1);
+        assert_eq!(surfaces[0].node_id.as_str(), "infer");
+        assert_eq!(
+            surfaces[0].status,
+            InferenceConnectionSurfaceStatus::Current
+        );
+        assert_eq!(
+            surfaces[0]
+                .descriptor_fingerprint
+                .as_ref()
+                .expect("current surface has descriptor fingerprint"),
+            publication.node_projections[0].descriptor_fingerprint()
+        );
+        assert_eq!(surfaces[0].inputs.len(), 1);
+        assert!(surfaces[0].validation_summary.executable);
+    }
+
+    #[test]
     fn publication_blocks_request_extraction_diagnostics() {
         let mut graph = graph_with_connected_model();
         graph.edges.push(GraphEdge {
@@ -365,6 +519,37 @@ mod tests {
             publication.node_projections[0].validation_summary.status,
             DraftGraphValidationStatus::Blocked
         );
+    }
+
+    #[test]
+    fn publication_builds_fail_closed_connection_surface_for_missing_facts() {
+        let graph = graph_with_connected_model();
+        let publication = publish_inference_validation_for_graph(
+            validation_session_id(),
+            graph_revision(),
+            &graph,
+            BTreeMap::new(),
+        )
+        .expect("publication");
+
+        let surfaces = publication
+            .connection_surfaces()
+            .expect("blocked connection surface should validate");
+
+        assert_eq!(surfaces.len(), 1);
+        assert_eq!(
+            surfaces[0].status,
+            InferenceConnectionSurfaceStatus::Blocked
+        );
+        assert!(!surfaces[0].validation_summary.executable);
+        assert!(
+            !surfaces[0].diagnostics.is_empty(),
+            "non-current surfaces must explain why they are blocked"
+        );
+        assert!(surfaces[0]
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == InferenceDiagnosticCode::DescriptorUnavailable));
     }
 
     #[test]

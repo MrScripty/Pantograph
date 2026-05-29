@@ -15310,6 +15310,30 @@ Worker rules:
   - Remaining follow-up: add workflow-service publication/adapter behavior from
     validation projection records to the shared connection surface before wiring
     connection candidates, insert-on-edge preview, or commits.
+- 2026-05-28 Milestone 5d descriptor-backed inference connection publication
+  adapter slice:
+  - Smallest useful vertical slice: added workflow-service publication behavior
+    that converts existing validation projection records into the shared
+    `InferenceConnectionSurface` contract without changing graph connection
+    candidates, insert-on-edge preview, commits, frontend presentation, or queue
+    admission.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: the adapter consumes descriptor-backed
+    projection records only, does not parse raw graph/Pumas/frontend/runtime
+    fields as inference-port authority, and makes non-current surfaces fail
+    closed with typed diagnostics.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service inference_interface_publication
+    --lib`; and `cargo check -p pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still reports
+    the pre-existing `set_active_run_execution_plan` dead-code warning in
+    `scheduler/store.rs`; this slice added no new warnings.
+  - Remaining follow-up: wire connection candidates, insert-on-edge preview, and
+    connection commits to consume the published connection surface for
+    `llm-inference` dynamic task ports while retaining static bootstrap/control
+    inputs only.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in
