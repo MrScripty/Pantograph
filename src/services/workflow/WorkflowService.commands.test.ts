@@ -23,6 +23,7 @@ import type {
   WorkflowAdminQueueReprioritizeResponse,
   WorkflowGraphCurrentValidationRefreshResponse,
   WorkflowGraphCurrentValidationSummaryResponse,
+  WorkflowGraphValidationLifecycleEventSnapshot,
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
   WorkflowExecutableValidationSnapshotRecord,
@@ -717,6 +718,51 @@ test('workflow command service forwards current validation refresh requests', as
             graph_session_id: 'graph-session-a',
             graph_revision: 'graph-revision-a',
           },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('workflow command service forwards validation lifecycle event snapshot requests', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const eventSnapshot: WorkflowGraphValidationLifecycleEventSnapshot = {
+    events: [
+      {
+        graph_session_id: 'graph-session-a',
+        graph_revision: 'graph-revision-a',
+        validation_session_id: 'validation-session-a',
+        sequence: 1,
+        kind: 'validation_pending',
+      },
+      {
+        graph_session_id: 'graph-session-a',
+        graph_revision: 'graph-revision-a',
+        validation_session_id: 'validation-session-a',
+        sequence: 2,
+        kind: 'publication_accepted',
+      },
+    ],
+    dropped_events: 0,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return eventSnapshot;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const snapshot = await service.graphValidationLifecycleEventSnapshot('graph-session-a');
+
+    assert.deepEqual(snapshot, eventSnapshot);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'graph_validation_lifecycle_event_snapshot',
+        args: {
+          graphSessionId: 'graph-session-a',
         },
       },
     ]);

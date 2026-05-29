@@ -17,7 +17,7 @@ use crate::graph::{
     WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
     WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowGraphValidationLifecycleEventSnapshot,
 };
 use crate::WorkflowRunId;
 use pantograph_inference_interface_contracts::{
@@ -88,6 +88,15 @@ impl WorkflowService {
     ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
         self.graph_session_store
             .refresh_current_validation_summary(request)
+            .await
+    }
+
+    pub async fn workflow_graph_validation_lifecycle_event_snapshot(
+        &self,
+        graph_session_id: &str,
+    ) -> Result<WorkflowGraphValidationLifecycleEventSnapshot, WorkflowServiceError> {
+        self.graph_session_store
+            .validation_lifecycle_event_snapshot(graph_session_id)
             .await
     }
 

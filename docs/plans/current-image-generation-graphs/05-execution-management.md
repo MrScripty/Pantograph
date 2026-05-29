@@ -15455,6 +15455,43 @@ Worker rules:
     cleanup, supersession, stale-result rejection, and bounded delivery
     semantics. Do not reuse execution-run `WorkflowEvent` channels or add
     frontend/Tauri validation policy.
+- 2026-05-28 Milestone 5d validation lifecycle snapshot transport read slice:
+  - Smallest useful vertical slice: expose the backend-owned lifecycle event
+    snapshot through workflow-service, register a thin Tauri command, and add a
+    typed frontend workflow command-service method with focused IPC forwarding
+    coverage.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/README.md`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, the Milestone 5d
+    file, and this execution log.
+  - No-fallback/no-legacy result: the command is a read-model recovery boundary
+    for future event-driven graph-editor validation. It forwards backend-owned
+    lifecycle DTOs only; it does not carry resolver facts, Pumas facts, local
+    paths, runtime-host payloads, scheduler decisions, submit authority,
+    frontend state, or execution-run `WorkflowEvent` channel data.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    validation_lifecycle_event_snapshot_reports_backend_refresh_events --lib`;
+    `cargo check -p pantograph-workflow-service`; `node
+    --experimental-strip-types --test
+    src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+    typecheck`; and `git diff --check`. Source-search verification found only
+    the expected existing Tauri `Result<T, String>` command boundary and
+    existing execution `WorkflowEvent` transport outside the new validation
+    snapshot method.
+  - Verification deviation: `cargo check --manifest-path src-tauri/Cargo.toml`
+    is blocked by the pre-existing unrelated missing
+    `set_media_conversion_executor` method in `src-tauri/src/app_setup.rs:96`.
+  - Remaining follow-up: add the dedicated graph-validation event emission and
+    frontend subscription service on top of this read command, with bounded
+    event identity/sequence handling and no frontend validation policy.
 
 ### Traceability Links
 

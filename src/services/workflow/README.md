@@ -10,8 +10,8 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
-| `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, current-validation summary/refresh, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
-| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, current-validation summary/refresh, queue, and retention commands return backend-owned results without optimistic client replacement. |
+| `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, current-validation summary/refresh/lifecycle snapshot, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
+| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, current-validation summary/refresh/lifecycle snapshot, queue, and retention commands return backend-owned results without optimistic client replacement. |
 | `WorkflowService.graphInspection.test.ts` | Focused IPC boundary test for saved graph inspection projection requests and backend-owned stale diagnostics. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, run-inspection, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowProjectionSubscriptionService.ts` | Typed diagnostics projection invalidation subscription helper over the Tauri event bridge. |
@@ -109,6 +109,10 @@ the backend refresh response exactly so stale revisions and unavailable facts
 remain backend-owned gate states. The refresh response may include typed
 descriptor/authored-port projection records for editor rendering; service code
 must not turn those records into local submit or scheduler eligibility policy.
+Graph validation lifecycle snapshots are also forwarded as typed graph-session
+commands. They are read-model recovery and event-delivery support for the graph
+editor, not validation authority: frontend code must not infer descriptor facts,
+queue eligibility, or resolver results from transport timing or missing events.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.

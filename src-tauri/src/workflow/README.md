@@ -227,6 +227,11 @@ refresh contract first, then emit compact
 backend invalidations. Tauri owns only event transport and burst coalescing; the
 projection kind, run/workflow scope, cursor, reason, and health semantics remain
 owned by `pantograph-workflow-service`.
+Graph validation lifecycle snapshots are exposed through a thin edit-session
+command that delegates to `pantograph-workflow-service`. Tauri does not derive
+validation freshness, descriptor facts, submit gates, or event ordering; the
+command only serializes the backend read model for recovery and future
+dedicated graph-validation event delivery.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.

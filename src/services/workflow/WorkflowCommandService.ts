@@ -47,6 +47,7 @@ import type {
   WorkflowGraphCurrentValidationRefreshResponse,
   WorkflowGraphCurrentValidationSummaryRequest,
   WorkflowGraphCurrentValidationSummaryResponse,
+  WorkflowGraphValidationLifecycleEventSnapshot,
   WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
   WorkflowManagedMediaDependencyId,
   WorkflowManagedMediaDependencyInstallFromStagingRequest,
@@ -192,6 +193,22 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     return invokeWorkflowCommand<WorkflowGraphCurrentValidationRefreshResponse>(
       'refresh_current_graph_validation_summary',
       { request },
+    );
+  }
+
+  async graphValidationLifecycleEventSnapshot(
+    graphSessionId: string,
+  ): Promise<WorkflowGraphValidationLifecycleEventSnapshot> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        events: [],
+        dropped_events: 0,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowGraphValidationLifecycleEventSnapshot>(
+      'graph_validation_lifecycle_event_snapshot',
+      { graphSessionId },
     );
   }
 

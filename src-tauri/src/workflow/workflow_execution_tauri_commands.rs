@@ -20,6 +20,7 @@ use pantograph_workflow_service::{
     WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphEditSessionGraphResponse,
     WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
+    WorkflowGraphValidationLifecycleEventSnapshot,
 };
 
 #[command]
@@ -335,6 +336,17 @@ pub async fn refresh_current_graph_validation_summary(
 ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, String> {
     workflow_service
         .workflow_graph_refresh_current_validation_summary(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
+#[command]
+pub async fn graph_validation_lifecycle_event_snapshot(
+    graph_session_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphValidationLifecycleEventSnapshot, String> {
+    workflow_service
+        .workflow_graph_validation_lifecycle_event_snapshot(&graph_session_id)
         .await
         .map_err(|error| error.to_envelope_json())
 }

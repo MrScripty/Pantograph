@@ -1225,6 +1225,49 @@ export interface WorkflowGraphCurrentValidationRefreshResponse {
   node_projections?: InferenceInterfaceNodeProjectionRecord[];
 }
 
+export type WorkflowGraphValidationLifecycleError =
+  | 'graph_session_closed'
+  | 'validation_session_missing'
+  | 'validation_session_superseded'
+  | 'graph_revision_changed';
+
+export type WorkflowGraphValidationCancellationReason =
+  | 'graph_revision_changed'
+  | 'validation_superseded'
+  | 'graph_session_closed';
+
+export type WorkflowGraphValidationLifecycleEventKind =
+  | 'validation_pending'
+  | {
+      validation_superseded: {
+        superseded_validation_session_id: string;
+      };
+    }
+  | 'publication_accepted'
+  | {
+      publication_rejected: {
+        reason: WorkflowGraphValidationLifecycleError;
+      };
+    }
+  | {
+      validation_cancelled: {
+        reason: WorkflowGraphValidationCancellationReason;
+      };
+    };
+
+export interface WorkflowGraphValidationLifecycleEvent {
+  graph_session_id: string;
+  graph_revision: string;
+  validation_session_id: string;
+  sequence: number;
+  kind: WorkflowGraphValidationLifecycleEventKind;
+}
+
+export interface WorkflowGraphValidationLifecycleEventSnapshot {
+  events: WorkflowGraphValidationLifecycleEvent[];
+  dropped_events: number;
+}
+
 export interface WorkflowExecutableValidationSnapshotDiagnostic {
   severity: string;
   code: string;

@@ -2434,6 +2434,29 @@ defining an image-only inference-node interface.
         close cleanup, supersession, stale-result rejection, and bounded
         delivery semantics. Do not reuse execution-run `WorkflowEvent`
         channels or add frontend/Tauri validation policy.
+      - 2026-05-28 lifecycle snapshot transport read sub-slice completed:
+        workflow-service now exposes the lifecycle event snapshot through a
+        service-level graph API, Tauri registers a thin
+        `graph_validation_lifecycle_event_snapshot` command, and the frontend
+        workflow command service mirrors the backend DTO shape with focused IPC
+        forwarding coverage. The command is recovery/read-model plumbing for
+        future event-driven graph-editor validation; it is not submit
+        authority, does not carry resolver/Pumas/runtime facts, and does not
+        reuse execution-run `WorkflowEvent` channels.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+        `cargo test -p pantograph-workflow-service
+        validation_lifecycle_event_snapshot_reports_backend_refresh_events
+        --lib`; `cargo check -p pantograph-workflow-service`; `node
+        --experimental-strip-types --test
+        src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+        typecheck`; and `git diff --check`. `cargo check --manifest-path
+        src-tauri/Cargo.toml` is blocked by the pre-existing unrelated
+        `set_media_conversion_executor` missing-method error in
+        `src-tauri/src/app_setup.rs:96`.
+      - Remaining follow-up: add the dedicated graph-validation event emission
+        and frontend subscription service on top of this read command, with
+        bounded event identity/sequence handling and no frontend validation
+        policy.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply
