@@ -2457,6 +2457,27 @@ defining an image-only inference-node interface.
         and frontend subscription service on top of this read command, with
         bounded event identity/sequence handling and no frontend validation
         policy.
+      - 2026-05-28 lifecycle event sink sub-slice completed:
+        workflow-service now exposes a typed
+        `WorkflowGraphValidationLifecycleEventSink` and configurable lifecycle
+        sink boundary. The lifecycle owner records each event in its bounded
+        backend log first, then publishes the cloned typed event to the sink for
+        later transport delivery. The sink carries only graph-session identity,
+        graph revision, validation-session identity, event sequence, and typed
+        lifecycle kind; it does not carry resolver/Pumas/runtime facts, submit
+        authority, frontend state, or execution-run events.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+        `cargo test -p pantograph-workflow-service
+        inference_validation_lifecycle --lib`; `cargo check -p
+        pantograph-workflow-service`; added-line source search over the touched
+        workflow-service files for retired path fields, raw JSON, execution
+        event transports, `Result<T, String>`, and spawned tasks; and `git diff
+        --check`. `cargo check` still reports the pre-existing
+        `set_active_run_execution_plan` dead-code warning.
+      - Remaining follow-up: implement a Tauri lifecycle-event bridge that
+        configures this sink at composition time, emits a dedicated
+        graph-validation event name, and leaves validation policy in
+        workflow-service.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply

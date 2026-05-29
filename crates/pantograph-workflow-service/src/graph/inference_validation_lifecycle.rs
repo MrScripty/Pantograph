@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::Arc,
+};
 
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, WorkflowGraphRevision, WorkflowGraphSessionId,
@@ -7,11 +10,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::{watch, RwLock};
 
-#[derive(Debug)]
 pub(crate) struct WorkflowGraphValidationLifecycleOwner {
     active: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationLifecycleRecord>>,
     closed_sessions: RwLock<HashSet<WorkflowGraphSessionId>>,
     events: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationLifecycleEventLog>>,
+    event_sink: RwLock<Option<Arc<dyn WorkflowGraphValidationLifecycleEventSink>>>,
     max_events_per_session: usize,
 }
 
@@ -21,8 +24,16 @@ impl WorkflowGraphValidationLifecycleOwner {
             active: RwLock::new(HashMap::new()),
             closed_sessions: RwLock::new(HashSet::new()),
             events: RwLock::new(HashMap::new()),
+            event_sink: RwLock::new(None),
             max_events_per_session: DEFAULT_MAX_LIFECYCLE_EVENTS_PER_SESSION,
         }
+    }
+
+    pub(crate) async fn set_event_sink(
+        &self,
+        event_sink: Option<Arc<dyn WorkflowGraphValidationLifecycleEventSink>>,
+    ) {
+        *self.event_sink.write().await = event_sink;
     }
 
     pub(crate) async fn begin_validation(
@@ -180,21 +191,28 @@ impl WorkflowGraphValidationLifecycleOwner {
         validation_session_id: DraftGraphValidationSessionId,
         kind: WorkflowGraphValidationLifecycleEventKind,
     ) {
-        let mut events = self.events.write().await;
-        let event_log = events.entry(graph_session_id.clone()).or_default();
-        if event_log.events.len() == self.max_events_per_session {
-            event_log.events.pop_front();
-            event_log.dropped_event_count += 1;
-        }
-        let event = WorkflowGraphValidationLifecycleEvent {
-            graph_session_id,
-            graph_revision,
-            validation_session_id,
-            sequence: event_log.next_sequence,
-            kind,
+        let event = {
+            let mut events = self.events.write().await;
+            let event_log = events.entry(graph_session_id.clone()).or_default();
+            if event_log.events.len() == self.max_events_per_session {
+                event_log.events.pop_front();
+                event_log.dropped_event_count += 1;
+            }
+            let event = WorkflowGraphValidationLifecycleEvent {
+                graph_session_id,
+                graph_revision,
+                validation_session_id,
+                sequence: event_log.next_sequence,
+                kind,
+            };
+            event_log.next_sequence += 1;
+            event_log.events.push_back(event.clone());
+            event
         };
-        event_log.next_sequence += 1;
-        event_log.events.push_back(event);
+        let event_sink = self.event_sink.read().await.clone();
+        if let Some(event_sink) = event_sink {
+            event_sink.publish_validation_lifecycle_event(event);
+        }
     }
 
     #[cfg(test)]
@@ -285,6 +303,10 @@ pub struct WorkflowGraphValidationLifecycleEventSnapshot {
     pub dropped_event_count: u64,
 }
 
+pub trait WorkflowGraphValidationLifecycleEventSink: Send + Sync {
+    fn publish_validation_lifecycle_event(&self, event: WorkflowGraphValidationLifecycleEvent);
+}
+
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -302,6 +324,18 @@ pub enum WorkflowGraphValidationLifecycleError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct RecordingLifecycleEventSink {
+        events: Mutex<Vec<WorkflowGraphValidationLifecycleEvent>>,
+    }
+
+    impl WorkflowGraphValidationLifecycleEventSink for RecordingLifecycleEventSink {
+        fn publish_validation_lifecycle_event(&self, event: WorkflowGraphValidationLifecycleEvent) {
+            self.events.lock().expect("events lock").push(event);
+        }
+    }
 
     #[tokio::test]
     async fn begin_validation_supersedes_active_session() {
@@ -530,5 +564,44 @@ mod tests {
         assert_eq!(encoded["events"][0]["graph_session_id"], "graph-session-1");
         assert_eq!(encoded["events"][0]["sequence"], 0);
         assert_eq!(encoded["events"][0]["kind"]["kind"], "validation_pending");
+    }
+
+    #[tokio::test]
+    async fn lifecycle_event_sink_receives_typed_events_after_state_recording() {
+        let owner = WorkflowGraphValidationLifecycleOwner::new();
+        let sink = Arc::new(RecordingLifecycleEventSink::default());
+        owner.set_event_sink(Some(sink.clone())).await;
+        let graph_session_id: WorkflowGraphSessionId =
+            "graph-session-1".parse().expect("valid graph session id");
+        let graph_revision: WorkflowGraphRevision =
+            "aaaaaaaaaaaaaaaa".parse().expect("valid graph revision");
+        let validation_session_id: DraftGraphValidationSessionId = "validation.session.1"
+            .parse()
+            .expect("valid validation session id");
+
+        owner
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                validation_session_id.clone(),
+            )
+            .await
+            .expect("begin validation");
+        owner
+            .accept_publication(&graph_session_id, &graph_revision, &validation_session_id)
+            .await
+            .expect("accept publication");
+
+        let snapshot = owner.event_snapshot(&graph_session_id).await;
+        let received = sink.events.lock().expect("events lock").clone();
+
+        assert_eq!(received, snapshot.events);
+        assert_eq!(
+            received.iter().map(|event| &event.kind).collect::<Vec<_>>(),
+            vec![
+                &WorkflowGraphValidationLifecycleEventKind::ValidationPending,
+                &WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
+            ]
+        );
     }
 }

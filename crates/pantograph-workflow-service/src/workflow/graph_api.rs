@@ -17,12 +17,14 @@ use crate::graph::{
     WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
     WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowGraphValidationLifecycleEventSnapshot,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowGraphValidationLifecycleEventSink,
+    WorkflowGraphValidationLifecycleEventSnapshot,
 };
 use crate::WorkflowRunId;
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
 };
+use std::sync::Arc;
 
 use super::{WorkflowService, WorkflowServiceError};
 
@@ -98,6 +100,15 @@ impl WorkflowService {
         self.graph_session_store
             .validation_lifecycle_event_snapshot(graph_session_id)
             .await
+    }
+
+    pub async fn set_workflow_graph_validation_lifecycle_event_sink(
+        &self,
+        event_sink: Option<Arc<dyn WorkflowGraphValidationLifecycleEventSink>>,
+    ) {
+        self.graph_session_store
+            .set_validation_lifecycle_event_sink(event_sink)
+            .await;
     }
 
     pub async fn workflow_graph_update_node_data(

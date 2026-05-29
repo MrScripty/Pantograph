@@ -53,9 +53,9 @@ pub use graph::{
     WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupPortsRequest,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     WorkflowGraphValidationLifecycleEvent, WorkflowGraphValidationLifecycleEventKind,
-    WorkflowGraphValidationLifecycleEventSnapshot, WorkflowGraphValidationSubmitGate,
-    WorkflowGraphValidationSubmitGateReason, WorkflowPresentationEdge,
-    WorkflowPresentationMetadata, WorkflowPresentationNode,
+    WorkflowGraphValidationLifecycleEventSink, WorkflowGraphValidationLifecycleEventSnapshot,
+    WorkflowGraphValidationSubmitGate, WorkflowGraphValidationSubmitGateReason,
+    WorkflowPresentationEdge, WorkflowPresentationMetadata, WorkflowPresentationNode,
 };
 pub use pantograph_runtime_attribution::{ClientSessionId, WorkflowId, WorkflowRunId};
 pub use scheduler::{

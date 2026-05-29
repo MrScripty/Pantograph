@@ -27,7 +27,9 @@ use super::group_mutation::{
 use super::inference_interface_facts::{
     InferenceInterfaceFactsProvider, UnavailableInferenceInterfaceFactsProvider,
 };
-use super::inference_validation_lifecycle::WorkflowGraphValidationLifecycleOwner;
+use super::inference_validation_lifecycle::{
+    WorkflowGraphValidationLifecycleEventSink, WorkflowGraphValidationLifecycleOwner,
+};
 use super::inference_validation_state::{
     CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
     DependencyEnvironmentActionIntentStateResolution,
@@ -138,6 +140,13 @@ impl GraphSessionStore {
             dependency_environment_service: DependencyEnvironmentService::new(dependency_provider),
             stale_timeout: timeout,
         }
+    }
+
+    pub async fn set_validation_lifecycle_event_sink(
+        &self,
+        event_sink: Option<Arc<dyn WorkflowGraphValidationLifecycleEventSink>>,
+    ) {
+        self.validation_lifecycle.set_event_sink(event_sink).await;
     }
 
     pub async fn create_session(

@@ -15492,6 +15492,34 @@ Worker rules:
   - Remaining follow-up: add the dedicated graph-validation event emission and
     frontend subscription service on top of this read command, with bounded
     event identity/sequence handling and no frontend validation policy.
+- 2026-05-28 Milestone 5d validation lifecycle event sink slice:
+  - Smallest useful vertical slice: add a typed workflow-service lifecycle
+    event sink boundary and configurable lifecycle owner hook so future
+    transport can observe lifecycle events without owning validation policy.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, the Milestone 5d
+    file, and this execution log.
+  - No-fallback/no-legacy result: lifecycle events are recorded in the bounded
+    backend log before sink publication, and the sink receives only typed
+    graph-session id, graph revision, validation-session id, sequence, and
+    lifecycle kind. No resolver facts, Pumas facts, paths, runtime-host
+    payloads, scheduler decisions, frontend state, raw JSON, execution
+    `WorkflowEvent`, or alternate validation authority were added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_validation_lifecycle --lib`;
+    `cargo check -p pantograph-workflow-service`; touched-source added-line
+    search for retired path fields, execution event transports, raw JSON,
+    `Result<T, String>`, and spawned tasks; and `git diff --check`. `cargo
+    check` still reports the pre-existing `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: implement the Tauri lifecycle-event bridge as a
+    composition-root adapter for this sink, then add the frontend subscription
+    service with bounded identity/sequence handling and no validation policy.
 
 ### Traceability Links
 

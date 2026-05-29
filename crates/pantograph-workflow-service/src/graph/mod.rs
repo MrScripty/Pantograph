@@ -98,7 +98,7 @@ pub use inference_interface_validation::{
 pub use inference_validation_lifecycle::{
     WorkflowGraphValidationCancellationReason, WorkflowGraphValidationLifecycleError,
     WorkflowGraphValidationLifecycleEvent, WorkflowGraphValidationLifecycleEventKind,
-    WorkflowGraphValidationLifecycleEventSnapshot,
+    WorkflowGraphValidationLifecycleEventSink, WorkflowGraphValidationLifecycleEventSnapshot,
 };
 #[cfg(test)]
 pub(crate) use inference_validation_state::{
