@@ -14824,6 +14824,33 @@ Worker rules:
     pantograph-workflow-service`; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d remove-edges validation cancellation slice:
+  - Smallest useful vertical slice: wire `remove_edges` through the existing
+    workflow-service validation lifecycle cancellation helper after successful
+    topology mutation, and add publication-time coverage proving pending
+    validation output is rejected when a multi-edge removal changes the graph.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: multi-edge topology edits now use the
+    canonical validation lifecycle owner and typed cancellation path, with no
+    frontend invalidation, timestamp, transport request id, or alternate
+    publication fallback.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_remove_edges_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service remove_edges --lib`;
+    `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_graph_changed_during_fact_lookup
+    --lib`; `cargo check -p pantograph-workflow-service`; source-search
+    verification for touched production code; and `git diff --check`.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in
