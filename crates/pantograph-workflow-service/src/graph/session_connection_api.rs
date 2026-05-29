@@ -113,58 +113,63 @@ impl GraphSessionStore {
         &self,
         request: WorkflowGraphInsertNodeAndConnectRequest,
     ) -> Result<InsertNodeConnectionResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        let before_graph = state.graph.clone();
-        let registry = NodeRegistry::new();
-        let (inserted_node, inserted_edge) = match insert_node_and_connect(
-            &state.graph,
-            &registry,
-            &request.graph_revision,
-            &request.source_anchor,
-            &request.node_type,
-            &request.position_hint,
-            request.preferred_input_port_id.as_deref(),
-        ) {
-            Ok(result) => result,
-            Err(rejection) => return Ok(rejected_insert_response(&state.graph, rejection)),
+        let response = {
+            let handle = self.get_session_handle(&request.session_id).await?;
+            let mut state = handle.lock().await;
+            state.touch();
+            let before_graph = state.graph.clone();
+            let registry = NodeRegistry::new();
+            let (inserted_node, inserted_edge) = match insert_node_and_connect(
+                &state.graph,
+                &registry,
+                &request.graph_revision,
+                &request.source_anchor,
+                &request.node_type,
+                &request.position_hint,
+                request.preferred_input_port_id.as_deref(),
+            ) {
+                Ok(result) => result,
+                Err(rejection) => return Ok(rejected_insert_response(&state.graph, rejection)),
+            };
+
+            state.push_undo_snapshot();
+            state.graph.nodes.push(inserted_node.clone());
+            state.graph.edges.push(inserted_edge);
+            sync_embedding_emit_metadata_flags(&mut state.graph);
+            state.canonicalize_graph();
+            let dirty_tasks =
+                dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id));
+            let memory_impact = graph_memory_impact_from_graph_change(
+                &before_graph,
+                &state.graph,
+                &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id)),
+            );
+            let workflow_event = graph_modified_event(
+                &request.session_id,
+                &request.session_id,
+                dirty_tasks,
+                memory_impact.clone(),
+            );
+            let memory_impact = phase6_memory_impact_projection(memory_impact);
+            let workflow_execution_session_state = state.mutation_session_state_view(
+                &request.session_id,
+                Some(&workflow_event),
+                memory_impact,
+            );
+
+            InsertNodeConnectionResponse {
+                accepted: true,
+                graph_revision: state.graph.compute_fingerprint(),
+                inserted_node_id: Some(inserted_node.id),
+                graph: Some(state.graph.clone()),
+                workflow_event: Some(workflow_event),
+                workflow_execution_session_state: Some(workflow_execution_session_state),
+                rejection: None,
+            }
         };
-
-        state.push_undo_snapshot();
-        state.graph.nodes.push(inserted_node.clone());
-        state.graph.edges.push(inserted_edge);
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        state.canonicalize_graph();
-        let dirty_tasks =
-            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id));
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &state.graph,
-            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id)),
-        );
-        let workflow_event = graph_modified_event(
-            &request.session_id,
-            &request.session_id,
-            dirty_tasks,
-            memory_impact.clone(),
-        );
-        let memory_impact = phase6_memory_impact_projection(memory_impact);
-        let workflow_execution_session_state = state.mutation_session_state_view(
-            &request.session_id,
-            Some(&workflow_event),
-            memory_impact,
-        );
-
-        Ok(InsertNodeConnectionResponse {
-            accepted: true,
-            graph_revision: state.graph.compute_fingerprint(),
-            inserted_node_id: Some(inserted_node.id),
-            graph: Some(state.graph.clone()),
-            workflow_event: Some(workflow_event),
-            workflow_execution_session_state: Some(workflow_execution_session_state),
-            rejection: None,
-        })
+        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+            .await?;
+        Ok(response)
     }
 
     pub async fn preview_node_insert_on_edge(
