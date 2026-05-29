@@ -16117,6 +16117,19 @@ Worker rules:
     executable payloads, or reviving whole-run runtime execution.
   - Verification passed: plan-only `git diff --check` for the affected plan
     files.
+- 2026-05-29 Milestone 5d legacy deletion search gate re-plan boundary:
+  - Search gate found real retired graph surfaces rather than only stale docs:
+    `expand-settings`, `model-provider` `model_path`/`inference_settings`,
+    path-shaped legacy processing inference nodes, and a C# smoke fixture that
+    still authors `modelPath`.
+  - Classification: `puma-lib` graph output is already model-ref-only but still
+    needs option metadata review; inference backend `model_path`/`entry_path`
+    fields are runtime/load-target internals and move with runtime-dispatch
+    work, not Milestone 5d graph cleanup.
+  - Recommended next slice: delete `expand-settings` first as the narrowest
+    alternate inference-interface source, then handle `model-provider`, legacy
+    processing inference nodes, and the C# smoke fixture in separate validated
+    slices.
 
 ### Traceability Links
 

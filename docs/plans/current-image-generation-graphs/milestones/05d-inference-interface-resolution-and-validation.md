@@ -3130,6 +3130,52 @@ defining an image-only inference-node interface.
       occurrences must be classified as unrelated non-workflow configuration,
       test fixtures being rewritten, or deletion targets before the milestone can
       claim no-legacy completion.
+  - 2026-05-29 re-plan boundary: the search gate found multiple distinct
+    retired surfaces with different owners, so a single deletion slice would
+    cross too much code:
+    - Graph-visible deletion targets: `workflow-nodes` still registers
+      `expand-settings`; `model-provider` still exposes `model_path` and
+      `inference_settings`; legacy processing nodes such as
+      `audio-generation`, `onnx-inference`, and `depth-estimation` still expose
+      path-shaped inference ports; the C# native smoke workflow still authors
+      `modelPath`.
+    - Already-modernized but still visible as review context: `puma-lib`
+      descriptor output is model-ref-only, and existing tests assert it does not
+      expose `model_path` or `inference_settings`, but its option provider still
+      contains package-entry-path and display metadata that must be classified
+      before no-legacy completion.
+    - Not Milestone 5d deletion targets: `crates/inference` backend and worker
+      `model_path`/`entry_path` fields are runtime/load-target internals owned
+      by runtime-host dispatch and Pumas artifact resolution, not graph
+      authoring. They must not be deleted as part of frontend/node registry
+      cleanup.
+    - Tooling/probe decision required: `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`
+      still uses `ModelDependencyRequest`; decide whether to retire the probe,
+      move it behind a non-workflow diagnostic boundary, or rewrite it to the
+      canonical dependency action/descriptor contracts.
+  - Options before implementation continues:
+    1. Delete `expand-settings` first as a narrow registry slice, update the
+       registry inventory count/tests, and remove its frontend-owned dynamic
+       port source. This is the recommended first deletion because it is a
+       direct alternate inference-interface source.
+    2. Rewrite or retire `model-provider` model-path and
+       `inference_settings` outputs as a separate input-node slice. This needs a
+       decision about whether `model-provider` remains a non-Pumas selector or
+       is fully superseded by `puma-lib` plus backend descriptors.
+    3. Retire legacy graph-visible processing inference nodes with path-shaped
+       ports (`audio-generation`, `onnx-inference`, `depth-estimation`) in a
+       separate registry slice, or explicitly reclassify any retained node as a
+       non-generic typed node with no model-path interface ownership.
+    4. Update the C# native smoke fixture to the canonical
+       `puma-lib -> llm-inference -> image-output` shape without `modelPath` as
+       a fixture slice after the graph node deletions stabilize.
+    5. Defer runtime/backend `model_path`/`entry_path` findings to the
+       runtime-dispatch milestone; do not delete them from inference backends in
+       this milestone.
+  - No-fallback/no-legacy gate: none of these options may preserve
+    `inference_settings`, `expand-settings`, `modelPath`, `ModelDependencyRequest`,
+    `ModelRefV2`, or model-path-derived node-engine inference paths as
+    successful workflow graph execution or inference-interface sources.
 
 **Verification:**
 
