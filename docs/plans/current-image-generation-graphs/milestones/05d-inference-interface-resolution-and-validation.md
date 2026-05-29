@@ -3490,6 +3490,35 @@ defining an image-only inference-node interface.
     validation/admission tests proving old summaries cannot remain current
     after semantic node-data edits; then resume remaining mutation cancellation
     wiring.
+- [x] 2026-05-28 current validation semantic revision regression slice
+      completed:
+  - Smallest useful vertical slice: add session-level regression coverage that
+    publishes an executable validation summary, mutates inference-node semantic
+    data, and proves the old validation summary is stale while the new revision
+    is missing until revalidated. The same slice proves layout-only position
+    edits preserve the current executable summary.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the test asserts validation freshness
+    comes from canonical `WorkflowGraphRevision` semantics and submit-gate
+    state, not mutation-side cache busting, frontend invalidation, timestamps,
+    or transport request ids.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service graph_fingerprint --lib`; `cargo check -p
+    pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
+  - Remaining follow-up: continue the revision-consumer audit through
+    scheduler admission, executable validation snapshots, saved graph drift
+    diagnostics, and dependency-environment action intents before resuming the
+    remaining mutation cancellation wiring.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

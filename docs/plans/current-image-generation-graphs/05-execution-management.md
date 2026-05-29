@@ -14735,6 +14735,31 @@ Worker rules:
     and spawned task calls; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d current validation semantic revision regression
+  slice:
+  - Smallest useful vertical slice: add session-level regression coverage that
+    publishes an executable validation summary, mutates inference-node semantic
+    data, and proves the old validation summary is stale while the new revision
+    is missing until revalidated. The same slice proves layout-only position
+    edits preserve the current executable summary.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: validation freshness is asserted through
+    canonical `WorkflowGraphRevision` semantics and submit-gate state, with no
+    mutation-side cache busting, frontend invalidation, timestamps, or
+    transport request ids.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service graph_fingerprint --lib`; `cargo check -p
+    pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in

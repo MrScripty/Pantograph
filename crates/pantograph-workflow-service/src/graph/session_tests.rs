@@ -388,6 +388,127 @@ async fn current_validation_summary_allows_executable_summary() {
 }
 
 #[tokio::test]
+async fn current_validation_summary_marks_semantic_node_data_edit_stale() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Executable,
+                true,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    let updated = store
+        .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+            session_id: session.session_id.clone(),
+            node_id: "infer".to_string(),
+            data: serde_json::json!({
+                "runtime": "cuda"
+            }),
+        })
+        .await
+        .expect("update semantic inference node data");
+
+    assert_ne!(updated.graph_revision, session.graph_revision);
+
+    let stale_response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid original graph revision"),
+        })
+        .await
+        .expect("stale validation summary response");
+
+    assert_eq!(
+        stale_response.state,
+        WorkflowGraphCurrentValidationSummaryState::Stale
+    );
+    assert!(!stale_response.submit_gate.allowed);
+    assert_eq!(
+        stale_response.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
+    );
+
+    let current_response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id,
+            graph_revision: updated
+                .graph_revision
+                .parse()
+                .expect("valid updated graph revision"),
+        })
+        .await
+        .expect("current validation summary response");
+
+    assert_eq!(
+        current_response.state,
+        WorkflowGraphCurrentValidationSummaryState::Missing
+    );
+    assert!(!current_response.submit_gate.allowed);
+    assert_eq!(
+        current_response.submit_gate.reason_code,
+        Some(WorkflowGraphValidationSubmitGateReason::ValidationSummaryMissing)
+    );
+}
+
+#[tokio::test]
+async fn current_validation_summary_survives_layout_only_position_edit() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .record_inference_validation_session(
+            &session.session_id,
+            validation_session(
+                &session.graph_revision,
+                DraftGraphValidationStatus::Executable,
+                true,
+            ),
+        )
+        .await
+        .expect("record current validation summary");
+
+    let updated = store
+        .update_node_position(WorkflowGraphUpdateNodePositionRequest {
+            session_id: session.session_id.clone(),
+            node_id: "infer".to_string(),
+            position: Position { x: 320.0, y: 64.0 },
+        })
+        .await
+        .expect("update inference node position");
+
+    assert_eq!(updated.graph_revision, session.graph_revision);
+
+    let response = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id,
+            graph_revision: updated
+                .graph_revision
+                .parse()
+                .expect("valid updated graph revision"),
+        })
+        .await
+        .expect("current validation summary response");
+
+    assert_eq!(
+        response.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert!(response.submit_gate.allowed);
+}
+
+#[tokio::test]
 async fn close_session_clears_current_validation_state() {
     let store = GraphSessionStore::new();
     let session = store
