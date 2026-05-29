@@ -12,7 +12,9 @@ use crate::graph::{
     InferenceInterfaceNodeProjectionRecord, WorkflowGraphInferenceValidationPublication,
     WorkflowGraphInferenceValidationSession,
 };
-use crate::{GraphEdge, GraphNode, Position, WorkflowGraph};
+use crate::{
+    GraphEdge, GraphNode, Position, WorkflowGraph, WorkflowGraphCurrentValidationRefreshRequest,
+};
 
 use super::*;
 
@@ -39,6 +41,27 @@ fn graph() -> WorkflowGraph {
             target: "output".to_string(),
             target_handle: "text".to_string(),
         }],
+        derived_graph: None,
+    }
+}
+
+fn unresolved_inference_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![GraphNode {
+            id: "inference".to_string(),
+            node_type: "llm-inference".to_string(),
+            position: Position { x: 0.0, y: 0.0 },
+            data: serde_json::json!({
+                "task_kind": "text_generation",
+                "runtime": "cuda",
+                "pumas_model_ref": {
+                    "source": "puma-lib",
+                    "status": "resolved",
+                    "model_id": "family/model"
+                }
+            }),
+        }],
+        edges: Vec::new(),
         derived_graph: None,
     }
 }
@@ -277,6 +300,57 @@ fn publish_workflow_executable_validation_snapshot_rejects_stale_runtime_publica
 
     assert!(
         matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("graph-session validation state"))
+    );
+}
+
+#[tokio::test]
+async fn publish_graph_session_executable_validation_snapshot_rejects_non_executable_summary() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let session = service
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph: unresolved_inference_graph(),
+            workflow_id: Some("workflow-versioned".to_string()),
+        })
+        .await
+        .expect("create graph edit session");
+    let graph_revision =
+        WorkflowGraphRevision::parse(session.graph_revision).expect("valid graph revision");
+    let validation = service
+        .workflow_graph_refresh_current_validation_summary(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: session.session_id.clone(),
+                graph_revision,
+            },
+        )
+        .await
+        .expect("refresh validation summary");
+
+    assert!(
+        !validation.summary.submit_gate.allowed,
+        "unresolved inference graph must not be submittable"
+    );
+
+    let err = service
+        .publish_graph_session_executable_validation_snapshot(
+            WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+                workflow_id: "workflow-versioned".to_string(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                graph_session_id: session.session_id,
+                validation_session_id: validation.summary.validation_session_id,
+                validation_snapshot_id: Some(
+                    WorkflowExecutableValidationSnapshotId::parse(
+                        "wfvalsnap_00000000-0000-4000-8000-000000000012",
+                    )
+                    .expect("valid snapshot id"),
+                ),
+            },
+        )
+        .await
+        .expect_err("non-executable validation summary must not publish");
+
+    assert!(
+        matches!(&err, WorkflowServiceError::InvalidRequest(message) if message.contains("not executable")),
+        "unexpected error: {err}"
     );
 }
 

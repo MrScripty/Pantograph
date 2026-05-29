@@ -2955,12 +2955,36 @@ defining an image-only inference-node interface.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
     the pre-existing `set_active_run_execution_plan` dead-code warning outside
     this slice.
-- [ ] Wire Executable Publish validation to consume the same descriptor
+- [x] Wire Executable Publish validation to consume the same descriptor
       contract. Required inputs, optional defaults, valid options, connected
       upstream output types, explicit runtime/device/trait constraints,
       validation session identity, semantic graph revision, descriptor
       fingerprint, and backend validation summary must be validated before a
       workflow version can be published, submitted, or admitted as executable.
+  - 2026-05-29: Completed the Executable Publish validation regression slice.
+  - Smallest useful vertical slice: add workflow-service coverage for the
+    public graph-session executable publish API proving a current but
+    non-executable inference validation summary fails closed and cannot produce
+    a durable executable validation snapshot.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_version.rs`,
+    this Milestone 5d file, and `05-execution-management.md`.
+  - No-fallback/no-legacy result: Executable Publish consumes backend-owned
+    graph-session validation state, validation-session identity, semantic graph
+    revision, descriptor summary, and submit gate state. It does not publish
+    from draft save, frontend state, raw graph fields, runtime defaults,
+    scheduler projections, Tauri payloads, or the retired caller-supplied
+    runtime publication path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_graph_session_executable_validation_snapshot_rejects_non_executable_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow_executable_validation_snapshot --lib`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; `cargo
+    check -p pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
 - [ ] Wire workflow submit and scheduler queue admission to consume the
       backend validation summary. The frontend submit button and backend queue
       admission must both fail closed while inference validation is pending,

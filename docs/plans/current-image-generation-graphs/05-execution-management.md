@@ -16005,6 +16005,30 @@ Worker rules:
   - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
     the pre-existing `set_active_run_execution_plan` dead-code warning outside
     this slice.
+- 2026-05-29 Milestone 5d Executable Publish validation regression slice:
+  - Smallest useful vertical slice: add workflow-service coverage for the
+    public graph-session executable publish API proving a current but
+    non-executable inference validation summary fails closed and cannot produce
+    a durable executable validation snapshot.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_version.rs`,
+    the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: Executable Publish consumes backend-owned
+    graph-session validation state, validation-session identity, semantic graph
+    revision, descriptor summary, and submit gate state. It does not publish
+    from draft save, frontend state, raw graph fields, runtime defaults,
+    scheduler projections, Tauri payloads, or the retired caller-supplied
+    runtime publication path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_graph_session_executable_validation_snapshot_rejects_non_executable_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    workflow_executable_validation_snapshot --lib`; `cargo test -p
+    pantograph-workflow-service executable_validation_snapshot --lib`; `cargo
+    check -p pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
 
 ### Traceability Links
 
