@@ -4198,10 +4198,44 @@ defining an image-only inference-node interface.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still reports
     the pre-existing `set_active_run_execution_plan` dead-code warning in
     `scheduler/store.rs`; this slice added no new warnings.
-  - Remaining follow-up: wire connection candidates, insert-on-edge preview, and
-    connection commits to consume the published connection surface for
-    `llm-inference` dynamic task ports while retaining static bootstrap/control
-    inputs only.
+  - Remaining follow-up: wire connection candidates and connection commits to
+    consume the published connection surface for `llm-inference` dynamic task
+    ports while retaining static bootstrap/control inputs only.
+- [x] 2026-05-28 descriptor-backed inference connection workflow-service
+  consumption slice completed:
+  - Smallest useful vertical slice: added a current validation-state read model
+    for `InferenceConnectionSurface` records and wired edit-session connection
+    candidates/direct commits to consume those surfaces for `llm-inference`
+    dynamic task ports.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/connection_intent.rs`,
+    `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/mod.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: live connection authority for
+    model/task-specific `llm-inference` ports now comes from current
+    descriptor-backed validation surfaces. Static `llm-inference` still exposes
+    only bootstrap/control connection inputs, and missing/stale/non-current
+    surfaces do not fall back to authored snapshots, `node.data.definition`,
+    Pumas paths, frontend state, scheduler decisions, or runtime-host payloads.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service connection_intent --lib`;
+    `cargo test -p pantograph-workflow-service current_connection_surfaces
+    --lib`; `cargo test -p pantograph-workflow-service connect --lib`; and
+    `cargo check -p pantograph-workflow-service`.
+  - Verification note: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning
+    in `scheduler/store.rs`; this slice added no new warnings.
+  - Remaining follow-up: insert-on-edge preview still uses static insertion
+    definitions because a newly inserted inference node has no model-bound
+    descriptor surface yet. The next descriptor-backed connection slice should
+    expose backend-owned surfaces to the graph editor/event path and decide
+    whether bridge preview should support already-resolved inference nodes only
+    or wait for the later event-driven editor port refresh.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

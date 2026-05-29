@@ -89,7 +89,7 @@ impl InferenceInterfaceNodeProjectionRecord {
     }
 }
 
-fn connection_surface_for_projection(
+pub(crate) fn connection_surface_for_projection(
     validation_session_id: &DraftGraphValidationSessionId,
     graph_revision: &WorkflowGraphRevision,
     projection: &InferenceInterfaceNodeProjectionRecord,

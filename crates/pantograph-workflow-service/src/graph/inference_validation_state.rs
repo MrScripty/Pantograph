@@ -15,10 +15,10 @@ use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
     DependencyEnvironmentActionIntentResult, DependencyEnvironmentActionIntentStatus,
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
-    InferenceAvailabilityStatus, InferenceDiagnosticCode, InferenceDiagnosticSeverity,
-    InferenceInterfaceDiagnostic, InferenceInterfaceFingerprint, InferenceTaskKind,
-    ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision, WorkflowGraphSessionId,
-    WorkflowNodeId,
+    InferenceAvailabilityStatus, InferenceConnectionSurface, InferenceDiagnosticCode,
+    InferenceDiagnosticSeverity, InferenceInterfaceDiagnostic, InferenceInterfaceFingerprint,
+    InferenceTaskKind, ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
+    WorkflowGraphSessionId, WorkflowNodeId,
 };
 use pantograph_scheduler::SchedulerTraitSetting;
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,7 @@ use super::executable_validation_snapshot_source::{
     CurrentExecutableValidationSnapshotSourceError,
     CurrentExecutableValidationSnapshotSourceRequest,
 };
+use super::inference_interface_publication::connection_surface_for_projection;
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
@@ -173,6 +174,102 @@ impl CurrentInferenceValidationStateStore {
             current_validation_summary_state(record.summary.status),
             Some(record.summary.clone()),
             bounded_current_validation_diagnostics(record),
+        )
+    }
+
+    pub(crate) async fn current_connection_surfaces(
+        &self,
+        request: WorkflowGraphCurrentConnectionSurfacesStateRequest,
+    ) -> WorkflowGraphCurrentConnectionSurfacesResponse {
+        if request.requested_graph_revision != request.current_graph_revision {
+            return current_connection_surfaces_response(
+                request.graph_session_id,
+                request.requested_graph_revision,
+                request.current_graph_revision,
+                None,
+                WorkflowGraphCurrentValidationSummaryState::Stale,
+                Vec::new(),
+                vec![summary_diagnostic(
+                    InferenceDiagnosticCode::GraphRevisionMismatch,
+                    "Inference connection surfaces were requested for a stale graph revision.",
+                    Some("Refresh validation for the current graph revision before connecting inference ports."),
+                )],
+            );
+        }
+
+        let summaries = self.summaries.read().await;
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id.clone(),
+            graph_revision: request.current_graph_revision.clone(),
+        };
+        let Some(record) = summaries.get(&key) else {
+            return current_connection_surfaces_response(
+                request.graph_session_id,
+                request.requested_graph_revision,
+                request.current_graph_revision,
+                None,
+                WorkflowGraphCurrentValidationSummaryState::Missing,
+                Vec::new(),
+                vec![summary_diagnostic(
+                    InferenceDiagnosticCode::InferenceConnectionSurfaceMissing,
+                    "Inference connection surfaces have not been resolved for this graph revision.",
+                    Some("Run descriptor validation before connecting inference task ports."),
+                )],
+            );
+        };
+
+        if request
+            .validation_session_id
+            .as_ref()
+            .is_some_and(|validation_session_id| {
+                validation_session_id != &record.validation_session_id
+            })
+        {
+            return current_connection_surfaces_response(
+                request.graph_session_id,
+                request.requested_graph_revision,
+                request.current_graph_revision,
+                Some(record.validation_session_id.clone()),
+                WorkflowGraphCurrentValidationSummaryState::Stale,
+                Vec::new(),
+                vec![summary_diagnostic(
+                    InferenceDiagnosticCode::DescriptorStale,
+                    "Inference connection surfaces were requested for a stale validation session.",
+                    Some("Refresh validation for the current graph revision before connecting inference ports."),
+                )],
+            );
+        }
+
+        let mut surfaces = Vec::with_capacity(record.nodes.len());
+        let mut diagnostics = Vec::new();
+        for node in record.nodes.values() {
+            match connection_surface_for_projection(
+                &record.validation_session_id,
+                &key.graph_revision,
+                &node.projection,
+            ) {
+                Ok(surface) => surfaces.push(surface),
+                Err(_error) => diagnostics.push(summary_diagnostic(
+                    InferenceDiagnosticCode::InferenceConnectionSurfaceBlocked,
+                    "Inference connection surface could not be built from current validation state.",
+                    None,
+                )),
+            }
+        }
+
+        let state = if diagnostics.is_empty() {
+            current_validation_summary_state(record.summary.status)
+        } else {
+            WorkflowGraphCurrentValidationSummaryState::Invalid
+        };
+        current_connection_surfaces_response(
+            request.graph_session_id,
+            request.requested_graph_revision,
+            request.current_graph_revision,
+            Some(record.validation_session_id.clone()),
+            state,
+            surfaces,
+            diagnostics,
         )
     }
 
@@ -580,6 +677,14 @@ pub(crate) struct WorkflowGraphCurrentValidationSummaryStateRequest {
     pub current_graph_revision: WorkflowGraphRevision,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowGraphCurrentConnectionSurfacesStateRequest {
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub requested_graph_revision: WorkflowGraphRevision,
+    pub current_graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct WorkflowGraphCurrentValidationSummaryRequest {
@@ -600,6 +705,21 @@ pub struct WorkflowGraphCurrentValidationRefreshResponse {
     pub summary: WorkflowGraphCurrentValidationSummaryResponse,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub node_projections: Vec<InferenceInterfaceNodeProjectionRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowGraphCurrentConnectionSurfacesResponse {
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub requested_graph_revision: WorkflowGraphRevision,
+    pub current_graph_revision: WorkflowGraphRevision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_session_id: Option<DraftGraphValidationSessionId>,
+    pub state: WorkflowGraphCurrentValidationSummaryState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surfaces: Vec<InferenceConnectionSurface>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -675,6 +795,26 @@ fn current_validation_summary_response(
         state,
         summary,
         submit_gate,
+        diagnostics,
+    }
+}
+
+fn current_connection_surfaces_response(
+    graph_session_id: WorkflowGraphSessionId,
+    requested_graph_revision: WorkflowGraphRevision,
+    current_graph_revision: WorkflowGraphRevision,
+    validation_session_id: Option<DraftGraphValidationSessionId>,
+    state: WorkflowGraphCurrentValidationSummaryState,
+    surfaces: Vec<InferenceConnectionSurface>,
+    diagnostics: Vec<InferenceInterfaceDiagnostic>,
+) -> WorkflowGraphCurrentConnectionSurfacesResponse {
+    WorkflowGraphCurrentConnectionSurfacesResponse {
+        graph_session_id,
+        requested_graph_revision,
+        current_graph_revision,
+        validation_session_id,
+        state,
+        surfaces,
         diagnostics,
     }
 }
@@ -1588,8 +1728,8 @@ fn request_ready_dependency_environment_action_result(
 mod tests {
     use pantograph_inference_interface_contracts::{
         AuthoredInferenceInterfaceSnapshot, DependencyEnvironmentAction,
-        DraftGraphValidationStatus, InferenceAvailability, InferenceDiagnosticCode,
-        InferenceInterfaceDescriptor,
+        DraftGraphValidationStatus, InferenceAvailability, InferenceConnectionSurfaceStatus,
+        InferenceDiagnosticCode, InferenceInterfaceDescriptor,
     };
 
     use super::*;
@@ -1736,6 +1876,105 @@ mod tests {
         assert_eq!(
             result.diagnostics[0].code,
             InferenceDiagnosticCode::GraphValidationPending
+        );
+    }
+
+    #[tokio::test]
+    async fn current_connection_surfaces_return_descriptor_backed_ports() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("valid validation publication");
+
+        let response = store
+            .current_connection_surfaces(connection_surfaces_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await;
+
+        assert_eq!(
+            response.state,
+            WorkflowGraphCurrentValidationSummaryState::Current
+        );
+        assert!(response.diagnostics.is_empty());
+        assert_eq!(response.surfaces.len(), 1);
+        assert_eq!(response.surfaces[0].node_id.as_str(), "infer");
+        assert_eq!(
+            response.surfaces[0].status,
+            InferenceConnectionSurfaceStatus::Current
+        );
+        assert!(response.surfaces[0].validation_summary.executable);
+    }
+
+    #[tokio::test]
+    async fn current_connection_surfaces_fail_closed_when_summary_missing() {
+        let store = CurrentInferenceValidationStateStore::new();
+
+        let response = store
+            .current_connection_surfaces(connection_surfaces_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                None,
+            ))
+            .await;
+
+        assert_eq!(
+            response.state,
+            WorkflowGraphCurrentValidationSummaryState::Missing
+        );
+        assert!(response.surfaces.is_empty());
+        assert_eq!(
+            response.diagnostics[0].code,
+            InferenceDiagnosticCode::InferenceConnectionSurfaceMissing
+        );
+    }
+
+    #[tokio::test]
+    async fn current_connection_surfaces_reject_stale_validation_session() {
+        let store = CurrentInferenceValidationStateStore::new();
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().expect("valid graph session id"),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .expect("valid validation publication");
+
+        let response = store
+            .current_connection_surfaces(connection_surfaces_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.old"),
+            ))
+            .await;
+
+        assert_eq!(
+            response.state,
+            WorkflowGraphCurrentValidationSummaryState::Stale
+        );
+        assert!(response.surfaces.is_empty());
+        assert_eq!(
+            response.diagnostics[0].code,
+            InferenceDiagnosticCode::DescriptorStale
         );
     }
 
@@ -2577,6 +2816,25 @@ mod tests {
         CurrentExecutableValidationSnapshotSourceRequest {
             graph_session_id: graph_session_id.parse().expect("valid graph session id"),
             graph_revision: graph_revision.parse().expect("valid graph revision"),
+            validation_session_id: validation_session_id
+                .map(|value| value.parse().expect("valid validation session id")),
+        }
+    }
+
+    fn connection_surfaces_request(
+        graph_session_id: &str,
+        requested_graph_revision: &str,
+        current_graph_revision: &str,
+        validation_session_id: Option<&str>,
+    ) -> WorkflowGraphCurrentConnectionSurfacesStateRequest {
+        WorkflowGraphCurrentConnectionSurfacesStateRequest {
+            graph_session_id: graph_session_id.parse().expect("valid graph session id"),
+            requested_graph_revision: requested_graph_revision
+                .parse()
+                .expect("valid requested graph revision"),
+            current_graph_revision: current_graph_revision
+                .parse()
+                .expect("valid current graph revision"),
             validation_session_id: validation_session_id
                 .map(|value| value.parse().expect("valid validation session id")),
         }

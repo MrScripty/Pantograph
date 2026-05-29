@@ -41,9 +41,10 @@ pub use canonicalization::{
     canonicalize_workflow_graph_with_migrations, WorkflowGraphCanonicalizationResult,
 };
 pub use connection_intent::{
-    commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
+    commit_connection, commit_connection_with_surfaces, connection_candidates,
+    connection_candidates_with_surfaces, insert_node_and_connect, insert_node_on_edge,
     preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
-    rejected_insert_on_edge_response, rejected_insert_response,
+    rejected_insert_on_edge_response, rejected_insert_response, InferenceConnectionSurfaceView,
 };
 pub use contract_validation::{
     validate_workflow_graph_contract, validate_workflow_graph_contract_diagnostics,
@@ -99,10 +100,10 @@ pub(crate) use inference_validation_state::{
     CurrentDependencyRequirementsProof, CurrentDependencyRequirementsProofStatus,
 };
 pub use inference_validation_state::{
-    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
-    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
-    WorkflowGraphCurrentValidationSummaryState, WorkflowGraphValidationSubmitGate,
-    WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphCurrentConnectionSurfacesResponse, WorkflowGraphCurrentValidationRefreshRequest,
+    WorkflowGraphCurrentValidationRefreshResponse, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryResponse, WorkflowGraphCurrentValidationSummaryState,
+    WorkflowGraphValidationSubmitGate, WorkflowGraphValidationSubmitGateReason,
 };
 pub use inspection::{
     inspect_workflow_graph, inspect_workflow_graph_with_run_context,

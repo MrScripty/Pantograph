@@ -121,8 +121,18 @@ fn resolve_edge_insertion_bridge(
 ) -> Result<EdgeInsertionBridge, ConnectionRejection> {
     let edge = super::resolve_edge(graph, edge_id)?;
     let (source_anchor, target_anchor) = edge_anchors(edge);
-    let source = super::resolve_output_anchor(graph, registry, &source_anchor)?;
-    let target = super::resolve_input_anchor(graph, registry, &target_anchor)?;
+    let source = super::resolve_output_anchor(
+        graph,
+        registry,
+        super::InferenceConnectionSurfaceView::default(),
+        &source_anchor,
+    )?;
+    let target = super::resolve_input_anchor(
+        graph,
+        registry,
+        super::InferenceConnectionSurfaceView::default(),
+        &target_anchor,
+    )?;
 
     let mut compatible_inputs = definition
         .inputs
@@ -160,6 +170,7 @@ fn resolve_edge_insertion_bridge(
         if super::evaluate_connection(
             &preview_graph,
             registry,
+            super::InferenceConnectionSurfaceView::default(),
             &source_anchor,
             &inserted_input_anchor,
         )
@@ -193,6 +204,7 @@ fn resolve_edge_insertion_bridge(
             if super::evaluate_connection(
                 &preview_graph_with_input,
                 registry,
+                super::InferenceConnectionSurfaceView::default(),
                 &inserted_output_anchor,
                 &target_anchor,
             )
@@ -227,7 +239,12 @@ pub fn insert_node_and_connect(
 ) -> Result<(GraphNode, GraphEdge), ConnectionRejection> {
     super::ensure_graph_revision(graph, graph_revision)?;
 
-    let source = super::resolve_output_anchor(graph, registry, source_anchor)?;
+    let source = super::resolve_output_anchor(
+        graph,
+        registry,
+        super::InferenceConnectionSurfaceView::default(),
+        source_anchor,
+    )?;
     let definition = resolve_insert_definition(registry, node_type)?;
 
     let mut compatible_inputs = definition
@@ -282,6 +299,7 @@ pub fn insert_node_and_connect(
     super::evaluate_connection(
         &preview_graph,
         registry,
+        super::InferenceConnectionSurfaceView::default(),
         source_anchor,
         &ConnectionAnchor {
             node_id: inserted_edge.target.clone(),

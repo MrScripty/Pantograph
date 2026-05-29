@@ -24,7 +24,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `contract_validation.rs` | Whole-graph contract validation and structured stale graph diagnostic classification. |
 | `contract_validation_tests.rs` | Structured graph contract validation and stale diagnostic classification tests. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
-| `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
+| `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation, including current descriptor-backed inference connection surfaces for `llm-inference` task ports. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
 | `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
 | `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
@@ -100,6 +100,14 @@ latest graph revision has a current executable validation session, preserve
 typed diagnostics for unavailable/stale/invalid states, and never ask Tauri or
 frontend code to resolve descriptors, Pumas state, dependency proofs, or
 scheduler runtime policy.
+Graph-session connection candidate and direct-connect APIs consume the current
+inference connection surface from `inference_validation_state.rs` when resolving
+`llm-inference` task ports. Static `llm-inference` graph contracts expose only
+bootstrap/control ports; model/task-specific prompt, sampler, input artifact,
+and result ports are offered for editing only when current descriptor validation
+published them for the active graph revision. Missing, stale, unavailable, or
+blocked validation state does not fall back to saved authored snapshots,
+`node.data.definition`, Pumas paths, frontend caches, or runtime metadata.
 Graph-session current validation refreshes are also backend-owned. A refresh
 request carries graph-session identity and the graph revision observed by the
 caller; workflow-service snapshots the current graph, rejects stale requested
@@ -156,6 +164,12 @@ the summary/gate remains the only submit authority.
 - Direct incompatible connection rejections should include a backend-owned
   `contract_diagnostic` projection when canonical type compatibility produced a
   typed rejection.
+- `llm-inference` task/model-specific connection ports are current validation
+  products. Connection candidates and direct connection commits may use
+  descriptor-backed `InferenceConnectionSurface` ports from the current
+  validation state, but must not use static retired task ports, authored
+  snapshots, `node.data.definition`, Pumas paths, frontend state, scheduler
+  decisions, or runtime-host payloads as connection authority.
 - Stale graph diagnostics are backend-owned `WorkflowGraphDiagnostic` records.
   The graph contract validator is the classification source for unknown node
   types, retired node types, unresolved effective definitions, missing edge

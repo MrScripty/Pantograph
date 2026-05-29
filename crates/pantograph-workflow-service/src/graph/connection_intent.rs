@@ -1,5 +1,11 @@
 use std::collections::{HashSet, VecDeque};
 
+use pantograph_inference_interface_contracts::{
+    InferenceArtifactType, InferenceConnectionSurface, InferenceConnectionSurfaceStatus,
+    InferenceConstraintType, InferencePortDescriptor, InferencePortRequirement,
+    InferenceReferenceType, InferenceScalarType, InferenceValueType,
+};
+
 use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
 use super::registry::NodeRegistry;
 use super::types::{
@@ -27,6 +33,30 @@ struct ResolvedOutputAnchor<'a> {
 struct ResolvedInputAnchor<'a> {
     node: &'a GraphNode,
     port: PortDefinition,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct InferenceConnectionSurfaceView<'a> {
+    surfaces: &'a [InferenceConnectionSurface],
+}
+
+impl<'a> InferenceConnectionSurfaceView<'a> {
+    pub fn new(surfaces: &'a [InferenceConnectionSurface]) -> Self {
+        Self { surfaces }
+    }
+
+    fn current_surface_for(&self, node_id: &str) -> Option<&'a InferenceConnectionSurface> {
+        self.surfaces.iter().find(|surface| {
+            surface.status == InferenceConnectionSurfaceStatus::Current
+                && surface.node_id.as_str() == node_id
+        })
+    }
+}
+
+impl Default for InferenceConnectionSurfaceView<'_> {
+    fn default() -> Self {
+        Self { surfaces: &[] }
+    }
 }
 
 fn is_static_llm_connection_input(port_id: &str) -> bool {
@@ -67,9 +97,123 @@ fn effective_definition_error_message(role: &str, error: EffectiveDefinitionErro
     }
 }
 
+fn connection_definition_for_node(
+    node: &GraphNode,
+    registry: &NodeRegistry,
+    surfaces: InferenceConnectionSurfaceView<'_>,
+) -> Result<NodeDefinition, EffectiveDefinitionError> {
+    if node.node_type != "llm-inference" {
+        return effective_node_definition(node, registry);
+    }
+
+    let mut definition = registry
+        .get_definition(&node.node_type)
+        .cloned()
+        .ok_or_else(|| EffectiveDefinitionError::UnknownNodeType(node.node_type.clone()))?;
+    definition
+        .inputs
+        .retain(|port| is_static_llm_connection_input(&port.id));
+
+    let Some(surface) = surfaces.current_surface_for(&node.id) else {
+        return Ok(definition);
+    };
+
+    definition.inputs.extend(
+        surface
+            .inputs
+            .iter()
+            .map(inference_port_descriptor_to_definition)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    definition.outputs.extend(
+        surface
+            .outputs
+            .iter()
+            .map(inference_port_descriptor_to_definition)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    Ok(definition)
+}
+
+fn inference_port_descriptor_to_definition(
+    port: &InferencePortDescriptor,
+) -> Result<PortDefinition, EffectiveDefinitionError> {
+    Ok(PortDefinition {
+        id: port.port_id.as_str().to_string(),
+        label: port.label.clone(),
+        data_type: inference_value_type_to_port_data_type(&port.value_type)?,
+        required: match port.requirement {
+            InferencePortRequirement::Required => true,
+            InferencePortRequirement::Optional => false,
+            _ => {
+                return Err(EffectiveDefinitionError::InvalidDynamicDefinition {
+                    message: format!(
+                        "inference connection surface port '{}' has unsupported requirement",
+                        port.port_id.as_str()
+                    ),
+                });
+            }
+        },
+        multiple: false,
+        options_provider: None,
+        inference_payloads: Vec::new(),
+    })
+}
+
+fn inference_value_type_to_port_data_type(
+    value_type: &InferenceValueType,
+) -> Result<super::types::PortDataType, EffectiveDefinitionError> {
+    let data_type = match value_type {
+        InferenceValueType::Scalar(InferenceScalarType::String) => {
+            super::types::PortDataType::String
+        }
+        InferenceValueType::Scalar(InferenceScalarType::Bool) => {
+            super::types::PortDataType::Boolean
+        }
+        InferenceValueType::Scalar(
+            InferenceScalarType::I64 | InferenceScalarType::U64 | InferenceScalarType::F64,
+        ) => super::types::PortDataType::Number,
+        InferenceValueType::Artifact(InferenceArtifactType::Image) => {
+            super::types::PortDataType::Image
+        }
+        InferenceValueType::Artifact(InferenceArtifactType::Audio) => {
+            super::types::PortDataType::Audio
+        }
+        InferenceValueType::Artifact(InferenceArtifactType::Tensor) => {
+            super::types::PortDataType::Tensor
+        }
+        InferenceValueType::Artifact(InferenceArtifactType::Document) => {
+            super::types::PortDataType::Document
+        }
+        InferenceValueType::Artifact(
+            InferenceArtifactType::Video | InferenceArtifactType::Media,
+        ) => super::types::PortDataType::Json,
+        InferenceValueType::Reference(
+            InferenceReferenceType::PumasModel
+            | InferenceReferenceType::MediaArtifact
+            | InferenceReferenceType::RuntimeArtifact
+            | InferenceReferenceType::SchedulerTaskResult,
+        ) => super::types::PortDataType::Json,
+        InferenceValueType::Constraint(
+            InferenceConstraintType::Runtime
+            | InferenceConstraintType::Device
+            | InferenceConstraintType::DenoisingScheduler
+            | InferenceConstraintType::SamplingMethod,
+        ) => super::types::PortDataType::String,
+        _ => {
+            return Err(EffectiveDefinitionError::InvalidDynamicDefinition {
+                message: "inference connection surface uses an unsupported port value type"
+                    .to_string(),
+            });
+        }
+    };
+    Ok(data_type)
+}
+
 fn resolve_output_anchor<'a>(
     graph: &'a WorkflowGraph,
     registry: &'a NodeRegistry,
+    surfaces: InferenceConnectionSurfaceView<'_>,
     anchor: &ConnectionAnchor,
 ) -> Result<ResolvedOutputAnchor<'a>, ConnectionRejection> {
     let node = graph
@@ -79,12 +223,13 @@ fn resolve_output_anchor<'a>(
             message: format!("source node '{}' was not found", anchor.node_id),
             contract_diagnostic: None,
         })?;
-    let definition =
-        effective_node_definition(node, registry).map_err(|error| ConnectionRejection {
+    let definition = connection_definition_for_node(node, registry, surfaces).map_err(|error| {
+        ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
             message: effective_definition_error_message("source", error),
             contract_diagnostic: None,
-        })?;
+        }
+    })?;
     let port = definition
         .outputs
         .iter()
@@ -105,6 +250,7 @@ fn resolve_output_anchor<'a>(
 fn resolve_input_anchor<'a>(
     graph: &'a WorkflowGraph,
     registry: &'a NodeRegistry,
+    surfaces: InferenceConnectionSurfaceView<'_>,
     anchor: &ConnectionAnchor,
 ) -> Result<ResolvedInputAnchor<'a>, ConnectionRejection> {
     let node = graph
@@ -114,16 +260,16 @@ fn resolve_input_anchor<'a>(
             message: format!("target node '{}' was not found", anchor.node_id),
             contract_diagnostic: None,
         })?;
-    let definition =
-        effective_node_definition(node, registry).map_err(|error| ConnectionRejection {
+    let definition = connection_definition_for_node(node, registry, surfaces).map_err(|error| {
+        ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
             message: effective_definition_error_message("target", error),
             contract_diagnostic: None,
-        })?;
+        }
+    })?;
     let port = definition
         .inputs
         .iter()
-        .filter(|port| is_connectable_input_port(&node.node_type, port))
         .find(|port| port.id == anchor.port_id)
         .cloned()
         .ok_or_else(|| ConnectionRejection {
@@ -194,11 +340,12 @@ fn would_create_cycle(graph: &WorkflowGraph, source_node_id: &str, target_node_i
 fn evaluate_connection(
     graph: &WorkflowGraph,
     registry: &NodeRegistry,
+    surfaces: InferenceConnectionSurfaceView<'_>,
     source_anchor: &ConnectionAnchor,
     target_anchor: &ConnectionAnchor,
 ) -> Result<(), ConnectionRejection> {
-    let source = resolve_output_anchor(graph, registry, source_anchor)?;
-    let target = resolve_input_anchor(graph, registry, target_anchor)?;
+    let source = resolve_output_anchor(graph, registry, surfaces, source_anchor)?;
+    let target = resolve_input_anchor(graph, registry, surfaces, target_anchor)?;
 
     if graph.edges.iter().any(|edge| {
         edge.source == source_anchor.node_id
@@ -291,7 +438,23 @@ pub fn connection_candidates(
     source_anchor: ConnectionAnchor,
     requested_revision: Option<&str>,
 ) -> Result<ConnectionCandidatesResponse, ConnectionRejection> {
-    let source = resolve_output_anchor(graph, registry, &source_anchor)?;
+    connection_candidates_with_surfaces(
+        graph,
+        registry,
+        InferenceConnectionSurfaceView::default(),
+        source_anchor,
+        requested_revision,
+    )
+}
+
+pub fn connection_candidates_with_surfaces(
+    graph: &WorkflowGraph,
+    registry: &NodeRegistry,
+    surfaces: InferenceConnectionSurfaceView<'_>,
+    source_anchor: ConnectionAnchor,
+    requested_revision: Option<&str>,
+) -> Result<ConnectionCandidatesResponse, ConnectionRejection> {
+    let source = resolve_output_anchor(graph, registry, surfaces, &source_anchor)?;
     let graph_revision = graph.compute_fingerprint();
 
     let mut compatible_nodes = Vec::new();
@@ -300,7 +463,7 @@ pub fn connection_candidates(
             continue;
         }
 
-        let Ok(definition) = effective_node_definition(node, registry) else {
+        let Ok(definition) = connection_definition_for_node(node, registry, surfaces) else {
             continue;
         };
 
@@ -310,10 +473,9 @@ pub fn connection_candidates(
                 node_id: node.id.clone(),
                 port_id: port.id.clone(),
             };
-            if !is_connectable_input_port(&node.node_type, port) {
-                continue;
-            }
-            if evaluate_connection(graph, registry, &source_anchor, &target_anchor).is_ok() {
+            if evaluate_connection(graph, registry, surfaces, &source_anchor, &target_anchor)
+                .is_ok()
+            {
                 anchors.push(ConnectionTargetAnchorCandidate {
                     port_id: port.id.clone(),
                     port_label: port.label.clone(),
@@ -388,8 +550,26 @@ pub fn commit_connection(
     source_anchor: &ConnectionAnchor,
     target_anchor: &ConnectionAnchor,
 ) -> Result<(), ConnectionRejection> {
+    commit_connection_with_surfaces(
+        graph,
+        registry,
+        InferenceConnectionSurfaceView::default(),
+        graph_revision,
+        source_anchor,
+        target_anchor,
+    )
+}
+
+pub fn commit_connection_with_surfaces(
+    graph: &WorkflowGraph,
+    registry: &NodeRegistry,
+    surfaces: InferenceConnectionSurfaceView<'_>,
+    graph_revision: &str,
+    source_anchor: &ConnectionAnchor,
+    target_anchor: &ConnectionAnchor,
+) -> Result<(), ConnectionRejection> {
     ensure_graph_revision(graph, graph_revision)?;
-    evaluate_connection(graph, registry, source_anchor, target_anchor)
+    evaluate_connection(graph, registry, surfaces, source_anchor, target_anchor)
 }
 
 pub fn rejected_commit_response(
@@ -411,6 +591,13 @@ mod tests {
     use super::*;
     use crate::graph::{NodeCategory, Position};
 
+    fn current_connection_surface() -> InferenceConnectionSurface {
+        serde_json::from_str(include_str!(
+            "../../../pantograph-inference-interface-contracts/tests/fixtures/connection_surface_image_generation_current.json"
+        ))
+        .expect("current connection surface fixture")
+    }
+
     fn text_graph() -> WorkflowGraph {
         WorkflowGraph {
             nodes: vec![
@@ -429,6 +616,33 @@ mod tests {
                 GraphNode {
                     id: "llm".into(),
                     node_type: "llm-inference".into(),
+                    position: Position { x: 200.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: Vec::new(),
+            derived_graph: None,
+        }
+    }
+
+    fn descriptor_backed_inference_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "source".into(),
+                    node_type: "text-input".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({"label": "Source"}),
+                },
+                GraphNode {
+                    id: "inference-node-1".into(),
+                    node_type: "llm-inference".into(),
+                    position: Position { x: 100.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+                GraphNode {
+                    id: "image-output".into(),
+                    node_type: "image-output".into(),
                     position: Position { x: 200.0, y: 0.0 },
                     data: serde_json::json!({}),
                 },
@@ -557,6 +771,83 @@ mod tests {
             result.is_ok(),
             "dynamic expand input should accept number output"
         );
+    }
+
+    #[test]
+    fn connection_candidates_use_current_inference_connection_surface_ports() {
+        let registry = NodeRegistry::new();
+        let surface = current_connection_surface();
+        let graph = descriptor_backed_inference_graph();
+        let response = connection_candidates_with_surfaces(
+            &graph,
+            &registry,
+            InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface)),
+            ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            None,
+        )
+        .expect("candidate query should succeed");
+
+        let inference_node = response
+            .compatible_nodes
+            .iter()
+            .find(|node| node.node_id == "inference-node-1")
+            .expect("descriptor-backed inference node candidate");
+        assert!(inference_node
+            .anchors
+            .iter()
+            .any(|anchor| anchor.port_id == "prompt"));
+    }
+
+    #[test]
+    fn commit_connection_accepts_current_descriptor_backed_inference_ports() {
+        let registry = NodeRegistry::new();
+        let surface = current_connection_surface();
+        let mut graph = descriptor_backed_inference_graph();
+        let revision = graph.compute_fingerprint();
+
+        commit_connection_with_surfaces(
+            &graph,
+            &registry,
+            InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface)),
+            &revision,
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "inference-node-1".into(),
+                port_id: "prompt".into(),
+            },
+        )
+        .expect("current descriptor-backed prompt should accept text");
+
+        graph.edges.push(GraphEdge {
+            id: "source-text-inference-prompt".into(),
+            source: "source".into(),
+            source_handle: "text".into(),
+            target: "inference-node-1".into(),
+            target_handle: "prompt".into(),
+        });
+        let revision = graph.compute_fingerprint();
+
+        commit_connection_with_surfaces(
+            &graph,
+            &registry,
+            InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface)),
+            &revision,
+            &ConnectionAnchor {
+                node_id: "inference-node-1".into(),
+                port_id: "image".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "image-output".into(),
+                port_id: "image".into(),
+            },
+        )
+        .expect("current descriptor-backed image output should connect to image output node");
     }
 
     #[test]

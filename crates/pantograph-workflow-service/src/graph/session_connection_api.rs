@@ -1,9 +1,16 @@
 use crate::workflow::WorkflowServiceError;
 
+use pantograph_inference_interface_contracts::{WorkflowGraphRevision, WorkflowGraphSessionId};
+
 use super::super::connection_intent::{
-    commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
-    preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
-    rejected_insert_on_edge_response, rejected_insert_response,
+    commit_connection_with_surfaces, connection_candidates_with_surfaces, insert_node_and_connect,
+    insert_node_on_edge, preview_node_insert_on_edge, rejected_commit_response,
+    rejected_edge_insert_preview_response, rejected_insert_on_edge_response,
+    rejected_insert_response, InferenceConnectionSurfaceView,
+};
+use super::super::inference_validation_state::{
+    WorkflowGraphCurrentConnectionSurfacesResponse,
+    WorkflowGraphCurrentConnectionSurfacesStateRequest,
 };
 use super::super::memory_impact::graph_memory_impact_from_graph_change;
 use super::super::registry::NodeRegistry;
@@ -16,7 +23,7 @@ use super::super::session_types::{
 };
 use super::super::types::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
-    GraphEdge, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
+    GraphEdge, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowGraph,
 };
 
 use super::{phase6_memory_impact_projection, GraphSessionStore};
@@ -26,13 +33,17 @@ impl GraphSessionStore {
         &self,
         request: WorkflowGraphGetConnectionCandidatesRequest,
     ) -> Result<ConnectionCandidatesResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
+        let (graph, connection_surfaces) = self
+            .connection_candidate_graph_snapshot(
+                &request.session_id,
+                request.graph_revision.as_deref(),
+            )
+            .await?;
         let registry = NodeRegistry::new();
-        connection_candidates(
-            &state.graph,
+        connection_candidates_with_surfaces(
+            &graph,
             &registry,
+            InferenceConnectionSurfaceView::new(&connection_surfaces.surfaces),
             request.source_anchor,
             request.graph_revision.as_deref(),
         )
@@ -43,15 +54,22 @@ impl GraphSessionStore {
         &self,
         request: WorkflowGraphConnectRequest,
     ) -> Result<ConnectionCommitResponse, WorkflowServiceError> {
+        let connection_surfaces = self
+            .current_connection_surfaces_for_session(
+                &request.session_id,
+                Some(request.graph_revision.as_str()),
+            )
+            .await?;
         let response = {
             let handle = self.get_session_handle(&request.session_id).await?;
             let mut state = handle.lock().await;
             state.touch();
             let before_graph = state.graph.clone();
             let registry = NodeRegistry::new();
-            if let Err(rejection) = commit_connection(
+            if let Err(rejection) = commit_connection_with_surfaces(
                 &state.graph,
                 &registry,
+                InferenceConnectionSurfaceView::new(&connection_surfaces.surfaces),
                 &request.graph_revision,
                 &request.source_anchor,
                 &request.target_anchor,
@@ -107,6 +125,61 @@ impl GraphSessionStore {
         self.cancel_active_validation_after_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
+    }
+
+    async fn connection_candidate_graph_snapshot(
+        &self,
+        session_id: &str,
+        requested_revision: Option<&str>,
+    ) -> Result<
+        (
+            WorkflowGraph,
+            WorkflowGraphCurrentConnectionSurfacesResponse,
+        ),
+        WorkflowServiceError,
+    > {
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        let graph = state.graph.clone();
+        drop(state);
+
+        let connection_surfaces = self
+            .current_connection_surfaces_for_session(session_id, requested_revision)
+            .await?;
+        Ok((graph, connection_surfaces))
+    }
+
+    async fn current_connection_surfaces_for_session(
+        &self,
+        session_id: &str,
+        requested_revision: Option<&str>,
+    ) -> Result<WorkflowGraphCurrentConnectionSurfacesResponse, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        let current_graph_revision =
+            WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        let requested_graph_revision = match requested_revision {
+            Some(value) => WorkflowGraphRevision::parse(value)
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?,
+            None => current_graph_revision.clone(),
+        };
+
+        Ok(self
+            .validation_state
+            .current_connection_surfaces(WorkflowGraphCurrentConnectionSurfacesStateRequest {
+                graph_session_id,
+                requested_graph_revision,
+                current_graph_revision,
+                validation_session_id: None,
+            })
+            .await)
     }
 
     pub async fn insert_node_and_connect(
