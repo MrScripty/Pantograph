@@ -1,6 +1,6 @@
 use super::super::types::InsertNodePositionHint;
 use super::*;
-use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
+use crate::graph::types::{ConnectionAnchor, GraphNode, PortDataType, PortMapping, Position};
 use crate::graph::{
     InferenceCapabilityFacts, InferenceInterfaceFactsProvider,
     InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
@@ -11,7 +11,7 @@ use crate::graph::{
     WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest, WorkflowGraphUngroupRequest,
-    WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
@@ -1428,6 +1428,80 @@ async fn publish_inference_validation_session_rejects_ungroup_changed_during_fac
         .ungroup(WorkflowGraphUngroupRequest {
             session_id: session.session_id,
             group_id,
+        })
+        .await
+        .expect("mutate graph while validation facts are pending");
+    release.notify_one();
+
+    let error = publish
+        .await
+        .expect("publish task should not panic")
+        .expect_err("publish should reject cancelled validation session");
+    assert!(
+        error
+            .to_string()
+            .contains("validation publication cancelled: graph revision changed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn publish_inference_validation_session_rejects_update_group_ports_changed_during_fact_lookup(
+) {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let grouped = store
+        .create_group(WorkflowGraphCreateGroupRequest {
+            session_id: session.session_id.clone(),
+            name: "Model Inputs".to_string(),
+            selected_node_ids: vec!["model".to_string(), "dep-env".to_string()],
+        })
+        .await
+        .expect("create group before validation starts");
+    let group_id = grouped
+        .graph
+        .nodes
+        .iter()
+        .find(|node| node.node_type == "node-group")
+        .expect("group node")
+        .id
+        .clone();
+
+    let publish_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let publish = tokio::spawn(async move {
+        publish_store
+            .publish_inference_validation_session(
+                &session_id,
+                DraftGraphValidationSessionId::parse("validation.session.group.ports.changed")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    entered.notified().await;
+
+    store
+        .update_group_ports(WorkflowGraphUpdateGroupPortsRequest {
+            session_id: session.session_id,
+            group_id,
+            exposed_inputs: Vec::new(),
+            exposed_outputs: vec![PortMapping {
+                internal_node_id: "model".to_string(),
+                internal_port_id: "pumas_model_ref".to_string(),
+                group_port_id: "out-model-ref-updated".to_string(),
+                group_port_label: "Model Ref Updated".to_string(),
+                data_type: PortDataType::Any,
+            }],
         })
         .await
         .expect("mutate graph while validation facts are pending");

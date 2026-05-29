@@ -559,38 +559,43 @@ impl GraphSessionStore {
         &self,
         request: WorkflowGraphUpdateGroupPortsRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        let before_graph = state.graph.clone();
-        let next_graph = update_group_ports_graph(
-            &state.graph,
-            &request.group_id,
-            request.exposed_inputs,
-            request.exposed_outputs,
-        )?;
-        state.push_undo_snapshot();
-        state.graph = next_graph;
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        let dirty_tasks =
-            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.group_id));
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &state.graph,
-            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.group_id)),
-        );
-        let workflow_event = graph_modified_event(
-            &request.session_id,
-            &request.session_id,
-            dirty_tasks,
-            memory_impact.clone(),
-        );
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(state.snapshot_response_with_state(
-            &request.session_id,
-            Some(workflow_event),
-            projection,
-        ))
+        let response = {
+            let handle = self.get_session_handle(&request.session_id).await?;
+            let mut state = handle.lock().await;
+            state.touch();
+            let before_graph = state.graph.clone();
+            let next_graph = update_group_ports_graph(
+                &state.graph,
+                &request.group_id,
+                request.exposed_inputs,
+                request.exposed_outputs,
+            )?;
+            state.push_undo_snapshot();
+            state.graph = next_graph;
+            sync_embedding_emit_metadata_flags(&mut state.graph);
+            let dirty_tasks =
+                dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.group_id));
+            let memory_impact = graph_memory_impact_from_graph_change(
+                &before_graph,
+                &state.graph,
+                &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.group_id)),
+            );
+            let workflow_event = graph_modified_event(
+                &request.session_id,
+                &request.session_id,
+                dirty_tasks,
+                memory_impact.clone(),
+            );
+            let projection = phase6_memory_impact_projection(memory_impact);
+            state.snapshot_response_with_state(
+                &request.session_id,
+                Some(workflow_event),
+                projection,
+            )
+        };
+        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+            .await?;
+        Ok(response)
     }
 
     pub async fn undo(
