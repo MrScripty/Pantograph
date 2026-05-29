@@ -47,6 +47,15 @@ from a workflow, pause that workflow while resources are used elsewhere, batch
 compatible tasks across runs, and resume dependent tasks later when their
 inputs are ready.
 
+2026-05-29 re-plan refinement: task-level orchestration must carry the
+canonical `DependencyReadinessProofEnvelope` and runtime-host handoff through
+the remaining Milestone 5b legacy-retirement path. The scheduler task state
+record is the only place that can carry readiness and dispatch evidence
+forward to runtime-host execution. Workflow-service may materialize node inputs
+from completed upstream task results, but it must not derive runtime authority
+from reduced execution plans, graph-authored paths, Tauri payloads, or old
+dependency preflight outputs.
+
 ## Ownership Boundaries
 
 - **Workflow-service application layer:** owns the use case orchestration that
@@ -117,14 +126,27 @@ inputs are ready.
 - `SchedulerTaskExecutionPort`: application-owned async port for executing one
   admitted task. Runtime inference variants call the runtime-host dispatch
   port; non-runtime variants call a narrow node-engine task execution adapter.
+- `DependencyReadinessProofEnvelope`: scheduler/workflow-service-owned readiness
+  evidence for runtime tasks. It is produced after backend validation and
+  dependency-planning facts are available, consumed before queue admission and
+  again before dispatch, and carried into runtime-host requests only as typed
+  readiness evidence. It includes workflow/run/node/task correlation,
+  descriptor fingerprint and freshness, selected runtime/device constraints,
+  Pumas model/artifact identity, selected dependency environment identity when
+  applicable, dependency availability status, proof status, and bounded typed
+  diagnostics. It does not contain executable paths, Pumas storage paths,
+  graph-visible `model_path`, worker launch metadata, or frontend/Tauri
+  inferred state.
 - `RuntimeHostExecutionRequest` / `RuntimeHostExecutionResponse` /
   `RuntimeHostExecutionPort`: shared runtime-host execution contracts moved
   out of `pantograph-embedded-runtime` into a lower-level contract crate. The
   request must carry a dispatch-selected `SchedulerRuntimeHandoff` plus typed
   materialized runtime inputs assembled from the canonical inference interface
-  descriptor and completed upstream task results. It must reject readiness-only
-  handoffs, reduced execution-plan projections, graph paths, local Pumas load
-  targets, scheduler-owned execution payloads, and worker launch metadata.
+  descriptor, completed upstream task results, and the current
+  `DependencyReadinessProofEnvelope`. It must reject readiness-only handoffs,
+  missing or stale readiness proof, reduced execution-plan projections, graph
+  paths, local Pumas load targets, scheduler-owned execution payloads, and
+  worker launch metadata.
 - `SchedulerTaskStateReadModel`: backend-owned status for graph editor,
   run-inspection, and diagnostics views. It exposes waiting/running/failed
   facts, not scheduler internals or executable load targets.
@@ -153,9 +175,10 @@ The chosen replacement keeps two separate truths:
 workflow-service binding resolution has validated materialized inputs for a
 runtime task. Scheduler readiness, resource admission, batching, dispatch, and
 runtime handoff policy must operate only on execution-intent states carrying
-the runtime variant. Non-runtime tasks may become ready, run, and complete
-through their own non-runtime execution-intent variant, but they must not
-fabricate a runtime intent to satisfy state storage.
+the runtime variant plus current readiness proof. Non-runtime tasks may become
+ready, run, and complete through their own non-runtime execution-intent
+variant, but they must not fabricate a runtime intent or readiness proof to
+satisfy state storage.
 
 2026-05-23 investigation update: the current phase-aware scheduler state
 contract still requires `SchedulableTaskIntent` on `Ready`, `Running`, and
@@ -213,6 +236,12 @@ implementation can be considered complete:
   that depend on `SchedulerQueueTaskRecord` or `SchedulerQueueTransition`.
   Do not keep aliases, adapters, compatibility modules, or dual successful
   queue/state paths.
+- Treat old dependency/preflight contracts as retired execution authority.
+  `ModelDependencyRequest`, `ModelRefV2`, node-engine dependency preflight,
+  and path-shaped runtime task payloads may exist only as temporary
+  diagnostic-only rejection paths until their callers are migrated. They must
+  not be adapted from canonical task state, readiness proof, or runtime-host
+  handoff data.
 - Treat persisted artifacts and fixtures as contract artifacts. Because this
   plan intentionally does not preserve legacy compatibility, old queue-shaped
   fixtures or saved workflow artifacts must be regenerated to the new

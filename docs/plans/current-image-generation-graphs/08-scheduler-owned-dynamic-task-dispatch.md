@@ -342,7 +342,11 @@ branches or preserve retired systems.
   scheduler-owned readiness admission and non-legacy runtime handoff first,
   then complete Milestone 5b to wire scheduler dispatch directly into
   runtime-host execution and delete `ModelRefV2`/`model_path` successful
-  paths.
+  paths. The 2026-05-29 refinement requires consuming the canonical
+  `DependencyReadinessProofEnvelope` before further production runtime wiring:
+  queue admission and pre-dispatch validation consume that proof, old
+  dependency/preflight paths fail closed if reached, and no path-shaped or
+  `ModelDependencyRequest` adapter can be a successful transition step.
 - **Reduced execution-plan boundary:** `WorkflowExecutionPlanNodeDecision` is
   an inspection/diagnostics projection, not executable scheduler state. If
   runtime launch needs full dispatch facts, use the actual

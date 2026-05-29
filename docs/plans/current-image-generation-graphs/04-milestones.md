@@ -62,6 +62,11 @@ milestone status in its file and summarize progress in
      direct scheduler-to-runtime-host execution that consumes scheduler
      handoff and resolves Pumas-approved load targets only at the host
      boundary.
+   - Consume the canonical `DependencyReadinessProofEnvelope` before
+     production runtime dispatch, then delete or fail closed old
+     `ModelDependencyRequest`, `ModelRefV2`, node-engine preflight, direct
+     runtime task, and path-shaped success paths without compatibility
+     adapters.
 
 P-a. [Pumas Library Contract Start](07-pumas-library-image-generation-facts.md)
    - Start Pumas P0-P1 immediately after Pantograph Milestone 0 freezes the
@@ -117,7 +122,13 @@ input/output contract that the graph editor and workflow validators expose.
 Milestone 5b must then replace runtime launch ownership with direct
 scheduler-to-runtime-host dispatch and remove successful `model_path`,
 `ModelRefV2`, and node-engine planned-inference execution contracts before
-Milestone 6 implements real PyTorch/diffusers image generation.
+Milestone 6 implements real PyTorch/diffusers image generation. Its first
+remaining production slices must follow the 2026-05-29 contract-first
+readiness/handoff re-plan: consume the canonical
+`DependencyReadinessProofEnvelope`, keep queue-admission and pre-dispatch
+freshness checks, materialize runtime-host requests from durable scheduler task
+state, reject old APIs with diagnostics if reached, and then delete the
+retired dependency/runtime contracts.
 
 Pumas P2-P5 may proceed in parallel with Pantograph Milestones 1-5, but Pumas
 producer-fact completion is a hard gate before Milestone 5a, Milestone 5c,

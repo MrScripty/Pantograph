@@ -22,6 +22,14 @@ scheduler task state, not whole-workflow node-engine output demand. Do not
 synthesize handoff from `WorkflowExecutionPlanNodeDecision`, and do not keep
 planned inference as an alternate successful launch path.
 
+Selected re-plan refinement as of 2026-05-29: the next runtime/dependency
+cleanup uses the contract-first readiness/handoff replacement path. The
+remaining work crosses scheduler readiness, workflow-service materialization,
+runtime-host handoff, node-engine preflight retirement, and legacy fixture
+deletion. It must not be implemented as another graph-authoring cleanup slice
+or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
+`ModelRefV2`, or `model_path` success behavior.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -29,6 +37,15 @@ planned inference as an alternate successful launch path.
   environment ref, and Pumas model/artifact identity without exposing
   `ModelRefV2`, `model_path`, executable load targets, reservations, batching
   groups, or worker launch internals to graph/node-engine contracts.
+- [ ] Consume the canonical `DependencyReadinessProofEnvelope` through the
+  remaining production runtime-host dispatch and legacy-retirement path. The
+  proof must come from backend validation summaries, dependency-planning facts,
+  selected runtime/device facts, descriptor fingerprints, explicit user
+  constraints, and typed availability evidence. It must carry
+  freshness/correlation ids, selected environment identity when one exists,
+  and bounded diagnostics without graph-visible paths, executable load targets,
+  scheduler policy in Tauri/frontend code, or a second adapter-local readiness
+  proof type.
 - [x] Add the host-owned Pumas load-target resolution service. It must resolve
   executable load targets only from scheduler-selected Pumas refs/artifact
   identity at runtime dispatch, and return typed unavailable/stale/invalid
@@ -46,7 +63,9 @@ planned inference as an alternate successful launch path.
 - [ ] Wire scheduler dispatch to call runtime-host execution directly from the
   actual dispatch-selected `SchedulerRuntimeHandoff`. The reduced
   `WorkflowExecutionPlan` may remain an inspection/diagnostics projection but
-  must not be used to launch inference or build handoff.
+  must not be used to launch inference or build handoff. Runtime requests must
+  include the canonical dependency readiness proof and workflow-service-owned
+  materialized runtime inputs derived from validated upstream task results.
 - [ ] Retire node-engine planned-inference launch ownership for runtime
   inference nodes. Affected nodes must submit or reference scheduler task
   intent and consume scheduler task state/results; missing scheduler task state
@@ -65,7 +84,10 @@ planned inference as an alternate successful launch path.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
-  repair old inputs.
+  repair old inputs. Any old dependency/preflight command reached before its
+  replacement must be diagnostic-only and must not successfully produce
+  `ModelDependencyRequest`, `ModelRefV2`, path-shaped dependency payloads, or
+  executable launch inputs.
 - [ ] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
   paths after runtime host load-target resolution is wired.
 - [ ] Remove retired node-engine contracts and helpers:
@@ -84,10 +106,18 @@ planned inference as an alternate successful launch path.
 
 - Contract tests and JSON fixtures for runtime-host execution input/output and
   Pumas load-target diagnostics.
+- Contract tests and JSON fixtures for dependency readiness proof success,
+  stale descriptor fingerprint, missing dependency availability, invalid
+  explicit runtime/device constraint, unavailable environment, and selected
+  environment identity.
 - Boundary tests proving graph, node-engine, saved-workflow, scheduler hint,
   and scheduler handoff payloads reject executable path fields.
 - Runtime-host tests proving Pumas load targets are resolved only at the host
   boundary and unavailable states produce typed diagnostics.
+- Queue admission and scheduler dispatch tests proving readiness proof
+  freshness is checked before enqueue/materialization and again before
+  runtime-host dispatch, and that stale/missing proof fails closed before any
+  runtime-host call.
 - Scheduler dispatch tests proving runtime-host requests are created only from
   dispatch-selected `SchedulerRuntimeHandoff`, not from
   `WorkflowExecutionPlanNodeDecision` or backend-decision projections.
@@ -108,7 +138,8 @@ planned inference as an alternate successful launch path.
 - Deletion/search checks proving successful production paths no longer contain
   `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
   `build_model_ref_v2`, `PlannedInferenceExecutionHost`, frontend `modelPath`
-  dependency actions, or path-shaped success fixtures.
+  dependency actions, direct old runtime task success fixtures, or path-shaped
+  success fixtures.
 - Focused crate checks for every touched Rust crate, including default,
   all-features, and no-default-features checks when public feature contracts
   change.
@@ -116,6 +147,8 @@ planned inference as an alternate successful launch path.
 **No-Fallback Requirements:**
 
 - Do not adapt scheduler readiness or handoff facts back into `ModelRefV2`.
+- Do not adapt canonical dependency readiness proof back into
+  `ModelDependencyRequest` or path-shaped dependency requests.
 - Do not synthesize scheduler handoff from reduced workflow execution-plan
   facts or backend execution projections.
 - Do not preserve `model_path`/`modelPath` as successful runtime execution
@@ -216,3 +249,13 @@ planned inference as an alternate successful launch path.
   Direct runtime-host dispatch must come from durable scheduler task state and
   actual dispatch-selected handoff; no reduced-plan handoff synthesis,
   node-engine planned-inference launch, or `ModelRefV2` bridge is allowed.
+- 2026-05-29 contract-first readiness/handoff replacement re-plan recorded.
+  The remaining runtime/dependency cleanup is a scheduler/workflow-service/
+  runtime-host boundary change, not a graph cleanup. The selected path is to
+  consume the existing canonical `DependencyReadinessProofEnvelope` in queue
+  admission and dispatch, pass it into runtime-host requests with materialized
+  runtime inputs, make old dependency/preflight paths fail closed if reached,
+  then delete `ModelDependencyRequest`, `ModelRefV2`, model-path success
+  behavior, planned-inference launch ownership, direct old runtime task success
+  fixtures, and frontend/Tauri path-shaped dependency actions. No second
+  readiness proof type or adapter-local compatibility proof is allowed.

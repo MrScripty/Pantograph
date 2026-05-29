@@ -16286,6 +16286,26 @@ Worker rules:
     change but still fails in `src-tauri/src/app_setup.rs` because
     `WorkflowService` does not expose `set_media_conversion_executor`. That app
     setup mismatch remains a separate follow-up.
+- 2026-05-29 runtime/dependency readiness handoff re-plan recorded:
+  - Boundary: the remaining legacy hits are scheduler/workflow-service/
+    runtime-host dependency and execution authority surfaces, not another
+    graph-authoring cleanup slice. They include readiness proof production,
+    queue admission freshness, runtime-host handoff, node-engine preflight
+    retirement, `ModelDependencyRequest`/`ModelRefV2`/`model_path` deletion,
+    and old runtime success fixtures.
+  - Selected option: contract-first readiness/handoff replacement. Freeze the
+    remaining production path around the existing canonical
+    `DependencyReadinessProofEnvelope`, consume it in queue admission and
+    pre-dispatch checks, pass it with materialized runtime inputs into
+    runtime-host requests from durable scheduler task state, make old
+    dependency/preflight APIs diagnostic-only if reached, then delete retired
+    successful execution paths. Do not create a second readiness proof type.
+  - Standards alignment: this preserves single-owner scheduler state, keeps
+    shared contracts typed and side-effect free, avoids Tauri/frontend business
+    logic, rejects compatibility adapters, and keeps implementation in
+    validated vertical slices with contract fixtures, boundary tests, source
+    search deletion gates, and default/all-features/no-default-features checks
+    for touched public Rust crates.
 
 ### Traceability Links
 

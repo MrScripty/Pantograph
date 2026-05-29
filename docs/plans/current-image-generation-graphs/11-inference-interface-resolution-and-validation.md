@@ -1032,8 +1032,12 @@ instead of falling back to previously rendered ports.
   concrete bounded-capacity/backpressure thresholds, and frontend store
   integration remain to choose. Cleanup, cancellation, supersession, and task
   observation are workflow-service lifecycle-owner requirements.
-- Align `RuntimeHostExecutionInput` with the value categories here without
-  coupling runtime-host to graph-editor-specific drift or patch contracts.
+- Align runtime-host execution input through the Milestone 5b canonical
+  `DependencyReadinessProofEnvelope` and materialized runtime-input handoff. The
+  runtime-host request must consume descriptor-backed materialized values and
+  readiness proof facts, but must not import graph-editor drift/patch
+  contracts, saved authored snapshots as execution authority, frontend
+  validation state, or reduced workflow execution-plan projections.
 
 ## Verification Strategy
 
