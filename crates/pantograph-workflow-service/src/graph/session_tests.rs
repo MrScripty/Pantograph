@@ -1,6 +1,8 @@
 use super::super::types::InsertNodePositionHint;
 use super::*;
-use crate::graph::types::{ConnectionAnchor, GraphNode, PortDataType, PortMapping, Position};
+use crate::graph::types::{
+    ConnectionAnchor, ConnectionRejectionReason, GraphNode, PortDataType, PortMapping, Position,
+};
 use crate::graph::{
     InferenceCapabilityFacts, InferenceInterfaceFactsProvider,
     InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
@@ -2779,7 +2781,7 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         .insert_node_on_edge(WorkflowGraphInsertNodeOnEdgeRequest {
             session_id: session_id.clone(),
             edge_id: "text-input-text-text-output-text".to_string(),
-            node_type: "llm-inference".to_string(),
+            node_type: "merge".to_string(),
             graph_revision: session.graph_revision,
             position_hint: InsertNodePositionHint {
                 position: Position { x: 80.0, y: 24.0 },
@@ -2905,7 +2907,7 @@ async fn connect_persists_memory_impact_for_later_session_snapshot() {
 }
 
 #[tokio::test]
-async fn connect_canonicalizes_llm_stream_drop_to_text_output_response_edge() {
+async fn connect_rejects_retired_static_llm_stream_edge() {
     let store = GraphSessionStore::new();
     let session = store
         .create_session(inference_to_output_graph(), None)
@@ -2927,21 +2929,20 @@ async fn connect_canonicalizes_llm_stream_drop_to_text_output_response_edge() {
         .await
         .expect("connect stream edge");
 
-    assert!(response.accepted);
-    let graph = response.graph.expect("updated graph");
-    assert_eq!(graph.edges.len(), 1);
-    let edge = &graph.edges[0];
-    assert_eq!(edge.id, "llm-response-output-text");
-    assert_eq!(edge.source, "llm");
-    assert_eq!(edge.source_handle, "response");
-    assert_eq!(edge.target, "output");
-    assert_eq!(edge.target_handle, "text");
-    assert!(!graph.edges.iter().any(|edge| {
-        edge.source == "llm"
-            && edge.source_handle == "stream"
-            && edge.target == "output"
-            && edge.target_handle == "stream"
-    }));
+    assert!(!response.accepted);
+    let rejection = response
+        .rejection
+        .expect("retired static stream port should be rejected");
+    assert_eq!(
+        rejection.reason,
+        ConnectionRejectionReason::UnknownSourceAnchor
+    );
+    assert!(
+        rejection.message.contains("llm.stream"),
+        "unexpected rejection: {rejection:?}"
+    );
+    let graph = response.graph.expect("unchanged graph");
+    assert!(graph.edges.is_empty());
 }
 
 #[derive(Debug, Clone, Copy)]

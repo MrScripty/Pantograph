@@ -29,6 +29,17 @@ struct ResolvedInputAnchor<'a> {
     port: PortDefinition,
 }
 
+fn is_static_llm_connection_input(port_id: &str) -> bool {
+    matches!(
+        port_id,
+        "pumas_model_ref" | "dependency_environment_sidecar"
+    )
+}
+
+fn is_connectable_input_port(node_type: &str, port: &PortDefinition) -> bool {
+    node_type != "llm-inference" || is_static_llm_connection_input(&port.id)
+}
+
 fn node_label(node: &GraphNode, definition: &NodeDefinition) -> String {
     node.data
         .get("label")
@@ -112,6 +123,7 @@ fn resolve_input_anchor<'a>(
     let port = definition
         .inputs
         .iter()
+        .filter(|port| is_connectable_input_port(&node.node_type, port))
         .find(|port| port.id == anchor.port_id)
         .cloned()
         .ok_or_else(|| ConnectionRejection {
@@ -298,6 +310,9 @@ pub fn connection_candidates(
                 node_id: node.id.clone(),
                 port_id: port.id.clone(),
             };
+            if !is_connectable_input_port(&node.node_type, port) {
+                continue;
+            }
             if evaluate_connection(graph, registry, &source_anchor, &target_anchor).is_ok() {
                 anchors.push(ConnectionTargetAnchorCandidate {
                     port_id: port.id.clone(),
@@ -333,6 +348,7 @@ pub fn connection_candidates(
             let mut matching_input_port_ids = definition
                 .inputs
                 .iter()
+                .filter(|port| is_connectable_input_port(&definition.node_type, port))
                 .filter(|port| validate_connection(&source.port.data_type, &port.data_type))
                 .map(|port| port.id.clone())
                 .collect::<Vec<_>>();
@@ -478,13 +494,20 @@ mod tests {
             .any(|node| node.node_id == "target"
                 && node.anchors.iter().any(|port| port.port_id == "text")));
         assert!(response.insertable_node_types.iter().any(|node| {
-            node.node_type == "llm-inference"
-                && node.category == NodeCategory::Processing
+            node.node_type == "merge"
+                && node.category == NodeCategory::Control
                 && node
                     .matching_input_port_ids
                     .iter()
-                    .any(|port_id| port_id == "prompt")
+                    .any(|port_id| port_id == "inputs")
         }));
+        assert!(
+            !response
+                .insertable_node_types
+                .iter()
+                .any(|node| node.node_type == "llm-inference"),
+            "static llm-inference task ports are descriptor-backed and must not appear as insertable static ports"
+        );
     }
 
     #[test]
@@ -592,22 +615,55 @@ mod tests {
     }
 
     #[test]
-    fn preview_node_insert_on_edge_returns_valid_bridge_for_llm() {
+    fn commit_connection_rejects_static_llm_device_as_connection_port() {
+        let registry = NodeRegistry::new();
+        let graph = text_graph();
+        let revision = graph.compute_fingerprint();
+
+        let rejection = commit_connection(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "llm".into(),
+                port_id: "device".into(),
+            },
+        )
+        .expect_err("static llm device constraint must not be graph-connectable");
+
+        assert_eq!(
+            rejection.reason,
+            ConnectionRejectionReason::UnknownTargetAnchor
+        );
+        assert!(
+            rejection.message.contains("llm.device"),
+            "unexpected rejection: {rejection:?}"
+        );
+    }
+
+    #[test]
+    fn preview_node_insert_on_edge_rejects_llm_without_descriptor_ports() {
         let registry = NodeRegistry::new();
         let graph = text_graph_with_edge();
         let revision = graph.compute_fingerprint();
 
-        let bridge = preview_node_insert_on_edge(
+        let rejection = preview_node_insert_on_edge(
             &graph,
             &registry,
             &revision,
             "source-text-target-text",
             "llm-inference",
         )
-        .expect("preview should find a valid bridge");
+        .expect_err("static llm-inference no longer exposes task bridge ports");
 
-        assert_eq!(bridge.input_port_id, "prompt");
-        assert_eq!(bridge.output_port_id, "response");
+        assert_eq!(
+            rejection.reason,
+            ConnectionRejectionReason::NoCompatibleInsertInput
+        );
     }
 
     #[test]
@@ -632,7 +688,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_node_on_edge_returns_two_replacement_edges() {
+    fn insert_node_on_edge_returns_two_replacement_edges_for_merge() {
         let registry = NodeRegistry::new();
         let graph = text_graph_with_edge();
         let revision = graph.compute_fingerprint();
@@ -642,22 +698,22 @@ mod tests {
             &registry,
             &revision,
             "source-text-target-text",
-            "llm-inference",
+            "merge",
             &super::super::types::InsertNodePositionHint {
                 position: Position { x: 50.0, y: 24.0 },
             },
         )
         .expect("edge insert should succeed");
 
-        assert_eq!(inserted_node.node_type, "llm-inference");
-        assert_eq!(bridge.input_port_id, "prompt");
-        assert_eq!(bridge.output_port_id, "response");
+        assert_eq!(inserted_node.node_type, "merge");
+        assert_eq!(bridge.input_port_id, "inputs");
+        assert_eq!(bridge.output_port_id, "merged");
         assert_eq!(incoming_edge.source, "source");
         assert_eq!(incoming_edge.target, inserted_node.id);
-        assert_eq!(incoming_edge.target_handle, "prompt");
+        assert_eq!(incoming_edge.target_handle, "inputs");
         assert_eq!(outgoing_edge.source, inserted_node.id);
         assert_eq!(outgoing_edge.target, "target");
-        assert_eq!(outgoing_edge.source_handle, "response");
+        assert_eq!(outgoing_edge.source_handle, "merged");
         assert_eq!(outgoing_edge.target_handle, "text");
     }
 

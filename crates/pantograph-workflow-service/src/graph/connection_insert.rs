@@ -127,6 +127,7 @@ fn resolve_edge_insertion_bridge(
     let mut compatible_inputs = definition
         .inputs
         .iter()
+        .filter(|port| super::is_connectable_input_port(&definition.node_type, port))
         .filter(|port| super::validate_connection(&source.port.data_type, &port.data_type))
         .collect::<Vec<_>>();
     if compatible_inputs.is_empty() {
@@ -232,6 +233,7 @@ pub fn insert_node_and_connect(
     let mut compatible_inputs = definition
         .inputs
         .iter()
+        .filter(|port| super::is_connectable_input_port(&definition.node_type, port))
         .filter(|port| super::validate_connection(&source.port.data_type, &port.data_type))
         .collect::<Vec<_>>();
     if compatible_inputs.is_empty() {

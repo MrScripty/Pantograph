@@ -4035,6 +4035,39 @@ defining an image-only inference-node interface.
     validation/interface snapshots, expose typed diagnostics for missing/stale
     snapshots, and include cross-layer coverage from descriptor resolution to
     graph-editor connection candidates before broadening runtime support.
+- [x] 2026-05-28 connection-intent static `llm-inference` cleanup slice
+  completed:
+  - Smallest useful vertical slice: remove retired static `llm-inference`
+    prompt/response/stream expectations from connection-intent verification,
+    block static `llm-inference` constraint inputs such as `device` from graph
+    connection authority, and preserve insert/connect coverage through
+    canonical non-inference nodes.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/connection_intent.rs`,
+    `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: static `llm-inference` no longer
+    becomes insertable from text via the `device` constraint, retired
+    stream-to-response canonicalization coverage now fails closed, and no
+    compatibility branch restores static prompt/response/stream ports.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service connect --lib`;
+    `cargo test -p pantograph-workflow-service insert_node_on_edge --lib`;
+    `cargo check -p pantograph-workflow-service`; source-search verification
+    for touched production code; and `git diff --check`.
+  - Discovered issue: source-search verification still reports the pre-existing
+    `connection_insert` prompt-priority helper, which is not currently reachable
+    through static `llm-inference` ports after this slice but should be revisited
+    when descriptor-backed inference connection intent is designed. The same
+    search still reports existing test fixtures for `model_path`, descriptor
+    port ids, retained fail-closed `stream` assertions, and async test
+    `tokio::spawn` calls. `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: design descriptor-backed inference connection intent
+    as its own canonical slice, consuming current validation/interface snapshots
+    and surfacing typed diagnostics for missing or stale snapshots instead of
+    reintroducing static inference task ports.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
