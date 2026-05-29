@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  adoptDependencyEnvironmentUpstreamRequirements,
   appendDependencyActivityLogLine,
   applyDependencyEnvironmentActionNodeData,
   buildDependencyEnvironmentNodeData,
@@ -90,48 +89,6 @@ test('dependency environment node state helpers initialize persist and apply bac
   assert.deepEqual(nextState.selectedBindingIds, ['binding-b']);
   assert.equal(nextState.dependencyRequirements, requirements);
   assert.equal(nextState.environmentRef?.env_id, 'env-a');
-});
-
-test('adoptDependencyEnvironmentUpstreamRequirements projects connected requirements once', () => {
-  const requirements = {
-    model_id: 'model-a',
-    platform_key: 'linux',
-    dependency_contract_version: 1,
-    validation_state: 'resolved' as const,
-    validation_errors: [],
-    selected_binding_ids: [],
-    bindings: [
-      {
-        binding_id: 'binding-a',
-        profile_id: 'profile-a',
-        profile_version: 1,
-        validation_state: 'resolved' as const,
-        validation_errors: [],
-        requirements: [],
-      },
-      {
-        binding_id: 'binding-b',
-        profile_id: 'profile-b',
-        profile_version: 1,
-        validation_state: 'resolved' as const,
-        validation_errors: [],
-        requirements: [],
-      },
-    ],
-  };
-
-  const adoption = adoptDependencyEnvironmentUpstreamRequirements(null, [], requirements);
-
-  assert.equal(adoption?.dependencyRequirements, requirements);
-  assert.deepEqual(adoption?.selectedBindingIds, ['binding-a', 'binding-b']);
-  assert.deepEqual(adoption?.nodeData, {
-    dependency_requirements: requirements,
-    selected_binding_ids: ['binding-a', 'binding-b'],
-  });
-  assert.equal(
-    adoptDependencyEnvironmentUpstreamRequirements(requirements, [], requirements),
-    null,
-  );
 });
 
 test('appendDependencyActivityLogLine formats and trims retained log lines', () => {
@@ -648,22 +605,12 @@ test('runDependencyEnvironmentActionRequest logs blocked results and failures', 
   ]);
 });
 
-test('resolveDependencyEnvironmentUpstreamState projects connected model and override inputs', () => {
-  const requirements = {
-    model_id: 'model-a',
-    platform_key: 'linux-x86_64',
-    backend_key: 'llama_cpp',
-    dependency_contract_version: 1,
-    validation_state: 'resolved' as const,
-    validation_errors: [],
-    bindings: [],
-    selected_binding_ids: ['binding-a'],
-  };
+test('resolveDependencyEnvironmentUpstreamState projects sidecar association and override inputs only', () => {
   const state = resolveDependencyEnvironmentUpstreamState(
     'dependency-node',
     [
       {
-        id: 'model-node',
+        id: 'inference-node',
         data: {
           modelPath: '/models/model.gguf',
           model_id: 'model-a',
@@ -671,7 +618,15 @@ test('resolveDependencyEnvironmentUpstreamState projects connected model and ove
           taskTypePrimary: 'embed',
           backendKey: 'llama_cpp',
           platform_context: { os: 'linux' },
-          dependency_requirements: requirements,
+          dependency_requirements: {
+            model_id: 'model-a',
+            platform_key: 'linux-x86_64',
+            dependency_contract_version: 1,
+            validation_state: 'resolved',
+            validation_errors: [],
+            bindings: [],
+            selected_binding_ids: ['binding-a'],
+          },
         },
       },
       {
@@ -690,10 +645,10 @@ test('resolveDependencyEnvironmentUpstreamState projects connected model and ove
     ],
     [
       {
-        source: 'model-node',
-        sourceHandle: 'model_path',
-        target: 'dependency-node',
-        targetHandle: 'model_path',
+        source: 'dependency-node',
+        sourceHandle: 'dependency_environment_sidecar',
+        target: 'inference-node',
+        targetHandle: 'dependency_environment_sidecar',
       },
       {
         source: 'override-node',
@@ -704,11 +659,10 @@ test('resolveDependencyEnvironmentUpstreamState projects connected model and ove
     ],
   );
 
-  assert.equal(state.modelPath, '/models/model.gguf');
-  assert.equal(state.modelId, 'model-a');
-  assert.equal(state.taskType, 'embed');
-  assert.equal(state.backendKey, 'llama_cpp');
-  assert.equal(state.requirements, requirements);
+  assert.equal(state.hasSidecarAssociation, true);
   assert.equal(state.manualOverrides.length, 1);
   assert.equal(state.manualOverrides[0].fields.python_executable, '/usr/bin/python3');
+  assert.equal(Object.hasOwn(state, 'modelPath'), false);
+  assert.equal(Object.hasOwn(state, 'requirements'), false);
+  assert.equal(Object.hasOwn(state, 'platformContext'), false);
 });

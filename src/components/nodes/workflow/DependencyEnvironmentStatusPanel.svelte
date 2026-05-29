@@ -29,7 +29,7 @@
 
 {#if !hasModelBinding}
   <div class="text-[10px] text-amber-400">
-    Connect a Puma-Lib model reference.
+    Connect this sidecar to an inference node.
   </div>
 {:else}
   <div class="rounded border px-2 py-1 text-[10px] {dependencyBadge.className}">

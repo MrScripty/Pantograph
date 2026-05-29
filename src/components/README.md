@@ -182,6 +182,11 @@ node-local resolve/check/install actions, `WorkflowGraph.svelte` supplies the
 graph coordinator context, and `workflowGraphBackendActions.ts` adds the active
 graph session/revision before forwarding a typed action intent to
 workflow-service.
+Dependency-environment node UI may detect only the typed
+`dependency_environment_sidecar` visual association and user-authored manual
+override inputs from graph edges. It must not infer model paths, Pumas facts,
+platform context, backend keys, dependency requirements, or action subjects from
+upstream graph data; those remain backend-owned validation/action projections.
 App graph delete-selection projection, reconnect-start branching, and reconnect
 result handling now use the package graph interaction helpers. The app graph
 still owns architecture mode, palette edge-insert preview, and
@@ -403,6 +408,12 @@ component.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.
+- Dependency-environment node helpers must not infer dependency action subjects
+  or backend-owned requirements from `model_path`, `modelPath`, backend keys,
+  platform context, Pumas package facts, or arbitrary upstream graph data. The
+  frontend can render the sidecar association and user override inputs, while
+  workflow-service owns validation, dependency request derivation, and action
+  diagnostics.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

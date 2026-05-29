@@ -12833,6 +12833,35 @@ Worker rules:
     planning preflight/readiness proof into scheduler dispatch and runtime
     handoff; embedded-runtime/node-engine `environment_ref` input gates are
     retirement targets once scheduler readiness proof is wired.
+- 2026-05-28 Milestone 5d dependency-environment frontend source cleanup
+  slice:
+  - Smallest useful vertical slice: retired frontend path-era upstream subject
+    inference from `dependencyEnvironmentSources.ts` and removed automatic
+    adoption of upstream dependency requirements into dependency-environment
+    node data.
+  - Allowed files touched:
+    `src/components/nodes/workflow/dependencyEnvironmentSources.ts`,
+    `src/components/nodes/workflow/DependencyEnvironmentNode.svelte`,
+    `src/components/nodes/workflow/DependencyEnvironmentStatusPanel.svelte`,
+    `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`,
+    `src/components/nodes/workflow/dependencyEnvironmentState.test.ts`,
+    `src/components/README.md`, the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: dependency-environment UI now detects only
+    the typed `dependency_environment_sidecar` visual association and
+    user-authored manual override inputs. It does not read upstream
+    `modelPath`/`model_path`, model ids, task/backend keys, platform context,
+    package-shaped dependency requirements, or arbitrary graph data as action
+    authority.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/dependencyEnvironmentState.test.ts`; `npm run
+    typecheck`; targeted source-search over the touched frontend dependency
+    environment files; and `git diff --check`.
+  - Remaining follow-up: dependency requirements/status/environment references
+    are still display fields in node data for backend-issued projections. A
+    later backend-event slice must refresh those fields from workflow-service
+    validation/action results and keep them stale unless they match current
+    graph revision, validation session, descriptor fingerprint, and dependency
+    planning identity.
 - 2026-05-26 Milestone 5d dependency-environment standards iteration:
   - Standards reviewed: layered ownership, backend-owned data, typed contracts,
     correct-by-construction Rust APIs, no magic strings, README traceability,

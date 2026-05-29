@@ -8,7 +8,6 @@
   import DependencyEnvironmentRefPanel from './DependencyEnvironmentRefPanel.svelte';
   import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
   import {
-    adoptDependencyEnvironmentUpstreamRequirements,
     appendDependencyActivityLogLine,
     buildDependencyEnvironmentNodeData,
     clearDependencyBindingOverrides,
@@ -72,12 +71,8 @@
   const MAX_ACTIVITY_LOG_LINES = 200;
 
   let upstreamState = $derived(resolveDependencyEnvironmentUpstreamState(id, $nodes, $edges));
-  let upstreamModelPath = $derived(upstreamState.modelPath);
-  let upstreamRequirements = $derived(upstreamState.requirements);
   let upstreamManualOverrides = $derived(upstreamState.manualOverrides);
-  let hasUpstreamModelBinding = $derived(
-    Boolean(upstreamState.modelId || upstreamState.requirements)
-  );
+  let hasSidecarAssociation = $derived(upstreamState.hasSidecarAssociation);
 
   const dependencyActionCoordinator = hasContext(DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT)
     ? getContext<DependencyEnvironmentActionCoordinator>(
@@ -88,19 +83,6 @@
   let effectiveManualOverrides = $derived.by(() =>
     mergeOverridePatches(upstreamManualOverrides, manualOverrides)
   );
-
-  $effect(() => {
-    const adoption = adoptDependencyEnvironmentUpstreamRequirements(
-      dependencyRequirements,
-      selectedBindingIds,
-      upstreamRequirements
-    );
-    if (!adoption) return;
-
-    dependencyRequirements = adoption.dependencyRequirements;
-    selectedBindingIds = adoption.selectedBindingIds;
-    updateNodeData(id, adoption.nodeData);
-  });
 
   const dependencyBadge = $derived(dependencyBadgeFor(dependencyRequirements, dependencyStatus));
 
@@ -159,7 +141,7 @@
   }
 
   function matchesActivityEvent(payload: DependencyActivityEvent): boolean {
-    return matchesDependencyActivityEvent(payload, upstreamModelPath);
+    return matchesDependencyActivityEvent(payload, null);
   }
 
   function renderActivityEvent(payload: DependencyActivityEvent): string {
@@ -316,7 +298,7 @@
       renderActivityEvent,
       appendActivityLine,
       persistNodeState,
-      shouldRunModeAction: () => mode === 'auto' && Boolean(upstreamModelPath),
+      shouldRunModeAction: () => mode === 'auto' && hasSidecarAssociation,
       runModeAction,
     })
       .then((nextUnlisten) => {
@@ -342,7 +324,7 @@
 
       <div class="space-y-2">
         <DependencyEnvironmentStatusPanel
-          hasModelBinding={hasUpstreamModelBinding}
+          hasModelBinding={hasSidecarAssociation}
           {dependencyBadge}
           {dependencyStatus}
           {isBusy}
@@ -400,7 +382,7 @@
           <DependencyEnvironmentRefPanel {environmentRef} />
         {/if}
 
-        {#if upstreamModelPath}
+        {#if hasSidecarAssociation || activityLog.length > 0}
           <DependencyEnvironmentActivityLog {activityLog} {isBusy} onClear={clearActivityLog} />
         {/if}
       </div>

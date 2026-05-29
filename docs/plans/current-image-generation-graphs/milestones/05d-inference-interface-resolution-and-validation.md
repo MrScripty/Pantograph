@@ -224,6 +224,12 @@ defining an image-only inference-node interface.
       activity is kept in node data for UX continuity, it is presentation-only
       history and must never affect validation, scheduler admission, dependency
       planning, or runtime handoff.
+      Implementation update 2026-05-28: the active frontend helper now detects
+      only the typed `dependency_environment_sidecar` visual association and
+      user-authored manual override inputs. It no longer projects upstream
+      `modelPath`/`model_path`, model ids, task/backend keys, platform context,
+      or dependency requirements into dependency action state, and the old
+      upstream-requirements adoption helper/test was removed.
       Scheduler/runtime boundary resolution: canonical dependency readiness
       flows through dependency planning preflight/readiness proof into scheduler
       dispatch and runtime handoff. Retire node-engine/embedded-runtime
@@ -2208,6 +2214,36 @@ defining an image-only inference-node interface.
         embedded-runtime/node-engine `ModelDependencyRequest` dependency
         preflight/model-ref path, then remove the managed resolver object from
         Tauri app setup once no active runtime path depends on it.
+- [x] 2026-05-28 dependency-environment frontend source cleanup slice
+  completed:
+  - Smallest useful vertical slice: retired frontend path-era upstream subject
+    inference from `dependencyEnvironmentSources.ts` and removed automatic
+    adoption of upstream dependency requirements into dependency-environment
+    node data.
+  - Files touched by the slice:
+    `src/components/nodes/workflow/dependencyEnvironmentSources.ts`,
+    `src/components/nodes/workflow/DependencyEnvironmentNode.svelte`,
+    `src/components/nodes/workflow/DependencyEnvironmentStatusPanel.svelte`,
+    `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`,
+    `src/components/nodes/workflow/dependencyEnvironmentState.test.ts`,
+    `src/components/README.md`, this milestone, and
+    `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: dependency-environment UI now detects
+    only the typed `dependency_environment_sidecar` visual association and
+    user-authored manual override inputs. It does not read upstream
+    `modelPath`/`model_path`, model ids, task/backend keys, platform context,
+    package-shaped dependency requirements, or arbitrary graph data as action
+    authority.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/dependencyEnvironmentState.test.ts`; `npm run
+    typecheck`; targeted source-search over the touched frontend dependency
+    environment files; and `git diff --check`.
+  - Remaining follow-up: dependency requirements/status/environment references
+    are still display fields in node data for backend-issued projections. A
+    later backend-event slice must refresh those fields from workflow-service
+    validation/action results and keep them stale unless they match current
+    graph revision, validation session, descriptor fingerprint, and dependency
+    planning identity.
 - [ ] Reuse existing graph-session/event transport patterns for live validation
       only when they preserve backend ownership and event-driven UI updates.
       Workflow-service must snapshot draft graph state under lock, release the
