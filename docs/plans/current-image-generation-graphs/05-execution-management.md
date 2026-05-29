@@ -15826,6 +15826,33 @@ Worker rules:
   - Remaining follow-up: add the graph-session apply method that owns freshness
     checks, graph mutation, validation cancellation/supersession, and updated
     graph/revision response assembly.
+- 2026-05-28 Milestone 5d option-2 backend apply method slice:
+  - Smallest useful vertical slice: add workflow-service graph-session proposal
+    application for the single non-destructive `ReplaceAuthoredSnapshot` path,
+    plus facade access for later transport-only Tauri wiring.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, the Milestone 5d file,
+    and this execution log.
+  - No-fallback/no-legacy result: proposal application uses current
+    validation-state proposal identity, validates the typed request against the
+    backend proposal, rechecks live graph revision under the session lock,
+    mutates only `node.data.inference_interface_snapshot`, returns the existing
+    backend graph mutation response, and cancels active validation through the
+    lifecycle owner. Unsupported destructive operations remain rejected by the
+    contract layer.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    apply_inference_interface_update_proposal --lib`; `cargo check -p
+    pantograph-workflow-service`; `git diff --check`.
+  - Deviation/discovered issue: the same existing
+    `set_active_run_execution_plan` dead-code warning remains outside this
+    slice.
+  - Remaining follow-up: add a thin Tauri command and frontend service wiring
+    to call this backend method without duplicating proposal or patch logic.
 
 ### Traceability Links
 

@@ -1,8 +1,9 @@
 use crate::graph::{
     inspect_workflow_graph, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
-    NodeRegistry, WorkflowFile, WorkflowGraph, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
+    EdgeInsertionPreviewResponse, InferenceInterfaceApplyProposalRequest,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, NodeRegistry, WorkflowFile,
+    WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
     WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
@@ -90,6 +91,15 @@ impl WorkflowService {
     ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
         self.graph_session_store
             .refresh_current_validation_summary(request)
+            .await
+    }
+
+    pub async fn workflow_graph_apply_inference_interface_update_proposal(
+        &self,
+        request: InferenceInterfaceApplyProposalRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store
+            .apply_inference_interface_update_proposal(request)
             .await
     }
 

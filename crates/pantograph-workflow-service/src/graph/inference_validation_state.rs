@@ -30,6 +30,7 @@ use super::executable_validation_snapshot_source::{
     CurrentExecutableValidationSnapshotSourceError,
     CurrentExecutableValidationSnapshotSourceRequest,
 };
+use super::inference_interface_patch::{GraphPatchProposalId, InferenceInterfaceUpdateProposal};
 use super::inference_interface_publication::connection_surface_for_projection;
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
@@ -601,6 +602,48 @@ impl CurrentInferenceValidationStateStore {
         })
     }
 
+    pub(crate) async fn current_update_proposal_for_apply(
+        &self,
+        request: CurrentInferenceInterfaceUpdateProposalStateRequest,
+    ) -> Result<InferenceInterfaceUpdateProposal, CurrentInferenceInterfaceUpdateProposalStateError>
+    {
+        let summaries = self.summaries.read().await;
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id,
+            graph_revision: request.graph_revision,
+        };
+        let record = summaries
+            .get(&key)
+            .ok_or(CurrentInferenceInterfaceUpdateProposalStateError::ValidationSummaryMissing)?;
+
+        if record.validation_session_id != request.validation_session_id {
+            return Err(
+                CurrentInferenceInterfaceUpdateProposalStateError::ValidationSessionMismatch,
+            );
+        }
+
+        let node = record.nodes.get(&request.node_id).ok_or_else(|| {
+            CurrentInferenceInterfaceUpdateProposalStateError::NodeMissing {
+                node_id: request.node_id.clone(),
+            }
+        })?;
+        let proposal = node.projection.update_proposal.as_ref().ok_or_else(|| {
+            CurrentInferenceInterfaceUpdateProposalStateError::ProposalMissing {
+                node_id: request.node_id.clone(),
+            }
+        })?;
+
+        if proposal.proposal_id != request.proposal_id {
+            return Err(CurrentInferenceInterfaceUpdateProposalStateError::ProposalIdMismatch);
+        }
+        if proposal.current_descriptor_fingerprint != request.current_descriptor_fingerprint {
+            return Err(
+                CurrentInferenceInterfaceUpdateProposalStateError::DescriptorFingerprintMismatch,
+            );
+        }
+        Ok(proposal.clone())
+    }
+
     #[allow(dead_code)]
     pub(crate) async fn current_executable_validation_snapshot_source(
         &self,
@@ -675,6 +718,32 @@ pub(crate) struct WorkflowGraphCurrentValidationSummaryStateRequest {
     pub graph_session_id: WorkflowGraphSessionId,
     pub requested_graph_revision: WorkflowGraphRevision,
     pub current_graph_revision: WorkflowGraphRevision,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CurrentInferenceInterfaceUpdateProposalStateRequest {
+    pub graph_session_id: WorkflowGraphSessionId,
+    pub graph_revision: WorkflowGraphRevision,
+    pub validation_session_id: DraftGraphValidationSessionId,
+    pub node_id: WorkflowNodeId,
+    pub proposal_id: GraphPatchProposalId,
+    pub current_descriptor_fingerprint: InferenceInterfaceFingerprint,
+}
+
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+pub(crate) enum CurrentInferenceInterfaceUpdateProposalStateError {
+    #[error("validation summary is missing for proposal apply")]
+    ValidationSummaryMissing,
+    #[error("validation session does not match current proposal state")]
+    ValidationSessionMismatch,
+    #[error("node {node_id} is missing current proposal state")]
+    NodeMissing { node_id: WorkflowNodeId },
+    #[error("node {node_id} has no current update proposal")]
+    ProposalMissing { node_id: WorkflowNodeId },
+    #[error("proposal id does not match current update proposal")]
+    ProposalIdMismatch,
+    #[error("descriptor fingerprint does not match current update proposal")]
+    DescriptorFingerprintMismatch,
 }
 
 #[derive(Debug, Clone)]

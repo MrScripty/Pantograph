@@ -2732,6 +2732,36 @@ defining an image-only inference-node interface.
     current validation state, proves proposal freshness/identity against the
     active graph revision and validation session, mutates only the authored
     snapshot, and cancels/supersedes stale validation for the changed graph.
+- [x] 2026-05-28 option-2 backend apply method slice:
+  - Smallest useful vertical slice: add the workflow-service graph-session
+    apply method for the first supported inference-interface update proposal
+    shape and expose it through the workflow graph facade for later
+    transport-only Tauri wiring.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this Milestone 5d
+    file, and `05-execution-management.md`.
+  - No-fallback/no-legacy result: the apply path re-reads current validation
+    proposal state by typed graph session, graph revision, validation session,
+    node id, proposal id, and descriptor fingerprint; then it rechecks the
+    live graph revision under the session lock before mutating. It applies only
+    `node.data.inference_interface_snapshot`, returns the canonical session
+    graph mutation response, and cancels active validation through the existing
+    lifecycle owner. It does not remove edges, clear literals, apply frontend
+    patches, preserve stale proposals, or introduce Tauri business logic.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    apply_inference_interface_update_proposal --lib`; `cargo check -p
+    pantograph-workflow-service`; `git diff --check`.
+  - Deviation/discovered issue: crate check still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning; it is unrelated to this
+    backend apply slice.
+  - Remaining follow-up: add a thin Tauri command that decodes the typed apply
+    request, delegates to `WorkflowService`, and encodes the backend graph
+    mutation response without owning proposal validation or graph patch logic.
 - [ ] Wire staged graph editor drift presentation and update preview.
       Option-2 scope: the editor shows authored-current diffs visually on
       nodes/ports/edges, keeps invalid edges visible, displays

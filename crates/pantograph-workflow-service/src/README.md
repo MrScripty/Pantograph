@@ -198,6 +198,11 @@ insertion. Runtime inference tasks require the saved executable validation
 snapshot before enqueue or scheduler graph materialization; non-runtime graphs
 may still run without snapshot authority because they do not consume inference
 descriptors.
+Workflow graph proposal application now has a backend-owned facade method for
+the first non-destructive inference-interface update path. The facade delegates
+to graph-session state so Tauri and frontend callers can request an explicitly
+confirmed authored snapshot replacement without owning proposal freshness,
+descriptor fingerprint, or graph mutation rules.
 Workflow scheduler task orchestration is a service-owned composition boundary.
 `WorkflowService` owns a `WorkflowSchedulerTaskOrchestrator`, exposes an
 explicit runtime-host execution port configuration hook, and installs a

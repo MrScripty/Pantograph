@@ -9,6 +9,7 @@ use crate::workflow::WorkflowServiceError;
 use super::super::executable_validation_snapshot_source::{
     CurrentExecutableValidationSnapshotSource, CurrentExecutableValidationSnapshotSourceRequest,
 };
+use super::super::inference_interface_patch::InferenceInterfaceApplyProposalRequest;
 use super::super::inference_interface_publication::WorkflowGraphInferenceValidationPublication;
 use super::super::inference_interface_validation::WorkflowGraphInferenceValidationSession;
 use super::super::inference_validation_lifecycle::WorkflowGraphValidationLifecycleEventSnapshot;
@@ -17,13 +18,20 @@ use super::super::inference_validation_publisher::{
     WorkflowGraphValidationPublishAttemptOutcome,
 };
 use super::super::inference_validation_state::{
+    CurrentInferenceInterfaceUpdateProposalStateRequest,
     CurrentInferenceSchedulerProjectionRequest, WorkflowGraphCurrentValidationRefreshRequest,
     WorkflowGraphCurrentValidationRefreshResponse, WorkflowGraphCurrentValidationSummaryRequest,
     WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphCurrentValidationSummaryStateRequest,
 };
+use super::super::memory_impact::graph_memory_impact_from_graph_change;
+use super::super::session_contract::WorkflowGraphEditSessionGraphResponse;
+use super::super::session_event::{dirty_tasks_from_seed_nodes, graph_modified_event};
+use super::super::session_graph::sync_embedding_emit_metadata_flags;
 use super::super::types::WorkflowGraph;
 use super::GraphSessionStore;
+
+const INFERENCE_INTERFACE_SNAPSHOT_FIELD: &str = "inference_interface_snapshot";
 
 impl GraphSessionStore {
     pub async fn current_validation_summary(
@@ -154,6 +162,86 @@ impl GraphSessionStore {
             })
             .await
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
+    }
+
+    pub async fn apply_inference_interface_update_proposal(
+        &self,
+        request: InferenceInterfaceApplyProposalRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let session_id = request.graph_session_id.as_str().to_string();
+        let node_id = request.node_id.as_str().to_string();
+        let proposal = self
+            .validation_state
+            .current_update_proposal_for_apply(
+                CurrentInferenceInterfaceUpdateProposalStateRequest {
+                    graph_session_id: request.graph_session_id.clone(),
+                    graph_revision: request.graph_revision.clone(),
+                    validation_session_id: request.validation_session_id.clone(),
+                    node_id: request.node_id.clone(),
+                    proposal_id: request.proposal_id.clone(),
+                    current_descriptor_fingerprint: request.current_descriptor_fingerprint.clone(),
+                },
+            )
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let snapshot = request
+            .replacement_snapshot(&proposal)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?
+            .clone();
+
+        let response = {
+            let handle = self.get_session_handle(&session_id).await?;
+            let mut state = handle.lock().await;
+            state.touch();
+            state.canonicalize_graph();
+            let current_graph_revision =
+                WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+                    .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+            if current_graph_revision != request.graph_revision {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "proposal apply request graph revision is stale".to_string(),
+                ));
+            }
+
+            let before_graph = state.graph.clone();
+            if state.graph.find_node(&node_id).is_none() {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "node '{}' was not found",
+                    node_id
+                )));
+            }
+            state.push_undo_snapshot();
+            let node = state.graph.find_node_mut(&node_id).ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!("node '{}' was not found", node_id))
+            })?;
+            let snapshot_value = serde_json::to_value(&snapshot)
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+            match &mut node.data {
+                serde_json::Value::Object(map) => {
+                    map.insert(
+                        INFERENCE_INTERFACE_SNAPSHOT_FIELD.to_string(),
+                        snapshot_value,
+                    );
+                }
+                data => {
+                    *data = serde_json::json!({
+                        INFERENCE_INTERFACE_SNAPSHOT_FIELD: snapshot_value
+                    });
+                }
+            }
+            sync_embedding_emit_metadata_flags(&mut state.graph);
+            let dirty_tasks =
+                dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id));
+            let memory_impact =
+                graph_memory_impact_from_graph_change(&before_graph, &state.graph, &dirty_tasks);
+            let workflow_event =
+                graph_modified_event(&session_id, &session_id, dirty_tasks, memory_impact.clone());
+            let projection = super::phase6_memory_impact_projection(memory_impact);
+            state.snapshot_response_with_state(&session_id, Some(workflow_event), projection)
+        };
+        self.cancel_active_validation_after_graph_mutation(&session_id)
+            .await?;
+        Ok(response)
     }
 
     pub async fn validation_lifecycle_event_snapshot(

@@ -4,8 +4,9 @@ use crate::graph::types::{
     ConnectionAnchor, ConnectionRejectionReason, GraphNode, PortDataType, PortMapping, Position,
 };
 use crate::graph::{
-    InferenceCapabilityFacts, InferenceInterfaceFactsProvider,
-    InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
+    InferenceCapabilityFacts, InferenceInterfaceApplyProposalRequest,
+    InferenceInterfaceFactsProvider, InferenceInterfaceFactsProviderError,
+    InferenceInterfaceGraphResolutionInput, InferenceInterfaceProposalApplyConfirmation,
     InferenceInterfaceResolverFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
     InferenceRuntimeAvailabilityFact, InferenceRuntimeAvailabilityState,
     WorkflowGraphAddEdgeRequest, WorkflowGraphCreateGroupRequest,
@@ -718,6 +719,149 @@ async fn validation_lifecycle_event_sink_receives_backend_refresh_events() {
             &WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
         ]
     );
+}
+
+#[tokio::test]
+async fn apply_inference_interface_update_proposal_replaces_authored_snapshot() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let mut graph = dependency_inference_graph();
+    graph.find_node_mut("infer").expect("infer node").data["inference_interface_snapshot"] =
+        stale_authored_snapshot_json();
+    let session = store.create_session(graph, None).await;
+
+    let refresh = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+    let projection = refresh
+        .node_projections
+        .iter()
+        .find(|projection| projection.node_id.as_str() == "infer")
+        .expect("infer projection");
+    let proposal = projection
+        .update_proposal
+        .as_ref()
+        .expect("update proposal");
+
+    let response = store
+        .apply_inference_interface_update_proposal(InferenceInterfaceApplyProposalRequest {
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: refresh
+                .summary
+                .validation_session_id
+                .clone()
+                .expect("validation session id"),
+            node_id: "infer".parse().expect("valid node id"),
+            proposal_id: proposal.proposal_id.clone(),
+            current_descriptor_fingerprint: proposal.current_descriptor_fingerprint.clone(),
+            confirmation: InferenceInterfaceProposalApplyConfirmation::Confirmed,
+            contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        })
+        .await
+        .expect("apply proposal");
+
+    let infer_node = response.graph.find_node("infer").expect("infer node");
+    assert_eq!(
+        infer_node.data["inference_interface_snapshot"]["descriptor_fingerprint"],
+        serde_json::json!(proposal.current_descriptor_fingerprint.as_str())
+    );
+    assert_ne!(response.graph_revision, session.graph_revision);
+    assert!(matches!(
+        response.workflow_event,
+        Some(node_engine::WorkflowEvent::GraphModified {
+            workflow_id,
+            execution_id,
+            dirty_tasks,
+            ..
+        }) if workflow_id == session.session_id
+            && execution_id == session.session_id
+            && dirty_tasks.contains(&"infer".to_string())
+    ));
+
+    let events = store
+        .validation_lifecycle_event_snapshot(&session.session_id)
+        .await
+        .expect("lifecycle event snapshot")
+        .events;
+    assert!(events.iter().any(|event| matches!(
+        event.kind,
+        WorkflowGraphValidationLifecycleEventKind::ValidationCancelled {
+            reason: super::super::inference_validation_lifecycle::WorkflowGraphValidationCancellationReason::GraphRevisionChanged
+        }
+    )));
+}
+
+#[tokio::test]
+async fn apply_inference_interface_update_proposal_rejects_mismatched_proposal_id() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let mut graph = dependency_inference_graph();
+    graph.find_node_mut("infer").expect("infer node").data["inference_interface_snapshot"] =
+        stale_authored_snapshot_json();
+    let session = store.create_session(graph, None).await;
+
+    let refresh = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+    let projection = refresh
+        .node_projections
+        .iter()
+        .find(|projection| projection.node_id.as_str() == "infer")
+        .expect("infer projection");
+    let proposal = projection
+        .update_proposal
+        .as_ref()
+        .expect("update proposal");
+
+    let error = store
+        .apply_inference_interface_update_proposal(InferenceInterfaceApplyProposalRequest {
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+            validation_session_id: refresh
+                .summary
+                .validation_session_id
+                .clone()
+                .expect("validation session id"),
+            node_id: "infer".parse().expect("valid node id"),
+            proposal_id: crate::graph::GraphPatchProposalId::parse("proposal.other")
+                .expect("valid proposal id"),
+            current_descriptor_fingerprint: proposal.current_descriptor_fingerprint.clone(),
+            confirmation: InferenceInterfaceProposalApplyConfirmation::Confirmed,
+            contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        })
+        .await
+        .expect_err("mismatched proposal id must fail");
+
+    assert!(error
+        .to_string()
+        .contains("proposal id does not match current update proposal"));
 }
 
 #[tokio::test]
@@ -2564,6 +2708,16 @@ fn validation_session(
         },
         events: Vec::new(),
     }
+}
+
+fn stale_authored_snapshot_json() -> serde_json::Value {
+    serde_json::json!({
+        "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+        "descriptor_fingerprint": "iface.old.v1",
+        "task_kind": "image_generation",
+        "inputs": [],
+        "outputs": []
+    })
 }
 
 #[tokio::test]
