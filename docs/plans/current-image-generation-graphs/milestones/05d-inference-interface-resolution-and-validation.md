@@ -2672,10 +2672,48 @@ defining an image-only inference-node interface.
     must not apply proposal operations itself, rewrite snapshots directly,
     remove edges, clear literals, or treat proposal presence as submit
     authority.
-- [ ] Wire graph editor drift presentation and update preview. The editor must
-      show authored-current diffs visually on nodes/ports/edges, keep invalid
-      edges visible, preview backend-proposed typed patch operations, and apply
-      them only after user confirmation.
+  - Re-plan decision: implement option 2 first, with option 4 as the target
+    UX. The next production slice must add a minimal backend-owned proposal
+    application API that supports only non-destructive
+    `ReplaceAuthoredSnapshot` operations. The request must carry typed graph
+    session id, current graph revision, validation session id, node id,
+    proposal id, current descriptor fingerprint, and explicit user
+    confirmation. Workflow-service must reject missing, stale, mismatched,
+    destructive, multi-operation, edge-removal, literal-clearing, wrong-node, or
+    wrong-descriptor proposals with typed diagnostics. Successful application
+    mutates only the authored inference snapshot for the target node through
+    graph-session mutation ownership, cancels/supersedes stale validation for
+    the changed graph revision, and returns the updated graph/revision through
+    existing graph mutation response patterns.
+  - Implementation order for option 2:
+    1. Add workflow-service request/response DTOs and focused validation tests
+       for `ReplaceAuthoredSnapshot` only.
+    2. Add the graph-session apply method that revalidates current validation
+       state/proposal identity before mutating the graph.
+    3. Add a thin Tauri command that only decodes/forwards/encodes the typed
+       request/response.
+    4. Add frontend service plumbing and a minimal Apply action that calls the
+       backend API using backend proposal ids and never constructs patch
+       operations locally.
+    5. Keep destructive `RemoveInvalidEdge` and `ClearInvalidLiteral` proposal
+       application disabled with typed diagnostics until the full option 4
+       preview/confirmation UX is implemented.
+  - Target option 4: after the minimal non-destructive apply path is validated,
+    add a full backend preview/apply workflow that returns a dedicated preview
+    model for all operation kinds, lets the graph editor display diffs while
+    editing remains unblocked, requires explicit confirmation for destructive
+    operations, and applies proposals only through workflow-service graph-patch
+    APIs.
+- [ ] Wire staged graph editor drift presentation and update preview.
+      Option-2 scope: the editor shows authored-current diffs visually on
+      nodes/ports/edges, keeps invalid edges visible, displays
+      backend-authored proposal data, and calls the backend apply API only for
+      supported `ReplaceAuthoredSnapshot` proposals. Unsupported destructive
+      operations remain visible as typed diagnostics and disabled actions until
+      the option-4 preview/confirmation workflow exists. The editor must never
+      construct patch operations locally, rewrite snapshots directly, remove
+      edges, clear literals, compare ports for authority, or treat proposal
+      presence as submit permission.
 - [ ] Wire `PortOptionsProvider`, selection-input, and option-cache consumers
       only as descriptor-backed presentation plumbing where reused. Typed
       option identity, defaults, availability, and diagnostics remain owned by

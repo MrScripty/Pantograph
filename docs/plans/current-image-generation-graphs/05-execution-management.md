@@ -15771,6 +15771,34 @@ Worker rules:
   - No-fallback/no-legacy result: current frontend behavior remains display-only
     for drift/proposal overlays until that application boundary is planned and
     implemented.
+- 2026-05-28 Milestone 5d update-preview apply re-plan decision:
+  - Selected approach: implement option 2 first and preserve option 4 as the
+    target UX. The next implementation slice must add a backend-owned
+    non-destructive apply API for `ReplaceAuthoredSnapshot` proposals only.
+  - Required minimal request identity: graph session id, current graph revision,
+    validation session id, target node id, proposal id, current descriptor
+    fingerprint, and explicit user confirmation. Raw strings must parse at the
+    boundary into existing graph/session/proposal newtypes before internal
+    freshness checks.
+  - Workflow-service responsibilities: re-read current graph-session validation
+    state, prove the proposal still belongs to the active graph revision and
+    validation session, reject stale/missing/mismatched proposals, reject
+    destructive or multi-operation proposals, apply only the authored snapshot
+    replacement through graph-session mutation ownership, cancel/supersede
+    stale validation for the changed graph revision, and return the updated
+    graph/revision using existing mutation response patterns.
+  - Tauri/frontend responsibilities: Tauri remains decode/forward/encode only.
+    The frontend may show the backend-authored proposal and call the apply API
+    with backend ids, but must not construct patch operations, rewrite node
+    data directly, remove edges, clear literals, compare ports, or derive
+    submit authority from proposal presence.
+  - Deferred option 4 target: after the minimal apply path is validated, add a
+    full preview/apply workflow for all proposal operations with backend
+    preview models, visual diffs, destructive confirmation, and editor behavior
+    that stays non-blocking while validation or preview refreshes run.
+  - No-fallback/no-legacy follow-up: do not add frontend-local graph patching,
+    raw JSON patch maps, compatibility shims for stale proposals, or
+    Tauri-owned business logic while implementing the staged apply path.
 
 ### Traceability Links
 
