@@ -15030,6 +15030,32 @@ Worker rules:
     untracked task ownership. `cargo check -p pantograph-workflow-service`
     still reports the pre-existing `set_active_run_execution_plan` dead-code
     warning.
+- 2026-05-28 Milestone 5d undo validation cancellation slice:
+  - Smallest useful vertical slice: wire successful `undo` operations through
+    the existing workflow-service validation lifecycle cancellation helper, and
+    add publication-time coverage proving pending validation output is rejected
+    when undo restores a previous semantic graph state.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: undo now uses the canonical validation
+    lifecycle owner and typed cancellation path after a successful state
+    restore, with no frontend invalidation, timestamp, transport request id, or
+    alternate publication fallback. Failed no-op undo remains a typed error
+    before cancellation.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_undo_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service undo --lib`; `cargo
+    check -p pantograph-workflow-service`; source-search verification for
+    touched production code; and `git diff --check`.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in

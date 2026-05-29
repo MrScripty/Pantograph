@@ -602,9 +602,14 @@ impl GraphSessionStore {
         &self,
         request: WorkflowGraphEditSessionGraphRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.undo(&request.session_id)
+        let response = {
+            let handle = self.get_session_handle(&request.session_id).await?;
+            let mut state = handle.lock().await;
+            state.undo(&request.session_id)?
+        };
+        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+            .await?;
+        Ok(response)
     }
 
     pub async fn redo(
