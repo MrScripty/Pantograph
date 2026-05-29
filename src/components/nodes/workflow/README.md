@@ -30,8 +30,6 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `dependencyEnvironmentState.ts` | Re-exports the dependency environment helper modules for stable component and test imports. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
 | `dependencyEnvironmentTypes.ts` | Defines dependency environment frontend contracts, node props, and node data shapes that mirror backend payloads. |
-| `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
-| `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
 | `NumberInputNode.svelte` | Renders a metadata-driven numeric editor that adopts downstream default values and range constraints. |
 | `PumaLibNode.svelte` | Presents model-library selection and persists canonical `pumas_model_ref` identity for downstream inference planning. |
@@ -90,10 +88,9 @@ Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
 must hand model identity and package facts to canonical `llm-inference` task
 shapes instead of routing diffusion or reranker packages to retired direct
 inference nodes.
-`ExpandSettingsNode.svelte` stays presentation-only: it shows schema details and
-the effective value currently flowing through each setting, while
-override-capable handles come from the shared node definition supplied by the
-workflow stores.
+The retired `ExpandSettingsNode.svelte` component and display helper have been
+removed. Model-specific inference options are rendered from backend descriptor
+ports rather than frontend-owned settings expansion.
 `LLMInferenceNode.svelte` displays canonical inference task and payload-role
 facts through `inferencePayloadDisplay.ts`, which reads only backend-neutral
 `inference_payloads` metadata from the node definition and does not render
@@ -192,11 +189,8 @@ and finality metadata in runtime data while the component reads bytes lazily wit
 - `PumaLibNode.svelte` must consume the shared Pumas model-option cache from
   `src/services/workflow/pumaModelOptionsCache.ts`; selector cursor handoff and
   invalidation logic belong in that service, not in component module state.
-- `ExpandSettingsNode.svelte` must not hardcode durable override handles; it
-  renders whatever additive inputs/outputs arrive in the backend-owned node
-  definition.
-- `ExpandSettingsNode.svelte` must display the connected override value when one
-  is available, otherwise the last runtime passthrough value or schema default.
+- Retired expand-settings presentation helpers must not be restored; backend
+  descriptors and authored snapshots are the only inference option source.
 - `SelectionInputNode.svelte` may auto-adopt defaults for static
   `allowed_values` ports, but provider-backed ports must render unset or stale
   values without writing planner defaults into graph data.

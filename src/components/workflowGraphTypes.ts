@@ -13,7 +13,6 @@ import AudioOutputNode from './nodes/workflow/AudioOutputNode.svelte';
 import BooleanInputNode from './nodes/workflow/BooleanInputNode.svelte';
 import DependencyEnvironmentNode from './nodes/workflow/DependencyEnvironmentNode.svelte';
 import DepthEstimationNode from './nodes/workflow/DepthEstimationNode.svelte';
-import ExpandSettingsNode from './nodes/workflow/ExpandSettingsNode.svelte';
 import GenericNode from './nodes/workflow/GenericNode.svelte';
 import ImageOutputNode from './nodes/workflow/ImageOutputNode.svelte';
 import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
@@ -58,7 +57,6 @@ export const workflowNodeTypes: NodeTypes = {
   'node-group': NodeGroupNode,
   'linked-input': LinkedInputNode,
   'masked-text-input': MaskedTextInputNode,
-  'expand-settings': ExpandSettingsNode,
   'image-input': GenericNode,
   'rag-search': GenericNode,
   'read-file': GenericNode,

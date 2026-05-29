@@ -12,7 +12,6 @@ adapters such as the Python runtime.
 | ----------- | ----------- |
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
 | `dependency_environment.rs` | Declares the dependency-environment sidecar/control node that associates dependency actions with one inference node. |
-| `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
 | `inference.rs` | Declares the canonical `llm-inference` bootstrap contract for model reference and scheduler constraint inputs before backend descriptor resolution. |
 
@@ -63,9 +62,9 @@ The previous static `llm-inference.denoising_scheduler` port and provider are
 retired. Denoising scheduler choices are descriptor-backed option sets owned by
 the inference-interface resolver; explicit scheduler acceptance remains a
 planner decision.
-`expand_settings.rs` follows the same contract-first rule: model-specific
-settings stay graph-visible as matching optional input/output ports while the
-schema itself still passes through unchanged for downstream inference merging.
+The retired `expand-settings` passthrough node is no longer registered.
+Model-specific inference options must come from backend descriptors and
+authored snapshots instead of a frontend-owned settings expansion path.
 Compatible text-generation
 descriptors now also reserve explicit `kv_cache_in` and `kv_cache_out` ports
 using the first-class `kv_cache` graph type so KV reuse remains graph-visible
@@ -94,8 +93,8 @@ environment-ref data ports.
 - Static `llm-inference` descriptors must not expose prompt, text, image,
   sampler, rerank, audio, cache, usage, or result ports. Those ports come only
   from backend-resolved descriptors and authored snapshots.
-- Expand-settings and `inference_settings` may not remain an alternate
-  inference-interface source. Existing uses are removal or descriptor-backed
+- `expand-settings` must not be restored as an alternate inference-interface
+  source. Existing `inference_settings` uses are removal or descriptor-backed
   rewrite targets in the inference-interface milestone.
 - Denoising scheduler option rows must come from descriptor-backed typed option
   sets and Pumas package facts. They must not write executable defaults into
@@ -145,5 +144,4 @@ assert_eq!(meta.node_type, "llm-inference");
 - New static processing ports may be added additively only when they are not
   model/task-specific inference interface ports. Inference-specific ports must
   be added through the descriptor resolver and authored snapshot contract.
-- `expand-settings` is not authoritative for canonical inference interfaces.
-  Future option presentation must consume backend descriptors or be removed.
+- Future option presentation must consume backend descriptors or be removed.

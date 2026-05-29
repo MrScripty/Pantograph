@@ -16130,6 +16130,27 @@ Worker rules:
     alternate inference-interface source, then handle `model-provider`, legacy
     processing inference nodes, and the C# smoke fixture in separate validated
     slices.
+- 2026-05-29 Milestone 5d `expand-settings` deletion slice completed:
+  - Slice scope: `workflow-nodes` registry/descriptor removal, frontend node
+    mapping and display-helper removal, package frontend test script cleanup,
+    README updates, and plan records.
+  - Implementation: removed the Rust `expand-settings` descriptor module and
+    export, updated built-in inventory counts and assertions, deleted the
+    Svelte `ExpandSettingsNode` component and display helper/tests, removed
+    frontend registrations, and deleted retired expand-specific store no-op
+    actions.
+  - No-fallback/no-legacy gate: no replacement static option source was added;
+    backend descriptor/authored snapshot ports remain the only inference option
+    source. Remaining `expand-settings` source-search hits are documentation and
+    the registry assertion that the node is retired.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo test
+    -p workflow-nodes test_inventory_collects_all_builtins --lib`; `cargo test
+    -p workflow-nodes --lib`; `cargo check -p workflow-nodes`; `cargo check -p
+    workflow-nodes --all-features`; `cargo check -p workflow-nodes
+    --no-default-features`; `npm run typecheck`; `node
+    --experimental-strip-types
+    packages/svelte-graph/src/stores/definitionOverlay.test.ts`; targeted
+    source search for retired expand-settings terms.
 
 ### Traceability Links
 

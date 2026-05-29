@@ -27,7 +27,6 @@ import PumaLibNode from '../components/nodes/workflow/PumaLibNode.svelte';
 import AgentToolsNode from '../components/nodes/workflow/AgentToolsNode.svelte';
 import NodeGroupNode from '../components/nodes/workflow/NodeGroupNode.svelte';
 import LinkedInputNode from '../components/nodes/workflow/LinkedInputNode.svelte';
-import ExpandSettingsNode from '../components/nodes/workflow/ExpandSettingsNode.svelte';
 
 // Architecture node components (Pantograph-only, not engine nodes)
 import ArchComponentNode from '../components/nodes/architecture/ArchComponentNode.svelte';
@@ -55,7 +54,6 @@ const SPECIALIZED_NODES: Record<string, Component<Record<string, unknown>>> = {
   'puma-lib': PumaLibNode,
   'agent-tools': AgentToolsNode,
   'linked-input': LinkedInputNode,
-  'expand-settings': ExpandSettingsNode,
 };
 
 /** Non-engine nodes (architecture + grouping, Pantograph desktop only) */

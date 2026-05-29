@@ -103,6 +103,9 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 - The current broad `llm-inference` descriptor is being replaced by
   descriptor-backed generic inference interfaces. New code must not use its
   static task/model ports or `inference_settings` as a successful fallback.
+- `expand-settings` is retired and must not be restored as a graph-visible
+  inference option source. Backend inference-interface descriptors own
+  model-specific option ports.
 - Defaults: optional metadata must have documented default behavior.
 - Enums and labels: node categories and port data types carry execution
   semantics.

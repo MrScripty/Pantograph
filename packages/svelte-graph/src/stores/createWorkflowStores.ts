@@ -121,10 +121,8 @@ export interface WorkflowStores {
   clearConnectionIntent: () => void;
   setActiveSessionId: (sessionId: string | null) => void;
 
-  // Compatibility no-ops while graph canonicalization is backend-owned.
+  // Compatibility no-op while graph canonicalization is backend-owned.
   syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
-  syncExpandPorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
-  autoConnectExpandToInference: (expandNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
 
   // Actions — groups
   createGroup: (name: string, nodeIds: string[]) => Promise<NodeGroup | null>;
@@ -399,20 +397,6 @@ export function createWorkflowStores(
     // Backend-owned graph canonicalization now applies inference port changes.
   }
 
-  function syncExpandPorts(
-    _sourceNodeId: string,
-    _inferenceSettings: InferenceParamSchema[],
-  ): void {
-    // Backend-owned graph canonicalization now applies expand-settings changes.
-  }
-
-  function autoConnectExpandToInference(
-    _expandNodeId: string,
-    _inferenceSettings: InferenceParamSchema[],
-  ): void {
-    // Backend-owned graph canonicalization now applies expand passthrough edges.
-  }
-
   const groupActions = createWorkflowGroupActions({
     backend,
     mutationDispatch,
@@ -440,8 +424,8 @@ export function createWorkflowStores(
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
     setConnectionIntent, clearConnectionIntent, setActiveSessionId,
-    // Compatibility no-ops
-    syncInferencePorts, syncExpandPorts, autoConnectExpandToInference,
+    // Compatibility no-op
+    syncInferencePorts,
     // Group actions
     createGroup: groupActions.createGroup,
     ungroupNodes: groupActions.ungroupNodes,

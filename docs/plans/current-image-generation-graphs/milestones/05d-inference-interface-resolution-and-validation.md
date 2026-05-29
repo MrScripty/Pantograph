@@ -3158,6 +3158,24 @@ defining an image-only inference-node interface.
        registry inventory count/tests, and remove its frontend-owned dynamic
        port source. This is the recommended first deletion because it is a
        direct alternate inference-interface source.
+       - 2026-05-29 implementation slice completed: removed the
+         `workflow-nodes` `expand-settings` descriptor/registration and updated
+         registry inventory tests; removed the frontend
+         `ExpandSettingsNode.svelte` component, display helper, display tests,
+         node-type registrations, and retired `syncExpandPorts`/
+         `autoConnectExpandToInference` no-op store exports. Remaining
+         `expand-settings` source-search hits are documentation and the registry
+         assertion that the node is retired.
+       - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo
+         test -p workflow-nodes test_inventory_collects_all_builtins --lib`;
+         `cargo test -p workflow-nodes --lib`; `cargo check -p
+         workflow-nodes`; `cargo check -p workflow-nodes --all-features`;
+         `cargo check -p workflow-nodes --no-default-features`; `npm run
+         typecheck`; `node --experimental-strip-types
+         packages/svelte-graph/src/stores/definitionOverlay.test.ts`; targeted
+         source search for `expand-settings`, `ExpandSettings`,
+         `expandSettings`, `syncExpandPorts`, and
+         `autoConnectExpandToInference`.
     2. Rewrite or retire `model-provider` model-path and
        `inference_settings` outputs as a separate input-node slice. This needs a
        decision about whether `model-provider` remains a non-Pumas selector or

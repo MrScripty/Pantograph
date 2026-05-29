@@ -82,8 +82,6 @@ export const clearConnectionIntent = workflowStores.clearConnectionIntent;
 
 // --- Inference settings actions ---
 export const syncInferencePorts = workflowStores.syncInferencePorts;
-export const syncExpandPorts = workflowStores.syncExpandPorts;
-export const autoConnectExpandToInference = workflowStores.autoConnectExpandToInference;
 
 // --- Group actions ---
 export const createGroup = workflowStores.createGroup;

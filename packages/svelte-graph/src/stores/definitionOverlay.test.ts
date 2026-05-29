@@ -4,35 +4,35 @@ import assert from 'node:assert/strict';
 import type { NodeDefinition } from '../types/workflow.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 
-test('resolveNodeDefinitionOverlay preserves additive dynamic ports from backend data', () => {
+test('resolveNodeDefinitionOverlay preserves additive descriptor ports from backend data', () => {
   const baseDefinitions: NodeDefinition[] = [
     {
-      node_type: 'expand-settings',
+      node_type: 'json-filter',
       category: 'processing',
-      label: 'Expand Settings',
-      description: 'Expose settings',
+      label: 'JSON Filter',
+      description: 'Filter JSON',
       io_binding_origin: 'integrated',
       inputs: [
-        { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: true, multiple: false },
+        { id: 'input', label: 'Input', data_type: 'json', required: true, multiple: false },
       ],
       outputs: [
-        { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: true, multiple: false },
+        { id: 'output', label: 'Output', data_type: 'json', required: false, multiple: false },
       ],
       execution_mode: 'reactive',
     },
   ];
 
   const resolved = resolveNodeDefinitionOverlay(
-    'expand-settings',
+    'json-filter',
     {
       definition: {
-        node_type: 'expand-settings',
+        node_type: 'json-filter',
         inputs: [
-          { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: true, multiple: false },
+          { id: 'input', label: 'Input', data_type: 'json', required: true, multiple: false },
           { id: 'temperature', label: 'Temperature', data_type: 'number', required: false, multiple: false },
         ],
         outputs: [
-          { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: true, multiple: false },
+          { id: 'output', label: 'Output', data_type: 'json', required: false, multiple: false },
           { id: 'temperature', label: 'Temperature', data_type: 'number', required: false, multiple: false },
         ],
       },
@@ -43,11 +43,11 @@ test('resolveNodeDefinitionOverlay preserves additive dynamic ports from backend
   assert.ok(resolved, 'definition should resolve');
   assert.deepEqual(
     resolved.inputs.map((port) => port.id),
-    ['inference_settings', 'temperature'],
+    ['input', 'temperature'],
   );
   assert.deepEqual(
     resolved.outputs.map((port) => port.id),
-    ['inference_settings', 'temperature'],
+    ['output', 'temperature'],
   );
 });
 

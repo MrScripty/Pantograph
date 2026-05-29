@@ -29,9 +29,9 @@ The graph editor needs a shared state boundary that can serve both UI rendering
 and transport payload generation. Interactive connection guidance adds another
 cross-cutting concern: the UI needs backend-derived target eligibility while the
 stores still need a current graph revision snapshot to validate a commit.
-Model-derived inference settings add a second contract problem: the stores must
-shape additive per-node ports consistently so `expand-settings`, primitive
-inputs, and inference nodes all see the same override handles.
+Model-derived inference options add a second contract problem: the stores must
+consume backend-owned additive per-node ports consistently so primitive inputs
+and inference nodes see the same descriptor-authored handles.
 
 ## Constraints
 - Derived graph fingerprints must stay synchronized with node and edge edits or

@@ -44,14 +44,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            38,
-            "Expected 38 built-in nodes with desktop feature"
+            37,
+            "Expected 37 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            35,
-            "Expected 35 built-in nodes without desktop feature"
+            34,
+            "Expected 34 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -77,8 +77,11 @@ mod tests {
         assert!(registry.has_node_type("kv-cache-load"));
         assert!(registry.has_node_type("kv-cache-truncate"));
         assert!(registry.has_node_type("masked-text-input"));
-        assert!(registry.has_node_type("expand-settings"));
         assert!(registry.has_node_type("dependency-environment"));
+        assert!(
+            !registry.has_node_type("expand-settings"),
+            "expand-settings is retired; backend descriptors own inference option ports"
+        );
         assert!(
             !registry.has_node_type("ollama-inference"),
             "Ollama is retired as a first-party graph-visible node"
