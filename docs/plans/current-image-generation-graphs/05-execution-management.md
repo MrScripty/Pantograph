@@ -16306,6 +16306,34 @@ Worker rules:
     validated vertical slices with contract fixtures, boundary tests, source
     search deletion gates, and default/all-features/no-default-features checks
     for touched public Rust crates.
+- 2026-05-29 Milestone 5b runtime-host materialized input contract slice
+  completed:
+  - Slice scope: `pantograph-runtime-host-contracts` request DTOs/dispatcher/
+    tests/fixtures/docs, workflow-service task orchestrator call sites/tests,
+    and plan records.
+  - Implementation: `RuntimeHostExecutionRequest` now requires explicit typed
+    `materialized_inputs`; the scheduler runtime-host dispatcher and
+    workflow-service task orchestrator pass those values through to the
+    runtime-host port; request validation bounds inputs and rejects path-shaped
+    input fields; the runtime-host request fixture no longer embeds a nested
+    selected artifact path.
+  - No-fallback/no-legacy gate: the slice adds no adapter from runtime-host
+    requests to `ModelDependencyRequest`, `ModelRefV2`, graph `model_path`,
+    frontend `modelPath`, or executable load targets. Runtime-host input values
+    are path-free typed contract values and missing `materialized_inputs` is a
+    contract error, not an implicit graph/runtime lookup.
+  - Verification passed: `cargo fmt -p pantograph-runtime-host-contracts -p
+    pantograph-workflow-service`; `cargo test -p
+    pantograph-runtime-host-contracts -- --nocapture`; `cargo test -p
+    pantograph-workflow-service task_orchestrator --lib -- --nocapture`;
+    `cargo check -p pantograph-runtime-host-contracts`; `cargo check -p
+    pantograph-runtime-host-contracts --all-features`; `cargo check -p
+    pantograph-runtime-host-contracts --no-default-features`; `cargo check -p
+    pantograph-workflow-service`; fmt check; targeted retired path/model-ref
+    source search over runtime-host contracts and touched workflow-service
+    orchestrator files; and `git diff --check`.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
 
 ### Traceability Links
 

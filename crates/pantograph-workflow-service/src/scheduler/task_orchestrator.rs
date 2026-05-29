@@ -1,5 +1,7 @@
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
-use pantograph_runtime_host_contracts::{RuntimeHostDispatchError, SchedulerRuntimeHostDispatcher};
+use pantograph_runtime_host_contracts::{
+    RuntimeHostDispatchError, RuntimeHostExecutionInput, SchedulerRuntimeHostDispatcher,
+};
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
     SchedulerDispatchSelectionDecision, SchedulerDispatchSelectionState,
@@ -61,10 +63,11 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         execution_request_id: impl Into<String>,
         handoff: SchedulerRuntimeHandoff,
+        materialized_inputs: Vec<RuntimeHostExecutionInput>,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
         let response = self
             .runtime_host_dispatcher
-            .dispatch(execution_request_id, handoff)
+            .dispatch(execution_request_id, handoff, materialized_inputs)
             .await
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)?;
         runtime_host_response_to_task_result(&response)
@@ -76,12 +79,13 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         execution_request_id: impl Into<String>,
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
+        materialized_inputs: Vec<RuntimeHostExecutionInput>,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
         let selection = select_scheduler_dispatch(selection_request)
             .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
             .into_inner();
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
-        self.dispatch_runtime_handoff(execution_request_id, handoff)
+        self.dispatch_runtime_handoff(execution_request_id, handoff, materialized_inputs)
             .await
     }
 

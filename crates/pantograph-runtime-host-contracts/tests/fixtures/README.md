@@ -8,7 +8,7 @@ boundary and must not include legacy successful execution fields.
 ## Contents
 | File | Description |
 | ---- | ----------- |
-| `runtime_host_execution_request_dispatch_selected.json` | Valid host execution request with a dispatch-selected scheduler handoff. |
+| `runtime_host_execution_request_dispatch_selected.json` | Valid host execution request with a dispatch-selected scheduler handoff and explicit typed materialized inputs. |
 | `runtime_host_execution_response_accepted.json` | Valid host response that acknowledges the request with typed diagnostics. |
 | `runtime_host_execution_response_completed_outputs.json` | Valid completed host response with typed, path-free output values and terminal metadata. |
 
@@ -16,7 +16,9 @@ boundary and must not include legacy successful execution fields.
 - Fixtures must not contain local paths, executable load targets, `ModelRefV2`,
   `model_path`, frontend `modelPath`, or worker launch internals.
 - Request fixtures must use scheduler-owned handoff and dispatch-decision
-  payloads as nested contracts.
+  payloads as nested contracts, and must carry explicit typed
+  `materialized_inputs` instead of relying on graph fields or runtime-local
+  lookup.
 - Response fixtures must use typed state, diagnostic enums, bounded typed
   outputs, and path-free terminal metadata.
 - Retired path-shaped fields must not be reintroduced as aliases.

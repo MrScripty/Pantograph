@@ -7,6 +7,7 @@ use thiserror::Error;
 
 const MAX_ID_LEN: usize = 128;
 const MAX_TEXT_LEN: usize = 1024;
+const MAX_RUNTIME_HOST_INPUTS: usize = 128;
 const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
 
@@ -21,12 +22,22 @@ pub struct RuntimeHostExecutionRequest {
     pub contract_version: u16,
     pub execution_request_id: String,
     pub handoff: SchedulerRuntimeHandoff,
+    pub materialized_inputs: Vec<RuntimeHostExecutionInput>,
 }
 
 impl RuntimeHostExecutionRequest {
     pub fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         validate_contract_version(self.contract_version)?;
         validate_identifier("execution_request_id", &self.execution_request_id)?;
+        if self.materialized_inputs.len() > MAX_RUNTIME_HOST_INPUTS {
+            return Err(RuntimeHostExecutionContractError::TooManyInputs {
+                actual: self.materialized_inputs.len(),
+                max: MAX_RUNTIME_HOST_INPUTS,
+            });
+        }
+        for input in &self.materialized_inputs {
+            input.validate()?;
+        }
         let validated_handoff = ValidatedSchedulerRuntimeHandoff::try_from(self.handoff.clone())?;
         if validated_handoff.as_ref().state != SchedulerRuntimeHandoffState::DispatchSelected {
             return Err(RuntimeHostExecutionContractError::InvalidField {
@@ -35,6 +46,48 @@ impl RuntimeHostExecutionRequest {
             });
         }
         Ok(())
+    }
+}
+
+/// Typed materialized input supplied to runtime-host execution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostExecutionInput {
+    pub port_id: String,
+    pub value: RuntimeHostExecutionInputValue,
+}
+
+impl RuntimeHostExecutionInput {
+    fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_identifier("input.port_id", &self.port_id)?;
+        self.value.validate()
+    }
+}
+
+/// Explicit runtime-host input value variants.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "value_type",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+#[non_exhaustive]
+pub enum RuntimeHostExecutionInputValue {
+    String(String),
+    Bool(bool),
+    I64(i64),
+    U64(u64),
+    MediaArtifactRef(RuntimeHostExecutionMediaArtifactRef),
+}
+
+impl RuntimeHostExecutionInputValue {
+    fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        match self {
+            Self::String(value) => validate_optional_text("input.string", value),
+            Self::MediaArtifactRef(value) => value.validate(),
+            Self::Bool(_) | Self::I64(_) | Self::U64(_) => Ok(()),
+        }
     }
 }
 
@@ -299,6 +352,8 @@ pub enum RuntimeHostExecutionContractError {
     InvalidIdentifier { field: &'static str },
     #[error("invalid text field `{field}`")]
     InvalidText { field: &'static str },
+    #[error("runtime-host request has {actual} inputs, maximum is {max}")]
+    TooManyInputs { actual: usize, max: usize },
     #[error("runtime-host response has {actual} outputs, maximum is {max}")]
     TooManyOutputs { actual: usize, max: usize },
     #[error("runtime-host response has {actual} diagnostics, maximum is {max}")]

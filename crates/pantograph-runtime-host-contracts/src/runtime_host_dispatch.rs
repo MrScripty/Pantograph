@@ -5,9 +5,9 @@ use pantograph_scheduler::SchedulerRuntimeHandoff;
 use thiserror::Error;
 
 use crate::{
-    RuntimeHostExecutionContractError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionContractError, RuntimeHostExecutionInput, RuntimeHostExecutionRequest,
+    RuntimeHostExecutionResponse, ValidatedRuntimeHostExecutionRequest,
+    ValidatedRuntimeHostExecutionResponse, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
 /// Runtime-host execution port called by scheduler dispatch.
@@ -35,11 +35,13 @@ impl SchedulerRuntimeHostDispatcher {
         &self,
         execution_request_id: impl Into<String>,
         handoff: SchedulerRuntimeHandoff,
+        materialized_inputs: Vec<RuntimeHostExecutionInput>,
     ) -> Result<ValidatedRuntimeHostExecutionResponse, RuntimeHostDispatchError> {
         let request = RuntimeHostExecutionRequest {
             contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
             execution_request_id: execution_request_id.into(),
             handoff,
+            materialized_inputs,
         };
         let validated_request = ValidatedRuntimeHostExecutionRequest::try_from(request)?;
         let response = self

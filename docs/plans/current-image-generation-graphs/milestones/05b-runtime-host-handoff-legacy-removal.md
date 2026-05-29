@@ -259,3 +259,27 @@ or by adapting canonical readiness/handoff data into `ModelDependencyRequest`,
   behavior, planned-inference launch ownership, direct old runtime task success
   fixtures, and frontend/Tauri path-shaped dependency actions. No second
   readiness proof type or adapter-local compatibility proof is allowed.
+- 2026-05-29 runtime-host materialized input contract slice completed.
+  Smallest useful vertical slice: require shared runtime-host execution
+  requests to carry explicit typed `materialized_inputs`, update scheduler
+  dispatcher/workflow-service orchestrator calls to pass those values, and
+  remove the lingering nested `selected_artifact_path` from the runtime-host
+  request fixture. Allowed write set: `pantograph-runtime-host-contracts`,
+  workflow-service task orchestrator call sites/tests, this milestone file,
+  and execution notes. No-fallback confirmation: materialized inputs are
+  path-free runtime-host contract values; missing input field, path-shaped
+  input fields, oversized input lists, readiness-only handoff, and old path/
+  model-ref names are rejected or absent. Verification passed: `cargo fmt -p
+  pantograph-runtime-host-contracts -p pantograph-workflow-service`; `cargo
+  test -p pantograph-runtime-host-contracts -- --nocapture`; `cargo test -p
+  pantograph-workflow-service task_orchestrator --lib -- --nocapture`; `cargo
+  check -p pantograph-runtime-host-contracts`; `cargo check -p
+  pantograph-runtime-host-contracts --all-features`; `cargo check -p
+  pantograph-runtime-host-contracts --no-default-features`; `cargo check -p
+  pantograph-workflow-service`; `cargo fmt -p
+  pantograph-runtime-host-contracts -p pantograph-workflow-service -- --check`;
+  targeted source search over the runtime-host contract and touched
+  workflow-service orchestrator files for retired path/model-ref terms; and
+  `git diff --check`. Existing caveat: `cargo check -p
+  pantograph-workflow-service` still emits the known unused
+  `set_active_run_execution_plan` warning.

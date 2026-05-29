@@ -57,7 +57,11 @@ async fn dispatcher_passes_dispatch_selected_handoff_to_runtime_host_port() {
     let dispatcher = SchedulerRuntimeHostDispatcher::new(port.clone());
 
     let validated = dispatcher
-        .dispatch("runtime-host-request-1", request.handoff)
+        .dispatch(
+            "runtime-host-request-1",
+            request.handoff,
+            request.materialized_inputs.clone(),
+        )
         .await
         .expect("dispatch-selected handoff should execute through port");
 
@@ -72,6 +76,7 @@ async fn dispatcher_passes_dispatch_selected_handoff_to_runtime_host_port() {
         SchedulerRuntimeHandoffState::DispatchSelected
     );
     assert!(recorded[0].handoff.dispatch_decision.is_some());
+    assert_eq!(recorded[0].materialized_inputs.len(), 2);
 }
 
 #[tokio::test]
@@ -85,7 +90,11 @@ async fn dispatcher_rejects_readiness_only_handoff_before_port_call() {
     let dispatcher = SchedulerRuntimeHostDispatcher::new(port.clone());
 
     let error = dispatcher
-        .dispatch("runtime-host-request-1", request.handoff)
+        .dispatch(
+            "runtime-host-request-1",
+            request.handoff,
+            request.materialized_inputs,
+        )
         .await
         .expect_err("readiness-only handoff must not reach runtime host");
 
@@ -110,7 +119,11 @@ async fn dispatcher_rejects_mismatched_runtime_host_response_correlation() {
     let dispatcher = SchedulerRuntimeHostDispatcher::new(port);
 
     let error = dispatcher
-        .dispatch("runtime-host-request-1", request.handoff)
+        .dispatch(
+            "runtime-host-request-1",
+            request.handoff,
+            request.materialized_inputs,
+        )
         .await
         .expect_err("response must match scheduler request correlation");
 

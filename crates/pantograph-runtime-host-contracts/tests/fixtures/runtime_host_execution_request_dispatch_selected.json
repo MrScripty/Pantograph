@@ -1,6 +1,22 @@
 {
   "contract_version": 1,
   "execution_request_id": "runtime-host.request.001",
+  "materialized_inputs": [
+    {
+      "port_id": "prompt",
+      "value": {
+        "value_type": "string",
+        "value": "a cinematic image of a red cube on a white table"
+      }
+    },
+    {
+      "port_id": "seed",
+      "value": {
+        "value_type": "u64",
+        "value": 42
+      }
+    }
+  ],
   "handoff": {
     "contract_version": 1,
     "workflow_id": "workflow.image_generation",
@@ -137,8 +153,7 @@
       "selected_model_ref": {
         "model_id": "pumas://models/juggernaut-xl-v10",
         "revision": "main",
-        "selected_artifact_id": "diffusers-bundle",
-        "selected_artifact_path": "juggernaut-xl-v10/diffusers"
+        "selected_artifact_id": "diffusers-bundle"
       },
       "readiness_proof": {
         "contract_version": 1,

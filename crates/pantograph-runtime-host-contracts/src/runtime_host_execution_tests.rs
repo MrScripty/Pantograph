@@ -25,6 +25,7 @@ fn runtime_host_execution_request_fixture_decodes_and_validates() {
         validated.as_ref().handoff.state,
         SchedulerRuntimeHandoffState::DispatchSelected
     );
+    assert_eq!(validated.as_ref().materialized_inputs.len(), 2);
     assert!(validated.as_ref().handoff.dispatch_decision.is_some());
 }
 
@@ -63,6 +64,67 @@ fn runtime_host_execution_request_rejects_path_shaped_fields() {
     assert!(
         error.to_string().contains("unknown field `model_path`"),
         "{error}"
+    );
+}
+
+#[test]
+fn runtime_host_execution_request_requires_materialized_inputs_field() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .expect("runtime host request fixture must decode as value");
+    value
+        .as_object_mut()
+        .expect("request fixture must be object")
+        .remove("materialized_inputs");
+
+    let error = serde_json::from_value::<RuntimeHostExecutionRequest>(value)
+        .expect_err("runtime host request must explicitly carry materialized inputs");
+
+    assert!(
+        error
+            .to_string()
+            .contains("missing field `materialized_inputs`"),
+        "{error}"
+    );
+}
+
+#[test]
+fn runtime_host_execution_request_rejects_path_shaped_input_fields() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .expect("runtime host request fixture must decode as value");
+    value["materialized_inputs"][0]["value"]["path"] = json!("/tmp/input.png");
+
+    let error = serde_json::from_value::<RuntimeHostExecutionRequest>(value)
+        .expect_err("runtime host inputs must reject path-shaped fields");
+
+    assert!(error.to_string().contains("string \"path\""), "{error}");
+}
+
+#[test]
+fn runtime_host_execution_request_rejects_too_many_inputs() {
+    let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .expect("runtime host request fixture must decode");
+    let input = request
+        .materialized_inputs
+        .first()
+        .expect("fixture must contain input")
+        .clone();
+    request.materialized_inputs = vec![input; 129];
+
+    let error = ValidatedRuntimeHostExecutionRequest::try_from(request)
+        .expect_err("runtime host request inputs must be bounded");
+
+    assert_eq!(
+        error,
+        RuntimeHostExecutionContractError::TooManyInputs {
+            actual: 129,
+            max: 128
+        }
     );
 }
 

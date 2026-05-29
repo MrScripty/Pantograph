@@ -82,7 +82,11 @@ async fn orchestrator_dispatches_runtime_task_through_shared_runtime_host_port()
         WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
 
     let result = orchestrator
-        .dispatch_runtime_handoff("workflow-service-runtime-request-1", request.handoff)
+        .dispatch_runtime_handoff(
+            "workflow-service-runtime-request-1",
+            request.handoff,
+            request.materialized_inputs.clone(),
+        )
         .await
         .expect("dispatch-selected handoff should reach runtime host port");
 
@@ -94,6 +98,7 @@ async fn orchestrator_dispatches_runtime_task_through_shared_runtime_host_port()
         recorded[0].handoff.state,
         SchedulerRuntimeHandoffState::DispatchSelected
     );
+    assert_eq!(recorded[0].materialized_inputs.len(), 2);
 }
 
 #[tokio::test]
@@ -108,7 +113,11 @@ async fn orchestrator_rejects_readiness_only_handoff_before_runtime_host_port() 
         WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
 
     let error = orchestrator
-        .dispatch_runtime_handoff("workflow-service-runtime-request-1", request.handoff)
+        .dispatch_runtime_handoff(
+            "workflow-service-runtime-request-1",
+            request.handoff,
+            request.materialized_inputs,
+        )
         .await
         .expect_err("readiness-only handoff must fail before runtime host");
 
@@ -145,6 +154,7 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
             "workflow-service-runtime-request-2",
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
                 .expect("selection request fixture must validate"),
+            runtime_host_request_fixture().materialized_inputs,
         )
         .await
         .expect("selected scheduler dispatch should reach runtime host port");
@@ -169,6 +179,7 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
         dispatch_decision.reservation_lease_id.as_str(),
         "reservation.001"
     );
+    assert_eq!(recorded[0].materialized_inputs.len(), 2);
 }
 
 #[tokio::test]
@@ -186,6 +197,7 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
             "workflow-service-runtime-request-3",
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
                 .expect("selection request without candidates still validates"),
+            runtime_host_request_fixture().materialized_inputs,
         )
         .await
         .expect_err("no-selection diagnostics must stop before runtime host");
