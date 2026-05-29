@@ -16232,6 +16232,21 @@ Worker rules:
     workflow-nodes --no-default-features`; targeted source search for
     `resolve_inference_settings_fallback` and `inference_settings` in
     `puma_lib.rs`/input README.
+- 2026-05-29 Milestone 5d bundled starter template cleanup completed:
+  - Slice scope: bundled workflow template JSON files, the template README, and
+    plan records.
+  - Implementation: removed retired `puma-lib.inference_settings ->
+    llm-inference.inference_settings` edges from the tiny-SD text-to-image and
+    GGUF reranker starter templates. The README now documents starter
+    inference as a model-ref-only handoff, with model-specific inference
+    options resolved by backend descriptors.
+  - No-fallback/no-legacy gate: no replacement template edge or graph field was
+    added. Retired direct inference-node names remain only in README
+    rejection/invariant text.
+  - Verification passed: JSON parse check for both templates; `npm run
+    typecheck`; targeted source search over `src/templates/workflows` for
+    retired settings/path/backend/direct-inference terms; `git diff --check`
+    for touched template files.
 
 ### Traceability Links
 

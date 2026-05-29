@@ -27,9 +27,11 @@ text-to-image generation or local GGUF reranking to be wired.
 ## Decision
 Store built-in workflow templates here as JSON and import them statically into
 the frontend template service. Text-to-image starters use the same canonical
-`puma-lib -> llm-inference` model-reference and inference-settings handoff as
-other inference tasks, with `task_kind = image_generation` and a graph-visible
-`image` output connected to `image-output`. Runtime selection remains
+`puma-lib -> llm-inference` model-reference handoff as other inference tasks,
+with `task_kind = image_generation` and a graph-visible `image` output
+connected to `image-output`. Runtime selection and model-specific inference
+options remain backend-owned unless a template explicitly demonstrates a hard
+runtime requirement.
 scheduler-owned unless a template explicitly demonstrates a hard runtime
 requirement.
 
@@ -47,9 +49,8 @@ requirement.
   `diffusion-inference`, `llamacpp-inference`, `pytorch-inference`,
   `ollama-inference`, dedicated `embedding`, or dedicated `reranker`.
 - Built-in text-to-image templates must use canonical `llm-inference` with
-  `task_kind = image_generation`, carry `pumas_model_ref` and
-  `inference_settings` from `puma-lib`, and connect the canonical `image`
-  output into `image-output`.
+  `task_kind = image_generation`, carry `pumas_model_ref` from `puma-lib`, and
+  connect the canonical `image` output into `image-output`.
 - Built-in templates must not use retired graph-visible backend/runtime
   selection fields such as `backend_key`, `runtime_hint`, resolved Pumas
   package facts, or raw model-source ports. The scheduler is the only runtime

@@ -3139,7 +3139,8 @@ defining an image-only inference-node interface.
       validated slices. Legacy processing nodes `audio-generation`,
       `onnx-inference`, and `depth-estimation` have now been removed as
       graph-visible descriptors/components in a separate validated slice. The
-      C# native smoke workflow still authors `modelPath`.
+      C# native smoke workflow has now been rewritten to the canonical
+      path-free fixture shape.
     - Already-modernized but still visible as review context: `puma-lib`
       descriptor output is model-ref-only, and existing tests assert it does not
       expose `model_path` or `inference_settings`, but its option provider still
@@ -3276,7 +3277,23 @@ defining an image-only inference-node interface.
          not found for workflow version`. That is a validation-snapshot
          lifecycle issue outside this fixture rewrite and remains a follow-up
          before using the full smoke as a runtime acceptance gate.
-    5. Defer runtime/backend `model_path`/`entry_path` findings to the
+    5. Remove retired `inference_settings` edges from bundled starter workflow
+       templates and keep template documentation aligned with the
+       model-ref-only handoff.
+       - 2026-05-29 implementation slice completed: removed
+         `puma-lib.inference_settings -> llm-inference.inference_settings`
+         edges from the tiny-SD text-to-image and GGUF reranker starter
+         templates, and updated the template README so starters carry
+         `pumas_model_ref` only. Model-specific inference options remain
+         backend descriptor-owned.
+       - No-fallback/no-legacy gate: no replacement template edge or hidden
+         graph field was added. Retired direct inference-node names remain only
+         in README rejection/invariant text.
+       - Verification passed: JSON parse check for both templates; `npm run
+         typecheck`; targeted source search over `src/templates/workflows` for
+         retired settings/path/backend/direct-inference terms; `git diff
+         --check` for the touched template files.
+    6. Defer runtime/backend `model_path`/`entry_path` findings to the
        runtime-dispatch milestone; do not delete them from inference backends in
        this milestone.
   - No-fallback/no-legacy gate: none of these options may preserve

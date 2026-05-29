@@ -134,13 +134,6 @@
           "target_handle": "pumas_model_ref"
         },
         {
-          "id": "e5",
-          "source": "model",
-          "source_handle": "inference_settings",
-          "target": "reranker",
-          "target_handle": "inference_settings"
-        },
-        {
           "id": "e6",
           "source": "reranker",
           "source_handle": "top_document",
