@@ -6,11 +6,11 @@ use crate::graph::{
     InferenceInterfaceFactsProviderError, InferenceInterfaceGraphResolutionInput,
     InferenceInterfaceResolverFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
     InferenceRuntimeAvailabilityFact, InferenceRuntimeAvailabilityState,
-    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationSummaryRequest,
-    WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest,
-    WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphCurrentValidationRefreshRequest,
+    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryState,
+    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphInferenceValidationSession, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveEdgesRequest, WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
@@ -1259,6 +1259,60 @@ async fn publish_inference_validation_session_rejects_delete_selection_changed_d
             session_id: session.session_id,
             node_ids: vec!["dep-env".to_string()],
             edge_ids: Vec::new(),
+        })
+        .await
+        .expect("mutate graph while validation facts are pending");
+    release.notify_one();
+
+    let error = publish
+        .await
+        .expect("publish task should not panic")
+        .expect_err("publish should reject cancelled validation session");
+    assert!(
+        error
+            .to_string()
+            .contains("validation publication cancelled: graph revision changed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn publish_inference_validation_session_rejects_add_edge_changed_during_fact_lookup() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let publish_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let publish = tokio::spawn(async move {
+        publish_store
+            .publish_inference_validation_session(
+                &session_id,
+                DraftGraphValidationSessionId::parse("validation.session.add.edge.changed")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    entered.notified().await;
+
+    store
+        .add_edge(WorkflowGraphAddEdgeRequest {
+            session_id: session.session_id,
+            edge: GraphEdge {
+                id: "model-to-infer-secondary".to_string(),
+                source: "model".to_string(),
+                source_handle: "pumas_model_ref".to_string(),
+                target: "infer".to_string(),
+                target_handle: "secondary_model_ref".to_string(),
+            },
         })
         .await
         .expect("mutate graph while validation facts are pending");
