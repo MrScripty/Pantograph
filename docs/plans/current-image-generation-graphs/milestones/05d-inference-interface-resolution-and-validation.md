@@ -3955,6 +3955,43 @@ defining an image-only inference-node interface.
     helper where it changes semantic graph state, after resolving or
     re-planning the current connection-intent test failures that affect
     insert-on-edge verification.
+- [x] 2026-05-28 insert-node-on-edge validation cancellation slice completed:
+  - Smallest useful vertical slice: wire accepted `insert_node_on_edge`
+    commits through the existing workflow-service validation lifecycle
+    cancellation helper, and add publication-time coverage proving pending
+    validation output is rejected when edge insertion changes the semantic
+    graph.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: accepted insert-on-edge commits now
+    use the canonical validation lifecycle owner and typed cancellation path
+    after the graph mutation, with no frontend invalidation, timestamp,
+    transport request id, or alternate publication fallback. Rejected
+    insert-on-edge attempts continue to return typed rejection responses before
+    cancellation.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_insert_node_on_edge_changed_during_fact_lookup
+    --lib`; `cargo check -p pantograph-workflow-service`; source-search
+    verification for touched production code; and `git diff --check`.
+  - Verification attempted and failed: `cargo test -p
+    pantograph-workflow-service insert_node_on_edge --lib` still fails the
+    pre-existing `insert_node_on_edge_returns_two_replacement_edges` test
+    because connection-intent bridge selection chooses static `device` instead
+    of retired `prompt` for `llm-inference`. The cancellation slice used a
+    canonical `merge` insertion path to avoid preserving the retired
+    `llm-inference` static prompt/response behavior.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
+  - Remaining follow-up: explicitly re-plan the connection-intent LLM
+    insert-on-edge tests so they either consume descriptor-backed inference
+    interface snapshots or are deleted as retired static-port coverage.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

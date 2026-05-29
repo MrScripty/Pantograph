@@ -1791,6 +1791,82 @@ async fn publish_inference_validation_session_rejects_insert_node_and_connect_ch
 }
 
 #[tokio::test]
+async fn publish_inference_validation_session_rejects_insert_node_on_edge_changed_during_fact_lookup(
+) {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let mut graph = dependency_inference_graph();
+    graph.nodes.push(GraphNode {
+        id: "notes-in".to_string(),
+        node_type: "text-input".to_string(),
+        position: Position { x: 40.0, y: 240.0 },
+        data: serde_json::json!({
+            "text": "notes"
+        }),
+    });
+    graph.nodes.push(GraphNode {
+        id: "notes-out".to_string(),
+        node_type: "text-output".to_string(),
+        position: Position { x: 360.0, y: 240.0 },
+        data: serde_json::json!({}),
+    });
+    graph.edges.push(GraphEdge {
+        id: "notes-in-text-notes-out-text".to_string(),
+        source: "notes-in".to_string(),
+        source_handle: "text".to_string(),
+        target: "notes-out".to_string(),
+        target_handle: "text".to_string(),
+    });
+    let session = store.create_session(graph, None).await;
+
+    let publish_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let publish = tokio::spawn(async move {
+        publish_store
+            .publish_inference_validation_session(
+                &session_id,
+                DraftGraphValidationSessionId::parse("validation.session.insert.edge.changed")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    entered.notified().await;
+
+    let response = store
+        .insert_node_on_edge(WorkflowGraphInsertNodeOnEdgeRequest {
+            session_id: session.session_id,
+            graph_revision: session.graph_revision,
+            edge_id: "notes-in-text-notes-out-text".to_string(),
+            node_type: "merge".to_string(),
+            position_hint: InsertNodePositionHint {
+                position: Position { x: 200.0, y: 240.0 },
+            },
+        })
+        .await
+        .expect("insert node on edge while validation facts are pending");
+    assert!(response.accepted);
+    release.notify_one();
+
+    let error = publish
+        .await
+        .expect("publish task should not panic")
+        .expect_err("publish should reject cancelled validation session");
+    assert!(
+        error
+            .to_string()
+            .contains("validation publication cancelled: graph revision changed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn publish_inference_validation_session_rejects_node_data_changed_during_fact_lookup() {
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
