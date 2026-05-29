@@ -15183,6 +15183,38 @@ Worker rules:
     untracked task ownership. `cargo check -p pantograph-workflow-service`
     still reports the pre-existing `set_active_run_execution_plan` dead-code
     warning.
+- 2026-05-28 Milestone 5d connection-intent static `llm-inference` test
+  re-plan decision:
+  - Discovered issue: broad connection verification still contains tests that
+    expect retired static `llm-inference` task ports (`prompt`, `response`, and
+    `stream`). The canonical graph-visible `llm-inference` descriptor has
+    already been shrunk to bootstrap/control ports, so keeping these tests green
+    by restoring static task ports would preserve legacy behavior and violate
+    the no-fallback/no-legacy rule.
+  - Standards result: use option 3. First remove or rewrite the retired
+    static-port connection coverage while preserving generic connection/insert
+    coverage through canonical static nodes such as `text-input`,
+    `text-output`, and `merge`. Then add descriptor-backed inference
+    connection intent as a separate planned slice where `llm-inference` ports
+    come from resolved validation/interface snapshots and missing or stale
+    snapshots fail closed with typed diagnostics.
+  - Standards mapping: coding standards require deleting retired compatibility
+    coverage instead of preserving shims; architecture standards keep
+    descriptor/interface snapshots as the structured producer-consumer contract;
+    Rust API standards require typed validated values rather than raw stringly
+    port guesses; testing standards require fail-closed boundary invariants and
+    retained canonical non-inference connection coverage; frontend standards
+    require backend-owned, event-driven port refresh rather than local
+    optimistic port invention.
+  - Next implementation slice: update `connection_intent` tests and any
+    directly affected assertions so retired static `llm-inference` port
+    expectations are removed or rewritten as fail-closed invariants, while
+    retaining canonical non-inference connection coverage.
+  - Deferred canonical slice: design and implement descriptor-backed inference
+    connection intent after the test cleanup. That slice must consume current
+    validation/interface snapshots, expose typed diagnostics for missing/stale
+    snapshots, and include cross-layer coverage from descriptor resolution to
+    graph-editor connection candidates before broadening runtime support.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in

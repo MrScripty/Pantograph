@@ -3992,6 +3992,49 @@ defining an image-only inference-node interface.
   - Remaining follow-up: explicitly re-plan the connection-intent LLM
     insert-on-edge tests so they either consume descriptor-backed inference
     interface snapshots or are deleted as retired static-port coverage.
+- [x] 2026-05-28 connection-intent static `llm-inference` test re-plan
+  decision:
+  - Discovered issue: broad connection verification still contains tests that
+    expect retired static `llm-inference` task ports (`prompt`, `response`, and
+    `stream`). The canonical graph-visible `llm-inference` descriptor has
+    already been shrunk to bootstrap/control ports, so keeping these tests green
+    by restoring static task ports would preserve legacy behavior and violate
+    the no-fallback/no-legacy rule.
+  - Standards result: use option 3. First remove or rewrite the retired
+    static-port connection coverage while preserving generic connection/insert
+    coverage through canonical static nodes such as `text-input`,
+    `text-output`, and `merge`. Then add descriptor-backed inference
+    connection intent as a separate planned slice where `llm-inference` ports
+    come from resolved validation/interface snapshots and missing or stale
+    snapshots fail closed with typed diagnostics.
+  - Standards mapping:
+    - Coding standards: delete retired compatibility coverage instead of
+      keeping backwards-compatibility shims.
+    - Architecture standards: keep descriptor/interface snapshots as the
+      structured producer-consumer contract for inference task ports; do not let
+      `connection_intent` reinterpret stale static node metadata as inference
+      authority.
+    - Rust API standards: parse and validate descriptor-backed port shapes at
+      the boundary into typed values before passing them inward; do not add raw
+      stringly port guesses for `llm-inference`.
+    - Testing standards: replace the failing tests with boundary invariant
+      coverage proving forbidden retired task ports cannot cross the static
+      registry boundary, generic connection helpers still work, and
+      `llm-inference` connection/insert requests fail closed or report typed
+      diagnostics until descriptor-backed ports are present.
+    - Frontend standards: when descriptor-backed connection intent is later
+      exposed to the graph editor, the backend remains the source of truth and
+      validation/port refresh must be event-driven rather than local optimistic
+      port invention.
+  - Next implementation slice: update `connection_intent` tests and any
+    directly affected assertions so retired static `llm-inference` port
+    expectations are removed or rewritten as fail-closed invariants, while
+    retaining canonical non-inference connection coverage.
+  - Deferred canonical slice: design and implement descriptor-backed inference
+    connection intent after the test cleanup. That slice must consume current
+    validation/interface snapshots, expose typed diagnostics for missing/stale
+    snapshots, and include cross-layer coverage from descriptor resolution to
+    graph-editor connection candidates before broadening runtime support.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
