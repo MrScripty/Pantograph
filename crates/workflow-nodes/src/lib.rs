@@ -44,14 +44,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            37,
-            "Expected 37 built-in nodes with desktop feature"
+            34,
+            "Expected 34 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            34,
-            "Expected 34 built-in nodes without desktop feature"
+            31,
+            "Expected 31 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -67,8 +67,6 @@ mod tests {
         assert!(registry.has_node_type("image-output"));
         assert!(registry.has_node_type("audio-input"));
         assert!(registry.has_node_type("audio-output"));
-        assert!(registry.has_node_type("audio-generation"));
-        assert!(registry.has_node_type("depth-estimation"));
         assert!(registry.has_node_type("process"));
         assert!(registry.has_node_type("puma-lib"));
         assert!(registry.has_node_type("agent-tools"));
@@ -81,6 +79,18 @@ mod tests {
         assert!(
             !registry.has_node_type("expand-settings"),
             "expand-settings is retired; backend descriptors own inference option ports"
+        );
+        assert!(
+            !registry.has_node_type("audio-generation"),
+            "audio-generation is retired as a graph-visible inference node; generic inference descriptors own audio generation"
+        );
+        assert!(
+            !registry.has_node_type("onnx-inference"),
+            "onnx-inference is retired as a graph-visible inference node; scheduler/runtime dispatch owns runtime selection"
+        );
+        assert!(
+            !registry.has_node_type("depth-estimation"),
+            "depth-estimation is retired as a graph-visible inference node; generic inference descriptors own depth tasks"
         );
         assert!(
             !registry.has_node_type("ollama-inference"),

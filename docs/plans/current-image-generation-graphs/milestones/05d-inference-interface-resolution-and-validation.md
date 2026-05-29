@@ -3136,9 +3136,10 @@ defining an image-only inference-node interface.
     - Graph-visible deletion targets: `workflow-nodes` previously registered
       `expand-settings` and exposed `model-provider` `model_path`/
       `inference_settings` ports; both have now been removed in separate
-      validated slices. Legacy processing nodes such as `audio-generation`,
-      `onnx-inference`, and `depth-estimation` still expose path-shaped
-      inference ports; the C# native smoke workflow still authors `modelPath`.
+      validated slices. Legacy processing nodes `audio-generation`,
+      `onnx-inference`, and `depth-estimation` have now been removed as
+      graph-visible descriptors/components in a separate validated slice. The
+      C# native smoke workflow still authors `modelPath`.
     - Already-modernized but still visible as review context: `puma-lib`
       descriptor output is model-ref-only, and existing tests assert it does not
       expose `model_path` or `inference_settings`, but its option provider still
@@ -3206,6 +3207,31 @@ defining an image-only inference-node interface.
        ports (`audio-generation`, `onnx-inference`, `depth-estimation`) in a
        separate registry slice, or explicitly reclassify any retained node as a
        non-generic typed node with no model-path interface ownership.
+       - 2026-05-29 implementation slice completed: removed the Rust
+         `audio-generation`, `onnx-inference`, and `depth-estimation`
+         processing descriptors, inventory registrations, exports, and
+         descriptor tests from `workflow-nodes`; removed their specialized
+         frontend node components and registrations; and updated source
+         READMEs to keep those task families behind backend-resolved generic
+         inference descriptors and scheduler/runtime dispatch.
+       - No-fallback/no-legacy gate: no compatibility descriptors,
+         path-shaped ports, `environment_ref` inputs, `inference_settings`
+         inputs, or specialized graph-visible components were retained.
+         Registry tests now assert the three node types are retired. Remaining
+         `depth_estimation` references are backend task-kind contracts and
+         runtime capability tests, not authorable graph node registrations.
+         Runtime/backend execution paths that still mention old node-type
+         strings are classified as runtime-dispatch legacy-removal work and
+         must not be treated as graph-authoring success paths.
+       - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `npm
+         run typecheck`; `cargo test -p workflow-nodes
+         test_inventory_collects_all_builtins --lib`; `node
+         --experimental-strip-types
+         src/components/nodes/workflow/primitiveInputMetadata.test.ts`;
+         `cargo check -p workflow-nodes`; `cargo test -p workflow-nodes
+         --lib`; `cargo check -p workflow-nodes --all-features`; `cargo check
+         -p workflow-nodes --no-default-features`; targeted source search for
+         retired graph-visible node/component/task names.
     4. Update the C# native smoke fixture to the canonical
        `puma-lib -> llm-inference -> image-output` shape without `modelPath` as
        a fixture slice after the graph node deletions stabilize.

@@ -20,8 +20,6 @@ import VectorOutputNode from '../components/nodes/workflow/VectorOutputNode.svel
 import ImageOutputNode from '../components/nodes/workflow/ImageOutputNode.svelte';
 import AudioInputNode from '../components/nodes/workflow/AudioInputNode.svelte';
 import AudioOutputNode from '../components/nodes/workflow/AudioOutputNode.svelte';
-import AudioGenerationNode from '../components/nodes/workflow/AudioGenerationNode.svelte';
-import DepthEstimationNode from '../components/nodes/workflow/DepthEstimationNode.svelte';
 import PointCloudOutputNode from '../components/nodes/workflow/PointCloudOutputNode.svelte';
 import PumaLibNode from '../components/nodes/workflow/PumaLibNode.svelte';
 import AgentToolsNode from '../components/nodes/workflow/AgentToolsNode.svelte';
@@ -48,8 +46,6 @@ const SPECIALIZED_NODES: Record<string, Component<Record<string, unknown>>> = {
   'image-output': ImageOutputNode,
   'audio-input': AudioInputNode,
   'audio-output': AudioOutputNode,
-  'audio-generation': AudioGenerationNode,
-  'depth-estimation': DepthEstimationNode,
   'point-cloud-output': PointCloudOutputNode,
   'puma-lib': PumaLibNode,
   'agent-tools': AgentToolsNode,

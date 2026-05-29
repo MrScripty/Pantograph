@@ -40,7 +40,6 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `selectionInputProviderOptions.ts` | Builds backend-owned provider option queries for selection inputs and discards stale async option responses when target context changes. |
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
-| `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
 | `RerankerNode.svelte` | Retired specialized renderer retained only for saved-workflow migration reference; new rerank workflows render through `LLMInferenceNode.svelte`. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
 | `inferencePayloadDisplay.ts` | Projects backend-neutral inference payload role metadata into compact task, diagnostics, usage, cache-handle, model-fact, and option display rows for canonical inference nodes. |
@@ -64,13 +63,11 @@ or requiring the whole workflow view to remount.
   association marker. Components may render it as a typed handle, but they must
   not use it to synthesize dependency requests, model paths, platform context,
   or scheduler admission state.
-- Audio playback must support both low-latency stream playback and final-audio
-  controls while cleaning up timers and `AudioContext` resources deterministically.
+- Audio playback must support final-audio controls while cleaning up timers and
+  `AudioContext` resources deterministically.
 - Final generated audio may arrive before browser metadata resolves, so the UI
   must honor backend-provided duration metadata instead of relying only on
   `HTMLAudioElement.duration`.
-- Stable Audio generation is batch-only in the current runtime, so the UI must
-  not imply that its output will arrive as playable stream chunks mid-generation.
 - Embedded node controls must remain labelled and graph-safe: icon-only or
   image-only buttons need accessible names, and pointer handlers must not leak
   canvas drag/pan gestures.
@@ -82,12 +79,14 @@ therefore handles playback resources locally while relying on run-start store
 cleanup to clear execution-local audio fields between workflow runs. Final audio
 duration is treated as a produced runtime contract (`audio_duration_seconds`)
 that the toolbar forwards from node outputs into the output node so scrub/replay
-controls do not depend solely on browser metadata timing. `AudioGenerationNode`
-also surfaces the batch-only capability boundary so users can distinguish Stable
-Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
-must hand model identity and package facts to canonical `llm-inference` task
-shapes instead of routing diffusion or reranker packages to retired direct
-inference nodes.
+controls do not depend solely on browser metadata timing.
+`PumaLibNode.svelte` must hand model identity to canonical `llm-inference`
+task shapes instead of routing packages to retired direct inference nodes.
+The retired direct `AudioGenerationNode.svelte`, `OnnxInferenceNode.svelte`,
+and `DepthEstimationNode.svelte` components have been removed. Audio,
+ONNX-backed, and depth task families are exposed through backend-resolved
+generic inference descriptors instead of specialized graph-visible inference
+components.
 The retired `ExpandSettingsNode.svelte` component and display helper have been
 removed. Model-specific inference options are rendered from backend descriptor
 ports rather than frontend-owned settings expansion.

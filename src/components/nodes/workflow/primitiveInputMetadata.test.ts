@@ -14,12 +14,12 @@ test('findConnectedTargetPort resolves the downstream input port for a value edi
     'value',
     [
       {
-        id: 'onnx-1',
+        id: 'json-filter-1',
         data: {
           definition: {
-            node_type: 'onnx-inference',
+            node_type: 'json-filter',
             category: 'processing',
-            label: 'ONNX',
+            label: 'JSON Filter',
             description: '',
             io_binding_origin: 'integrated',
             inputs: [
@@ -42,7 +42,7 @@ test('findConnectedTargetPort resolves the downstream input port for a value edi
       {
         source: 'number-1',
         sourceHandle: 'value',
-        target: 'onnx-1',
+        target: 'json-filter-1',
         targetHandle: 'speed',
       },
     ]

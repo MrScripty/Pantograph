@@ -7,12 +7,10 @@ import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
 import ArchServiceNode from './nodes/architecture/ArchServiceNode.svelte';
 import ArchStoreNode from './nodes/architecture/ArchStoreNode.svelte';
 import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
-import AudioGenerationNode from './nodes/workflow/AudioGenerationNode.svelte';
 import AudioInputNode from './nodes/workflow/AudioInputNode.svelte';
 import AudioOutputNode from './nodes/workflow/AudioOutputNode.svelte';
 import BooleanInputNode from './nodes/workflow/BooleanInputNode.svelte';
 import DependencyEnvironmentNode from './nodes/workflow/DependencyEnvironmentNode.svelte';
-import DepthEstimationNode from './nodes/workflow/DepthEstimationNode.svelte';
 import GenericNode from './nodes/workflow/GenericNode.svelte';
 import ImageOutputNode from './nodes/workflow/ImageOutputNode.svelte';
 import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
@@ -21,7 +19,6 @@ import MaskedTextInputNode from './nodes/workflow/MaskedTextInputNode.svelte';
 import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
 import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
 import NumberInputNode from './nodes/workflow/NumberInputNode.svelte';
-import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
 import PointCloudOutputNode from './nodes/workflow/PointCloudOutputNode.svelte';
 import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
 import SelectionInputNode from './nodes/workflow/SelectionInputNode.svelte';
@@ -41,16 +38,13 @@ export const workflowNodeTypes: NodeTypes = {
   'selection-input': SelectionInputNode,
   'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
-  'onnx-inference': OnnxInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,
   'vector-output': VectorOutputNode,
   'image-output': ImageOutputNode,
   'audio-input': AudioInputNode,
   'audio-output': AudioOutputNode,
-  'audio-generation': AudioGenerationNode,
   'dependency-environment': DependencyEnvironmentNode,
-  'depth-estimation': DepthEstimationNode,
   'point-cloud-output': PointCloudOutputNode,
   'puma-lib': PumaLibNode,
   'agent-tools': AgentToolsNode,

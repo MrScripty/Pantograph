@@ -12,7 +12,6 @@
   import SelectionInputNode from './nodes/workflow/SelectionInputNode.svelte';
   import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
-  import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
   import VectorOutputNode from './nodes/workflow/VectorOutputNode.svelte';
@@ -45,7 +44,6 @@
     'selection-input': SelectionInputNode,
     'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,
-    'onnx-inference': OnnxInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
     'vector-output': VectorOutputNode,

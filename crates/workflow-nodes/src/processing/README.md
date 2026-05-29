@@ -10,7 +10,6 @@ adapters such as the Python runtime.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `audio_generation.rs` | Declares the Stable Audio generation node contract. |
 | `dependency_environment.rs` | Declares the dependency-environment sidecar/control node that associates dependency actions with one inference node. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
 | `inference.rs` | Declares the canonical `llm-inference` bootstrap contract for model reference and scheduler constraint inputs before backend descriptor resolution. |
@@ -26,8 +25,9 @@ hidden behavior that the graph cannot express safely.
   delegated to Tauri task executors or Python sidecars.
 - Current canonical contract changes must preserve declared port meanings.
   Retired legacy ports are removed instead of kept as compatibility aliases.
-- Dependency/runtime metadata used by Python-backed nodes must be graph-visible
-  when workflows need to stage environment readiness explicitly.
+- Dependency/runtime metadata used by inference runtimes must come from backend
+  validation, dependency planning, scheduler admission, and runtime handoff
+  contracts rather than graph-visible path-shaped processing nodes.
 - Canonical inference runtime selection is graph-visible only as optional
   scheduler intent. An omitted `runtime` input leaves runtime choice to
   scheduler policy, while an explicit value is a hard scheduler requirement
@@ -65,6 +65,12 @@ planner decision.
 The retired `expand-settings` passthrough node is no longer registered.
 Model-specific inference options must come from backend descriptors and
 authored snapshots instead of a frontend-owned settings expansion path.
+The retired direct `audio-generation`, `onnx-inference`, and
+`depth-estimation` graph descriptors are no longer registered. Their task
+families remain runtime/backend capabilities for canonical inference
+descriptors and scheduler dispatch, but they are not authorable processing
+nodes and must not reintroduce graph-visible `model_path`, `environment_ref`,
+or `inference_settings` ports.
 Compatible text-generation
 descriptors now also reserve explicit `kv_cache_in` and `kv_cache_out` ports
 using the first-class `kv_cache` graph type so KV reuse remains graph-visible
@@ -96,6 +102,10 @@ environment-ref data ports.
 - `expand-settings` must not be restored as an alternate inference-interface
   source. Existing `inference_settings` uses are removal or descriptor-backed
   rewrite targets in the inference-interface milestone.
+- Direct `audio-generation`, `onnx-inference`, and `depth-estimation`
+  processing nodes must not be restored as graph-visible inference entrypoints.
+  Add or change those task families through backend-resolved
+  `llm-inference` descriptors and scheduler/runtime dispatch contracts.
 - Denoising scheduler option rows must come from descriptor-backed typed option
   sets and Pumas package facts. They must not write executable defaults into
   graph data or bypass planner diagnostics.

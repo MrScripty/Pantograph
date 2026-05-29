@@ -388,8 +388,7 @@ fn convert_value_type(value_type: node_engine::PortDataType) -> PortValueType {
 
 fn capability_requirements(metadata: &node_engine::TaskMetadata) -> Vec<NodeCapabilityRequirement> {
     match metadata.node_type.as_str() {
-        "llm-inference" | "onnx-inference" => vec![NodeCapabilityRequirement::required("llm")],
-        "audio-generation" => vec![NodeCapabilityRequirement::required("audio_generation")],
+        "llm-inference" => vec![NodeCapabilityRequirement::required("llm")],
         "puma-lib" | "model-provider" => {
             vec![NodeCapabilityRequirement::required("model_library")]
         }

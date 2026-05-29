@@ -16168,6 +16168,28 @@ Worker rules:
     --all-features`; `cargo check -p workflow-nodes --no-default-features`;
     targeted source search for `model-provider`/`ModelProviderTask` with
     `model_path` and `inference_settings`.
+- 2026-05-29 Milestone 5d direct processing inference descriptor deletion
+  slice completed:
+  - Slice scope: `workflow-nodes` direct processing inference descriptors,
+    frontend node registrations/components for those descriptors, focused
+    frontend test fixture naming, source READMEs, and plan records.
+  - Implementation: removed graph-visible `audio-generation`,
+    `onnx-inference`, and `depth-estimation` descriptors and specialized
+    frontend components. Registry tests now assert those nodes are retired.
+  - No-fallback/no-legacy gate: no compatibility descriptors or path-shaped
+    ports were retained. Audio, ONNX-backed, and depth task families remain
+    backend/runtime capability concepts only and must be entered through
+    backend-resolved generic inference descriptors plus scheduler/runtime
+    dispatch contracts.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `npm run
+    typecheck`; `cargo test -p workflow-nodes
+    test_inventory_collects_all_builtins --lib`; `node
+    --experimental-strip-types
+    src/components/nodes/workflow/primitiveInputMetadata.test.ts`; `cargo
+    check -p workflow-nodes`; `cargo test -p workflow-nodes --lib`; `cargo
+    check -p workflow-nodes --all-features`; `cargo check -p workflow-nodes
+    --no-default-features`; targeted source search for retired graph-visible
+    node/component/task names.
 
 ### Traceability Links
 

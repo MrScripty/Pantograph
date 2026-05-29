@@ -109,6 +109,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 - Generic `model-provider` remains a non-Pumas display selector and must not
   expose executable `model_path`, runtime load targets, dependency
   requirements, or `inference_settings` as graph-visible outputs.
+- Direct `audio-generation`, `onnx-inference`, and `depth-estimation`
+  processing descriptors are retired as graph-visible inference entrypoints.
+  Their task families must be exposed through backend-resolved generic
+  inference descriptors and scheduler/runtime dispatch contracts.
 - Defaults: optional metadata must have documented default behavior.
 - Enums and labels: node categories and port data types carry execution
   semantics.
