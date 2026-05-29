@@ -2644,6 +2644,34 @@ defining an image-only inference-node interface.
         pantograph-workflow-service`; added-line source search for retired path
         fields, raw JSON, execution event transports, `Result<T, String>`, and
         spawned tasks; and `git diff --check`.
+- [x] 2026-05-28 graph-editor update-preview apply re-plan boundary:
+  - Discovered issue: the milestone now has backend-authored drift reports,
+    update proposals, validation events, and node-level display badges, but no
+    backend graph-patch application API exists for applying an
+    `InferenceInterfaceUpdateProposal` to the active graph session. The
+    existing contract types validate proposal shape, but there is no
+    workflow-service command/session method that verifies proposal identity,
+    graph revision, validation session, current node state, affected edges, and
+    user confirmation before mutating the graph.
+  - Why implementation must stop here: building the graph-editor apply button
+    now would require either direct frontend mutation of
+    `node.data.inference_interface_snapshot` or a new Tauri/frontend command
+    whose backend authority, freshness checks, and failure diagnostics are not
+    designed. Either path would violate the no-fallback/no-legacy rule and move
+    graph patch authority out of workflow-service.
+  - Required re-plan: define the backend-owned proposal application boundary
+    before implementing the full update-preview/apply UX. The design must cover
+    request/response DTOs, graph-session id and graph revision checks,
+    validation-session/proposal id checks, revalidation of current descriptor
+    fingerprint, affected edge/literal handling, confirmation for destructive
+    operations, typed diagnostics for stale/missing/rejected proposals, Tauri as
+    transport only, and frontend behavior that displays a preview without
+    blocking editing or deriving patch operations locally.
+  - No-fallback/no-legacy confirmation: until that boundary is planned and
+    implemented, the frontend may display backend drift/proposal facts only. It
+    must not apply proposal operations itself, rewrite snapshots directly,
+    remove edges, clear literals, or treat proposal presence as submit
+    authority.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply

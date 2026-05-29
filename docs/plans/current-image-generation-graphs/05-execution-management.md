@@ -15751,6 +15751,26 @@ Worker rules:
     typecheck`.
   - Remaining follow-up: build the full graph-editor update-preview/apply UX
     against backend graph-patch APIs.
+- 2026-05-28 Milestone 5d update-preview apply re-plan boundary:
+  - Discovered issue: backend drift reports, update proposals, validation
+    events, runtime overlays, and inference-node badges are now present, but no
+    workflow-service graph-patch application API exists for applying an
+    `InferenceInterfaceUpdateProposal` to the active graph session.
+  - Why implementation stops here: an apply button would otherwise need to
+    mutate graph node data directly in the frontend or invent an unplanned
+    Tauri command without backend freshness checks. Both would violate the
+    no-fallback/no-legacy rule because workflow-service must own graph mutation,
+    proposal identity checks, stale revision rejection, affected edge/literal
+    handling, and typed diagnostics.
+  - Required re-plan: define a backend-owned proposal application boundary with
+    request/response DTOs, graph-session and graph-revision identity,
+    validation-session/proposal id checks, descriptor fingerprint revalidation,
+    destructive confirmation handling, stale/missing/rejected proposal
+    diagnostics, Tauri transport-only forwarding, and frontend preview behavior
+    that remains editable and does not derive patch operations locally.
+  - No-fallback/no-legacy result: current frontend behavior remains display-only
+    for drift/proposal overlays until that application boundary is planned and
+    implemented.
 
 ### Traceability Links
 
