@@ -14722,6 +14722,22 @@ Worker rules:
     a stable validation-relevant node-data projection, or whether validation
     state/events/scheduler projections/saved authored snapshots need a separate
     typed validation-input fingerprint.
+- 2026-05-28 Milestone 5d validation freshness option 3 standards review:
+  - Decision: use option 3. Redefine `WorkflowGraphRevision` as the canonical
+    semantic graph revision and make validation freshness depend on that
+    revision plus validation-owned descriptor/model/runtime fingerprints.
+  - Standards result: graph semantic identity stays workflow-service owned;
+    resolver fingerprints stay validation/resolver owned; UI/layout-only state
+    must not invalidate inference validation; and stale async results must be
+    rejected by deterministic revision/fingerprint checks rather than
+    incidental mutation cancellation, timestamps, frontend cache busting, or
+    transport request ids.
+  - Required next slices: add tests proving semantic node-data edits change the
+    revision and layout-only edits do not; centralize the semantic graph
+    revision projection; audit revision consumers across edit-session
+    responses, connection stale checks, validation state/lifecycle, dependency
+    intents, submit gate, scheduler projections, executable validation
+    snapshots, saved graph drift diagnostics, and graph README contracts.
 
 ### Traceability Links
 

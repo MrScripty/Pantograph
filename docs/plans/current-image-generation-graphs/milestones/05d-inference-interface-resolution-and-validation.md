@@ -3368,6 +3368,61 @@ defining an image-only inference-node interface.
     validation-input fingerprint stored beside graph revision in validation
     state, events, submit gates, scheduler projections, and saved graph
     authored snapshots.
+  - Selected design: use option 3. Redefine `WorkflowGraphRevision` as the
+    canonical semantic graph revision, then make inference-validation freshness
+    depend on that revision plus validation-owned descriptor/model/runtime
+    fingerprints. The graph revision is the workflow-service-owned identity for
+    graph semantics; descriptor fingerprints remain owned by the inference
+    interface resolver and prove that backend-resolved ports, defaults,
+    availability, and constraints still match the authored graph.
+  - Standards alignment:
+    - Simplicity: one graph semantic revision remains the freshness authority
+      for graph state, while descriptor/model/runtime fingerprints remain
+      separate because they are backend resolver facts rather than graph
+      document semantics.
+    - Executable/structured contract discipline: persisted saved graphs,
+      validation state, lifecycle events, submit gates, scheduler projections,
+      and drift diagnostics must agree on the same revision semantics instead
+      of duplicating field interpretation.
+    - Stale async response safety: fact lookup, dependency actions, and
+      scheduler admission must re-check the current semantic graph revision and
+      descriptor fingerprints before accepting results.
+    - No compatibility shim: do not keep mutation-side cancellation as the
+      freshness mechanism, do not add timestamps/request counters as authority,
+      and do not let frontend/Tauri cache-busting decide validation freshness.
+  - Canonical semantic revision scope:
+    - Include node identity, node type, connection topology, group/input/output
+      semantics, and graph-authored node data that can affect validation,
+      execution, scheduler materialization, dependency-environment actions, or
+      saved authored inference snapshots.
+    - Exclude layout-only presentation fields such as node position from
+      validation freshness. If layout needs independent dirty tracking later,
+      add a separate layout/document revision instead of overloading
+      `WorkflowGraphRevision`.
+    - Node-data projection must be centralized in workflow-service graph code.
+      Unknown graph-authored data on inference/execution-relevant nodes must
+      fail conservative by participating in semantic revision until the node
+      contract explicitly marks it presentation-only. Known presentation-only
+      fields may be excluded only through a typed, documented projection rule.
+    - The projection must use deterministic serialization/canonical ordering;
+      do not hash raw JSON text, map iteration order, incidental frontend field
+      order, or transport-specific formatting.
+  - Required implementation slices before resuming graph-mutation cancellation:
+    1. Add focused tests that currently expose the bug: validation/execution
+       node-data changes must change `WorkflowGraphRevision`, while position-
+       only changes must not change validation freshness.
+    2. Introduce a centralized semantic graph revision projection/helper in
+       workflow-service graph code and update `WorkflowGraph::compute_fingerprint()`
+       to use a versioned semantic projection.
+    3. Audit current revision consumers: edit-session responses, connection
+       stale checks, derived graph cache, current validation state, validation
+       lifecycle events, dependency-environment intents, submit gate,
+       scheduler projections, executable validation snapshots, and saved graph
+       drift diagnostics.
+    4. Update graph README/API consumer contract text so callers understand
+       that graph revision is semantic, not visual layout identity.
+    5. Resume mutation cancellation wiring only after the revision semantics
+       are deterministic and tested.
   - No-fallback/no-legacy confirmation: do not compensate with incidental
     cancellation calls, frontend cache busting, timestamps, or transport-side
     invalidation. The freshness key must be canonical, deterministic, and owned
@@ -3378,9 +3433,29 @@ defining an image-only inference-node interface.
     `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
     `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
     and this milestone.
-  - Remaining follow-up: decide the freshness-key design before wiring
-    cancellation into the remaining graph edit operations or closing the live
-    validation lifecycle owner item.
+  - Remaining follow-up: implement the selected semantic graph revision design
+    before wiring cancellation into the remaining graph edit operations or
+    closing the live validation lifecycle owner item.
+- [x] 2026-05-28 validation freshness option 3 standards review completed:
+  - Decision recorded: option 3 is selected as the standards-compliant design.
+    `WorkflowGraphRevision` becomes the canonical semantic graph revision, and
+    inference-validation freshness is that revision plus descriptor/model/
+    runtime fingerprints owned by validation/resolver contracts.
+  - Standards result: the plan keeps graph semantics, resolver facts, async
+    lifecycle freshness, scheduler admission, and UI/layout state separated by
+    explicit ownership boundaries. It rejects incidental invalidation,
+    timestamps, frontend cache busting, or transport request ids as validation
+    authority.
+  - Blast-radius notes: implementation must audit graph fingerprinting,
+    derived graph cache invalidation, edit-session revision responses,
+    connection stale checks, validation state, lifecycle events,
+    dependency-environment action intents, submit gate, scheduler projections,
+    executable validation snapshots, saved authored snapshots, graph README,
+    and drift diagnostics.
+  - Test requirements: add focused Rust tests for semantic node-data revision
+    changes and layout-only non-changes before replacing the fingerprint
+    projection; then add stale validation/admission tests that prove old
+    validation summaries cannot remain current after semantic node-data edits.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the
