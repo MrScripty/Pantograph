@@ -16382,6 +16382,30 @@ Worker rules:
     avoids fallback/compatibility detours, and requires focused scheduler
     transition tests plus workflow-service orchestration tests before runtime
     dispatch wiring continues.
+- 2026-05-29 Milestone 5b scheduler runtime-input transition contract slice
+  completed:
+  - Slice scope: `pantograph-scheduler` task-state transition contract/tests
+    plus plan records.
+  - Implementation: `AwaitingInputs` may now transition directly to
+    `WaitingDependencyReadiness`, and `WaitingDependencyReadiness` rejects
+    non-runtime execution intent. The exhaustive transition matrix was updated
+    with focused tests for the direct runtime edge and non-runtime rejection.
+  - No-fallback/no-legacy gate: this only changes scheduler-owned lifecycle
+    legality. It does not dispatch runtime work, route runtime tasks through
+    `Ready`, synthesize handoff, read graph paths, or adapt anything into
+    `ModelRefV2`/`ModelDependencyRequest`.
+  - Verification passed: `cargo fmt -p pantograph-scheduler`; `cargo test -p
+    pantograph-scheduler --test queue_state -- --nocapture`; `cargo check -p
+    pantograph-scheduler`; `cargo fmt -p pantograph-scheduler -- --check`;
+    `cargo check -p pantograph-scheduler --all-features`; `cargo check -p
+    pantograph-scheduler --no-default-features`; targeted retired
+    path/model-ref source search over touched scheduler files; and `git diff
+    --check`.
+  - Verification caveat: targeted source search still reports allowed hits in
+    the negative path-shaped-field rejection test and the existing typed Pumas
+    fixture value.
+  - Remaining follow-up: add workflow-service runtime input advancement using
+    this scheduler-owned transition contract.
 
 ### Traceability Links
 

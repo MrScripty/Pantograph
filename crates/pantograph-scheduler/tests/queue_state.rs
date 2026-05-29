@@ -183,6 +183,67 @@ fn source_input_task_can_materialize_from_awaiting_inputs_to_completed() {
 }
 
 #[test]
+fn runtime_task_can_advance_from_awaiting_inputs_to_waiting_dependency_readiness() {
+    let awaiting_record = match apply_scheduler_task_state_transition(
+        None,
+        task_transition_to(None, awaiting_inputs_state()),
+    )
+    .expect("runtime task awaiting inputs should apply")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("initial transition cannot be already applied")
+        }
+    };
+
+    let waiting_record = match apply_scheduler_task_state_transition(
+        Some(&awaiting_record),
+        task_transition_with_id(
+            "transition.runtime_inputs_ready",
+            Some(SchedulerTaskStateKind::AwaitingInputs),
+            waiting_dependency_readiness_state(task_intent("run.001", "task.001")),
+        ),
+    )
+    .expect("runtime input readiness should advance to dependency readiness")
+    {
+        SchedulerTaskStateTransitionApplyResult::Applied(record) => record,
+        SchedulerTaskStateTransitionApplyResult::AlreadyApplied(_) => {
+            panic!("new transition cannot be already applied")
+        }
+    };
+
+    assert_eq!(
+        waiting_record.state.kind(),
+        SchedulerTaskStateKind::WaitingDependencyReadiness
+    );
+    assert!(waiting_record
+        .state
+        .execution_intent()
+        .is_some_and(|intent| intent.runtime_task_intent().is_some()));
+}
+
+#[test]
+fn waiting_dependency_readiness_rejects_non_runtime_execution_intent() {
+    let transition = task_transition_to(
+        None,
+        SchedulerTaskState::WaitingDependencyReadiness {
+            execution_intent: non_runtime_execution_intent("text-output"),
+        },
+    );
+
+    let error = apply_scheduler_task_state_transition(None, transition)
+        .expect_err("dependency readiness state must require runtime intent");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::InvalidField {
+            field: "task_state.execution_intent",
+            reason: "waiting dependency readiness requires runtime task intent",
+        }
+    );
+}
+
+#[test]
 fn rejects_path_shaped_task_state_fields() {
     let value = serde_json::json!({
         "contract_version": 1,
@@ -438,7 +499,14 @@ fn allowed_next_states(previous: SchedulerTaskStateKind) -> &'static [SchedulerT
     };
 
     match previous {
-        AwaitingInputs => &[Ready, InputUnavailable, Invalid, TerminalFailed, Completed],
+        AwaitingInputs => &[
+            Ready,
+            WaitingDependencyReadiness,
+            InputUnavailable,
+            Invalid,
+            TerminalFailed,
+            Completed,
+        ],
         InputUnavailable => &[AwaitingInputs, TerminalFailed],
         Invalid => &[TerminalFailed],
         Ready => &[
@@ -497,9 +565,7 @@ fn state_for_kind(kind: SchedulerTaskStateKind) -> SchedulerTaskState {
         },
         SchedulerTaskStateKind::Ready => ready_state(intent),
         SchedulerTaskStateKind::WaitingDependencyReadiness => {
-            SchedulerTaskState::WaitingDependencyReadiness {
-                execution_intent: runtime_execution_intent(intent),
-            }
+            waiting_dependency_readiness_state(intent)
         }
         SchedulerTaskStateKind::WaitingResources => SchedulerTaskState::WaitingResources {
             execution_intent: runtime_execution_intent(intent),
@@ -530,6 +596,12 @@ fn awaiting_inputs_state() -> SchedulerTaskState {
 
 fn ready_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
     SchedulerTaskState::Ready {
+        execution_intent: runtime_execution_intent(task_intent),
+    }
+}
+
+fn waiting_dependency_readiness_state(task_intent: SchedulableTaskIntent) -> SchedulerTaskState {
+    SchedulerTaskState::WaitingDependencyReadiness {
         execution_intent: runtime_execution_intent(task_intent),
     }
 }

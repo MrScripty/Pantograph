@@ -64,7 +64,7 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `RuntimeHostExecutionResponse`, and keep request/cancellation/retry
   correlation in scheduler/application orchestration rather than runtime
   adapters.
-- [ ] Update the scheduler task-state transition contract to allow runtime
+- [x] Update the scheduler task-state transition contract to allow runtime
   inference tasks with materialized upstream inputs to transition directly from
   `AwaitingInputs` to `WaitingDependencyReadiness`. The scheduler contract
   must require a runtime execution intent for that state, keep non-runtime
@@ -342,3 +342,24 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   construction state transitions, avoids compatibility/fallback behavior, and
   requires focused scheduler contract tests before workflow-service runtime
   input advancement is retried.
+- 2026-05-29 scheduler runtime-input transition contract slice completed.
+  Smallest useful vertical slice: update the `pantograph-scheduler` task-state
+  transition matrix so runtime inference tasks can advance directly from
+  `AwaitingInputs` to `WaitingDependencyReadiness`, and enforce that
+  `WaitingDependencyReadiness` carries a runtime execution intent. Allowed
+  write set: `crates/pantograph-scheduler/src/queue.rs`,
+  `crates/pantograph-scheduler/tests/queue_state.rs`, this milestone file, and
+  execution notes. No-fallback confirmation: the slice does not dispatch
+  runtime work, does not route runtime tasks through `Ready`, does not
+  synthesize scheduler handoff, and does not introduce `ModelRefV2`,
+  `ModelDependencyRequest`, graph paths, or executable load targets.
+  Verification passed: `cargo fmt -p pantograph-scheduler`; `cargo test -p
+  pantograph-scheduler --test queue_state -- --nocapture`; `cargo check -p
+  pantograph-scheduler`; `cargo fmt -p pantograph-scheduler -- --check`;
+  `cargo check -p pantograph-scheduler --all-features`; `cargo check -p
+  pantograph-scheduler --no-default-features`; targeted source search over
+  touched scheduler files for retired path/model-ref terms; and `git diff
+  --check`. Search caveat: allowed hits remain in the negative
+  path-shaped-field rejection test and the existing typed Pumas fixture value.
+  Remaining follow-up: retry workflow-service runtime input advancement on top
+  of the scheduler-owned transition contract.

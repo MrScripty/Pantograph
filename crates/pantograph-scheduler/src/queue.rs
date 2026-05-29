@@ -120,7 +120,12 @@ impl SchedulerTaskStateKind {
         match self {
             AwaitingInputs => matches!(
                 next,
-                Ready | InputUnavailable | Invalid | TerminalFailed | Completed
+                Ready
+                    | WaitingDependencyReadiness
+                    | InputUnavailable
+                    | Invalid
+                    | TerminalFailed
+                    | Completed
             ),
             InputUnavailable => matches!(next, AwaitingInputs | TerminalFailed),
             Invalid => matches!(next, TerminalFailed),
@@ -461,6 +466,14 @@ impl SchedulerTaskState {
     ) -> Result<(), SchedulerContractError> {
         if let Some(execution_intent) = self.execution_intent() {
             execution_intent.validate_for_task(workflow_id, workflow_run_id, node_id, task_id)?;
+        }
+        if matches!(self, SchedulerTaskState::WaitingDependencyReadiness { .. })
+            && self.task_intent().is_none()
+        {
+            return Err(SchedulerContractError::InvalidField {
+                field: "task_state.execution_intent",
+                reason: "waiting dependency readiness requires runtime task intent",
+            });
         }
         validate_diagnostics(self)
     }
