@@ -18,6 +18,13 @@ export interface InferenceUpdateApplyDisplay {
   label: string;
 }
 
+export interface InferenceUpdatePreviewDisplay {
+  extraCount: number;
+  operationSummary: string | null;
+  rows: string[];
+  title: string;
+}
+
 const STATUS_LABELS: Record<WorkflowGraphValidationSummary['status'], string> = {
   pending: 'Pending validation',
   stale: 'Stale validation',
@@ -102,6 +109,29 @@ export function buildInferenceUpdateApplyDisplay(
     detail: 'Unsupported update',
     enabled: false,
     label: 'Review',
+  };
+}
+
+export function buildInferenceUpdatePreviewDisplay(
+  driftReport: InferenceInterfaceDriftReport | null | undefined,
+  updateProposal: InferenceInterfaceUpdateProposal | null | undefined,
+): InferenceUpdatePreviewDisplay | null {
+  if (!driftReport && !updateProposal) {
+    return null;
+  }
+
+  const changes = driftReport?.changes ?? updateProposal?.drift_report?.changes ?? [];
+  const rows = changes.slice(0, 3).map((change) =>
+    change.port_id ? `${change.port_id}: ${change.message}` : change.message,
+  );
+  const operationCount = updateProposal?.operations?.length ?? 0;
+
+  return {
+    extraCount: Math.max(changes.length - rows.length, 0),
+    operationSummary:
+      operationCount > 0 ? formatCount(operationCount, 'backend operation') : null,
+    rows,
+    title: driftReport?.blocking ? 'Review interface changes' : 'Interface update preview',
   };
 }
 

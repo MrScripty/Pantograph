@@ -15907,6 +15907,25 @@ Worker rules:
   - Remaining follow-up: implement the richer option-4 preview/confirmation
     workflow for destructive updates and visual diffs while keeping backend
     graph-patch ownership.
+- 2026-05-28 Milestone 5d staged node-local update preview slice:
+  - Smallest useful vertical slice: add inference-node preview rows for
+    backend-authored drift messages and proposal operation counts.
+  - Allowed files touched:
+    `src/components/nodes/workflow/LLMInferenceNode.svelte`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.ts`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.test.ts`,
+    `src/components/nodes/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: node-local preview stays display-only and
+    consumes backend projection facts. It does not compare ports, construct
+    graph patch operations, mutate authored snapshots, remove edges, clear
+    literals, infer submit authority, or enable destructive proposal
+    application.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts`; `npm
+    run typecheck`; `git diff --check`.
+  - Remaining follow-up: add graph-level port/edge visual overlays and option-4
+    destructive preview/confirmation support.
 
 ### Traceability Links
 

@@ -184,6 +184,10 @@ and finality metadata in runtime data while the component reads bytes lazily wit
   create patch operations, or mutate graph data itself. Supported apply actions
   must go through the graph-level inference-interface update coordinator and
   backend graph-patch API.
+- Inference-interface update previews may list backend drift messages and
+  backend operation counts for node-local review. They must not become graph
+  mutation authority or recreate backend patch previews from frontend
+  comparisons.
 - `PumaLibNode.svelte` must consume the shared Pumas model-option cache from
   `src/services/workflow/pumaModelOptionsCache.ts`; selector cursor handoff and
   invalidation logic belong in that service, not in component module state.

@@ -12,6 +12,7 @@
   import {
     buildInferenceDriftDisplay,
     buildInferenceUpdateApplyDisplay,
+    buildInferenceUpdatePreviewDisplay,
     buildInferenceValidationDisplay,
   } from './inferenceValidationDisplay';
   import {
@@ -61,6 +62,12 @@
   );
   let updateApplyDisplay = $derived(
     buildInferenceUpdateApplyDisplay(data.inference_interface_update_proposal),
+  );
+  let updatePreviewDisplay = $derived(
+    buildInferenceUpdatePreviewDisplay(
+      data.inference_interface_drift_report,
+      data.inference_interface_update_proposal,
+    ),
   );
 
   let statusColor = $derived(
@@ -186,6 +193,20 @@
               {/if}
             </div>
           {/if}
+          {#if updatePreviewDisplay}
+            <div class="inference-update-preview">
+              <div class="inference-update-preview__title">{updatePreviewDisplay.title}</div>
+              {#if updatePreviewDisplay.operationSummary}
+                <div class="truncate">{updatePreviewDisplay.operationSummary}</div>
+              {/if}
+              {#each updatePreviewDisplay.rows as row, index (`${index}:${row}`)}
+                <div class="truncate" title={row}>{row}</div>
+              {/each}
+              {#if updatePreviewDisplay.extraCount > 0}
+                <div>{updatePreviewDisplay.extraCount} more</div>
+              {/if}
+            </div>
+          {/if}
           {#if updateApplyError}
             <div class="inference-validation inference-validation--error" title={updateApplyError}>
               <span class="truncate">{updateApplyError}</span>
@@ -267,5 +288,20 @@
   .inference-update-button:disabled {
     cursor: not-allowed;
     opacity: 0.55;
+  }
+
+  .inference-update-preview {
+    display: grid;
+    gap: 0.125rem;
+    border-left: 2px solid #525252;
+    padding-left: 0.375rem;
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+    color: #a3a3a3;
+  }
+
+  .inference-update-preview__title {
+    color: #e5e5e5;
+    font-weight: 500;
   }
 </style>

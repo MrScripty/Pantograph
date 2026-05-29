@@ -2821,6 +2821,25 @@ defining an image-only inference-node interface.
   - Remaining follow-up: build the option-4 full update-preview/confirmation UX
     for destructive operations and richer diffs, still applying through
     workflow-service graph-patch APIs only.
+- [x] 2026-05-28 staged node-local update preview slice:
+  - Smallest useful vertical slice: render a compact inference-node update
+    preview from backend drift messages and backend proposal operation counts.
+  - Allowed files touched:
+    `src/components/nodes/workflow/LLMInferenceNode.svelte`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.ts`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.test.ts`,
+    `src/components/nodes/workflow/README.md`, this Milestone 5d file, and
+    `05-execution-management.md`.
+  - No-fallback/no-legacy result: the preview consumes backend-authored drift
+    report rows and backend-authored proposal operation counts only. It does
+    not compare ports, construct graph patch operations, rewrite graph data,
+    remove edges, clear literals, infer submit authority, or enable destructive
+    proposal application.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts`; `npm
+    run typecheck`; `git diff --check`.
+  - Remaining follow-up: add graph-level edge/port visual overlays and the
+    richer option-4 preview/confirmation workflow for destructive operations.
 - [ ] Wire staged graph editor drift presentation and update preview.
       Option-2 scope: the editor shows authored-current diffs visually on
       nodes/ports/edges, keeps invalid edges visible, displays

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildInferenceDriftDisplay,
   buildInferenceUpdateApplyDisplay,
+  buildInferenceUpdatePreviewDisplay,
   buildInferenceValidationDisplay,
 } from './inferenceValidationDisplay.ts';
 
@@ -209,6 +210,76 @@ test('buildInferenceUpdateApplyDisplay disables destructive proposal operations'
       detail: 'Requires preview',
       enabled: false,
       label: 'Review',
+    },
+  );
+});
+
+test('buildInferenceUpdatePreviewDisplay lists backend drift changes without patch construction', () => {
+  assert.deepEqual(
+    buildInferenceUpdatePreviewDisplay(
+      {
+        authored_fingerprint: 'descriptor.previous',
+        current_fingerprint: 'descriptor.current',
+        severity: 'blocking',
+        blocking: true,
+        changes: [
+          {
+            kind: 'port_added',
+            port_id: 'prompt',
+            message: 'Current descriptor added input port prompt.',
+          },
+          {
+            kind: 'port_type_changed',
+            port_id: 'image',
+            message: 'Input image changed type.',
+          },
+          {
+            kind: 'default_changed',
+            port_id: 'steps',
+            message: 'Steps default changed.',
+          },
+          {
+            kind: 'availability_changed',
+            port_id: 'sampler',
+            message: 'Sampler availability changed.',
+          },
+        ],
+      },
+      {
+        proposal_id: 'inference-interface-update/infer-1',
+        node_id: 'infer-1',
+        current_descriptor_fingerprint: 'descriptor.current',
+        drift_report: {
+          authored_fingerprint: 'descriptor.previous',
+          current_fingerprint: 'descriptor.current',
+          severity: 'blocking',
+          blocking: true,
+        },
+        operations: [
+          {
+            operation: 'replace_authored_snapshot',
+            value: {
+              node_id: 'infer-1',
+              snapshot: {
+                descriptor_fingerprint: 'descriptor.current',
+                task_kind: 'image_generation',
+              },
+            },
+          },
+        ],
+        requires_confirmation: true,
+        destructive: false,
+      },
+    ),
+    {
+      extraCount: 1,
+      operationSummary: '1 backend operation',
+      rows: [
+        'prompt: Current descriptor added input port prompt.',
+        'image: Input image changed type.',
+        'steps: Steps default changed.',
+      ],
+      title: 'Review interface changes',
     },
   );
 });
