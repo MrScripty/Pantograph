@@ -15669,6 +15669,39 @@ Worker rules:
   - Remaining follow-up: generate detailed drift reports and backend update
     proposals from the authored/current comparison before wiring graph-editor
     update-preview UI.
+- 2026-05-28 Milestone 5d backend drift report projection slice:
+  - Smallest useful vertical slice: produce typed backend drift reports from
+    authored inference snapshots versus current descriptors, attach them to
+    validation node projections and connection surfaces, emit the existing
+    node-scoped validation `DriftReported` event, and mirror the optional DTO in
+    frontend workflow types/runtime overlays.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_projection.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_version.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/README.md`,
+    `src/components/workflowValidationProjectionOverlays.ts`,
+    `src/components/workflowValidationProjectionOverlays.test.ts`,
+    `src/components/README.md`, the Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: drift reports are backend-authored
+    presentation/update-preview input. Frontend code does not compare ports,
+    author patches, infer submit permission, inspect Pumas/model paths, or use
+    drift overlays as scheduler/runtime authority.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_interface_projection --lib`;
+    `cargo test -p pantograph-workflow-service inference_interface_publication
+    --lib`; `cargo check -p pantograph-workflow-service` with the pre-existing
+    `set_active_run_execution_plan` dead-code warning; `node
+    --experimental-strip-types --test
+    src/components/workflowValidationProjectionOverlays.test.ts`; `npm run
+    typecheck`.
+  - Remaining follow-up: generate typed update proposals from drift reports and
+    render graph-editor badges/update-preview controls without moving patch
+    authority into the frontend.
 
 ### Traceability Links
 

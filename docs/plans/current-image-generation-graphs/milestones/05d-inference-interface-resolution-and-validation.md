@@ -2572,6 +2572,29 @@ defining an image-only inference-node interface.
       - Remaining follow-up: produce detailed backend drift reports and typed
         update proposals from the same authored/current comparison, then expose
         them to the graph editor as display/update-preview data.
+      - 2026-05-28 backend drift report projection slice completed:
+        workflow-service now builds typed `InferenceInterfaceDriftReport`
+        values from authored snapshot versus current descriptor comparison,
+        attaches the report to node projections and connection surfaces, emits
+        the existing node-scoped `DriftReported` validation event, and mirrors
+        the optional drift report in frontend workflow DTO/overlay types.
+      - No-fallback/no-legacy result: drift reports are backend-authored facts
+        only. Frontend overlay code forwards them for display and clears them
+        with the graph-revision overlay keys; it does not compare ports,
+        produce graph patches, infer submit authority, or inspect Pumas/model
+        paths.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+        `cargo test -p pantograph-workflow-service
+        inference_interface_projection --lib`; `cargo test -p
+        pantograph-workflow-service inference_interface_publication --lib`;
+        `cargo check -p pantograph-workflow-service` with the pre-existing
+        `set_active_run_execution_plan` dead-code warning; `node
+        --experimental-strip-types --test
+        src/components/workflowValidationProjectionOverlays.test.ts`; `npm run
+        typecheck`.
+      - Remaining follow-up: generate typed update proposals from the drift
+        report and render graph-editor badges/preview UI without introducing a
+        frontend-owned patch authority.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

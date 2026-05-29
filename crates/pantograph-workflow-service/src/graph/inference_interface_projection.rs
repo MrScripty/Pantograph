@@ -1,8 +1,10 @@
 use pantograph_inference_interface_contracts::{
     AuthoredInferenceInterfaceSnapshot, AuthoredInferencePortSnapshot,
     DraftGraphEnqueueDisabledReason, DraftGraphValidationStatus, DraftGraphValidationSummary,
-    InferenceAvailabilityReason, InferenceAvailabilityStatus, InferenceDiagnosticSeverity,
-    InferenceInterfaceContractError, InferenceInterfaceDescriptor,
+    InferenceAvailabilityReason, InferenceAvailabilityStatus, InferenceDiagnosticCode,
+    InferenceDiagnosticSeverity, InferenceDriftSeverity, InferenceInterfaceContractError,
+    InferenceInterfaceDescriptor, InferenceInterfaceDiagnostic, InferenceInterfaceDriftChange,
+    InferenceInterfaceDriftChangeKind, InferenceInterfaceDriftReport, InferencePortDescriptor,
     INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
@@ -30,6 +32,8 @@ pub struct InferenceInterfaceResolutionProjection {
     pub descriptor: InferenceInterfaceDescriptor,
     pub authored_snapshot: AuthoredInferenceInterfaceSnapshot,
     pub validation_summary: DraftGraphValidationSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_report: Option<InferenceInterfaceDriftReport>,
 }
 
 pub fn resolve_inference_interface_projection(
@@ -45,12 +49,14 @@ pub fn resolve_inference_interface_projection(
         }
         None => authored_snapshot_from_descriptor(&descriptor)?,
     };
+    let drift_report = drift_report_from_descriptor_and_snapshot(&descriptor, &authored_snapshot)?;
     let validation_summary =
         validation_summary_from_descriptor_and_snapshot(&descriptor, &authored_snapshot)?;
     Ok(InferenceInterfaceResolutionProjection {
         descriptor,
         authored_snapshot,
         validation_summary,
+        drift_report,
     })
 }
 
@@ -75,6 +81,63 @@ pub fn authored_snapshot_from_descriptor(
     };
     snapshot.validate()?;
     Ok(snapshot)
+}
+
+pub fn drift_report_from_descriptor_and_snapshot(
+    descriptor: &InferenceInterfaceDescriptor,
+    authored_snapshot: &AuthoredInferenceInterfaceSnapshot,
+) -> Result<Option<InferenceInterfaceDriftReport>, InferenceInterfaceProjectionError> {
+    descriptor.validate()?;
+    authored_snapshot.validate()?;
+    if authored_snapshot.descriptor_fingerprint == descriptor.descriptor_fingerprint {
+        return Ok(None);
+    }
+
+    let mut changes = Vec::new();
+    if authored_snapshot.task_kind != descriptor.task_kind {
+        changes.push(drift_change(
+            InferenceInterfaceDriftChangeKind::TaskKindChanged,
+            None,
+            format!(
+                "Task kind changed from {} to {}.",
+                authored_snapshot.task_kind.as_str(),
+                descriptor.task_kind.as_str()
+            ),
+        ));
+    }
+    extend_port_drift_changes(
+        &mut changes,
+        "input",
+        &authored_snapshot.inputs,
+        &descriptor.inputs,
+    );
+    extend_port_drift_changes(
+        &mut changes,
+        "output",
+        &authored_snapshot.outputs,
+        &descriptor.outputs,
+    );
+
+    let report = InferenceInterfaceDriftReport {
+        authored_fingerprint: authored_snapshot.descriptor_fingerprint.clone(),
+        current_fingerprint: descriptor.descriptor_fingerprint.clone(),
+        severity: InferenceDriftSeverity::Blocking,
+        blocking: true,
+        changes,
+        diagnostics: vec![InferenceInterfaceDiagnostic {
+            severity: InferenceDiagnosticSeverity::Error,
+            code: InferenceDiagnosticCode::DriftDetected,
+            message: "The authored inference interface no longer matches the current descriptor."
+                .to_string(),
+            hint: Some(
+                "Review the current descriptor and apply the backend update proposal before submitting."
+                    .to_string(),
+            ),
+            port_id: None,
+        }],
+    };
+    report.validate()?;
+    Ok(Some(report))
 }
 
 pub fn validation_summary_from_descriptor(
@@ -156,6 +219,108 @@ fn authored_port_snapshot_from_descriptor(
         value_type: port.value_type.clone(),
         default: port.default.clone(),
         availability: port.availability.clone(),
+    }
+}
+
+fn extend_port_drift_changes(
+    changes: &mut Vec<InferenceInterfaceDriftChange>,
+    direction_label: &'static str,
+    authored_ports: &[AuthoredInferencePortSnapshot],
+    current_ports: &[InferencePortDescriptor],
+) {
+    for authored_port in authored_ports {
+        let current_port = current_ports
+            .iter()
+            .find(|port| port.port_id == authored_port.port_id);
+        let Some(current_port) = current_port else {
+            changes.push(drift_change(
+                InferenceInterfaceDriftChangeKind::PortRemoved,
+                Some(authored_port.port_id.clone()),
+                format!(
+                    "Authored {direction_label} port {} is no longer available.",
+                    authored_port.port_id.as_str()
+                ),
+            ));
+            continue;
+        };
+        extend_existing_port_drift_changes(changes, direction_label, authored_port, current_port);
+    }
+
+    for current_port in current_ports {
+        if authored_ports
+            .iter()
+            .any(|port| port.port_id == current_port.port_id)
+        {
+            continue;
+        }
+        changes.push(drift_change(
+            InferenceInterfaceDriftChangeKind::PortAdded,
+            Some(current_port.port_id.clone()),
+            format!(
+                "Current descriptor added {direction_label} port {}.",
+                current_port.port_id.as_str()
+            ),
+        ));
+    }
+}
+
+fn extend_existing_port_drift_changes(
+    changes: &mut Vec<InferenceInterfaceDriftChange>,
+    direction_label: &'static str,
+    authored_port: &AuthoredInferencePortSnapshot,
+    current_port: &InferencePortDescriptor,
+) {
+    if authored_port.value_type != current_port.value_type {
+        changes.push(drift_change(
+            InferenceInterfaceDriftChangeKind::PortTypeChanged,
+            Some(authored_port.port_id.clone()),
+            format!(
+                "{direction_label} port {} changed value type.",
+                authored_port.port_id.as_str()
+            ),
+        ));
+    }
+    if authored_port.requirement != current_port.requirement {
+        changes.push(drift_change(
+            InferenceInterfaceDriftChangeKind::RequirementChanged,
+            Some(authored_port.port_id.clone()),
+            format!(
+                "{direction_label} port {} changed requirement.",
+                authored_port.port_id.as_str()
+            ),
+        ));
+    }
+    if authored_port.default != current_port.default {
+        changes.push(drift_change(
+            InferenceInterfaceDriftChangeKind::DefaultChanged,
+            Some(authored_port.port_id.clone()),
+            format!(
+                "{direction_label} port {} changed default.",
+                authored_port.port_id.as_str()
+            ),
+        ));
+    }
+    if authored_port.availability != current_port.availability {
+        changes.push(drift_change(
+            InferenceInterfaceDriftChangeKind::AvailabilityChanged,
+            Some(authored_port.port_id.clone()),
+            format!(
+                "{direction_label} port {} changed availability.",
+                authored_port.port_id.as_str()
+            ),
+        ));
+    }
+}
+
+fn drift_change(
+    kind: InferenceInterfaceDriftChangeKind,
+    port_id: Option<pantograph_inference_interface_contracts::InferencePortId>,
+    message: String,
+) -> InferenceInterfaceDriftChange {
+    InferenceInterfaceDriftChange {
+        kind,
+        port_id,
+        message,
     }
 }
 
@@ -385,6 +550,24 @@ mod tests {
             .validation_summary
             .enqueue_disabled_reasons
             .contains(&DraftGraphEnqueueDisabledReason::DriftRequiresReview));
+        let drift_report = drifted_projection
+            .drift_report
+            .as_ref()
+            .expect("drift report");
+        assert!(drift_report.blocking);
+        assert_eq!(
+            drift_report.authored_fingerprint,
+            authored_snapshot.descriptor_fingerprint
+        );
+        assert_eq!(
+            drift_report.current_fingerprint,
+            drifted_projection.descriptor.descriptor_fingerprint
+        );
+        assert!(drift_report.changes.is_empty());
+        assert!(drift_report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == InferenceDiagnosticCode::DriftDetected));
         assert_eq!(drifted_projection.validation_summary.diagnostics_count, 1);
         assert_eq!(
             drifted_projection

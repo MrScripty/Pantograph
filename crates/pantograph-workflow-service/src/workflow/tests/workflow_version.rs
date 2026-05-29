@@ -390,6 +390,7 @@ fn executable_validation_publication(
             },
             descriptor,
             validation_summary: summary,
+            drift_report: None,
             runtime_constraint: None,
             device_constraint: None,
         }],

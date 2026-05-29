@@ -5,8 +5,8 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
     InferenceConnectionSurface, InferenceConnectionSurfaceStatus, InferenceDiagnosticCode,
     InferenceDiagnosticSeverity, InferenceInterfaceContractError, InferenceInterfaceDescriptor,
-    InferenceInterfaceDiagnostic, InferenceInterfaceFingerprint, RuntimeIntentId,
-    WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceInterfaceFingerprint,
+    RuntimeIntentId, WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -78,6 +78,8 @@ pub struct InferenceInterfaceNodeProjectionRecord {
     pub authored_snapshot: AuthoredInferenceInterfaceSnapshot,
     pub validation_summary: DraftGraphValidationSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_report: Option<InferenceInterfaceDriftReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_constraint: Option<RuntimeIntentId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_constraint: Option<DeviceIntentId>,
@@ -105,7 +107,7 @@ pub(crate) fn connection_surface_for_projection(
         inputs: projection.descriptor.inputs.clone(),
         outputs: projection.descriptor.outputs.clone(),
         validation_summary: projection.validation_summary.clone(),
-        drift_report: None,
+        drift_report: projection.drift_report.clone(),
         diagnostics: connection_surface_diagnostics(status, &projection.descriptor),
     };
     surface.validate()?;
@@ -243,6 +245,7 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
             descriptor: projection.descriptor,
             authored_snapshot: projection.authored_snapshot,
             validation_summary: projection.validation_summary,
+            drift_report: projection.drift_report,
             runtime_constraint: input.request.runtime_constraint.clone(),
             device_constraint: input.request.device_constraint.clone(),
         });
@@ -376,6 +379,20 @@ fn validation_events(
             ),
         });
         sequence += 1;
+        if let Some(drift_report) = &projection.drift_report {
+            events.push(WorkflowGraphInferenceValidationEvent {
+                validation_session_id: validation_session_id.clone(),
+                graph_revision: graph_revision.clone(),
+                sequence,
+                scope: WorkflowGraphInferenceValidationEventScope::Node {
+                    node_id: projection.node_id.clone(),
+                },
+                payload: WorkflowGraphInferenceValidationEventPayload::DriftReported(
+                    drift_report.clone(),
+                ),
+            });
+            sequence += 1;
+        }
     }
     events.push(WorkflowGraphInferenceValidationEvent {
         validation_session_id: validation_session_id.clone(),
@@ -408,9 +425,9 @@ fn checked_u32(field: &'static str, count: usize) -> Result<u32, InferenceInterf
 mod tests {
     use super::*;
     use pantograph_inference_interface_contracts::{
-        InferenceAvailability, InferencePortDescriptor, InferencePortDirection, InferencePortId,
-        InferencePortOptions, InferencePortRequirement, InferenceScalarType, InferenceTaskKind,
-        InferenceValueType, RuntimeIntentId,
+        InferenceAvailability, InferenceInterfaceDriftChangeKind, InferencePortDescriptor,
+        InferencePortDirection, InferencePortId, InferencePortOptions, InferencePortRequirement,
+        InferenceScalarType, InferenceTaskKind, InferenceValueType, RuntimeIntentId,
     };
     use serde_json::json;
 
@@ -472,6 +489,43 @@ mod tests {
         );
         assert_eq!(surfaces[0].inputs.len(), 1);
         assert!(surfaces[0].validation_summary.executable);
+    }
+
+    #[test]
+    fn publication_emits_drift_report_for_stale_authored_snapshot() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data["inference_interface_snapshot"] = authored_snapshot_json();
+
+        let publication = publish_inference_validation_for_graph(
+            validation_session_id(),
+            graph_revision(),
+            &graph,
+            BTreeMap::from([("infer".to_string(), ready_facts())]),
+        )
+        .expect("publication");
+
+        let projection = &publication.node_projections[0];
+        let drift_report = projection.drift_report.as_ref().expect("drift report");
+        assert!(drift_report.blocking);
+        assert!(drift_report
+            .changes
+            .iter()
+            .any(|change| change.kind == InferenceInterfaceDriftChangeKind::PortAdded));
+        assert_eq!(
+            publication.validation_session.summary.status,
+            DraftGraphValidationStatus::Blocked
+        );
+        assert!(publication.validation_session.events.iter().any(|event| {
+            matches!(
+                event.payload,
+                WorkflowGraphInferenceValidationEventPayload::DriftReported(_)
+            )
+        }));
+
+        let surfaces = publication
+            .connection_surfaces()
+            .expect("connection surfaces should validate");
+        assert!(surfaces[0].drift_report.is_some());
     }
 
     #[test]
@@ -609,6 +663,16 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+
+    fn authored_snapshot_json() -> serde_json::Value {
+        json!({
+            "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+            "descriptor_fingerprint": "descriptor.previous",
+            "task_kind": "image_generation",
+            "inputs": [],
+            "outputs": []
+        })
     }
 
     fn graph_with_inference_node_count(count: usize) -> WorkflowGraph {

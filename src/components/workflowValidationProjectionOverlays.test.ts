@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { InferenceInterfaceNodeProjectionRecord } from '../services/workflow/types.ts';
 import {
+  INFERENCE_INTERFACE_DRIFT_REPORT_RUNTIME_KEY,
   INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY,
   INFERENCE_INTERFACE_VALIDATION_SUMMARY_RUNTIME_KEY,
   workflowValidationProjectionOverlays,
@@ -33,6 +34,20 @@ test('workflowValidationProjectionOverlays projects backend inference validation
       diagnostics_count: 0,
       blocking_diagnostics_count: 0,
     },
+    drift_report: {
+      authored_fingerprint: 'descriptor.previous',
+      current_fingerprint: 'descriptor.image_generation.1',
+      severity: 'blocking',
+      blocking: true,
+      changes: [
+        {
+          kind: 'port_added',
+          port_id: 'prompt',
+          message: 'Current descriptor added input port prompt.',
+        },
+      ],
+      diagnostics: [],
+    },
   } satisfies InferenceInterfaceNodeProjectionRecord;
 
   assert.deepEqual(workflowValidationProjectionOverlays([projection]), [
@@ -41,6 +56,7 @@ test('workflowValidationProjectionOverlays projects backend inference validation
       data: {
         [INFERENCE_INTERFACE_SNAPSHOT_RUNTIME_KEY]: projection.authored_snapshot,
         [INFERENCE_INTERFACE_VALIDATION_SUMMARY_RUNTIME_KEY]: projection.validation_summary,
+        [INFERENCE_INTERFACE_DRIFT_REPORT_RUNTIME_KEY]: projection.drift_report,
       },
     },
   ]);

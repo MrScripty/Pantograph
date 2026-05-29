@@ -266,8 +266,10 @@ the summary/gate remains the only submit authority.
   summaries, or executable Pumas load targets as alternate model identity
   sources.
 - Inference-interface projection is also workflow-service owned. Minimal
-  authored snapshots are projected from validated descriptors, and draft
-  validation summaries are derived from descriptor availability and diagnostics.
+  authored snapshots are projected from validated descriptors when no saved
+  snapshot exists, current validation summaries are derived from descriptor
+  availability plus authored/current drift, and typed drift reports remain
+  backend-authored projection data.
 - Dependency-environment service calls happen after graph/session state has
   been snapshotted and released. Provider output is accepted only after the
   canonical dependency-environment service validates the result contract.
@@ -275,7 +277,7 @@ the summary/gate remains the only submit authority.
   instead of inferring enqueue permission from raw diagnostics.
 - Synchronous inference-validation publication is workflow-service owned. It
   snapshots graph state under the session lock, runs descriptor projection after
-  the graph lock is released, emits node-scoped descriptor events plus a
+  the graph lock is released, emits node-scoped descriptor/drift events plus a
   graph-scoped summary event, and records current graph/node validation state
   for later dependency actions and scheduler admission. Publication rejects
   graphs whose inference-node projection count exceeds the explicit bounded

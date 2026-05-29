@@ -1133,11 +1133,44 @@ export interface AuthoredInferenceInterfaceSnapshot {
   outputs?: AuthoredInferencePortSnapshot[];
 }
 
+export type InferenceDriftSeverity =
+  | 'none'
+  | 'informational'
+  | 'non_blocking'
+  | 'blocking';
+
+export type InferenceInterfaceDriftChangeKind =
+  | 'port_added'
+  | 'port_removed'
+  | 'port_type_changed'
+  | 'requirement_changed'
+  | 'default_changed'
+  | 'option_set_changed'
+  | 'availability_changed'
+  | 'task_kind_changed'
+  | 'runtime_condition_changed';
+
+export interface InferenceInterfaceDriftChange {
+  kind: InferenceInterfaceDriftChangeKind;
+  port_id?: string | null;
+  message: string;
+}
+
+export interface InferenceInterfaceDriftReport {
+  authored_fingerprint: string;
+  current_fingerprint: string;
+  severity: InferenceDriftSeverity;
+  blocking: boolean;
+  changes?: InferenceInterfaceDriftChange[];
+  diagnostics?: WorkflowGraphValidationDiagnostic[];
+}
+
 export interface InferenceInterfaceNodeProjectionRecord {
   node_id: string;
   descriptor: InferenceInterfaceDescriptor;
   authored_snapshot: AuthoredInferenceInterfaceSnapshot;
   validation_summary: WorkflowGraphValidationSummary;
+  drift_report?: InferenceInterfaceDriftReport | null;
   runtime_constraint?: string | null;
   device_constraint?: string | null;
 }
