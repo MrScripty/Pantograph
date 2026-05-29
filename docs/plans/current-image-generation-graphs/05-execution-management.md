@@ -16090,6 +16090,23 @@ Worker rules:
   - Verification context: current targeted queue-admission and executable
     snapshot tests pass; broad `session_execution --lib` remains blocked by
     known legacy/runtime session expectations.
+- 2026-05-29 Milestone 5d contract-crate decomposition gate slice completed:
+  - Slice scope: `pantograph-inference-interface-contracts` module layout and
+    README only, plus plan records.
+  - Implementation: moved shared validation primitives, contract-version
+    checks, bounded validation helpers, validated identifier newtypes, and the
+    crate error type from `src/lib.rs` into private `src/validation.rs`; kept
+    the existing public facade through `lib.rs` re-exports.
+  - No-fallback/no-legacy gate: wire DTOs, serde shapes, and public contract
+    names are unchanged; no raw graph path, `inference_settings`,
+    frontend/Tauri payload, scheduler decision, or runtime-host fallback path
+    was added.
+  - Verification passed: `cargo fmt -p
+    pantograph-inference-interface-contracts -- --check`; `cargo test -p
+    pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts --all-features`; `cargo check -p
+    pantograph-inference-interface-contracts --no-default-features`.
 
 ### Traceability Links
 

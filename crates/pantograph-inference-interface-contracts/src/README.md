@@ -1,6 +1,8 @@
 # Source Layout
 
-`lib.rs` contains the initial DTO-only inference interface contract surface.
+`lib.rs` curates the DTO-only inference interface contract facade and public
+re-exports. `validation.rs` owns shared contract-version checks, bounded
+validation helpers, validated identifier newtypes, and the crate error type.
 The crate intentionally stays behavior-light: it validates bounds, required
 fields, version markers, and dependency-planning model references, but it does
 not resolve Pumas facts, select schedulers, execute inference, or mutate graphs.

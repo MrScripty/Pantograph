@@ -15,6 +15,17 @@ facts, executable paths, scheduler choices, or frontend-only metadata.
   lifecycle code, inference execution, worker dispatch, or frontend rendering
   policy.
 
+## Module Ownership
+
+- `lib.rs` curates the public DTO facade and contract re-exports used by graph
+  editing, validation, admission, scheduler projection, and future runtime-host
+  materialization consumers.
+- `validation.rs` owns shared contract-version checks, bounded validation
+  helpers, validated identifier newtypes, and the crate error type. It is
+  private implementation detail re-exported through `lib.rs` where public.
+- New DTO families must move into focused modules instead of growing the crate
+  root unless the change is a small addition to an existing contract family.
+
 ## Invariants
 
 - All public serialized DTOs use `serde(deny_unknown_fields)`.

@@ -3108,12 +3108,24 @@ defining an image-only inference-node interface.
       selection-input, and option-cache reuse versus a dedicated descriptor
       option renderer. The decision must preserve typed descriptor ownership
       and avoid duplicating backend semantics.
-- [ ] Add a contract-crate decomposition gate before adding more shared DTO
+- [x] Add a contract-crate decomposition gate before adding more shared DTO
       families. `pantograph-inference-interface-contracts/src/lib.rs` is already
       large enough that validation publication records, node projection DTOs, or
       additional dependency-action contracts must move into focused modules
       unless the change is a small addition to an existing type. Update the crate
       README and dependency-direction checks in the same slice.
+  - 2026-05-29 implementation slice: moved shared validation primitives,
+    contract-version checks, bounded validation helpers, validated identifier
+    newtypes, and the crate error type from the crate root into private
+    `validation.rs`; kept the public API curated through `lib.rs` re-exports;
+    updated the crate README with module ownership. This preserves existing
+    wire DTO behavior and adds no new dependencies or fallback paths.
+  - Verification passed: `cargo fmt -p
+    pantograph-inference-interface-contracts -- --check`; `cargo test -p
+    pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts`; `cargo check -p
+    pantograph-inference-interface-contracts --all-features`; `cargo check -p
+    pantograph-inference-interface-contracts --no-default-features`.
 - [ ] Keep the legacy deletion searches as implementation gates, not cleanup
       notes. The first acceptance slice must prove it does not invoke
       `inference_settings`, `expand-settings`, static all-port inference
