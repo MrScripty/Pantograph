@@ -3566,6 +3566,30 @@ defining an image-only inference-node interface.
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
   - Remaining follow-up: continue the revision-consumer audit with saved graph
     drift diagnostics and dependency-environment action intents.
+- [x] 2026-05-28 dependency-environment semantic revision regression slice
+      completed:
+  - Smallest useful vertical slice: add graph-session coverage proving
+    dependency-environment action intents fail closed after inference-node
+    semantic data changes stale the previously published validation summary.
+    The test covers both the old requested graph revision and the new current
+    graph revision without a matching validation summary.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: dependency-environment actions remain
+    keyed by the current semantic graph revision and validation-state summary;
+    the slice adds no compatibility dependency action path, graph-data fallback,
+    timestamp, or frontend invalidation path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    dependency_environment_action_intent_rejects_semantic_node_data_stale_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    dependency_environment_action_intent --lib`; `cargo check -p
+    pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: continue the revision-consumer audit with saved graph
+    drift diagnostics, then resume remaining mutation cancellation wiring.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

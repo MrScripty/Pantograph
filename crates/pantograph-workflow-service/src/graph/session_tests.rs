@@ -1307,6 +1307,95 @@ async fn dependency_environment_action_intent_rejects_stale_graph_revision() {
 }
 
 #[tokio::test]
+async fn dependency_environment_action_intent_rejects_semantic_node_data_stale_summary() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    store
+        .publish_inference_validation_session(
+            &session.session_id,
+            DraftGraphValidationSessionId::parse("validation.session.dependency.stale")
+                .expect("valid validation session id"),
+        )
+        .await
+        .expect("publish inference validation session");
+
+    let updated = store
+        .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+            session_id: session.session_id.clone(),
+            node_id: "infer".to_string(),
+            data: serde_json::json!({
+                "runtime": "cuda"
+            }),
+        })
+        .await
+        .expect("update semantic inference node data");
+
+    assert_ne!(updated.graph_revision, session.graph_revision);
+
+    let stale_result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid original graph revision"),
+            validation_session_id: Some(
+                "validation.session.dependency.stale"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed stale result");
+
+    assert_eq!(
+        stale_result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        stale_result.diagnostics[0].code,
+        InferenceDiagnosticCode::GraphRevisionMismatch
+    );
+
+    let current_result = store
+        .resolve_dependency_environment_action_intent(DependencyEnvironmentActionIntent {
+            contract_version: 1,
+            graph_session_id: session.session_id.parse().expect("valid graph session id"),
+            graph_revision: updated
+                .graph_revision
+                .parse()
+                .expect("valid updated graph revision"),
+            validation_session_id: Some(
+                "validation.session.dependency.stale"
+                    .parse()
+                    .expect("valid validation session id"),
+            ),
+            target_node_id: "dep-env".parse().expect("valid target node id"),
+            action: DependencyEnvironmentAction::Resolve,
+        })
+        .await
+        .expect("intent resolution should return typed missing result");
+
+    assert_eq!(
+        current_result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        current_result.diagnostics[0].code,
+        InferenceDiagnosticCode::ValidationSummaryMissing
+    );
+}
+
+#[tokio::test]
 async fn dependency_environment_action_intent_blocks_invalid_sidecar_choices() {
     let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
         StaticInferenceFactsProvider {

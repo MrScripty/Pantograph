@@ -14802,6 +14802,28 @@ Worker rules:
     pantograph-workflow-service`; and `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d dependency-environment semantic revision regression
+  slice:
+  - Smallest useful vertical slice: add graph-session coverage proving
+    dependency-environment action intents fail closed after inference-node
+    semantic data changes stale the previously published validation summary.
+    The test covers both the old requested graph revision and the new current
+    graph revision without a matching validation summary.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: dependency-environment actions remain keyed
+    by the current semantic graph revision and validation-state summary; the
+    slice adds no compatibility dependency action path, graph-data fallback,
+    timestamp, or frontend invalidation path.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    dependency_environment_action_intent_rejects_semantic_node_data_stale_summary
+    --lib`; `cargo test -p pantograph-workflow-service
+    dependency_environment_action_intent --lib`; `cargo check -p
+    pantograph-workflow-service`; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in
