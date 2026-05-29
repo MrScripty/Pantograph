@@ -2840,7 +2840,7 @@ defining an image-only inference-node interface.
     run typecheck`; `git diff --check`.
   - Remaining follow-up: add graph-level edge/port visual overlays and the
     richer option-4 preview/confirmation workflow for destructive operations.
-- [ ] Wire staged graph editor drift presentation and update preview.
+- [x] Wire staged graph editor drift presentation and update preview.
       Option-2 scope: the editor shows authored-current diffs visually on
       nodes/ports/edges, keeps invalid edges visible, displays
       backend-authored proposal data, and calls the backend apply API only for
@@ -2850,6 +2850,28 @@ defining an image-only inference-node interface.
       construct patch operations locally, rewrite snapshots directly, remove
       edges, clear literals, compare ports for authority, or treat proposal
       presence as submit permission.
+  - 2026-05-28: Completed the staged graph-level drift overlay slice.
+  - Smallest useful vertical slice: project backend-authored affected-edge
+    facts into transient graph edge data and node-handle classes so the editor
+    can visibly mark affected edges and ports without changing the saved graph.
+  - Allowed files touched: `src/components/workflowInferenceDriftEdgeOverlays.ts`,
+    `src/components/workflowInferenceDriftEdgeOverlays.test.ts`,
+    `src/components/WorkflowGraph.svelte`,
+    `src/components/edges/ReconnectableEdge.svelte`,
+    `src/components/nodes/BaseNode.svelte`, `src/components/README.md`, this
+    Milestone 5d file, and `05-execution-management.md`.
+  - No-fallback/no-legacy result: the overlay consumes only backend-authored
+    `affected_edges` and `remove_invalid_edge` operation facts. It keeps
+    invalid edges visible, does not compare ports, does not construct patch
+    operations, does not mutate saved edge/node data, does not remove edges,
+    does not clear literals, and does not affect submit permission.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/workflowInferenceDriftEdgeOverlays.test.ts
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts`; `npm run
+    typecheck`.
+  - Remaining follow-up: option-4 full preview/confirmation UX must still add a
+    richer destructive-operation review flow before destructive proposals can
+    be applied.
 - [ ] Wire `PortOptionsProvider`, selection-input, and option-cache consumers
       only as descriptor-backed presentation plumbing where reused. Typed
       option identity, defaults, availability, and diagnostics remain owned by

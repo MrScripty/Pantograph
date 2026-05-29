@@ -7,6 +7,10 @@
   import { nodes } from '../../stores/workflowStore';
   import type { NodeDefinition } from '../../services/workflow/types';
   import { insetReconnectAnchorPosition } from '../reconnectInteraction';
+  import {
+    INFERENCE_INTERFACE_DRIFT_EDGE_ACTIVE_KEY,
+    INFERENCE_INTERFACE_DRIFT_EDGE_TITLE_KEY,
+  } from '../workflowInferenceDriftEdgeOverlays';
 
   let {
     id,
@@ -105,6 +109,12 @@
   const edgeInsertPreviewActive = $derived(
     (data as Record<string, unknown> | undefined)?.edgeInsertPreviewActive === true,
   );
+  const inferenceInterfaceDriftAffected = $derived(
+    (data as Record<string, unknown> | undefined)?.[INFERENCE_INTERFACE_DRIFT_EDGE_ACTIVE_KEY] === true,
+  );
+  const inferenceInterfaceDriftTitle = $derived(
+    (data as Record<string, unknown> | undefined)?.[INFERENCE_INTERFACE_DRIFT_EDGE_TITLE_KEY],
+  );
 </script>
 
 <!-- Custom SVG with gradient - colored only at the ends, white in the middle -->
@@ -138,16 +148,35 @@
   />
 {/if}
 
+{#if inferenceInterfaceDriftAffected}
+  <path
+    d={path}
+    stroke="rgba(248, 113, 113, 0.7)"
+    stroke-width={selected ? 8 : 6}
+    fill="none"
+    stroke-linecap="round"
+    stroke-dasharray="6 5"
+  >
+    {#if typeof inferenceInterfaceDriftTitle === 'string'}
+      <title>{inferenceInterfaceDriftTitle}</title>
+    {/if}
+  </path>
+{/if}
+
 <path
   {id}
   class="react-flow__edge-path"
   d={path}
   stroke="url(#{gradientId})"
-  stroke-width={edgeInsertPreviewActive ? (selected ? 3 : 2.5) : (selected ? 1.5 : 1)}
+  stroke-width={edgeInsertPreviewActive || inferenceInterfaceDriftAffected ? (selected ? 3 : 2.5) : (selected ? 1.5 : 1)}
   fill="none"
   stroke-linecap="round"
   filter="url(#{gradientId}-glow)"
-/>
+>
+  {#if typeof inferenceInterfaceDriftTitle === 'string'}
+    <title>{inferenceInterfaceDriftTitle}</title>
+  {/if}
+</path>
 
 <!-- Invisible wider path for interaction -->
 <path

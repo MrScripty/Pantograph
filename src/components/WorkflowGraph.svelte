@@ -55,6 +55,7 @@
     shouldClearEdgeInsertPreviewForGraphState,
     type EdgeInsertPreviewState,
   } from './edgeInsertInteraction.ts';
+  import { applyInferenceDriftEdgeOverlays } from './workflowInferenceDriftEdgeOverlays.ts';
   import { refreshWorkflowGraphEdgeInsertPreview } from './workflowGraphEdgeInsertPreview.ts';
   import WorkflowGraphCanvas from './WorkflowGraphCanvas.svelte';
   import {
@@ -492,10 +493,11 @@
 
   $effect(() => {
     const previewEdgeId = edgeInsertPreview.bridge ? edgeInsertPreview.edgeId : null;
-    const result = applyEdgeInsertPreviewActiveFlag(edges, previewEdgeId);
+    const previewResult = applyEdgeInsertPreviewActiveFlag(edges, previewEdgeId);
+    const driftResult = applyInferenceDriftEdgeOverlays(previewResult.edges, nodes);
 
-    if (result.changed) {
-      edges = result.edges;
+    if (previewResult.changed || driftResult.changed) {
+      edges = driftResult.edges;
     }
   });
 

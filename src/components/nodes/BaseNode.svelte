@@ -3,6 +3,7 @@
   import type { NodeDefinition, PortDefinition } from '../../services/workflow/types';
   import type { Snippet } from 'svelte';
   import { connectionIntent, edges, nodeExecutionStates } from '../../stores/workflowStore';
+  import { inferenceProposalAffectsPort } from '../workflowInferenceDriftEdgeOverlays';
 
   interface Props {
     id: string;
@@ -71,15 +72,23 @@
   }
 
   function getInputHandleClass(portId: string): string {
-    if (!hasConnectionIntent || isIntentSourceNode) return '';
-    return isIntentTarget(portId) ? 'intent-eligible' : 'intent-ineligible';
+    const driftClass = inferenceProposalAffectsPort({ data, nodeId: id, portId })
+      ? 'inference-drift-affected'
+      : '';
+    if (!hasConnectionIntent || isIntentSourceNode) return driftClass;
+    const intentClass = isIntentTarget(portId) ? 'intent-eligible' : 'intent-ineligible';
+    return `${intentClass} ${driftClass}`.trim();
   }
 
   function getOutputHandleClass(portId: string): string {
-    if (!hasConnectionIntent) return '';
-    return isIntentSourceNode && intentSourceAnchor?.port_id === portId
+    const driftClass = inferenceProposalAffectsPort({ data, nodeId: id, portId })
+      ? 'inference-drift-affected'
+      : '';
+    if (!hasConnectionIntent) return driftClass;
+    const intentClass = isIntentSourceNode && intentSourceAnchor?.port_id === portId
       ? 'intent-source'
       : 'intent-ineligible';
+    return `${intentClass} ${driftClass}`.trim();
   }
 
 </script>
@@ -288,5 +297,10 @@
     opacity: 1;
     transform: scale(1.1);
     box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+  }
+
+  :global(.base-node .svelte-flow__handle.inference-drift-affected) {
+    outline: 2px dashed #f87171;
+    outline-offset: 2px;
   }
 </style>

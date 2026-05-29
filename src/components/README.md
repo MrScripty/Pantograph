@@ -21,6 +21,8 @@ architecture views on top of the shared editor.
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, backend candidate projection, commit anchors, and revision selection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh/staleness/cleanup decisions, and rendered-edge hit testing. |
+| `workflowInferenceDriftEdgeOverlays.ts` | Projects backend-authored inference-interface affected-edge facts into display-only edge and port markers for the active graph canvas. |
+| `workflowInferenceDriftEdgeOverlays.test.ts` | Unit coverage for display-only inference drift edge and port overlay projection. |
 | `workflowGraphBackendActions.ts` | Owns app graph `WorkflowService` session lookup, dependency-environment action intent construction, edge insertion, backend graph refresh, and adapters into shared package backend action primitives. |
 | `inferenceInterfaceUpdateContext.ts` | Graph-level context for backend-owned inference interface proposal application requests emitted by inference-node UI. |
 | `workflowGraphEdgeInsertPreview.ts` | Coordinates palette edge-insert preview refresh requests and stale-response guards around the edge-insert interaction state helpers. |
@@ -196,6 +198,11 @@ validation session before forwarding the typed backend apply request. The graph
 coordinator synchronizes only the backend mutation response; it does not build
 patch operations, compare ports, rewrite node data locally, or decide submit
 eligibility.
+Inference-interface affected-edge and affected-port graph markings are also
+display-only projections from backend-authored update proposals. The graph uses
+`workflowInferenceDriftEdgeOverlays.ts` to add transient edge data for canvas
+rendering and to mark proposal-affected node handles; these markers are never
+persisted, never used as submit authority, and never cause local graph patching.
 Dependency-environment node UI may detect only the typed
 `dependency_environment_sidecar` visual association and user-authored manual
 override inputs from graph edges. It must not infer model paths, Pumas facts,

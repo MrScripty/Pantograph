@@ -15926,6 +15926,29 @@ Worker rules:
     run typecheck`; `git diff --check`.
   - Remaining follow-up: add graph-level port/edge visual overlays and option-4
     destructive preview/confirmation support.
+- 2026-05-28 Milestone 5d staged graph-level drift overlay slice:
+  - Smallest useful vertical slice: add display-only graph edge and node-handle
+    markers for backend-authored inference-interface affected-edge facts.
+  - Allowed files touched:
+    `src/components/workflowInferenceDriftEdgeOverlays.ts`,
+    `src/components/workflowInferenceDriftEdgeOverlays.test.ts`,
+    `src/components/WorkflowGraph.svelte`,
+    `src/components/edges/ReconnectableEdge.svelte`,
+    `src/components/nodes/BaseNode.svelte`, `src/components/README.md`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: the graph overlay consumes only backend
+    proposal `affected_edges` and `remove_invalid_edge` operation facts. The
+    editor keeps affected edges visible and marks affected handles without
+    constructing patch operations, comparing ports, mutating saved graph data,
+    removing edges, clearing literals, or treating drift markers as submit
+    permission.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/workflowInferenceDriftEdgeOverlays.test.ts
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts`; `npm run
+    typecheck`.
+  - Remaining follow-up: option-4 full destructive-operation
+    preview/confirmation remains required before destructive proposal
+    application is enabled.
 
 ### Traceability Links
 
