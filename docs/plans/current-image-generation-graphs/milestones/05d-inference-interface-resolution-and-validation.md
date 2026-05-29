@@ -3650,6 +3650,35 @@ defining an image-only inference-node interface.
   - Remaining follow-up: wire `remove_node`, `delete_selection`, `add_edge`,
     group mutations, undo/redo, and connection insert/commit operations through
     the same lifecycle helper where they change semantic graph state.
+- [x] 2026-05-28 remove-node validation cancellation slice completed:
+  - Smallest useful vertical slice: wire `remove_node` through the existing
+    workflow-service validation lifecycle cancellation helper after successful
+    semantic graph mutation, and add publication-time coverage proving pending
+    validation output is rejected when node removal changes the graph.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_node_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: node removal now uses the canonical
+    validation lifecycle owner and typed cancellation path, with no frontend
+    invalidation, timestamp, transport request id, or alternate publication
+    fallback.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_remove_node_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    remove_node_prunes_attached_edges --lib`; `cargo check -p
+    pantograph-workflow-service`; source-search verification for touched
+    production code; and `git diff --check`.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
+  - Remaining follow-up: wire `delete_selection`, `add_edge`, group mutations,
+    undo/redo, and connection insert/commit operations through the same
+    lifecycle helper where they change semantic graph state.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

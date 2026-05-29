@@ -1179,6 +1179,54 @@ async fn publish_inference_validation_session_rejects_add_node_changed_during_fa
 }
 
 #[tokio::test]
+async fn publish_inference_validation_session_rejects_remove_node_changed_during_fact_lookup() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+        Arc::new(BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let publish_store = Arc::clone(&store);
+    let session_id = session.session_id.clone();
+    let publish = tokio::spawn(async move {
+        publish_store
+            .publish_inference_validation_session(
+                &session_id,
+                DraftGraphValidationSessionId::parse("validation.session.remove.node.changed")
+                    .expect("valid validation session id"),
+            )
+            .await
+    });
+    entered.notified().await;
+
+    store
+        .remove_node(WorkflowGraphRemoveNodeRequest {
+            session_id: session.session_id,
+            node_id: "dep-env".to_string(),
+        })
+        .await
+        .expect("mutate graph while validation facts are pending");
+    release.notify_one();
+
+    let error = publish
+        .await
+        .expect("publish task should not panic")
+        .expect_err("publish should reject cancelled validation session");
+    assert!(
+        error
+            .to_string()
+            .contains("validation publication cancelled: graph revision changed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn publish_inference_validation_session_rejects_node_data_changed_during_fact_lookup() {
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
