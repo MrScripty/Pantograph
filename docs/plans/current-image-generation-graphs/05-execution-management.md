@@ -16080,6 +16080,13 @@ Worker rules:
     recommended option is to split projection completion from dispatch-time
     materialization so runtime inference remains fail-closed until the
     scheduler-owned runtime-host handoff exists.
+  - Decision selected: use option 1. Milestone 5d now treats
+    descriptor-backed scheduler projection as complete and moves final
+    runtime-host input materialization to the runtime-dispatch milestone. The
+    materialization work must run only after scheduler input readiness and a
+    dispatch-selected runtime-host handoff exist; it must not be backfilled by
+    raw graph-field parsing, frontend/Tauri payloads, model paths,
+    `inference_settings`, or retired whole-run runtime execution.
   - Verification context: current targeted queue-admission and executable
     snapshot tests pass; broad `session_execution --lib` remains blocked by
     known legacy/runtime session expectations.

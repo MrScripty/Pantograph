@@ -1551,6 +1551,13 @@ Staged implementation:
    connected Pumas refs and other materialized inputs become a validated
    `SchedulableTaskIntent` before dispatch. Do not duplicate input
    materialization inside the runtime dispatch path.
+   2026-05-29 Milestone 5d split decision: this runtime-dispatch milestone owns
+   final runtime-host input materialization after scheduler input readiness and
+   dispatch selection. It must consume upstream task results, graph literals,
+   descriptor defaults, and scheduler-selected handoff facts through typed
+   contracts; it must not derive executable inputs from raw graph
+   `task_kind`/runtime/device fields, frontend/Tauri payloads, model paths,
+   `inference_settings`, or retired whole-run runtime execution.
 5. Implement the embedded-runtime `RuntimeHostExecutionPort` by accepting a
    validated dispatch-selected runtime-host request, resolving the Pumas artifact
    load target from the dispatch-selected `PumasModelRef`, calling the inference

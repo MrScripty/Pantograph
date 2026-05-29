@@ -3025,15 +3025,19 @@ defining an image-only inference-node interface.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
     the pre-existing `set_active_run_execution_plan` dead-code warning outside
     this slice.
-- [ ] Update scheduler task graph projection and materialization so generic
-      inference tasks store path-free model refs, task kind, typed constraints,
-      descriptor fingerprint, and bindings only. Workflow-service must
-      materialize final runtime-host inputs from upstream task results, graph
-      literal values, and descriptor defaults after scheduler input readiness.
-      Projection must consume the current descriptor-backed validation state for
-      resolved task kind, descriptor fingerprint, and validated constraints; raw
-      graph `task_kind`, runtime, device, or trait JSON are resolver inputs only
-      and must not be parsed again as execution authority.
+- [x] Confirm scheduler task graph projection consumes descriptor-backed
+      validation state and stores path-free model refs, task kind, typed
+      constraints, descriptor fingerprint, and bindings only. Projection must
+      consume the current descriptor-backed validation state for resolved task
+      kind, descriptor fingerprint, and validated constraints; raw graph
+      `task_kind`, runtime, device, or trait JSON are resolver inputs only and
+      must not be parsed again as execution authority.
+  - 2026-05-29 decision: selected option 1. Descriptor-backed scheduler
+    projection is complete in Milestone 5d; final runtime-host input
+    materialization is split out to the runtime-dispatch milestone because it
+    requires scheduler input readiness plus a dispatch-selected runtime-host
+    handoff. This preserves the current typed fail-closed behavior until that
+    handoff exists.
   - 2026-05-29 re-plan boundary: descriptor-backed scheduler projection is
     already implemented and covered by task-graph/session projection tests, but
     final runtime-host input materialization cannot be completed inside this
@@ -3066,8 +3070,16 @@ defining an image-only inference-node interface.
   - No-fallback/no-legacy gate: implementation must not continue by deriving
     runtime-host inputs from raw graph `task_kind`, runtime/device strings,
     `inference_settings`, model paths, current frontend state, Tauri payloads,
-    or the old whole-run host execution path. Until the re-plan is resolved,
-    runtime inference dispatch remains fail-closed with typed diagnostics.
+    or the old whole-run host execution path. Until the runtime-dispatch slice
+    wires scheduler-owned materialization and host handoff, runtime inference
+    dispatch remains fail-closed with typed diagnostics.
+- [ ] Implement final runtime-host input materialization in the
+      runtime-dispatch milestone, after scheduler input readiness and dispatch
+      selection are wired. Workflow-service must materialize final runtime-host
+      inputs from upstream task results, graph literal values, and descriptor
+      defaults only after the scheduler has a ready task and a
+      scheduler-selected handoff. This Milestone 5d work may reference that
+      future owner, but must not implement a local compatibility path.
 - [ ] Align the runtime-host input contract with descriptor materialization.
       Runtime-host execution requests must include scheduler-selected handoff
       plus typed, path-free materialized inputs and artifact/result references;
