@@ -32,6 +32,8 @@ owner of that policy itself.
 | `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
 | `headless_workflow_commands_tests.rs` | Shared fixtures and module index for headless workflow command diagnostics, trace, scheduler, runtime metadata, and transport tests. |
 | `headless_workflow_commands_tests/` | Focused headless workflow command tests split by diagnostics helper recording, transport responses/errors, and diagnostics projection/storage behavior. |
+| `graph_validation_lifecycle_bridge.rs` | Tauri transport adapter for backend-owned graph-validation lifecycle events; implements the workflow-service sink and emits dedicated graph-validation events without owning validation policy. |
+| `graph_validation_lifecycle_transport.rs` | Dedicated graph-validation lifecycle event name and compact typed transport payload. |
 | `projection_invalidation_bridge.rs` | Tauri lifecycle owner for the diagnostics projection refresh sink; coalesces backend refresh requests, invokes workflow-service refresh, and emits successful invalidations. |
 | `projection_invalidation_transport.rs` | Compact diagnostics projection invalidation event payload and coalescing transport helper. |
 | `managed_media_conversion.rs` | Desktop host adapter that leases managed FFmpeg/OpenImageIO/OpenColorIO tools, runs bounded stdin/stdout conversion pipelines, and returns typed conversion attribution to `pantograph-workflow-service`. |
@@ -232,6 +234,12 @@ command that delegates to `pantograph-workflow-service`. Tauri does not derive
 validation freshness, descriptor facts, submit gates, or event ordering; the
 command only serializes the backend read model for recovery and future
 dedicated graph-validation event delivery.
+Graph validation lifecycle event delivery is wired as a composition-root bridge:
+`app_setup.rs` installs a Tauri adapter for the workflow-service lifecycle
+event sink, and the adapter emits `workflow://graph-validation/lifecycle-event`
+payloads unchanged. Tauri owns only event transport and logging of emit
+failures; workflow-service owns lifecycle ordering, bounded retention,
+freshness, and validation authority.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.

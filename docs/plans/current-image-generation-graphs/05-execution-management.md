@@ -15520,6 +15520,31 @@ Worker rules:
   - Remaining follow-up: implement the Tauri lifecycle-event bridge as a
     composition-root adapter for this sink, then add the frontend subscription
     service with bounded identity/sequence handling and no validation policy.
+- 2026-05-28 Milestone 5d Tauri validation lifecycle event bridge slice:
+  - Smallest useful vertical slice: add a Tauri composition-root adapter for
+    the workflow-service validation lifecycle event sink and emit a dedicated
+    `workflow://graph-validation/lifecycle-event` transport payload.
+  - Allowed files touched:
+    `src-tauri/src/workflow/graph_validation_lifecycle_bridge.rs`,
+    `src-tauri/src/workflow/graph_validation_lifecycle_transport.rs`,
+    `src-tauri/src/workflow/mod.rs`, `src-tauri/src/app_setup.rs`,
+    `src-tauri/src/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: Tauri owns only adapter registration, event
+    emission, and emit-failure logging. It does not translate resolver facts,
+    derive validation freshness, inspect Pumas/model paths, compute submit
+    gates, allocate background tasks, or reuse execution `WorkflowEvent`
+    channels.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+    `cargo check -p pantograph-workflow-service`; touched-source added-line
+    search for retired path fields, execution event transports, raw JSON,
+    `Result<T, String>`, and spawned tasks; and `git diff --check`.
+  - Verification deviation: `cargo check --manifest-path src-tauri/Cargo.toml`
+    is still blocked by the pre-existing unrelated missing
+    `set_media_conversion_executor` method in `src-tauri/src/app_setup.rs:96`.
+  - Remaining follow-up: add the frontend graph-validation lifecycle
+    subscription service and wire editor-side identity/sequence filtering
+    against the backend snapshot read command.
 - 2026-05-28 Milestone 5d validation lifecycle event sink graph-session
   coverage slice:
   - Smallest useful vertical slice: add a focused graph-session integration

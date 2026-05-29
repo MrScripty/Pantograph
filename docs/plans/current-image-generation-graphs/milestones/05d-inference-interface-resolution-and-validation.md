@@ -2478,6 +2478,23 @@ defining an image-only inference-node interface.
         configures this sink at composition time, emits a dedicated
         graph-validation event name, and leaves validation policy in
         workflow-service.
+      - 2026-05-28 Tauri lifecycle-event bridge sub-slice completed:
+        `app_setup.rs` now configures a transport-only Tauri adapter for the
+        workflow-service validation lifecycle event sink. The adapter emits
+        dedicated `workflow://graph-validation/lifecycle-event` payloads
+        unchanged and logs emit failures; it does not derive validation
+        freshness, resolver facts, submit gates, or event ordering.
+      - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+        `cargo check -p pantograph-workflow-service`; added-line source search
+        over the touched Tauri bridge files for retired path fields, raw JSON,
+        execution event transports, `Result<T, String>`, and spawned tasks; and
+        `git diff --check`. `cargo check --manifest-path src-tauri/Cargo.toml`
+        remains blocked by the pre-existing unrelated
+        `set_media_conversion_executor` missing-method error in
+        `src-tauri/src/app_setup.rs:96`.
+      - Remaining follow-up: add the frontend subscription service for the
+        dedicated graph-validation lifecycle event and wire editor-side
+        identity/sequence filtering against the backend snapshot read command.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

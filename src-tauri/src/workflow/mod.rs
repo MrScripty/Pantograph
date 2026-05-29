@@ -25,6 +25,8 @@ pub mod commands;
 pub mod diagnostics;
 pub mod event_adapter;
 pub mod events;
+pub mod graph_validation_lifecycle_bridge;
+mod graph_validation_lifecycle_transport;
 pub mod groups;
 mod headless_diagnostics;
 pub mod headless_diagnostics_transport;

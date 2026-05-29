@@ -251,6 +251,21 @@ pub fn run_app() -> AppStartupResult<()> {
                 );
                 app.manage(projection_invalidation_bridge);
 
+                let validation_lifecycle_bridge = Arc::new(
+                    workflow::graph_validation_lifecycle_bridge::WorkflowGraphValidationLifecycleEventBridge::new(
+                        app.handle().clone(),
+                    ),
+                );
+                let validation_lifecycle_sink: Arc<
+                    dyn pantograph_workflow_service::WorkflowGraphValidationLifecycleEventSink,
+                > = validation_lifecycle_bridge.clone();
+                tauri::async_runtime::block_on(
+                    workflow_service.set_workflow_graph_validation_lifecycle_event_sink(Some(
+                        validation_lifecycle_sink,
+                    )),
+                );
+                app.manage(validation_lifecycle_bridge);
+
                 if let Err(err) =
                     inference::reconcile_interrupted_managed_runtime_jobs(&app_data_dir)
                 {
