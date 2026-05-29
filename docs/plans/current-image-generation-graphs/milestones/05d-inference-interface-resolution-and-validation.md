@@ -3456,6 +3456,40 @@ defining an image-only inference-node interface.
     changes and layout-only non-changes before replacing the fingerprint
     projection; then add stale validation/admission tests that prove old
     validation summaries cannot remain current after semantic node-data edits.
+- [x] 2026-05-28 semantic graph revision projection slice completed:
+  - Smallest useful vertical slice: replace graph fingerprint node rows with a
+    centralized versioned semantic projection that includes deterministic
+    node-data content while excluding layout-only position fields.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/types.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: validation freshness now derives from
+    canonical graph revision semantics instead of incidental mutation-side
+    cancellation, frontend cache busting, timestamps, or transport request ids.
+  - Standards result: node-data hashing is deterministic and canonical; object
+    key order does not affect graph revision; layout-only position edits do not
+    invalidate validation freshness; and the API consumer/producer contract
+    documents semantic revision behavior.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service graph_fingerprint
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_node_data_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    update_node_position_updates_session_graph --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo test
+    -p pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo test -p pantograph-workflow-service
+    port_definition_round_trip_preserves_inference_payloads --lib`; `cargo
+    check -p pantograph-workflow-service`; production source-search
+    verification in `types.rs` for path fields, `anyhow`, `Result<T, String>`,
+    and spawned task calls; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: audit remaining revision consumers and add stale
+    validation/admission tests proving old summaries cannot remain current
+    after semantic node-data edits; then resume remaining mutation cancellation
+    wiring.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

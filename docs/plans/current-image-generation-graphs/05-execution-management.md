@@ -14709,6 +14709,32 @@ Worker rules:
     `git diff --check`.
   - Discovered issue: `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d semantic graph revision projection slice:
+  - Smallest useful vertical slice: replace graph fingerprint node rows with a
+    centralized versioned semantic projection that includes deterministic
+    node-data content while excluding layout-only position fields.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/types.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, the Milestone 5d
+    file, and this execution log.
+  - No-fallback/no-legacy result: validation freshness now derives from
+    canonical graph revision semantics instead of incidental mutation-side
+    cancellation, frontend cache busting, timestamps, or transport request ids.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service graph_fingerprint
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_node_data_changed_during_fact_lookup
+    --lib`; `cargo test -p pantograph-workflow-service
+    update_node_position_updates_session_graph --lib`; `cargo test -p
+    pantograph-workflow-service current_validation_summary --lib`; `cargo test
+    -p pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo test -p pantograph-workflow-service
+    port_definition_round_trip_preserves_inference_payloads --lib`; `cargo
+    check -p pantograph-workflow-service`; production source-search
+    verification in `types.rs` for path fields, `anyhow`, `Result<T, String>`,
+    and spawned task calls; and `git diff --check`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still
+    reports the pre-existing `set_active_run_execution_plan` dead-code warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in

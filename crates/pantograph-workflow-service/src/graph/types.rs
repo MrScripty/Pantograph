@@ -195,6 +195,83 @@ mod tests {
             PortDataType::DependencyEnvironmentSidecar
         );
     }
+
+    #[test]
+    fn graph_fingerprint_changes_when_semantic_node_data_changes() {
+        let mut graph = semantic_revision_graph();
+        let original = graph.compute_fingerprint();
+
+        graph.find_node_mut("infer").expect("infer node").data["runtime"] =
+            serde_json::json!("cuda");
+
+        assert_ne!(graph.compute_fingerprint(), original);
+    }
+
+    #[test]
+    fn graph_fingerprint_ignores_layout_only_position_changes() {
+        let mut graph = semantic_revision_graph();
+        let original = graph.compute_fingerprint();
+
+        graph.find_node_mut("infer").expect("infer node").position = Position { x: 320.0, y: 48.0 };
+
+        assert_eq!(graph.compute_fingerprint(), original);
+    }
+
+    #[test]
+    fn graph_fingerprint_canonicalizes_node_data_object_key_order() {
+        let mut first = semantic_revision_graph();
+        first.find_node_mut("infer").expect("infer node").data = serde_json::json!({
+            "model_ref": {
+                "model_id": "image/example/tiny",
+                "selected_artifact_id": "artifact.diffusers"
+            },
+            "runtime": "auto"
+        });
+        let mut second = semantic_revision_graph();
+        second.find_node_mut("infer").expect("infer node").data = serde_json::json!({
+            "runtime": "auto",
+            "model_ref": {
+                "selected_artifact_id": "artifact.diffusers",
+                "model_id": "image/example/tiny"
+            }
+        });
+
+        assert_eq!(first.compute_fingerprint(), second.compute_fingerprint());
+    }
+
+    fn semantic_revision_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "model".to_string(),
+                    node_type: "puma-lib".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "model_ref": {
+                            "model_id": "image/example/tiny",
+                            "selected_artifact_id": "artifact.diffusers"
+                        }
+                    }),
+                },
+                GraphNode {
+                    id: "infer".to_string(),
+                    node_type: "inference".to_string(),
+                    position: Position { x: 100.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "runtime": "auto"
+                    }),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "model-to-infer".to_string(),
+                source: "model".to_string(),
+                source_handle: "model_ref".to_string(),
+                target: "infer".to_string(),
+                target_handle: "model_ref".to_string(),
+            }],
+            derived_graph: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -500,7 +577,7 @@ impl WorkflowGraph {
         let mut node_rows = self
             .nodes
             .iter()
-            .map(|n| format!("{}|{}", n.id, n.node_type))
+            .map(semantic_node_fingerprint_row)
             .collect::<Vec<_>>();
         node_rows.sort();
 
@@ -517,7 +594,7 @@ impl WorkflowGraph {
         edge_rows.sort();
 
         let mut digest = FNV64_OFFSET_BASIS;
-        digest = fnv1a64_update(digest, b"v1");
+        digest = fnv1a64_update(digest, b"semantic-graph-v2");
         for row in node_rows {
             digest = fnv1a64_update(digest, row.as_bytes());
             digest = fnv1a64_update(digest, b"\n");
@@ -555,6 +632,15 @@ impl WorkflowGraph {
     }
 }
 
+fn semantic_node_fingerprint_row(node: &GraphNode) -> String {
+    let mut digest = FNV64_OFFSET_BASIS;
+    digest = semantic_fingerprint_update_str(digest, "node");
+    digest = semantic_fingerprint_update_str(digest, &node.id);
+    digest = semantic_fingerprint_update_str(digest, &node.node_type);
+    let digest = semantic_fingerprint_update_json(digest, &node.data);
+    format!("{}|{}|{:016x}", node.id, node.node_type, digest)
+}
+
 const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV64_PRIME: u64 = 0x100000001b3;
 
@@ -564,6 +650,49 @@ fn fnv1a64_update(mut hash: u64, bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(FNV64_PRIME);
     }
     hash
+}
+
+fn semantic_fingerprint_update_str(hash: u64, value: &str) -> u64 {
+    let hash = fnv1a64_update(hash, b"s:");
+    let hash = fnv1a64_update(hash, value.len().to_string().as_bytes());
+    let hash = fnv1a64_update(hash, b":");
+    fnv1a64_update(hash, value.as_bytes())
+}
+
+fn semantic_fingerprint_update_json(hash: u64, value: &serde_json::Value) -> u64 {
+    match value {
+        serde_json::Value::Null => fnv1a64_update(hash, b"n"),
+        serde_json::Value::Bool(value) => {
+            fnv1a64_update(hash, if *value { b"b:true" } else { b"b:false" })
+        }
+        serde_json::Value::Number(value) => {
+            semantic_fingerprint_update_str(fnv1a64_update(hash, b"#"), &value.to_string())
+        }
+        serde_json::Value::String(value) => {
+            semantic_fingerprint_update_str(fnv1a64_update(hash, b"\""), value)
+        }
+        serde_json::Value::Array(values) => {
+            let mut hash = fnv1a64_update(hash, b"[");
+            hash = fnv1a64_update(hash, values.len().to_string().as_bytes());
+            for value in values {
+                hash = semantic_fingerprint_update_json(fnv1a64_update(hash, b","), value);
+            }
+            fnv1a64_update(hash, b"]")
+        }
+        serde_json::Value::Object(values) => {
+            let mut hash = fnv1a64_update(hash, b"{");
+            let mut keys = values.keys().collect::<Vec<_>>();
+            keys.sort();
+            hash = fnv1a64_update(hash, keys.len().to_string().as_bytes());
+            for key in keys {
+                hash = semantic_fingerprint_update_str(fnv1a64_update(hash, b","), key);
+                if let Some(value) = values.get(key) {
+                    hash = semantic_fingerprint_update_json(fnv1a64_update(hash, b":"), value);
+                }
+            }
+            fnv1a64_update(hash, b"}")
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

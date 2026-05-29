@@ -388,6 +388,9 @@ let response = service
   identity and session kind; transport adapters must not hardcode that
   classification locally.
 - Treat `graph_revision` as an opaque concurrency token.
+- `graph_revision` represents canonical graph semantics, not visual layout
+  state. Validation/execution-relevant node data participates in the revision;
+  node position changes do not invalidate inference validation freshness.
 - Expect structured rejection for stale revisions or incompatible connections;
   incompatible type rejections may include a canonical `contract_diagnostic`
   with source/target node ids, port ids, value types, and rejection reason.
@@ -397,6 +400,10 @@ let response = service
 - Request/response DTO field names are stable unless an explicit breaking change is documented.
 - `WorkflowFile.version` is the persisted file-format version.
 - `WorkflowGraph.derived_graph` is volatile advisory metadata and may be regenerated.
+- `WorkflowGraph.compute_fingerprint()` uses a versioned semantic projection:
+  node identity, node type, deterministic node-data content, and connection
+  topology participate; layout-only position fields and volatile
+  `derived_graph` metadata do not.
 - `WorkflowExecutableTopology` is the contract used for execution
   fingerprinting; callers must not use `WorkflowGraph.compute_fingerprint()` as
   workflow-version identity.
