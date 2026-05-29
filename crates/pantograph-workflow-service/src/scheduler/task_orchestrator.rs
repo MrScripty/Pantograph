@@ -424,6 +424,111 @@ impl WorkflowSchedulerTaskOrchestrator {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn advance_awaiting_runtime_task_inputs(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> Result<Option<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    )),
+                )
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a runtime inference task",
+                    task_id
+                )),
+            ));
+        }
+        let record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no active task-state record",
+                        task_id
+                    )),
+                )
+            })?;
+        if record.state.kind() != SchedulerTaskStateKind::AwaitingInputs {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' must be awaiting inputs before runtime readiness advancement",
+                    task_id
+                )),
+            ));
+        }
+
+        let results = store
+            .active_run_scheduler_task_results(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        match runtime_input_readiness(task, &results) {
+            RuntimeInputReadiness::Blocked => Ok(None),
+            RuntimeInputReadiness::Ready => {
+                let transition =
+                    waiting_dependency_readiness_transition_from_awaiting_inputs(task, record)?;
+                store
+                    .apply_active_run_scheduler_task_transition(
+                        session_id,
+                        workflow_run_id,
+                        transition,
+                    )
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                    .and_then(applied_task_state_record)
+                    .map(Some)
+            }
+            RuntimeInputReadiness::InputUnavailable(diagnostic) => {
+                let transition =
+                    input_unavailable_transition_from_awaiting_inputs(record, diagnostic)?;
+                store
+                    .apply_active_run_scheduler_task_transition(
+                        session_id,
+                        workflow_run_id,
+                        transition,
+                    )
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                    .and_then(applied_task_state_record)
+                    .map(Some)
+            }
+            RuntimeInputReadiness::Invalid(diagnostic) => {
+                let transition = invalid_transition_from_awaiting_inputs(record, diagnostic)?;
+                store
+                    .apply_active_run_scheduler_task_transition(
+                        session_id,
+                        workflow_run_id,
+                        transition,
+                    )
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                    .and_then(applied_task_state_record)
+                    .map(Some)
+            }
+        }
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn apply_runtime_dependency_readiness_admission(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -941,6 +1046,21 @@ fn ready_transition_from_awaiting_inputs(
     )
 }
 
+#[allow(dead_code)]
+fn waiting_dependency_readiness_transition_from_awaiting_inputs(
+    task: &WorkflowSchedulerTask,
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    task_state_transition(
+        record,
+        "runtime-inputs-ready",
+        SchedulerTaskStateKind::AwaitingInputs,
+        SchedulerTaskState::WaitingDependencyReadiness {
+            execution_intent: runtime_execution_intent(task)?,
+        },
+    )
+}
+
 fn input_unavailable_transition_from_awaiting_inputs(
     record: &SchedulerTaskStateRecord,
     diagnostic: SchedulerTaskStateDiagnostic,
@@ -1163,6 +1283,40 @@ enum NonRuntimeInputReadiness {
     Invalid(SchedulerTaskStateDiagnostic),
 }
 
+#[allow(dead_code)]
+enum RuntimeInputReadiness {
+    Ready,
+    Blocked,
+    InputUnavailable(SchedulerTaskStateDiagnostic),
+    Invalid(SchedulerTaskStateDiagnostic),
+}
+
+#[allow(dead_code)]
+fn runtime_input_readiness(
+    task: &WorkflowSchedulerTask,
+    results: &[WorkflowSchedulerTaskResult],
+) -> RuntimeInputReadiness {
+    if task.schedulable_intent.is_none() {
+        return RuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "runtime scheduler task is missing a typed runtime execution intent",
+        ));
+    }
+    for binding in &task.input_bindings {
+        match materialized_bound_output(task, results, binding) {
+            MaterializedBindingValue::Ready(_) => {}
+            MaterializedBindingValue::Blocked => return RuntimeInputReadiness::Blocked,
+            MaterializedBindingValue::Unavailable(diagnostic) => {
+                return RuntimeInputReadiness::InputUnavailable(diagnostic);
+            }
+            MaterializedBindingValue::Invalid(diagnostic) => {
+                return RuntimeInputReadiness::Invalid(diagnostic);
+            }
+        }
+    }
+    RuntimeInputReadiness::Ready
+}
+
 fn non_runtime_input_readiness(
     task: &WorkflowSchedulerTask,
     results: &[WorkflowSchedulerTaskResult],
@@ -1196,6 +1350,21 @@ fn non_runtime_input_readiness(
             }
         }
     }
+}
+
+#[allow(dead_code)]
+fn runtime_execution_intent(
+    task: &WorkflowSchedulerTask,
+) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
+    let Some(task_intent) = task.schedulable_intent.clone() else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "runtime scheduler task '{}' is missing a typed runtime execution intent",
+                task.task_id.as_str()
+            )),
+        ));
+    };
+    Ok(SchedulerTaskExecutionIntent::Runtime { task_intent })
 }
 
 enum MaterializedBindingValue<'a> {

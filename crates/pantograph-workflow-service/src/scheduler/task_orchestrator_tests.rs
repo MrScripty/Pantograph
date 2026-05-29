@@ -400,6 +400,84 @@ fn orchestrator_initializes_dependent_runtime_task_as_awaiting_inputs() {
 }
 
 #[test]
+fn orchestrator_advances_dependent_runtime_task_when_inputs_materialize() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_id = task_intent.task_id.as_str().to_string();
+    let mut task = task_from_intent(task_intent.clone());
+    task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
+    task.input_bindings = vec![text_binding("prompt", task.task_id.as_str())];
+    let source = text_input_task_for_runtime_intent(&task_intent, "prompt");
+    let task_graph = task_graph(vec![source, task]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    store
+        .record_active_run_scheduler_task_result(
+            &session_id,
+            &workflow_run_id,
+            text_result_for_runtime_intent(
+                &task_intent,
+                "prompt",
+                WorkflowSchedulerTaskResultStatus::Completed,
+            ),
+        )
+        .expect("record prompt result");
+
+    let advanced = orchestrator
+        .advance_awaiting_runtime_task_inputs(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("advance runtime task")
+        .expect("runtime task should advance");
+
+    assert_eq!(advanced.state_version, 2);
+    let SchedulerTaskState::WaitingDependencyReadiness { execution_intent } = advanced.state else {
+        panic!("expected waiting dependency readiness");
+    };
+    assert!(execution_intent.runtime_task_intent().is_some());
+}
+
+#[test]
+fn orchestrator_leaves_dependent_runtime_task_blocked_without_materialized_input() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_id = task_intent.task_id.as_str().to_string();
+    let mut task = task_from_intent(task_intent.clone());
+    task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
+    task.input_bindings = vec![text_binding("prompt", task.task_id.as_str())];
+    let source = text_input_task_for_runtime_intent(&task_intent, "prompt");
+    let task_graph = task_graph(vec![source, task]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+
+    let advanced = orchestrator
+        .advance_awaiting_runtime_task_inputs(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("advance runtime task");
+
+    assert!(advanced.is_none());
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    let record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == task_id)
+        .expect("runtime task record");
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::AwaitingInputs);
+}
+
+#[test]
 fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![WorkflowSchedulerTask {
@@ -1328,6 +1406,16 @@ fn text_input_task(task_id: &str, _value: &str) -> WorkflowSchedulerTask {
     }
 }
 
+fn text_input_task_for_runtime_intent(
+    task_intent: &SchedulableTaskIntent,
+    task_id: &str,
+) -> WorkflowSchedulerTask {
+    let mut task = text_input_task(task_id, "paint a red cube");
+    task.workflow_id = task_intent.workflow_id.clone();
+    task.workflow_run_id = task_intent.workflow_run_id.clone();
+    task
+}
+
 fn text_output_task() -> WorkflowSchedulerTask {
     WorkflowSchedulerTask {
         workflow_id: scheduler_workflow_id(),
@@ -1390,6 +1478,17 @@ fn text_result(
         status,
         WorkflowSchedulerTaskResultValue::String("paint a red cube".to_string()),
     )
+}
+
+fn text_result_for_runtime_intent(
+    task_intent: &SchedulableTaskIntent,
+    task_id: &str,
+    status: WorkflowSchedulerTaskResultStatus,
+) -> WorkflowSchedulerTaskResult {
+    let mut result = text_result(task_id, status);
+    result.workflow_id = task_intent.workflow_id.as_str().to_string();
+    result.workflow_run_id = task_intent.workflow_run_id.as_str().to_string();
+    result
 }
 
 fn bool_result(

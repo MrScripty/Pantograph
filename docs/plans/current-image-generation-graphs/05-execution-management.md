@@ -16406,6 +16406,35 @@ Worker rules:
     fixture value.
   - Remaining follow-up: add workflow-service runtime input advancement using
     this scheduler-owned transition contract.
+- 2026-05-29 Milestone 5b workflow-service runtime input advancement slice
+  completed:
+  - Slice scope: workflow-service scheduler task orchestrator/tests plus plan
+    records.
+  - Implementation: added an orchestrator path that advances dependent runtime
+    inference tasks from `AwaitingInputs` to `WaitingDependencyReadiness` only
+    when connected upstream scheduler task results have materialized. Missing
+    inputs leave the task blocked in `AwaitingInputs`; unavailable or invalid
+    materialized inputs produce typed scheduler diagnostics.
+  - No-fallback/no-legacy gate: this does not dispatch runtime work, does not
+    route runtime inference through `Ready`, does not synthesize handoff, does
+    not read graph paths or executable load targets, and does not adapt
+    readiness into `ModelRefV2` or `ModelDependencyRequest`.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service task_orchestrator --lib --
+    --nocapture`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+    pantograph-workflow-service -- --check`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; targeted retired
+    path/model-ref source search over touched workflow-service scheduler files
+    and the session API; and `git diff --check`.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
+  - Deviation recorded: session-runner wiring was attempted and reverted
+    because it widened existing session behavior before the dedicated runtime
+    runner boundary was planned and tested.
+  - Remaining follow-up: implement the dedicated session/runtime runner slice
+    so upstream result recording invokes this advancement path without
+    reviving old planned-inference launch behavior.
 
 ### Traceability Links
 

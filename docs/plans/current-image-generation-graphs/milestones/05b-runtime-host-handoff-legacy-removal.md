@@ -82,6 +82,13 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   must not be used to launch inference or build handoff. Runtime requests must
   include the canonical dependency readiness proof and workflow-service-owned
   materialized runtime inputs derived from validated upstream task results.
+- [ ] Wire the session/runtime runner to call workflow-service runtime input
+  advancement after upstream task results are recorded. This must be a
+  dedicated runner slice, because direct wiring through the existing
+  fail-closed runtime session branch changes legacy/session expectations and
+  risks reintroducing broad compatibility behavior. The runner must keep graph
+  editing, validation, dependency readiness, runtime input materialization, and
+  runtime-host dispatch as separate boundaries.
 - [ ] Retire node-engine planned-inference launch ownership for runtime
   inference nodes. Affected nodes must submit or reference scheduler task
   intent and consume scheduler task state/results; missing scheduler task state
@@ -363,3 +370,31 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   path-shaped-field rejection test and the existing typed Pumas fixture value.
   Remaining follow-up: retry workflow-service runtime input advancement on top
   of the scheduler-owned transition contract.
+- 2026-05-29 workflow-service runtime input advancement slice completed.
+  Smallest useful vertical slice: add a workflow-service orchestrator method
+  that advances a dependent runtime inference task from `AwaitingInputs` to
+  `WaitingDependencyReadiness` only after all connected upstream scheduler task
+  results have materialized. Allowed write set:
+  `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+  `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+  this milestone file, and execution notes. No-fallback confirmation: the
+  slice does not dispatch runtime work, does not route runtime tasks through
+  `Ready`, does not synthesize handoff, does not read graph paths or executable
+  load targets, and does not adapt runtime readiness into `ModelRefV2` or
+  `ModelDependencyRequest`. Blocked inputs return no transition; unavailable
+  or invalid materialized inputs move through typed scheduler diagnostics.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service task_orchestrator --lib --
+  --nocapture`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `cargo check -p
+  pantograph-workflow-service --all-features`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; targeted retired
+  path/model-ref source search over touched workflow-service scheduler files
+  and the session API; and `git diff --check`. Verification caveat: `cargo
+  check -p pantograph-workflow-service` still emits the known unused
+  `set_active_run_execution_plan` warning. Deviation recorded: session-runner
+  wiring was attempted and reverted because it widened existing session
+  behavior before the dedicated runtime runner boundary was planned and tested.
+  Remaining follow-up: implement the dedicated session/runtime runner slice so
+  upstream result recording invokes this advancement path without reviving old
+  planned-inference launch behavior.
