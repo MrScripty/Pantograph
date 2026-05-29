@@ -131,9 +131,10 @@ assert_eq!(metadata.node_type, "model-provider");
 - Consumers must treat selector display paths as display/debug data only. They
   are not executable graph values.
 - Consumers must treat selected-model detail as role-dependent. Owner and
-  local-client Pumas access may provide batch execution descriptors, package
-  summaries, and inference settings; read-only access may provide only the
-  bounded selector row and empty inference settings.
+  local-client Pumas access may provide batch execution descriptors and package
+  summaries; read-only access may provide only the bounded selector row.
+  Inference settings are resolved by backend inference-interface descriptors,
+  not by `puma-lib` selector option metadata.
 
 ## Structured Producer Contract
 - `puma-lib` emits only `pumas_model_ref` and display identity such as

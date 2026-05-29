@@ -3145,6 +3145,23 @@ defining an image-only inference-node interface.
       expose `model_path` or `inference_settings`, but its option provider still
       contains package-entry-path and display metadata that must be classified
       before no-legacy completion.
+      - 2026-05-29 implementation slice completed: removed the selector option
+        metadata `inference_settings` stub and its fallback helper/test from
+        `puma-lib`. Selector option values remain typed `pumas_model_ref`
+        payloads; option metadata may still carry display/debug paths,
+        readiness state, storage/validation state, package summaries, and the
+        selector cursor, but those fields are documented as non-executable
+        evidence only and are not graph-authoring authority.
+      - No-fallback/no-legacy gate: no replacement settings source or
+        compatibility metadata key was added. Backend inference-interface
+        descriptors remain the only owner for model-specific inference option
+        ports/settings.
+      - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo
+        test -p workflow-nodes puma_lib --lib --features model-library`;
+        `cargo check -p workflow-nodes --features model-library`; `cargo check
+        -p workflow-nodes --no-default-features`; targeted source search for
+        `resolve_inference_settings_fallback` and `inference_settings` in
+        `puma_lib.rs`/input README.
     - Not Milestone 5d deletion targets: `crates/inference` backend and worker
       `model_path`/`entry_path` fields are runtime/load-target internals owned
       by runtime-host dispatch and Pumas artifact resolution, not graph

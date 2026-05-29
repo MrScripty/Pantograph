@@ -16214,6 +16214,24 @@ Worker rules:
     runtime path because the saved executable validation snapshot is missing
     for the workflow version. That runtime acceptance blocker is recorded as a
     follow-up and was not fixed in this fixture-only slice.
+- 2026-05-29 Milestone 5d `puma-lib` selector metadata narrowing completed:
+  - Slice scope: `crates/workflow-nodes/src/input/puma_lib.rs`, the input-node
+    README, and plan records.
+  - Implementation: removed the selector option metadata
+    `inference_settings` stub and deleted the test-only fallback helper that
+    computed default settings from model records. Selector option values remain
+    typed Pumas model references; option metadata is documented as display/
+    debug evidence only when it carries display paths, readiness, storage,
+    validation, package summary, or selector cursor data.
+  - No-fallback/no-legacy gate: no replacement settings key or compatibility
+    path was added. Model-specific inference options remain owned by backend
+    inference-interface descriptors, not `puma-lib` selector metadata.
+  - Verification passed: `cargo fmt -p workflow-nodes -- --check`; `cargo test
+    -p workflow-nodes puma_lib --lib --features model-library`; `cargo check
+    -p workflow-nodes --features model-library`; `cargo check -p
+    workflow-nodes --no-default-features`; targeted source search for
+    `resolve_inference_settings_fallback` and `inference_settings` in
+    `puma_lib.rs`/input README.
 
 ### Traceability Links
 

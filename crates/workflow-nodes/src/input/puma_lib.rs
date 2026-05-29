@@ -101,17 +101,6 @@ mod options_provider {
     /// Provides available models from pumas-library for the `pumas_model_ref` port.
     pub struct PumaLibOptionsProvider;
 
-    /// Compute conservative inference settings when the API-backed settings
-    /// lookup is unavailable.
-    #[cfg(test)]
-    pub(crate) fn resolve_inference_settings_fallback(
-        record: &pumas_library::ModelRecord,
-    ) -> serde_json::Value {
-        pumas_library::models::default_inference_settings(&record.model_type, "", None)
-            .map(|s| serde_json::to_value(s).unwrap_or_default())
-            .unwrap_or(serde_json::Value::Null)
-    }
-
     #[cfg(test)]
     pub(crate) fn runtime_engine_hints_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
@@ -533,7 +522,6 @@ mod options_provider {
                         .unwrap_or(serde_json::Value::Array(Vec::new()))
                 })
                 .unwrap_or(serde_json::Value::Array(Vec::new())),
-            "inference_settings": serde_json::Value::Array(Vec::new()),
             "package_facts_summary_cursor": cursor,
             "package_facts_summary_status": row.package_facts_summary_status,
             "package_facts_summary": package_facts_summary,
@@ -689,9 +677,9 @@ mod model_library_tests {
         custom_code_sources_for_option_metadata, dependency_bindings_for_option_metadata,
         load_package_facts_summary_cache, port_option_from_selector_row,
         requires_custom_code_from_summary, resolve_execution_descriptor,
-        resolve_inference_settings_fallback, review_reasons_for_option_metadata,
-        runtime_engine_hints_from_summary, task_type_primary_from_descriptor_or_record,
-        PackageFactsSummaryCache, PumaLibOptionsProvider,
+        review_reasons_for_option_metadata, runtime_engine_hints_from_summary,
+        task_type_primary_from_descriptor_or_record, PackageFactsSummaryCache,
+        PumaLibOptionsProvider,
     };
     use crate::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
     use node_engine::{extension_keys, ExecutorExtensions, PortOptionsProvider, PortOptionsQuery};
@@ -1548,7 +1536,7 @@ mod model_library_tests {
             .expect("selector option metadata should be an object");
         assert_eq!(metadata["id"], serde_json::json!("llm/imported/test-gguf"));
         assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
-        assert_eq!(metadata["inference_settings"], serde_json::json!([]));
+        assert!(metadata.get("inference_settings").is_none());
         assert!(metadata.get("execution_contract_version").is_none());
         let result_metadata = result
             .metadata
@@ -1644,7 +1632,7 @@ mod model_library_tests {
             .expect("selector option metadata should be an object");
         assert_eq!(metadata["id"], serde_json::json!("llm/imported/read-only"));
         assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
-        assert_eq!(metadata["inference_settings"], serde_json::json!([]));
+        assert!(metadata.get("inference_settings").is_none());
         let result_metadata = result
             .metadata
             .as_ref()
@@ -1698,29 +1686,6 @@ mod model_library_tests {
             metadata["selector_snapshot_contract_version"],
             serde_json::json!(1)
         );
-    }
-
-    #[test]
-    fn test_inference_settings_fallback_ignores_record_metadata() {
-        let record = model_record_with_metadata(serde_json::json!({
-            "inference_settings": [{
-                "key": "stale_metadata_setting",
-                "label": "Stale Metadata Setting",
-                "param_type": "number",
-                "default": 1
-            }],
-            "files": [{"name": "model.gguf"}],
-            "subtype": "dllm"
-        }));
-
-        let settings = resolve_inference_settings_fallback(&record);
-
-        assert!(settings
-            .as_array()
-            .expect("fallback settings should be an array")
-            .iter()
-            .all(|setting| setting.get("key").and_then(|key| key.as_str())
-                != Some("stale_metadata_setting")));
     }
 
     #[tokio::test]
