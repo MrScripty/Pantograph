@@ -2478,6 +2478,19 @@ defining an image-only inference-node interface.
         configures this sink at composition time, emits a dedicated
         graph-validation event name, and leaves validation policy in
         workflow-service.
+      - 2026-05-28 lifecycle event sink graph-session coverage slice
+        completed: added a focused graph-session test proving
+        `refresh_current_validation_summary` publishes the same typed pending
+        and publication-accepted lifecycle events to the configured sink that
+        are retained in the backend lifecycle snapshot.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+        `cargo test -p pantograph-workflow-service
+        validation_lifecycle_event_sink_receives_backend_refresh_events
+        --lib`; `cargo test -p pantograph-workflow-service
+        inference_validation_lifecycle --lib`; `cargo check -p
+        pantograph-workflow-service`; added-line source search for retired path
+        fields, raw JSON, execution event transports, `Result<T, String>`, and
+        spawned tasks; and `git diff --check`.
 - [ ] Wire graph editor drift presentation and update preview. The editor must
       show authored-current diffs visually on nodes/ports/edges, keep invalid
       edges visible, preview backend-proposed typed patch operations, and apply

@@ -13,7 +13,8 @@ use crate::graph::{
     WorkflowGraphCurrentValidationSummaryState, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphInferenceValidationSession,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphValidationLifecycleEventKind,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphValidationLifecycleEvent,
+    WorkflowGraphValidationLifecycleEventKind, WorkflowGraphValidationLifecycleEventSink,
     WorkflowGraphValidationSubmitGateReason,
 };
 use crate::{
@@ -39,7 +40,7 @@ use pantograph_inference_interface_contracts::{
     INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
 fn sample_graph() -> WorkflowGraph {
@@ -675,6 +676,48 @@ async fn validation_lifecycle_event_snapshot_reports_backend_refresh_events() {
         snapshot.events[1].kind,
         WorkflowGraphValidationLifecycleEventKind::PublicationAccepted
     ));
+}
+
+#[tokio::test]
+async fn validation_lifecycle_event_sink_receives_backend_refresh_events() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let event_sink = Arc::new(RecordingValidationLifecycleEventSink::default());
+    store
+        .set_validation_lifecycle_event_sink(Some(event_sink.clone()))
+        .await;
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    let _response = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+
+    let snapshot = store
+        .validation_lifecycle_event_snapshot(&session.session_id)
+        .await
+        .expect("lifecycle event snapshot");
+    let received = event_sink.events.lock().expect("events lock").clone();
+
+    assert_eq!(received, snapshot.events);
+    assert_eq!(
+        received.iter().map(|event| &event.kind).collect::<Vec<_>>(),
+        vec![
+            &WorkflowGraphValidationLifecycleEventKind::ValidationPending,
+            &WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
+        ]
+    );
 }
 
 #[tokio::test]
@@ -2353,6 +2396,17 @@ fn dependency_inference_graph() -> WorkflowGraph {
 #[derive(Debug)]
 struct StaticInferenceFactsProvider {
     facts: BTreeMap<String, InferenceInterfaceResolverFacts>,
+}
+
+#[derive(Default)]
+struct RecordingValidationLifecycleEventSink {
+    events: Mutex<Vec<WorkflowGraphValidationLifecycleEvent>>,
+}
+
+impl WorkflowGraphValidationLifecycleEventSink for RecordingValidationLifecycleEventSink {
+    fn publish_validation_lifecycle_event(&self, event: WorkflowGraphValidationLifecycleEvent) {
+        self.events.lock().expect("events lock").push(event);
+    }
 }
 
 #[async_trait]

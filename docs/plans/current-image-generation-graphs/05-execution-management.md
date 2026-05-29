@@ -15520,6 +15520,26 @@ Worker rules:
   - Remaining follow-up: implement the Tauri lifecycle-event bridge as a
     composition-root adapter for this sink, then add the frontend subscription
     service with bounded identity/sequence handling and no validation policy.
+- 2026-05-28 Milestone 5d validation lifecycle event sink graph-session
+  coverage slice:
+  - Smallest useful vertical slice: add a focused graph-session integration
+    test proving `refresh_current_validation_summary` publishes the same typed
+    validation lifecycle events to the configured sink that are retained in the
+    backend lifecycle snapshot.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: coverage proves the canonical
+    workflow-service refresh path drives the sink; no frontend/Tauri facts, raw
+    JSON, path fields, execution `WorkflowEvent` transport, or alternate
+    validation authority were added.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    validation_lifecycle_event_sink_receives_backend_refresh_events --lib`;
+    `cargo test -p pantograph-workflow-service inference_validation_lifecycle
+    --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+    added-line search for retired path fields, execution event transports, raw
+    JSON, `Result<T, String>`, and spawned tasks; and `git diff --check`.
 
 ### Traceability Links
 
