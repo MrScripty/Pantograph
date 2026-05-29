@@ -121,34 +121,6 @@ impl TauriTaskExecutor {
             })
     }
 
-    fn selected_detail_inference_settings_value(
-        detail: &PumasSelectedModelDetail,
-        requested_model_id: &str,
-    ) -> Option<serde_json::Value> {
-        if detail.inference_settings.is_empty() {
-            return None;
-        }
-
-        match serde_json::to_value(&detail.inference_settings) {
-            Ok(value)
-                if value
-                    .as_array()
-                    .is_some_and(|settings| !settings.is_empty()) =>
-            {
-                Some(value)
-            }
-            Ok(_) => None,
-            Err(error) => {
-                log::warn!(
-                    "Puma-Lib inference-settings serialization failed for '{}': {}",
-                    requested_model_id,
-                    error
-                );
-                None
-            }
-        }
-    }
-
     pub(super) async fn execute_puma_lib(
         &self,
         inputs: &HashMap<String, serde_json::Value>,
@@ -173,7 +145,6 @@ impl TauriTaskExecutor {
             inputs,
             &["recommended_backend", "recommendedBackend"],
         );
-        let mut hydrated_inference_settings = None;
 
         let requested_model_id = model_id.clone();
         if let Some(requested_model_id) = requested_model_id.as_deref() {
@@ -185,11 +156,6 @@ impl TauriTaskExecutor {
                 {
                     Ok(Some(detail)) => {
                         pumas_model_ref = Self::selected_detail_model_ref_value(&detail);
-                        hydrated_inference_settings =
-                            Self::selected_detail_inference_settings_value(
-                                &detail,
-                                requested_model_id,
-                            );
                         Self::apply_puma_lib_selected_detail(
                             &detail,
                             requested_model_id,
@@ -220,18 +186,7 @@ impl TauriTaskExecutor {
             }
         }
 
-        let inference_settings = hydrated_inference_settings
-            .or_else(|| {
-                Self::read_optional_input_value_aliases(
-                    inputs,
-                    &["inference_settings", "inferenceSettings"],
-                )
-                .filter(|value| value.is_array())
-            })
-            .unwrap_or_else(|| serde_json::json!([]));
-
         let mut outputs = HashMap::new();
-        outputs.insert("inference_settings".to_string(), inference_settings);
         if pumas_model_ref.is_none() {
             if let Some(model_id) = model_id.as_deref().filter(|value| !value.trim().is_empty()) {
                 pumas_model_ref = Some(serde_json::json!({ "model_id": model_id }));

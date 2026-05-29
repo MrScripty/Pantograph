@@ -3163,6 +3163,29 @@ defining an image-only inference-node interface.
         -p workflow-nodes --no-default-features`; targeted source search for
         `resolve_inference_settings_fallback` and `inference_settings` in
         `puma_lib.rs`/input README.
+      - 2026-05-29 implementation slice completed: removed
+        `inference_settings` from `PumasSelectedModelDetail`, stopped owner and
+        local-client selected detail from calling
+        `get_inference_settings_batch`, and removed embedded-runtime
+        `puma-lib` projection of saved or selected-detail inference settings.
+        Selected detail now hydrates model reference, descriptor, and package
+        summary evidence only.
+      - No-fallback/no-legacy gate: no saved-node `inference_settings` input,
+        Pumas batch setting, or embedded-runtime output remains a successful
+        `puma-lib` settings path in the touched owner files. Backend
+        inference-interface descriptors remain the sole settings/default owner.
+      - Verification passed: `cargo fmt -p workflow-nodes -p
+        pantograph-embedded-runtime -- --check`; `cargo test -p
+        workflow-nodes selected_model_detail --lib --features model-library`;
+        `cargo test -p pantograph-embedded-runtime puma_lib_execution --lib`;
+        `cargo check -p workflow-nodes --features model-library`; `cargo check
+        -p pantograph-embedded-runtime`; targeted source search over the
+        touched setup/embedded-runtime files for the removed selected-detail
+        settings path.
+      - Verification caveat: `cargo check -p pantograph` now reaches past this
+        API change but still fails in `src-tauri/src/app_setup.rs` because
+        `WorkflowService` does not expose `set_media_conversion_executor`.
+        That existing Tauri app setup mismatch is outside this slice.
     - Not Milestone 5d deletion targets: `crates/inference` backend and worker
       `model_path`/`entry_path` fields are runtime/load-target internals owned
       by runtime-host dispatch and Pumas artifact resolution, not graph

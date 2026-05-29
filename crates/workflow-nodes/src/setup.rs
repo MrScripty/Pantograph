@@ -29,7 +29,6 @@ pub struct PumasSelectedModelDetail {
     pub selector_row: Option<pumas_library::models::ModelLibrarySelectorSnapshotRow>,
     pub descriptor: Option<pumas_library::models::ModelExecutionDescriptor>,
     pub package_summary_result: Option<pumas_library::models::ModelPackageFactsSummaryResult>,
-    pub inference_settings: Vec<pumas_library::models::InferenceParamSchema>,
 }
 
 #[cfg(feature = "model-library")]
@@ -108,8 +107,6 @@ impl PumasSelectorAccess {
                     .await?,
                 api.resolve_model_package_facts_summaries(vec![model_id.to_string()])
                     .await?,
-                api.get_inference_settings_batch(vec![model_id.to_string()])
-                    .await?,
             ),
             Self::LocalClient(client) => selected_model_detail_from_batch_owner(
                 model_id,
@@ -120,15 +117,11 @@ impl PumasSelectorAccess {
                 client
                     .resolve_model_package_facts_summaries(vec![model_id.to_string()])
                     .await?,
-                client
-                    .get_inference_settings_batch(vec![model_id.to_string()])
-                    .await?,
             ),
             Self::ReadOnly(_) => Ok(PumasSelectedModelDetail {
                 selector_row,
                 descriptor: None,
                 package_summary_result: None,
-                inference_settings: Vec::new(),
             }),
         }
     }
@@ -231,7 +224,6 @@ fn selected_model_detail_from_batch_owner(
     selector_row: Option<pumas_library::models::ModelLibrarySelectorSnapshotRow>,
     descriptors: Vec<pumas_library::models::ModelExecutionDescriptorBatchItem>,
     summaries: Vec<pumas_library::models::ModelPackageFactsSummaryBatchItem>,
-    settings: Vec<pumas_library::models::ModelInferenceSettingsBatchItem>,
 ) -> pumas_library::Result<PumasSelectedModelDetail> {
     let descriptor = descriptors
         .into_iter()
@@ -241,17 +233,11 @@ fn selected_model_detail_from_batch_owner(
         .into_iter()
         .find(|item| item.model_id == model_id)
         .and_then(|item| item.result);
-    let inference_settings = settings
-        .into_iter()
-        .find(|item| item.model_id == model_id)
-        .map(|item| item.settings)
-        .unwrap_or_default();
 
     Ok(PumasSelectedModelDetail {
         selector_row,
         descriptor,
         package_summary_result,
-        inference_settings,
     })
 }
 
@@ -654,21 +640,6 @@ mod tests {
                     },
                 ])
                 .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
-                "get_inference_settings_batch" => serde_json::to_value(vec![
-                    pumas_library::models::ModelInferenceSettingsBatchItem {
-                        model_id: model_id.to_string(),
-                        settings: vec![pumas_library::models::InferenceParamSchema {
-                            key: "temperature".to_string(),
-                            label: "Temperature".to_string(),
-                            param_type: pumas_library::models::ParamType::Number,
-                            default: serde_json::json!(0.7),
-                            description: None,
-                            constraints: None,
-                        }],
-                        error: None,
-                    },
-                ])
-                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
                 _ => Err(pumas_library::PumasError::Other(format!(
                     "unexpected IPC method: {method}"
                 ))),
@@ -851,8 +822,6 @@ mod tests {
         );
         let descriptor = detail.descriptor.expect("descriptor should hydrate");
         assert_eq!(descriptor.recommended_backend.as_deref(), Some("llamacpp"));
-        assert_eq!(detail.inference_settings.len(), 1);
-        assert_eq!(detail.inference_settings[0].key, "temperature");
     }
 
     #[tokio::test]

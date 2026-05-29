@@ -16263,6 +16263,29 @@ Worker rules:
     JSON parse check for `.pantograph/workflows/juggernaut-x-v10-sdxl.json`;
     targeted source search over the touched fixture/script/README; `git diff
     --check` for touched files.
+- 2026-05-29 Milestone 5d selected-model detail settings removal completed:
+  - Slice scope: `workflow-nodes` selected-model detail setup, embedded-runtime
+    Puma-Lib task projection/tests, affected source READMEs, and plan records.
+  - Implementation: removed `inference_settings` from
+    `PumasSelectedModelDetail`, stopped owner/local-client selected detail from
+    calling `get_inference_settings_batch`, and removed embedded-runtime
+    `puma-lib` output projection from saved or selected-detail inference
+    settings.
+  - No-fallback/no-legacy gate: selected-model detail now carries model
+    reference, descriptor, and package-summary evidence only. Backend
+    inference-interface descriptors remain the sole owner for model-specific
+    option defaults and validation.
+  - Verification passed: `cargo fmt -p workflow-nodes -p
+    pantograph-embedded-runtime -- --check`; `cargo test -p workflow-nodes
+    selected_model_detail --lib --features model-library`; `cargo test -p
+    pantograph-embedded-runtime puma_lib_execution --lib`; `cargo check -p
+    workflow-nodes --features model-library`; `cargo check -p
+    pantograph-embedded-runtime`; targeted source search over the touched
+    setup/embedded-runtime files for removed selected-detail settings paths.
+  - Verification caveat: `cargo check -p pantograph` reaches past this API
+    change but still fails in `src-tauri/src/app_setup.rs` because
+    `WorkflowService` does not expose `set_media_conversion_executor`. That app
+    setup mismatch remains a separate follow-up.
 
 ### Traceability Links
 

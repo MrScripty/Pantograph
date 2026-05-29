@@ -13,7 +13,7 @@ hold execution families that need host resources.
 | ---- | ----------- |
 | `dependency_environment.rs` | Dependency preflight gates for Python-backed runtime nodes and model-ref resolution. |
 | `dependency_environment/` | Helper modules for dependency preflight input projection and stable runtime environment keys. |
-| `puma_lib.rs` | Puma-Lib selected-model lookup through explicit selector-access roles, selected-detail inference-settings refresh, optional owner full-package-facts enrichment, execution descriptor projection, metadata normalization, and model-path output preparation. |
+| `puma_lib.rs` | Puma-Lib selected-model lookup through explicit selector-access roles, model-reference projection, display metadata normalization, and fail-closed removal of graph-authored executable paths/settings. |
 | `python_execution.rs` | Python runtime input normalization, runtime instance metadata, adapter invocation, failure health recording, and stream replay. |
 | `rag_search.rs` | RAG search execution against the host-provided RAG backend. |
 
@@ -71,8 +71,8 @@ same behavior without exposing helper paths outside this module boundary.
   or node family, not graph-authored backend hints.
 - Python execution helpers may normalize runtime inputs and record health facts,
   but dependency gating must remain in dependency preflight helpers.
-- Puma-Lib helpers prepare model metadata outputs and must not own dependency
-  installation decisions.
+- Puma-Lib helpers prepare model-reference and display metadata outputs and
+  must not own dependency installation decisions or inference option defaults.
 - Puma-Lib selected `model_id` refresh must use `PUMAS_SELECTOR_ACCESS`.
   Read-only selector rows may rebind executable path/backend/task metadata, but
   only owner `PumasApi` access may enrich outputs with full package facts.
@@ -80,10 +80,9 @@ same behavior without exposing helper paths outside this module boundary.
   `shared-resources/models/...` path may recover the relative Pumas `model_id`
   from that path before selected-detail hydration. This is a compatibility
   bridge to current Pumas facts, not a second model index.
-- Owner and local-client selected-detail hydration may replace saved
-  `inference_settings` with Pumas batch settings when they are non-empty.
-  Read-only selector access must leave saved settings intact because selector
-  rows do not own rich inference-setting detail.
+- Owner, local-client, and read-only selected-detail hydration must not emit
+  `inference_settings`. Backend inference-interface descriptors own
+  model-specific option defaults and validation.
 - Stream artifact helpers may emit pass-through ArtifactStore metadata, but
   they must leave managed conversion status and dependency lease attribution
   empty unless a host-owned conversion executor supplies those typed facts.

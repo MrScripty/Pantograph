@@ -93,9 +93,9 @@ feeds without inspecting Pumas storage.
   targets at the host/planning boundary.
 - Task inference from selector metadata must remain conservative and
   deterministic.
-- Stored Pumas inference settings are reused only when they are non-empty
-  arrays; otherwise the node falls back to descriptor/API defaults so empty
-  metadata does not masquerade as an executable settings contract.
+- Stored Pumas inference settings are not selected-model detail or option
+  metadata. Backend inference-interface descriptors own model-specific option
+  defaults and validation.
 
 ## Revisit Triggers
 - Model-selection metadata grows beyond what one node should emit directly.

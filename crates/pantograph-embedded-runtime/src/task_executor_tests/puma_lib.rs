@@ -44,8 +44,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_output
             "model_id": "diffusion/imported/test-bundle",
             "model_type": "diffusion",
             "task_type_primary": "text-to-image",
-            "recommended_backend": "llamacpp",
-            "inference_settings": []
+            "recommended_backend": "llamacpp"
         }),
     );
 
@@ -118,8 +117,7 @@ async fn puma_lib_execution_preserves_explicit_model_ref_without_model_path_outp
                 "model_id": "vlm/qwen35/qwen3_6-27b-heretic-ara-gguf",
                 "selected_artifact_path": artifact_path
             },
-            "recommended_backend": "llamacpp",
-            "inference_settings": []
+            "recommended_backend": "llamacpp"
         }),
     );
 
@@ -189,8 +187,7 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
             "model_id": model_id,
             "model_type": "diffusion",
             "task_type_primary": "text-to-image",
-            "recommended_backend": "llamacpp",
-            "inference_settings": []
+            "recommended_backend": "llamacpp"
         }),
     );
 
@@ -273,8 +270,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_puma
             "model_id": model_id,
             "model_type": "diffusion",
             "task_type_primary": "text-to-image",
-            "recommended_backend": "llamacpp",
-            "inference_settings": []
+            "recommended_backend": "llamacpp"
         }),
     );
 
@@ -316,7 +312,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_puma
 }
 
 #[tokio::test]
-async fn puma_lib_execution_prefers_selected_detail_inference_settings() {
+async fn puma_lib_execution_does_not_emit_inference_settings_from_saved_or_selected_detail() {
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
@@ -375,24 +371,11 @@ async fn puma_lib_execution_prefers_selected_detail_inference_settings() {
     let outputs = executor
         .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
         .await
-        .expect("puma-lib should refresh inference settings from selected detail");
+        .expect("puma-lib should resolve selected detail without inference settings");
 
-    let settings = outputs
-        .get("inference_settings")
-        .and_then(|value| value.as_array())
-        .expect("inference settings should be an array");
     assert!(
-        settings.iter().any(
-            |setting| setting.get("key").and_then(|value| value.as_str())
-                == Some("num_inference_steps")
-        ),
-        "selected-detail diffusion defaults should replace stale saved settings"
-    );
-    assert!(
-        settings.iter().all(
-            |setting| setting.get("key").and_then(|value| value.as_str()) != Some("stale_setting")
-        ),
-        "stale saved inference settings should not survive selected-detail hydration"
+        outputs.get("inference_settings").is_none(),
+        "puma-lib must not emit inference settings from saved node data or selected detail"
     );
 }
 
@@ -433,8 +416,7 @@ async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id()
         serde_json::json!({
             "modelPath": "",
             "modelName": "Test Bundle",
-            "recommended_backend": "diffusers",
-            "inference_settings": []
+            "recommended_backend": "diffusers"
         }),
     );
 
