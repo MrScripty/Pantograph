@@ -15877,6 +15877,36 @@ Worker rules:
     `set_active_run_execution_plan` dead-code warning there.
   - Remaining follow-up: wire frontend service/client code and the minimal
     editor Apply action against this command without local proposal patching.
+- 2026-05-28 Milestone 5d option-2 frontend apply action slice:
+  - Smallest useful vertical slice: add the frontend service request mirror,
+    graph-level coordinator, and inference-node Apply control for the first
+    backend-supported non-destructive proposal application path.
+  - Allowed files touched: `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowGraphMutationService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/README.md`,
+    `src/components/inferenceInterfaceUpdateContext.ts`,
+    `src/components/workflowGraphBackendActions.ts`,
+    `src/components/WorkflowGraph.svelte`, `src/components/README.md`,
+    `src/components/nodes/workflow/LLMInferenceNode.svelte`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.ts`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.test.ts`,
+    `src/components/nodes/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: the node can request application only of
+    backend-authored non-destructive replacement proposals. The graph
+    coordinator obtains current validation-session identity from
+    workflow-service and forwards the typed backend apply request; frontend code
+    does not construct patch operations, rewrite snapshots directly, remove
+    edges, clear literals, compare ports for authority, infer submit
+    permission, or keep destructive proposal application enabled.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts
+    src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+    typecheck`; `git diff --check`.
+  - Remaining follow-up: implement the richer option-4 preview/confirmation
+    workflow for destructive updates and visual diffs while keeping backend
+    graph-patch ownership.
 
 ### Traceability Links
 

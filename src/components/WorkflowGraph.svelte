@@ -73,6 +73,7 @@
   } from './workflowGraphKeyboardActions.ts';
   import { resolveWorkflowGraphSource } from './workflowGraphSource.ts';
   import {
+    applyWorkflowInferenceInterfaceUpdateProposal,
     commitWorkflowConnection,
     commitWorkflowEdgeInsertDrop,
     commitWorkflowInsertCandidate,
@@ -86,6 +87,10 @@
     DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT,
     type DependencyEnvironmentActionCoordinator,
   } from './dependencyEnvironmentActionContext.ts';
+  import {
+    INFERENCE_INTERFACE_UPDATE_COORDINATOR_CONTEXT,
+    type InferenceInterfaceUpdateCoordinator,
+  } from './inferenceInterfaceUpdateContext.ts';
   import {
     isWorkflowPaletteEdgeInsertEnabled,
     clearActiveWorkflowPaletteDragDefinition,
@@ -165,6 +170,17 @@
   setContext(
     DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT,
     dependencyEnvironmentActionCoordinator,
+  );
+
+  const inferenceInterfaceUpdateCoordinator: InferenceInterfaceUpdateCoordinator = (request) =>
+    applyWorkflowInferenceInterfaceUpdateProposal({
+      graphRevision: getGraphRevision(),
+      proposal: request.proposal,
+    });
+
+  setContext(
+    INFERENCE_INTERFACE_UPDATE_COORDINATOR_CONTEXT,
+    inferenceInterfaceUpdateCoordinator,
   );
 
   // Track previous store references so we only push genuine changes to SvelteFlow.

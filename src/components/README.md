@@ -22,6 +22,7 @@ architecture views on top of the shared editor.
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh/staleness/cleanup decisions, and rendered-edge hit testing. |
 | `workflowGraphBackendActions.ts` | Owns app graph `WorkflowService` session lookup, dependency-environment action intent construction, edge insertion, backend graph refresh, and adapters into shared package backend action primitives. |
+| `inferenceInterfaceUpdateContext.ts` | Graph-level context for backend-owned inference interface proposal application requests emitted by inference-node UI. |
 | `workflowGraphEdgeInsertPreview.ts` | Coordinates palette edge-insert preview refresh requests and stale-response guards around the edge-insert interaction state helpers. |
 | `workflowGraphKeyboardActions.ts` | Coordinates app graph container keyboard commands and horseshoe window keyboard dispatch. |
 | `workflowGraphPaletteHandlers.ts` | Coordinates app palette drop and drag-over events before delegating to node insertion or edge-insert preview handlers. |
@@ -187,6 +188,14 @@ node-local resolve/check/install actions, `WorkflowGraph.svelte` supplies the
 graph coordinator context, and `workflowGraphBackendActions.ts` adds the active
 graph session/revision before forwarding a typed action intent to
 workflow-service.
+Inference-interface update proposal actions use the same graph-coordinator
+pattern. `LLMInferenceNode.svelte` emits the selected backend-authored
+proposal, `WorkflowGraph.svelte` supplies current graph revision context, and
+`workflowGraphBackendActions.ts` asks workflow-service for the current
+validation session before forwarding the typed backend apply request. The graph
+coordinator synchronizes only the backend mutation response; it does not build
+patch operations, compare ports, rewrite node data locally, or decide submit
+eligibility.
 Dependency-environment node UI may detect only the typed
 `dependency_environment_sidecar` visual association and user-authored manual
 override inputs from graph edges. It must not infer model paths, Pumas facts,
@@ -401,6 +410,11 @@ component.
 - App graph selected-node id projection must use the package
   `collectSelectedNodeIds` helper so selection snapshot handling cannot drift
   from the package graph.
+- Inference-interface proposal application must pass through the graph-level
+  coordinator and workflow-service apply API. Node components may request
+  application of backend-authored non-destructive proposals, but they must not
+  mutate graph stores, remove edges, clear literals, or construct graph patches
+  directly.
 - App graph horseshoe blocked-reason logging must use the package
   `resolveWorkflowHorseshoeBlockedReasonLog` helper so diagnostic duplicate
   suppression cannot drift from the package graph.

@@ -6,10 +6,12 @@ import type {
   EdgeInsertionPreviewResponse,
   GraphEdge,
   GraphNode,
+  InferenceInterfaceApplyProposalRequest,
   InsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse,
   InsertNodePositionHint,
   WorkflowGraph,
+  WorkflowGraphMutationResponse,
 } from './types.ts';
 import {
   connectWorkflowAnchors,
@@ -45,6 +47,18 @@ export abstract class WorkflowGraphMutationService {
       nodeId,
       data,
     }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
+  }
+
+  async applyInferenceInterfaceUpdateProposal(
+    request: InferenceInterfaceApplyProposalRequest,
+  ): Promise<WorkflowGraphMutationResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      throw new Error('Inference interface proposal application is not supported in mock mode');
+    }
+
+    return invoke<unknown>('apply_inference_interface_update_proposal', {
+      request,
+    }).then((response) => parseWorkflowGraphMutationResponse(response));
   }
 
   async updateNodePosition(

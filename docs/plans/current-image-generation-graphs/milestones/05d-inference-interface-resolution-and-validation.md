@@ -2790,6 +2790,37 @@ defining an image-only inference-node interface.
   - Remaining follow-up: add frontend service plumbing and a minimal Apply
     action that calls this command with backend proposal ids and explicit
     confirmation, without constructing proposal patch operations locally.
+- [x] 2026-05-28 option-2 frontend apply action slice:
+  - Smallest useful vertical slice: add frontend service plumbing, graph-level
+    coordination, and a minimal inference-node Apply action for backend-owned
+    non-destructive `ReplaceAuthoredSnapshot` proposals.
+  - Allowed files touched: `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowGraphMutationService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/README.md`,
+    `src/components/inferenceInterfaceUpdateContext.ts`,
+    `src/components/workflowGraphBackendActions.ts`,
+    `src/components/WorkflowGraph.svelte`, `src/components/README.md`,
+    `src/components/nodes/workflow/LLMInferenceNode.svelte`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.ts`,
+    `src/components/nodes/workflow/inferenceValidationDisplay.test.ts`,
+    `src/components/nodes/workflow/README.md`, this Milestone 5d file, and
+    `05-execution-management.md`.
+  - No-fallback/no-legacy result: the frontend forwards backend proposal ids,
+    graph session/revision identity, backend validation-session identity,
+    descriptor fingerprint, and explicit confirmation to the backend apply
+    command. It does not construct graph patch operations, compare ports,
+    rewrite authored snapshots directly, remove edges, clear literals, infer
+    submit authority, or apply stale proposals. Unsupported destructive or
+    multi-operation proposal application remains disabled for the future
+    option-4 preview/confirmation workflow.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/inferenceValidationDisplay.test.ts
+    src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+    typecheck`; `git diff --check`.
+  - Remaining follow-up: build the option-4 full update-preview/confirmation UX
+    for destructive operations and richer diffs, still applying through
+    workflow-service graph-patch APIs only.
 - [ ] Wire staged graph editor drift presentation and update preview.
       Option-2 scope: the editor shows authored-current diffs visually on
       nodes/ports/edges, keeps invalid edges visible, displays

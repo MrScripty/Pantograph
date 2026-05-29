@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildInferenceDriftDisplay,
+  buildInferenceUpdateApplyDisplay,
   buildInferenceValidationDisplay,
 } from './inferenceValidationDisplay.ts';
 
@@ -135,6 +136,79 @@ test('buildInferenceDriftDisplay falls back to drift change counts', () => {
       label: 'Interface changed',
       detail: '2 interface changes',
       tone: 'warning',
+    },
+  );
+});
+
+test('buildInferenceUpdateApplyDisplay enables only backend replacement proposals', () => {
+  assert.deepEqual(
+    buildInferenceUpdateApplyDisplay({
+      proposal_id: 'inference-interface-update/infer-1',
+      node_id: 'infer-1',
+      current_descriptor_fingerprint: 'descriptor.current',
+      drift_report: {
+        authored_fingerprint: 'descriptor.previous',
+        current_fingerprint: 'descriptor.current',
+        severity: 'blocking',
+        blocking: true,
+      },
+      operations: [
+        {
+          operation: 'replace_authored_snapshot',
+          value: {
+            node_id: 'infer-1',
+            snapshot: {
+              descriptor_fingerprint: 'descriptor.current',
+              task_kind: 'image_generation',
+            },
+          },
+        },
+      ],
+      requires_confirmation: true,
+      destructive: false,
+    }),
+    {
+      detail: null,
+      enabled: true,
+      label: 'Apply',
+    },
+  );
+});
+
+test('buildInferenceUpdateApplyDisplay disables destructive proposal operations', () => {
+  assert.deepEqual(
+    buildInferenceUpdateApplyDisplay({
+      proposal_id: 'inference-interface-update/infer-1',
+      node_id: 'infer-1',
+      current_descriptor_fingerprint: 'descriptor.current',
+      drift_report: {
+        authored_fingerprint: 'descriptor.previous',
+        current_fingerprint: 'descriptor.current',
+        severity: 'blocking',
+        blocking: true,
+      },
+      operations: [
+        {
+          operation: 'remove_invalid_edge',
+          value: {
+            edge: {
+              edge_id: 'edge-1',
+              source_node_id: 'source',
+              source_port_id: 'image',
+              target_node_id: 'infer-1',
+              target_port_id: 'prompt',
+            },
+            reason: 'target_port_removed',
+          },
+        },
+      ],
+      requires_confirmation: true,
+      destructive: true,
+    }),
+    {
+      detail: 'Requires preview',
+      enabled: false,
+      label: 'Review',
     },
   );
 });

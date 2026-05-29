@@ -1222,6 +1222,19 @@ export interface InferenceInterfaceUpdateProposal {
   diagnostics?: WorkflowGraphValidationDiagnostic[];
 }
 
+export type InferenceInterfaceProposalApplyConfirmation = 'not_confirmed' | 'confirmed';
+
+export interface InferenceInterfaceApplyProposalRequest {
+  contract_version?: number;
+  graph_session_id: string;
+  graph_revision: string;
+  validation_session_id: string;
+  node_id: string;
+  proposal_id: string;
+  current_descriptor_fingerprint: string;
+  confirmation: InferenceInterfaceProposalApplyConfirmation;
+}
+
 export interface InferenceInterfaceNodeProjectionRecord {
   node_id: string;
   descriptor: InferenceInterfaceDescriptor;

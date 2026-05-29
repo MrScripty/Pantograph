@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getContext, hasContext } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import type {
     InferenceInterfaceDriftReport,
@@ -10,8 +11,13 @@
   import { buildInferencePayloadDisplay } from './inferencePayloadDisplay';
   import {
     buildInferenceDriftDisplay,
+    buildInferenceUpdateApplyDisplay,
     buildInferenceValidationDisplay,
   } from './inferenceValidationDisplay';
+  import {
+    INFERENCE_INTERFACE_UPDATE_COORDINATOR_CONTEXT,
+    type InferenceInterfaceUpdateCoordinator,
+  } from '../../inferenceInterfaceUpdateContext.ts';
 
   interface Props {
     id: string;
@@ -29,6 +35,15 @@
 
   let { id, data, selected = false }: Props = $props();
 
+  const inferenceUpdateCoordinator = hasContext(INFERENCE_INTERFACE_UPDATE_COORDINATOR_CONTEXT)
+    ? getContext<InferenceInterfaceUpdateCoordinator>(
+        INFERENCE_INTERFACE_UPDATE_COORDINATOR_CONTEXT
+      )
+    : null;
+
+  let updateApplyBusy = $state(false);
+  let updateApplyError = $state<string | null>(null);
+
   // Get execution info (new format with state and errorMessage)
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
@@ -43,6 +58,9 @@
       data.inference_interface_drift_report,
       data.inference_interface_update_proposal,
     ),
+  );
+  let updateApplyDisplay = $derived(
+    buildInferenceUpdateApplyDisplay(data.inference_interface_update_proposal),
   );
 
   let statusColor = $derived(
@@ -62,6 +80,30 @@
       error: 'Error',
     }[executionState]
   );
+
+  async function applyInferenceInterfaceUpdate(event: MouseEvent): Promise<void> {
+    event.stopPropagation();
+    if (
+      !inferenceUpdateCoordinator ||
+      !updateApplyDisplay?.enabled ||
+      updateApplyBusy ||
+      !data.inference_interface_update_proposal
+    ) {
+      return;
+    }
+
+    updateApplyBusy = true;
+    updateApplyError = null;
+    try {
+      await inferenceUpdateCoordinator({
+        proposal: data.inference_interface_update_proposal,
+      });
+    } catch (error) {
+      updateApplyError = error instanceof Error ? error.message : String(error);
+    } finally {
+      updateApplyBusy = false;
+    }
+  }
 </script>
 
 <div class="llm-node-wrapper border-green-600/50">
@@ -128,6 +170,27 @@
               <span class="shrink-0">{driftDisplay.detail}</span>
             {/if}
           </div>
+          {#if updateApplyDisplay}
+            <div class="inference-update-action">
+              <button
+                type="button"
+                class="inference-update-button"
+                disabled={!updateApplyDisplay.enabled || updateApplyBusy || !inferenceUpdateCoordinator}
+                title={updateApplyDisplay.detail ?? updateApplyDisplay.label}
+                onclick={applyInferenceInterfaceUpdate}
+              >
+                {updateApplyBusy ? 'Applying' : updateApplyDisplay.label}
+              </button>
+              {#if updateApplyDisplay.detail}
+                <span class="truncate">{updateApplyDisplay.detail}</span>
+              {/if}
+            </div>
+          {/if}
+          {#if updateApplyError}
+            <div class="inference-validation inference-validation--error" title={updateApplyError}>
+              <span class="truncate">{updateApplyError}</span>
+            </div>
+          {/if}
         {/if}
         {#if streamContent}
           <div class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-20 overflow-y-auto">
@@ -182,5 +245,27 @@
     border-color: #166534;
     background: rgba(20, 83, 45, 0.24);
     color: #bbf7d0;
+  }
+
+  .inference-update-action {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+    color: #d4d4d4;
+  }
+
+  .inference-update-button {
+    border-radius: 0.25rem;
+    border: 1px solid #525252;
+    background: #262626;
+    padding: 0.125rem 0.375rem;
+    color: #f5f5f5;
+  }
+
+  .inference-update-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 </style>

@@ -46,6 +46,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `RerankerNode.svelte` | Retired specialized renderer retained only for saved-workflow migration reference; new rerank workflows render through `LLMInferenceNode.svelte`. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
 | `inferencePayloadDisplay.ts` | Projects backend-neutral inference payload role metadata into compact task, diagnostics, usage, cache-handle, model-fact, and option display rows for canonical inference nodes. |
+| `inferenceValidationDisplay.ts` | Projects backend validation, drift, update-proposal, and supported apply-action presentation for canonical inference nodes without owning graph patches. |
 
 ## Problem
 Workflow execution mixes durable node configuration with transient runtime data
@@ -180,7 +181,9 @@ and finality metadata in runtime data while the component reads bytes lazily wit
   consume backend validation authority directly.
 - Drift and update-proposal badges on `LLMInferenceNode.svelte` must be derived
   only from backend projection overlays. The component must not compare ports,
-  create patch operations, or apply interface updates itself.
+  create patch operations, or mutate graph data itself. Supported apply actions
+  must go through the graph-level inference-interface update coordinator and
+  backend graph-patch API.
 - `PumaLibNode.svelte` must consume the shared Pumas model-option cache from
   `src/services/workflow/pumaModelOptionsCache.ts`; selector cursor handoff and
   invalidation logic belong in that service, not in component module state.

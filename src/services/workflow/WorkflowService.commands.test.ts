@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
+import { WorkflowService } from './WorkflowService.ts';
 import { MOCK_NODE_DEFINITIONS } from './mocks.ts';
 import type {
   DiagnosticsRetentionPolicySettings,
@@ -27,6 +28,7 @@ import type {
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
   WorkflowExecutableValidationSnapshotRecord,
+  WorkflowGraphMutationResponse,
   InferencePortPayloadContract,
   WorkflowBackendTaskCapability,
   WorkflowManagedMediaDependencyStatus,
@@ -763,6 +765,70 @@ test('workflow command service forwards validation lifecycle event snapshot requ
         cmd: 'graph_validation_lifecycle_event_snapshot',
         args: {
           graphSessionId: 'graph-session-a',
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('workflow service applies inference interface proposals through backend mutation command', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowGraphMutationResponse = {
+    graph: {
+      nodes: [
+        {
+          id: 'infer-1',
+          node_type: 'llm-inference',
+          position: { x: 0, y: 0 },
+          data: {
+            inference_interface_snapshot: {
+              descriptor_fingerprint: 'descriptor.current',
+              task_kind: 'image_generation',
+            },
+          },
+        },
+      ],
+      edges: [],
+    },
+    workflow_event: null,
+    workflow_session_state: undefined,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowService();
+    const result = await service.applyInferenceInterfaceUpdateProposal({
+      contract_version: 1,
+      graph_session_id: 'graph-session-a',
+      graph_revision: 'graph-revision-a',
+      validation_session_id: 'validation-session-a',
+      node_id: 'infer-1',
+      proposal_id: 'proposal-a',
+      current_descriptor_fingerprint: 'descriptor.current',
+      confirmation: 'confirmed',
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'apply_inference_interface_update_proposal',
+        args: {
+          request: {
+            contract_version: 1,
+            graph_session_id: 'graph-session-a',
+            graph_revision: 'graph-revision-a',
+            validation_session_id: 'validation-session-a',
+            node_id: 'infer-1',
+            proposal_id: 'proposal-a',
+            current_descriptor_fingerprint: 'descriptor.current',
+            confirmation: 'confirmed',
+          },
         },
       },
     ]);

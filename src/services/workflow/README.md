@@ -119,6 +119,11 @@ Graph validation lifecycle event subscription wiring lives in
 dedicated graph-validation event name, filters by active graph session, drops
 stale sequence numbers, and leaves initial snapshot/recovery reads to
 `graphValidationLifecycleEventSnapshot`.
+Inference-interface update proposal application is forwarded through the
+backend graph mutation command. The service carries the typed apply request,
+parses the returned graph mutation response, and does not construct proposal
+operations, rewrite node data directly, remove edges, clear literals, or infer
+submit authority from proposal presence.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.
@@ -239,6 +244,11 @@ missing `events` array as empty rather than a transport failure.
   or request application of those proposals through backend graph-patch APIs,
   but must not derive submit permission, scheduler admission, or replacement
   graph patches from frontend-local comparison logic.
+- Inference-interface proposal application requests must carry backend proposal
+  ids, graph session/revision identity, validation-session identity, descriptor
+  fingerprint, and explicit confirmation. Frontend services must forward those
+  fields to the backend command and parse the returned graph mutation response;
+  they must not compare ports or synthesize patch operations locally.
 - Built-in template tests must scan every registered starter template for
   retired direct inference node types so new examples stay on canonical
   `llm-inference` task shapes.

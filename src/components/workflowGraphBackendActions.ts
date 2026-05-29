@@ -22,6 +22,7 @@ import type {
 import type {
   ConnectionAnchor,
   ConnectionCommitResponse,
+  InferenceInterfaceUpdateProposal,
   InsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse,
   InsertNodePositionHint,
@@ -88,6 +89,11 @@ interface DependencyEnvironmentActionParams {
   validationSessionId?: string | null;
 }
 
+interface InferenceInterfaceUpdateProposalApplyParams {
+  graphRevision: string;
+  proposal: InferenceInterfaceUpdateProposal;
+}
+
 function currentSessionId(): string | null {
   return workflowService.getCurrentExecutionId();
 }
@@ -136,6 +142,40 @@ export async function runWorkflowDependencyEnvironmentAction({
     target_node_id: targetNodeId,
     action,
   });
+}
+
+export async function applyWorkflowInferenceInterfaceUpdateProposal({
+  graphRevision,
+  proposal,
+}: InferenceInterfaceUpdateProposalApplyParams): Promise<void> {
+  const sessionId = currentSessionId();
+  if (!sessionId) {
+    throw new Error('Inference interface update requires an active graph edit session.');
+  }
+  if (!graphRevision) {
+    throw new Error('Inference interface update requires a current graph revision.');
+  }
+
+  const summary = await workflowService.currentGraphValidationSummary({
+    graph_session_id: sessionId,
+    graph_revision: graphRevision,
+  });
+  if (!summary.validation_session_id) {
+    throw new Error('Inference interface update requires a current validation session.');
+  }
+
+  const response = await workflowService.applyInferenceInterfaceUpdateProposal({
+    contract_version: proposal.contract_version ?? 1,
+    graph_session_id: sessionId,
+    graph_revision: graphRevision,
+    validation_session_id: summary.validation_session_id,
+    node_id: proposal.node_id,
+    proposal_id: proposal.proposal_id,
+    current_descriptor_fingerprint: proposal.current_descriptor_fingerprint,
+    confirmation: 'confirmed',
+  });
+
+  syncGraphForSession(response.graph, sessionId);
 }
 
 export async function commitWorkflowEdgeInsertDrop({

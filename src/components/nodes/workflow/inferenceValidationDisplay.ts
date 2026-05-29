@@ -12,6 +12,12 @@ export interface InferenceValidationDisplay {
   tone: InferenceValidationTone;
 }
 
+export interface InferenceUpdateApplyDisplay {
+  detail: string | null;
+  enabled: boolean;
+  label: string;
+}
+
 const STATUS_LABELS: Record<WorkflowGraphValidationSummary['status'], string> = {
   pending: 'Pending validation',
   stale: 'Stale validation',
@@ -62,6 +68,40 @@ export function buildInferenceDriftDisplay(
         ? formatCount(changeCount, 'interface change')
         : 'review required',
     tone: driftReport.blocking ? 'error' : 'warning',
+  };
+}
+
+export function buildInferenceUpdateApplyDisplay(
+  updateProposal: InferenceInterfaceUpdateProposal | null | undefined,
+): InferenceUpdateApplyDisplay | null {
+  if (!updateProposal) {
+    return null;
+  }
+
+  if (updateProposal.destructive) {
+    return {
+      detail: 'Requires preview',
+      enabled: false,
+      label: 'Review',
+    };
+  }
+
+  const operations = updateProposal.operations ?? [];
+  if (
+    operations.length === 1
+    && operations[0]?.operation === 'replace_authored_snapshot'
+  ) {
+    return {
+      detail: null,
+      enabled: true,
+      label: 'Apply',
+    };
+  }
+
+  return {
+    detail: 'Unsupported update',
+    enabled: false,
+    label: 'Review',
   };
 }
 
