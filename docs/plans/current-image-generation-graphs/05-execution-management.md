@@ -16107,6 +16107,16 @@ Worker rules:
     pantograph-inference-interface-contracts`; `cargo check -p
     pantograph-inference-interface-contracts --all-features`; `cargo check -p
     pantograph-inference-interface-contracts --no-default-features`.
+- 2026-05-29 Milestone 5d runtime-dispatch ownership cleanup completed:
+  - Decision: final runtime-host input materialization, runtime-host input
+    request alignment, and pre-dispatch descriptor revalidation are owned by
+    the runtime-dispatch milestone because they require scheduler input
+    readiness and a dispatch-selected runtime-host handoff.
+  - No-fallback/no-legacy gate: Milestone 5d must not backfill those tasks by
+    parsing raw graph fields, reusing stale ports, accepting frontend/Tauri
+    executable payloads, or reviving whole-run runtime execution.
+  - Verification passed: plan-only `git diff --check` for the affected plan
+    files.
 
 ### Traceability Links
 

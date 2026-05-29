@@ -1558,6 +1558,12 @@ Staged implementation:
    contracts; it must not derive executable inputs from raw graph
    `task_kind`/runtime/device fields, frontend/Tauri payloads, model paths,
    `inference_settings`, or retired whole-run runtime execution.
+   The same dispatch-owned slice must align the runtime-host input request with
+   descriptor materialization and run pre-dispatch descriptor revalidation. If
+   Pumas facts, selected artifact state, runtime capability, or descriptor
+   fingerprint changed since executable publish/admission validation, dispatch
+   selection must stop with typed diagnostics rather than using stale ports or
+   inventing replacement inputs.
 5. Implement the embedded-runtime `RuntimeHostExecutionPort` by accepting a
    validated dispatch-selected runtime-host request, resolving the Pumas artifact
    load target from the dispatch-selected `PumasModelRef`, calling the inference

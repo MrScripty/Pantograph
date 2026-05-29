@@ -3073,23 +3073,19 @@ defining an image-only inference-node interface.
     or the old whole-run host execution path. Until the runtime-dispatch slice
     wires scheduler-owned materialization and host handoff, runtime inference
     dispatch remains fail-closed with typed diagnostics.
-- [ ] Implement final runtime-host input materialization in the
-      runtime-dispatch milestone, after scheduler input readiness and dispatch
-      selection are wired. Workflow-service must materialize final runtime-host
-      inputs from upstream task results, graph literal values, and descriptor
-      defaults only after the scheduler has a ready task and a
-      scheduler-selected handoff. This Milestone 5d work may reference that
-      future owner, but must not implement a local compatibility path.
-- [ ] Align the runtime-host input contract with descriptor materialization.
-      Runtime-host execution requests must include scheduler-selected handoff
-      plus typed, path-free materialized inputs and artifact/result references;
-      they must not receive graph paths, Pumas package facts, or scheduler-owned
-      payload guesses.
-- [ ] Add pre-dispatch descriptor revalidation before scheduler dispatch
-      selection. If Pumas facts, selected artifact state, runtime capability,
-      or descriptor fingerprint changed since executable publish/admission
-      validation, fail the task with typed diagnostics rather than falling back
-      to stale ports.
+- [x] Move final runtime-host input materialization, runtime-host input
+      contract alignment, and pre-dispatch descriptor revalidation to the
+      runtime-dispatch milestone. Those tasks require scheduler input readiness
+      and dispatch-selected runtime-host handoff ownership, so Milestone 5d must
+      not implement them locally or provide compatibility paths.
+  - 2026-05-29 decision: runtime-host execution requests must eventually
+    include scheduler-selected handoff plus typed, path-free materialized inputs
+    and artifact/result references, but the owning implementation slice is the
+    runtime-dispatch milestone. Pre-dispatch descriptor revalidation must run
+    before scheduler dispatch selection there; if Pumas facts, selected artifact
+    state, runtime capability, or descriptor fingerprint changed since
+    executable publish/admission validation, the task fails with typed
+    diagnostics rather than falling back to stale ports.
 - [ ] Delete or rewrite retired inference-node port discovery and validation
       surfaces replaced by this resolver. Do not keep compatibility aliases,
       legacy model-path support checks, planned-inference validation branches,
