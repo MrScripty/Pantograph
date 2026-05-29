@@ -3878,6 +3878,46 @@ defining an image-only inference-node interface.
     warning.
   - Remaining follow-up: wire connection insert/commit operations through the
     same lifecycle helper where they change semantic graph state.
+- [x] 2026-05-28 connect validation cancellation slice completed:
+  - Smallest useful vertical slice: wire accepted `connect` commits through
+    the existing workflow-service validation lifecycle cancellation helper, and
+    add publication-time coverage proving pending validation output is rejected
+    when a committed connection changes the semantic graph.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+    milestone, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: accepted connection commits now use
+    the canonical validation lifecycle owner and typed cancellation path after
+    the graph mutation, with no frontend invalidation, timestamp, transport
+    request id, or alternate publication fallback. Rejected connection commits
+    continue to return typed rejection responses before cancellation.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_connect_changed_during_fact_lookup
+    --lib`; `cargo check -p pantograph-workflow-service`; source-search
+    verification for touched production code; and `git diff --check`.
+  - Verification attempted and failed: `cargo test -p
+    pantograph-workflow-service connect --lib` still fails pre-existing
+    connection-intent coverage around LLM prompt/device port selection and
+    stream-to-output canonicalization
+    (`connection_candidates_return_existing_nodes_and_insertable_types`,
+    `preview_node_insert_on_edge_returns_valid_bridge_for_llm`,
+    `insert_node_on_edge_returns_two_replacement_edges`, and
+    `connect_canonicalizes_llm_stream_drop_to_text_output_response_edge`). The
+    cancellation slice does not change connection selection policy, but the
+    failure must be resolved or explicitly re-planned before relying on broad
+    connection-intent verification for insert-on-edge slices.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
+  - Remaining follow-up: wire `insert_node_and_connect` and
+    `insert_node_on_edge` through the same lifecycle helper where they change
+    semantic graph state, after accounting for the current connection-intent
+    test failures.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

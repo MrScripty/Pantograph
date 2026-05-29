@@ -15082,6 +15082,42 @@ Worker rules:
     untracked task ownership. `cargo check -p pantograph-workflow-service`
     still reports the pre-existing `set_active_run_execution_plan` dead-code
     warning.
+- 2026-05-28 Milestone 5d connect validation cancellation slice:
+  - Smallest useful vertical slice: wire accepted `connect` commits through
+    the existing workflow-service validation lifecycle cancellation helper, and
+    add publication-time coverage proving pending validation output is rejected
+    when a committed connection changes the semantic graph.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: accepted connection commits now use the
+    canonical validation lifecycle owner and typed cancellation path after the
+    graph mutation, with no frontend invalidation, timestamp, transport request
+    id, or alternate publication fallback. Rejected connection commits continue
+    to return typed rejection responses before cancellation.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_connect_changed_during_fact_lookup
+    --lib`; `cargo check -p pantograph-workflow-service`; source-search
+    verification for touched production code; and `git diff --check`.
+  - Verification attempted and failed: `cargo test -p
+    pantograph-workflow-service connect --lib` still fails pre-existing
+    connection-intent coverage around LLM prompt/device port selection and
+    stream-to-output canonicalization
+    (`connection_candidates_return_existing_nodes_and_insertable_types`,
+    `preview_node_insert_on_edge_returns_valid_bridge_for_llm`,
+    `insert_node_on_edge_returns_two_replacement_edges`, and
+    `connect_canonicalizes_llm_stream_drop_to_text_output_response_edge`). The
+    cancellation slice does not change connection selection policy, but the
+    failure must be resolved or explicitly re-planned before relying on broad
+    connection-intent verification for insert-on-edge slices.
+  - Discovered issue: source-search verification in `session_tests.rs` still
+    reports existing test fixtures for `model_path` and existing async test
+    `tokio::spawn` calls; this slice added no production path usage or
+    untracked task ownership. `cargo check -p pantograph-workflow-service`
+    still reports the pre-existing `set_active_run_execution_plan` dead-code
+    warning.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in
