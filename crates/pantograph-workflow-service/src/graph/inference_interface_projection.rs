@@ -35,10 +35,18 @@ pub struct InferenceInterfaceResolutionProjection {
 pub fn resolve_inference_interface_projection(
     request: pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest,
     facts: InferenceInterfaceResolverFacts,
+    authored_snapshot: Option<AuthoredInferenceInterfaceSnapshot>,
 ) -> Result<InferenceInterfaceResolutionProjection, InferenceInterfaceProjectionError> {
     let descriptor = resolve_inference_interface_from_facts(request, facts)?;
-    let authored_snapshot = authored_snapshot_from_descriptor(&descriptor)?;
-    let validation_summary = validation_summary_from_descriptor(&descriptor)?;
+    let authored_snapshot = match authored_snapshot {
+        Some(snapshot) => {
+            snapshot.validate()?;
+            snapshot
+        }
+        None => authored_snapshot_from_descriptor(&descriptor)?,
+    };
+    let validation_summary =
+        validation_summary_from_descriptor_and_snapshot(&descriptor, &authored_snapshot)?;
     Ok(InferenceInterfaceResolutionProjection {
         descriptor,
         authored_snapshot,
@@ -72,7 +80,16 @@ pub fn authored_snapshot_from_descriptor(
 pub fn validation_summary_from_descriptor(
     descriptor: &InferenceInterfaceDescriptor,
 ) -> Result<DraftGraphValidationSummary, InferenceInterfaceProjectionError> {
+    let authored_snapshot = authored_snapshot_from_descriptor(descriptor)?;
+    validation_summary_from_descriptor_and_snapshot(descriptor, &authored_snapshot)
+}
+
+pub fn validation_summary_from_descriptor_and_snapshot(
+    descriptor: &InferenceInterfaceDescriptor,
+    authored_snapshot: &AuthoredInferenceInterfaceSnapshot,
+) -> Result<DraftGraphValidationSummary, InferenceInterfaceProjectionError> {
     descriptor.validate()?;
+    authored_snapshot.validate()?;
     let diagnostics_count = checked_u32("diagnostics_count", descriptor.diagnostics.len())?;
     let blocking_diagnostics_count = checked_u32(
         "blocking_diagnostics_count",
@@ -90,8 +107,31 @@ pub fn validation_summary_from_descriptor(
             DraftGraphEnqueueDisabledReason::BlockingDiagnostics,
         );
     }
+    let descriptor_drift_detected =
+        authored_snapshot.descriptor_fingerprint != descriptor.descriptor_fingerprint;
+    if descriptor_drift_detected {
+        push_unique(
+            &mut enqueue_disabled_reasons,
+            DraftGraphEnqueueDisabledReason::DriftRequiresReview,
+        );
+    }
 
-    let status = validation_status(descriptor, blocking_diagnostics_count);
+    let status = if descriptor_drift_detected {
+        DraftGraphValidationStatus::Blocked
+    } else {
+        validation_status(descriptor, blocking_diagnostics_count)
+    };
+    let diagnostics_count = if descriptor_drift_detected && diagnostics_count == 0 {
+        1
+    } else {
+        diagnostics_count
+    };
+    let blocking_diagnostics_count = if descriptor_drift_detected && blocking_diagnostics_count == 0
+    {
+        1
+    } else {
+        blocking_diagnostics_count
+    };
     let executable =
         status == DraftGraphValidationStatus::Executable && enqueue_disabled_reasons.is_empty();
     let summary = DraftGraphValidationSummary {
@@ -249,8 +289,9 @@ mod tests {
 
     #[test]
     fn projection_turns_ready_descriptor_into_authored_snapshot_and_executable_summary() {
-        let projection = resolve_inference_interface_projection(request(None, None), ready_facts())
-            .expect("projection");
+        let projection =
+            resolve_inference_interface_projection(request(None, None), ready_facts(), None)
+                .expect("projection");
 
         assert_eq!(projection.authored_snapshot.inputs.len(), 1);
         assert_eq!(
@@ -273,6 +314,7 @@ mod tests {
         let projection = resolve_inference_interface_projection(
             request(Some(runtime_id("vllm")), None),
             ready_facts(),
+            None,
         )
         .expect("projection");
 
@@ -298,8 +340,8 @@ mod tests {
         facts.model.state = InferenceModelResolutionState::MissingSelectedArtifact;
         facts.capability = None;
 
-        let projection =
-            resolve_inference_interface_projection(request(None, None), facts).expect("projection");
+        let projection = resolve_inference_interface_projection(request(None, None), facts, None)
+            .expect("projection");
 
         assert!(projection.authored_snapshot.inputs.is_empty());
         assert!(projection.authored_snapshot.outputs.is_empty());
@@ -312,6 +354,44 @@ mod tests {
             .validation_summary
             .enqueue_disabled_reasons
             .contains(&DraftGraphEnqueueDisabledReason::DescriptorUnavailable));
+    }
+
+    #[test]
+    fn projection_blocks_authored_snapshot_descriptor_drift() {
+        let current_projection =
+            resolve_inference_interface_projection(request(None, None), ready_facts(), None)
+                .expect("current projection");
+        let mut authored_snapshot = current_projection.authored_snapshot.clone();
+        authored_snapshot.descriptor_fingerprint =
+            pantograph_inference_interface_contracts::InferenceInterfaceFingerprint::parse(
+                "descriptor.previous",
+            )
+            .expect("previous descriptor fingerprint");
+
+        let drifted_projection = resolve_inference_interface_projection(
+            request(None, None),
+            ready_facts(),
+            Some(authored_snapshot.clone()),
+        )
+        .expect("drifted projection");
+
+        assert_eq!(drifted_projection.authored_snapshot, authored_snapshot);
+        assert_eq!(
+            drifted_projection.validation_summary.status,
+            DraftGraphValidationStatus::Blocked
+        );
+        assert!(!drifted_projection.validation_summary.executable);
+        assert!(drifted_projection
+            .validation_summary
+            .enqueue_disabled_reasons
+            .contains(&DraftGraphEnqueueDisabledReason::DriftRequiresReview));
+        assert_eq!(drifted_projection.validation_summary.diagnostics_count, 1);
+        assert_eq!(
+            drifted_projection
+                .validation_summary
+                .blocking_diagnostics_count,
+            1
+        );
     }
 
     fn request(

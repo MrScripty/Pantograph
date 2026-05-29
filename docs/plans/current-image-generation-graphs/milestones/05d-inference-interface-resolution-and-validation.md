@@ -2549,6 +2549,29 @@ defining an image-only inference-node interface.
       - Remaining follow-up: add port/edge-level drift badges and update-preview
         rendering from backend descriptor/drift records. Do not derive those
         facts in the graph package or make them submit authority.
+      - 2026-05-28 authored snapshot drift foundation slice completed:
+        graph resolution input extraction now preserves a valid saved
+        `node.data.inference_interface_snapshot` as the authored inference
+        shape and rejects malformed snapshots with typed
+        `invalid_authored_snapshot` diagnostics. Validation publication passes
+        that authored snapshot into descriptor projection; if its descriptor
+        fingerprint differs from the current resolved descriptor, the backend
+        summary is blocked with `drift_requires_review` instead of silently
+        replacing authored ports.
+      - No-fallback/no-legacy result: absent authored snapshots still bootstrap
+        from the current descriptor for first-time model resolution, but present
+        stale snapshots are not treated as executable. No graph paths,
+        `node.data.definition`, frontend overlays, scheduler facts, or runtime
+        payloads become drift authority.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+        `cargo test -p pantograph-workflow-service inference_interface_request
+        --lib`; `cargo test -p pantograph-workflow-service
+        inference_interface_projection --lib`; `cargo check -p
+        pantograph-workflow-service` with the pre-existing
+        `set_active_run_execution_plan` dead-code warning.
+      - Remaining follow-up: produce detailed backend drift reports and typed
+        update proposals from the same authored/current comparison, then expose
+        them to the graph editor as display/update-preview data.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

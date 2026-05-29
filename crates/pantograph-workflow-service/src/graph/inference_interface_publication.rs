@@ -229,11 +229,15 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
             .get(&input.node_id)
             .cloned()
             .unwrap_or_else(missing_model_facts);
-        let projection = resolve_inference_interface_projection(input.request.clone(), facts)
-            .map_err(|source| InferenceInterfacePublicationError::Projection {
-                node_id: input.node_id.clone(),
-                source,
-            })?;
+        let projection = resolve_inference_interface_projection(
+            input.request.clone(),
+            facts,
+            input.authored_snapshot.clone(),
+        )
+        .map_err(|source| InferenceInterfacePublicationError::Projection {
+            node_id: input.node_id.clone(),
+            source,
+        })?;
         node_projections.push(InferenceInterfaceNodeProjectionRecord {
             node_id: WorkflowNodeId::parse(&input.node_id)?,
             descriptor: projection.descriptor,

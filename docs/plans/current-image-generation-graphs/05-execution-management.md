@@ -15645,6 +15645,30 @@ Worker rules:
   - Remaining follow-up: render backend-authored port/edge drift and
     update-preview overlays without deriving those facts in the graph package
     or making them submit authority.
+- 2026-05-28 Milestone 5d authored snapshot drift foundation slice:
+  - Smallest useful vertical slice: preserve the saved authored inference
+    interface snapshot during graph resolution input extraction and make
+    validation publication fail closed when that snapshot's descriptor
+    fingerprint no longer matches the current resolved descriptor.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_request.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_projection.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, the Milestone 5d
+    file, and this execution log.
+  - No-fallback/no-legacy result: present authored snapshots are validated and
+    compared by backend workflow-service code; stale fingerprints become a
+    typed `drift_requires_review` validation block. The slice does not use
+    `node.data.definition`, graph paths, frontend overlay state, scheduler
+    facts, or runtime payloads as an executable fallback.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service inference_interface_request --lib`;
+    `cargo test -p pantograph-workflow-service inference_interface_projection
+    --lib`; `cargo check -p pantograph-workflow-service` with the pre-existing
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: generate detailed drift reports and backend update
+    proposals from the authored/current comparison before wiring graph-editor
+    update-preview UI.
 
 ### Traceability Links
 

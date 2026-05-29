@@ -251,6 +251,11 @@ the summary/gate remains the only submit authority.
   inference capability facts, and runtime availability facts. The resolver
   assembles descriptors and typed unavailable diagnostics without guessing from
   names, paths, package facts, or runtime-host payloads.
+- Inference validation request extraction preserves the saved
+  `node.data.inference_interface_snapshot` as the authored graph shape when it
+  is present. Publication compares that authored descriptor fingerprint with the
+  current resolved descriptor and marks drift as a backend validation block
+  instead of silently replacing the authored shape with current ports.
 - Scheduler inference projections and executable snapshot source projections
   require current dependency requirements proof for executable inference
   nodes. Missing, stale, unavailable, or invalid proof is a typed validation

@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use pantograph_dependency_planning::{DeviceIntentId, PumasModelRef, RuntimeIntentId};
 use pantograph_inference_interface_contracts::{
-    InferenceTaskKind, ResolveInferenceInterfaceRequest, INFERENCE_INTERFACE_CONTRACT_VERSION,
+    AuthoredInferenceInterfaceSnapshot, InferenceTaskKind, ResolveInferenceInterfaceRequest,
+    INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,15 +16,18 @@ const PORT_TASK_KIND: &str = "task_kind";
 const PORT_RUNTIME: &str = "runtime";
 const PORT_DEVICE: &str = "device";
 const NODE_TYPE_PUMA_LIB: &str = "puma-lib";
+const INFERENCE_INTERFACE_SNAPSHOT_FIELD: &str = "inference_interface_snapshot";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct InferenceInterfaceGraphResolutionInput {
     pub node_id: String,
     pub request: ResolveInferenceInterfaceRequest,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authored_snapshot: Option<AuthoredInferenceInterfaceSnapshot>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct InferenceInterfaceGraphResolutionInputs {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -54,6 +58,7 @@ pub enum InferenceInterfaceGraphResolutionDiagnosticCode {
     InvalidTaskKind,
     InvalidRuntimeConstraint,
     InvalidDeviceConstraint,
+    InvalidAuthoredSnapshot,
 }
 
 pub fn inference_interface_resolution_inputs_from_graph(
@@ -95,6 +100,11 @@ pub fn inference_interface_resolution_inputs_from_graph(
         else {
             continue;
         };
+        let Some(authored_snapshot) =
+            optional_authored_snapshot(&node.id, &node.data, &mut diagnostics)
+        else {
+            continue;
+        };
         let request = ResolveInferenceInterfaceRequest {
             contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
             model_ref,
@@ -114,6 +124,7 @@ pub fn inference_interface_resolution_inputs_from_graph(
         requests.push(InferenceInterfaceGraphResolutionInput {
             node_id: node.id.clone(),
             request,
+            authored_snapshot,
         });
     }
 
@@ -274,6 +285,43 @@ fn parse_model_ref(
                 format!("pumas_model_ref must match the canonical contract: {error}"),
             ));
             None
+        }
+    }
+}
+
+fn optional_authored_snapshot(
+    node_id: &str,
+    data: &Value,
+    diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
+) -> Option<Option<AuthoredInferenceInterfaceSnapshot>> {
+    match data.get(INFERENCE_INTERFACE_SNAPSHOT_FIELD) {
+        None | Some(Value::Null) => Some(None),
+        Some(value) => {
+            match serde_json::from_value::<AuthoredInferenceInterfaceSnapshot>(value.clone()) {
+                Ok(snapshot) => match snapshot.validate() {
+                    Ok(()) => Some(Some(snapshot)),
+                    Err(error) => {
+                        diagnostics.push(diagnostic(
+                        node_id,
+                        Some(INFERENCE_INTERFACE_SNAPSHOT_FIELD),
+                        InferenceInterfaceGraphResolutionDiagnosticCode::InvalidAuthoredSnapshot,
+                        format!("authored inference interface snapshot is invalid: {error}"),
+                    ));
+                        None
+                    }
+                },
+                Err(error) => {
+                    diagnostics.push(diagnostic(
+                    node_id,
+                    Some(INFERENCE_INTERFACE_SNAPSHOT_FIELD),
+                    InferenceInterfaceGraphResolutionDiagnosticCode::InvalidAuthoredSnapshot,
+                    format!(
+                        "authored inference interface snapshot must match the canonical contract: {error}",
+                    ),
+                ));
+                    None
+                }
+            }
         }
     }
 }
@@ -457,6 +505,48 @@ mod tests {
                 .map(|device| device.as_str()),
             Some("cuda.0")
         );
+        assert!(request.authored_snapshot.is_none());
+    }
+
+    #[test]
+    fn graph_resolution_inputs_preserve_authored_inference_snapshot() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data[INFERENCE_INTERFACE_SNAPSHOT_FIELD] = authored_snapshot_json();
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.requests.len(), 1);
+        let snapshot = result.requests[0]
+            .authored_snapshot
+            .as_ref()
+            .expect("authored snapshot");
+        assert_eq!(
+            snapshot.descriptor_fingerprint.as_str(),
+            "descriptor.previous"
+        );
+        assert_eq!(snapshot.inputs.len(), 1);
+        assert_eq!(snapshot.inputs[0].port_id.as_str(), "prompt");
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_invalid_authored_inference_snapshot() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data[INFERENCE_INTERFACE_SNAPSHOT_FIELD] = json!({
+            "descriptor_fingerprint": "",
+            "task_kind": "image_generation",
+            "inputs": [],
+            "outputs": []
+        });
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidAuthoredSnapshot
+                && diagnostic.port_id.as_deref() == Some(INFERENCE_INTERFACE_SNAPSHOT_FIELD)
+        }));
     }
 
     #[test]
@@ -640,5 +730,29 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+
+    fn authored_snapshot_json() -> Value {
+        json!({
+            "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+            "descriptor_fingerprint": "descriptor.previous",
+            "task_kind": "image_generation",
+            "inputs": [
+                {
+                    "port_id": "prompt",
+                    "label": "Prompt",
+                    "direction": "input",
+                    "requirement": "required",
+                    "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                    },
+                    "availability": {
+                        "status": "available"
+                    }
+                }
+            ],
+            "outputs": []
+        })
     }
 }
