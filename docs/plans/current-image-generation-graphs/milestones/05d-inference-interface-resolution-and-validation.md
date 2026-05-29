@@ -4068,6 +4068,90 @@ defining an image-only inference-node interface.
     as its own canonical slice, consuming current validation/interface snapshots
     and surfacing typed diagnostics for missing or stale snapshots instead of
     reintroducing static inference task ports.
+- [x] 2026-05-28 descriptor-backed inference connection contract-first design
+  decision:
+  - Decision: use option 3. The next descriptor-backed inference connection
+    implementation must start by extending the shared
+    `pantograph-inference-interface-contracts` crate with an executable
+    connection-surface contract instead of adding a workflow-service-only DTO.
+    The contract is needed because the same resolved inference-node interface is
+    consumed by workflow-service connection intent, graph-editor presentation,
+    saved authored graph drift handling, and queue-admission validation.
+  - Contract ownership: `pantograph-inference-interface-contracts` owns only
+    path-free DTOs, validated ids, bounded diagnostics, status enums, descriptor
+    fingerprint identity, authored/current drift shape, and fixture contract
+    tests. It must not own Pumas lookup, graph mutation, live validation event
+    streams, scheduler placement, runtime-host execution, frontend rendering, or
+    Tauri/app wiring.
+  - Required contract shape: add a versioned connection-surface DTO keyed by
+    graph revision, optional validation session id, target inference node id,
+    descriptor fingerprint, current status, descriptor-backed input/output port
+    descriptors, draft validation summary, optional drift report, and bounded
+    diagnostics. Missing, pending, stale, unavailable, blocked, or drift-blocked
+    descriptor state must be represented explicitly and must fail closed for
+    connection commit and workflow queue submission.
+  - Cross-layer flow: workflow-service publishes the contract from the current
+    validation/interface projection and consumes it when resolving connection
+    candidates, insert-on-edge previews, and connection commits. The graph editor
+    renders backend-published ports and diagnostics without inventing inference
+    ports locally. Scheduler admission consumes executable validation authority
+    derived from the same descriptor source, not the editor connection surface
+    and not raw `node.data`.
+  - Saved graph behavior: saved graph files may retain the minimum authored
+    inference interface snapshot needed to preserve historical graph shape and
+    explain drift after Pantograph/model/runtime changes. They must not store
+    Pumas package facts, executable paths, scheduler decisions, runtime load
+    targets, media payloads, or frontend presentation state. Reopening a graph
+    compares the authored snapshot with the current descriptor and surfaces typed
+    drift diagnostics while keeping graph editing available.
+  - No-fallback/no-legacy confirmation: do not restore static
+    `llm-inference` task ports such as `prompt`, `response`, `stream`, `device`,
+    or denoising/sampler ports. Do not parse raw model paths, Pumas metadata
+    bags, runtime blobs, frontend caches, or `node.data.definition` as inference
+    port authority. If the descriptor-backed surface cannot be resolved, return
+    typed diagnostics and keep submit/queue actions blocked.
+  - Standards result:
+    - Coding standards: the contract separates authored graph shape, current
+      validation state, editor rendering, scheduler execution, runtime policy,
+      persistence, and diagnostics so maintainers can reason about each concern
+      independently.
+    - Architecture standards: this is an executable producer-consumer contract in
+      a dedicated contracts crate because multiple independently evolving
+      consumers trust the same persisted and cross-layer shape.
+    - Rust API standards: use validated newtypes/enums, `serde(deny_unknown_fields)`,
+      versioned DTOs, `TryFrom` validated wrappers, bounded collections, and
+      structured diagnostics rather than stringly port guesses.
+    - Documentation standards: update the contract crate README/API consumer
+      contract and structured producer contract when the DTO is added, including
+      compatibility, drift, and regeneration rules for saved artifacts.
+    - Frontend standards: keep validation and port refresh event-driven from
+      backend state; graph editing remains responsive while validation runs, but
+      submit/queue remains disabled when the backend contract is not executable.
+    - Testing standards: start with contract fixtures and boundary invariant
+      tests proving retired static ports cannot return, missing/stale descriptor
+      state fails closed, and a resolved descriptor produces graph-editor
+      connection candidates through the real workflow-service boundary.
+  - Thin-slice sequence:
+    1. Extend `pantograph-inference-interface-contracts` with the connection
+       surface DTO, validation wrappers, README contract text, and JSON fixtures.
+    2. Add workflow-service publication/adapter code that builds the surface from
+       existing validation projection records and rejects stale/missing surfaces
+       with typed diagnostics.
+    3. Wire connection candidates, insert-on-edge preview, and connection commit
+       to consume the surface for `llm-inference` dynamic task ports while
+       retaining static bootstrap/control inputs only.
+    4. Expose the same backend-owned surface to the graph editor through the
+       existing event/session path; frontend renders ports, drift, and
+       diagnostics but does not compute inference capability.
+    5. Verify queue-admission gating uses executable validation authority derived
+       from the same descriptor source and cannot submit stale or unresolved
+       inference nodes.
+  - Re-plan triggers: stop before implementation if the connection-surface DTO
+    starts carrying Pumas paths/facts, runtime-host payloads, scheduler placement
+    decisions, frontend layout/presentation state, unbounded diagnostics, or live
+    validation event transport. Stop if implementation would require a
+    compatibility shim for retired static task ports or a second inference-port
+    authority outside descriptor-backed validation.
 - [x] 2026-05-26 descriptor-task-kind scheduler projection re-plan boundary:
   - Discovered issue: `workflow_scheduler_task_graph` currently receives only
     `WorkflowGraph` and parses raw inference-node `node.data.task_kind` as the

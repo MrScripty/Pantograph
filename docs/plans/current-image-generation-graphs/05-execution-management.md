@@ -15244,6 +15244,50 @@ Worker rules:
     port ids, retained fail-closed `stream` assertions, and async test
     `tokio::spawn` calls. `cargo check -p pantograph-workflow-service` still
     reports the pre-existing `set_active_run_execution_plan` dead-code warning.
+- 2026-05-28 Milestone 5d descriptor-backed inference connection
+  contract-first design decision:
+  - Decision: use option 3. Descriptor-backed inference connection intent must
+    begin by extending `pantograph-inference-interface-contracts` with a shared
+    executable connection-surface contract before workflow-service, frontend, or
+    queue-admission consumers are wired to it.
+  - Required contract ownership: the shared crate owns path-free DTOs, validated
+    ids, bounded diagnostics, status enums, descriptor fingerprint identity,
+    authored/current drift shape, and fixture contract tests. It must not own
+    Pumas lookup, graph mutation, live validation streams, scheduler placement,
+    runtime-host execution, frontend rendering, or Tauri/app wiring.
+  - Required behavior: workflow-service publishes the contract from current
+    validation/interface projection records and consumes it for connection
+    candidates, insert-on-edge preview, and connection commit. The graph editor
+    renders backend-published ports/diagnostics and keeps editing available
+    while validation runs, but submit/queue remains disabled when the backend
+    contract is missing, stale, unavailable, blocked, or drift-blocked.
+  - Saved graph behavior: saved graph files may retain only the minimum authored
+    inference-interface snapshot required to preserve historical graph shape and
+    explain descriptor drift. They must not store Pumas facts, executable paths,
+    scheduler decisions, runtime load targets, media payloads, or frontend
+    presentation state.
+  - No-fallback/no-legacy result: do not restore static `llm-inference` task
+    ports such as `prompt`, `response`, `stream`, `device`, or sampler/denoising
+    ports. Do not parse raw model paths, Pumas metadata bags, runtime blobs,
+    frontend caches, or `node.data.definition` as inference-port authority.
+  - Standards result: the contract-first approach satisfies the coding
+    simplicity rule by separating authored graph shape, current validation,
+    editor rendering, scheduler execution, runtime policy, persistence, and
+    diagnostics. It satisfies architecture/Rust API/documentation/frontend/testing
+    standards by using a dedicated executable contracts crate, validated DTOs,
+    explicit compatibility and drift documentation, backend-owned event-driven UI
+    state, and vertical-slice/boundary invariant verification.
+  - Thin-slice sequence: first extend `pantograph-inference-interface-contracts`
+    with the connection surface DTO, validated wrappers, README text, and JSON
+    fixtures; then add workflow-service publication/adapter behavior; then wire
+    connection candidates, insert-on-edge, and commits; then expose the
+    backend-owned surface to the graph editor; then verify queue-admission
+    gating uses executable validation authority from the same descriptor source.
+  - Re-plan triggers: stop if the DTO starts carrying Pumas paths/facts,
+    runtime-host payloads, scheduler placement decisions, frontend layout state,
+    unbounded diagnostics, or live validation event transport; stop if the
+    implementation needs compatibility shims for retired static task ports or a
+    second inference-port authority outside descriptor-backed validation.
 - 2026-05-28 Milestone 5d validation graph revision re-plan boundary:
   - Discovered issue: `WorkflowGraph::compute_fingerprint()` ignores
     `node.data`, but inference validation resolver inputs can be authored in
