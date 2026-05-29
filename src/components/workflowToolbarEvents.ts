@@ -7,6 +7,7 @@ import {
 import type {
   NodeExecutionState,
   WorkflowEvent,
+  WorkflowGraphValidationLifecycleEvent,
   WorkflowGraphValidationSubmitGate,
 } from '../services/workflow/types.ts';
 
@@ -58,6 +59,11 @@ export interface WorkflowValidationRefreshKeyInput {
   graphRevision: string | null | undefined;
 }
 
+export interface WorkflowValidationLifecycleRefreshInput extends WorkflowValidationRefreshKeyInput {
+  event: WorkflowGraphValidationLifecycleEvent;
+  currentValidationSummaryKey: string | null | undefined;
+}
+
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');
   return (
@@ -104,6 +110,26 @@ export function workflowValidationRefreshKey({
   }
 
   return `${graphSessionId}:${graphRevision}`;
+}
+
+export function shouldRefreshValidationFromLifecycleEvent({
+  event,
+  currentGraphType,
+  graphSessionId,
+  graphRevision,
+  currentValidationSummaryKey,
+}: WorkflowValidationLifecycleRefreshInput): boolean {
+  const refreshKey = workflowValidationRefreshKey({
+    currentGraphType,
+    graphSessionId,
+    graphRevision,
+  });
+  return Boolean(
+    refreshKey &&
+      currentValidationSummaryKey === refreshKey &&
+      event.graph_session_id === graphSessionId &&
+      event.graph_revision === graphRevision,
+  );
 }
 
 export function isWorkflowSemanticVersionConflictError(error: unknown): boolean {

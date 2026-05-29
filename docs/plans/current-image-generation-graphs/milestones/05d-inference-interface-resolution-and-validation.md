@@ -2514,6 +2514,22 @@ defining an image-only inference-node interface.
         transports, `Result<T, String>`, and `any`; and `git diff --check`.
       - Remaining follow-up: wire the graph editor to consume the subscription
         and snapshot read model without blocking editing while validation runs.
+      - 2026-05-28 toolbar lifecycle-event consumption slice completed:
+        `WorkflowToolbar.svelte` now subscribes to dedicated graph-validation
+        lifecycle events and refreshes the backend current-validation summary
+        only when the event graph-session id and graph revision match the active
+        workflow draft key. Editing remains non-blocking, event timing is not
+        submit authority, and the toolbar still disables submit from the
+        backend-owned submit gate.
+      - Verification passed: `node --experimental-strip-types --test
+        src/components/workflowToolbarEvents.test.ts
+        src/services/workflow/WorkflowGraphValidationLifecycleSubscriptionService.test.ts`;
+        `npm run typecheck`; added-line source search over the touched toolbar
+        files for retired path fields, raw JSON, `Result<T, String>`, `any`,
+        and timer-based polling; and `git diff --check`.
+      - Remaining follow-up: render node/port-level drift and pending
+        validation overlays from the backend descriptor projection rather than
+        only toolbar submit state.
       - 2026-05-28 lifecycle event sink graph-session coverage slice
         completed: added a focused graph-session test proving
         `refresh_current_validation_summary` publishes the same typed pending

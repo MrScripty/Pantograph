@@ -8,6 +8,7 @@ import {
   isNumericWorkflowSemanticVersion,
   isWorkflowSemanticVersionConflictError,
   nextWorkflowPatchSemanticVersion,
+  shouldRefreshValidationFromLifecycleEvent,
   workflowSubmitDisabledReason,
   workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
@@ -221,6 +222,47 @@ test('workflowValidationRefreshKey rejects non-workflow or incomplete validation
       graphRevision: null,
     }),
     null,
+  );
+});
+
+test('shouldRefreshValidationFromLifecycleEvent requires matching active graph identity', () => {
+  const event = {
+    graph_session_id: 'graph-session-1',
+    graph_revision: 'graph-revision-1',
+    validation_session_id: 'validation-session-1',
+    sequence: 7,
+    kind: { kind: 'publication_accepted' as const },
+  };
+
+  assert.equal(
+    shouldRefreshValidationFromLifecycleEvent({
+      event,
+      currentGraphType: 'workflow',
+      graphSessionId: 'graph-session-1',
+      graphRevision: 'graph-revision-1',
+      currentValidationSummaryKey: 'graph-session-1:graph-revision-1',
+    }),
+    true,
+  );
+  assert.equal(
+    shouldRefreshValidationFromLifecycleEvent({
+      event,
+      currentGraphType: 'workflow',
+      graphSessionId: 'graph-session-2',
+      graphRevision: 'graph-revision-1',
+      currentValidationSummaryKey: 'graph-session-2:graph-revision-1',
+    }),
+    false,
+  );
+  assert.equal(
+    shouldRefreshValidationFromLifecycleEvent({
+      event,
+      currentGraphType: 'workflow',
+      graphSessionId: 'graph-session-1',
+      graphRevision: 'graph-revision-2',
+      currentValidationSummaryKey: 'graph-session-1:graph-revision-2',
+    }),
+    false,
   );
 });
 

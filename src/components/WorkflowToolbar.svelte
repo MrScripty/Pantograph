@@ -29,6 +29,7 @@
     AUDIO_RUNTIME_DATA_KEYS,
   } from './nodes/workflow/audioOutputState';
   import type { WorkflowGraphCurrentValidationSummaryResponse } from '../services/workflow/types';
+  import { subscribeGraphValidationLifecycleEvents } from '../services/workflow/WorkflowGraphValidationLifecycleSubscriptionService';
   import {
     focusWorkflowDiagnostics,
     selectActiveWorkflowRun,
@@ -42,6 +43,7 @@
     isNumericWorkflowSemanticVersion,
     isWorkflowSemanticVersionConflictError,
     nextWorkflowPatchSemanticVersion,
+    shouldRefreshValidationFromLifecycleEvent,
     workflowSubmitDisabledReason,
     workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
@@ -203,6 +205,49 @@
       activeWorkflowRunId = result.activeWorkflowRunId;
       waitingForInput = result.waitingForInput;
     });
+  });
+
+  $effect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    void subscribeGraphValidationLifecycleEvents({
+      getActiveGraphSessionId: () => $currentSessionId,
+      handleEvent: async (event) => {
+        const graphSessionId = $currentSessionId;
+        const graphRevision = $workflowGraph.derived_graph?.graph_fingerprint ?? null;
+        if (!graphSessionId || !graphRevision) {
+          return;
+        }
+        if (!shouldRefreshValidationFromLifecycleEvent({
+          event,
+          currentGraphType: $currentGraphType,
+          graphSessionId,
+          graphRevision,
+          currentValidationSummaryKey,
+        })) {
+          return;
+        }
+        const summary = await workflowService.currentGraphValidationSummary({
+          graph_session_id: graphSessionId,
+          graph_revision: graphRevision,
+        });
+        if (!cancelled && currentValidationSummaryKey === `${graphSessionId}:${graphRevision}`) {
+          currentValidationSummary = summary;
+        }
+      },
+    }).then((nextUnlisten) => {
+      if (cancelled) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   });
 
   async function closeExecutionSession(sessionId: string): Promise<void> {

@@ -15576,6 +15576,29 @@ Worker rules:
   - Remaining follow-up: wire graph editor draft-validation state to this
     subscription plus the backend snapshot read command while keeping editing
     non-blocking and submit gating backend-owned.
+- 2026-05-28 Milestone 5d toolbar validation lifecycle consumption slice:
+  - Smallest useful vertical slice: wire `WorkflowToolbar.svelte` to the
+    dedicated graph-validation lifecycle subscription and add a pure helper/test
+    that accepts events only when graph-session id, graph revision, and current
+    validation key match the active workflow draft.
+  - Allowed files touched: `src/components/WorkflowToolbar.svelte`,
+    `src/components/workflowToolbarEvents.ts`,
+    `src/components/workflowToolbarEvents.test.ts`, the Milestone 5d file, and
+    this execution log.
+  - No-fallback/no-legacy result: lifecycle events trigger only a backend
+    `currentGraphValidationSummary` read for the matching active draft. They do
+    not become submit authority, infer descriptor facts, inspect Pumas/model
+    paths, block editing, or introduce timer-based polling. Submit remains
+    disabled from the backend submit gate.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/workflowToolbarEvents.test.ts
+    src/services/workflow/WorkflowGraphValidationLifecycleSubscriptionService.test.ts`;
+    `npm run typecheck`; touched-source added-line search for retired path
+    fields, raw JSON, `Result<T, String>`, `any`, and timer-based polling; and
+    `git diff --check`.
+  - Remaining follow-up: render node/port-level drift and pending validation
+    overlays from backend descriptor projection records rather than only toolbar
+    submit state.
 - 2026-05-28 Milestone 5d validation lifecycle event sink graph-session
   coverage slice:
   - Smallest useful vertical slice: add a focused graph-session integration
