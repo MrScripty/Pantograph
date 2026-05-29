@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::workflow::WorkflowServiceError;
+use crate::{WorkflowGraphSaveRequest, WorkflowService};
 
 use super::persistence::{FileSystemWorkflowGraphStore, WorkflowGraphStore};
 use super::types::{GraphEdge, GraphNode, Position, WorkflowFile, WorkflowGraph};
@@ -129,6 +130,47 @@ fn retired_llamacpp_graph() -> WorkflowGraph {
             },
         ],
         derived_graph: None,
+    }
+}
+
+fn invalid_inference_draft_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: -120.0, y: 0.0 },
+                data: serde_json::json!({"text": "draft prompt"}),
+            },
+            GraphNode {
+                id: "inference".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 20.0, y: 0.0 },
+                data: serde_json::json!({
+                    "label": "Draft inference",
+                    "authored_inference_interface": {
+                        "schema_version": 1,
+                        "descriptor_fingerprint": "iface.stale.v1",
+                        "ports": []
+                    },
+                    "runtime": "cuda"
+                }),
+            },
+        ],
+        edges: Vec::new(),
+        derived_graph: None,
+    }
+}
+
+fn json_contains_key(value: &serde_json::Value, key: &str) -> bool {
+    match value {
+        serde_json::Value::Object(object) => {
+            object.contains_key(key) || object.values().any(|value| json_contains_key(value, key))
+        }
+        serde_json::Value::Array(values) => {
+            values.iter().any(|value| json_contains_key(value, key))
+        }
+        _ => false,
     }
 }
 
@@ -345,6 +387,47 @@ fn save_workflow_preserves_retired_direct_diffusion_for_stale_diagnostics() {
         workflow.contract_upgrades.is_empty(),
         "current save must not append compatibility migration records"
     );
+}
+
+#[test]
+fn draft_save_persists_invalid_inference_graph_without_executable_authority() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+
+    let response = service
+        .workflow_graph_save(
+            &store,
+            WorkflowGraphSaveRequest {
+                name: "invalid inference draft".to_string(),
+                graph: invalid_inference_draft_graph(),
+            },
+        )
+        .expect("draft save must preserve editable invalid graph");
+
+    assert!(response.path.ends_with("invalid-inference-draft.json"));
+
+    let saved = fs::read_to_string(response.path).expect("read saved workflow");
+    let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
+    let saved_json: serde_json::Value = serde_json::from_str(&saved).expect("parse saved json");
+
+    assert!(workflow
+        .graph
+        .nodes
+        .iter()
+        .any(|node| node.node_type == "llm-inference"));
+    assert!(workflow
+        .graph
+        .derived_graph
+        .as_ref()
+        .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
+    assert!(!json_contains_key(
+        &saved_json,
+        "executable_validation_snapshot"
+    ));
+    assert!(!json_contains_key(&saved_json, "scheduler_projection"));
+    assert!(!json_contains_key(&saved_json, "queue_admission"));
+    assert!(!json_contains_key(&saved_json, "submit_gate"));
 }
 
 #[test]

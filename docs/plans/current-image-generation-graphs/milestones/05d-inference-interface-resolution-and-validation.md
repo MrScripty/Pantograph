@@ -2928,12 +2928,33 @@ defining an image-only inference-node interface.
     `expand-settings`, static port tables, or whole-run runtime execution.
     Invalid executable state returns typed diagnostics; invalid draft state can
     still be persisted as editable graph history.
-- [ ] Wire Draft Save persistence to remain non-executable. Draft Save may
+- [x] Wire Draft Save persistence to remain non-executable. Draft Save may
       validate persisted graph shape, schema version, authored snapshot/history
       integrity, and canonical graph serialization only. Tests must prove an
       invalid inference graph can be saved for continued editing without
       producing executable validation snapshots, scheduler projections, queue
       admission state, or submit permission.
+  - 2026-05-29: Completed the Draft Save non-executable persistence slice.
+  - Smallest useful vertical slice: add workflow-service graph persistence
+    regression coverage proving an invalid generic inference draft can be saved
+    for later editing through the save API without emitting executable
+    validation snapshots, scheduler projections, queue-admission state, or
+    submit-gate authority.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/persistence_tests.rs`, this
+    Milestone 5d file, and `05-execution-management.md`.
+  - No-fallback/no-legacy result: Draft Save remains graph persistence only.
+    The test does not add a compatibility branch, validation bypass,
+    executable snapshot synthesis, scheduler projection fallback, frontend
+    submit authority, or queue-admission side effect.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    draft_save_persists_invalid_inference_graph_without_executable_authority
+    --lib`; `cargo test -p pantograph-workflow-service persistence --lib`;
+    `cargo check -p pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
 - [ ] Wire Executable Publish validation to consume the same descriptor
       contract. Required inputs, optional defaults, valid options, connected
       upstream output types, explicit runtime/device/trait constraints,

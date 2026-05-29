@@ -15985,6 +15985,26 @@ Worker rules:
     permission. Invalid executable state returns typed diagnostics while the
     editor remains able to display and edit the draft graph.
   - Verification passed: `git diff --check`.
+- 2026-05-29 Milestone 5d Draft Save non-executable persistence slice:
+  - Smallest useful vertical slice: add workflow-service graph persistence
+    regression coverage proving an invalid generic inference draft can be saved
+    for later editing without producing executable validation snapshots,
+    scheduler projections, queue-admission state, or submit-gate authority.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/persistence_tests.rs`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: Draft Save remains graph persistence only.
+    The slice adds no compatibility branch, validation bypass, executable
+    snapshot synthesis, scheduler projection fallback, frontend submit
+    authority, or queue-admission side effect.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    draft_save_persists_invalid_inference_graph_without_executable_authority
+    --lib`; `cargo test -p pantograph-workflow-service persistence --lib`;
+    `cargo check -p pantograph-workflow-service`.
+  - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
+    the pre-existing `set_active_run_execution_plan` dead-code warning outside
+    this slice.
 
 ### Traceability Links
 
