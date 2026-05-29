@@ -3293,7 +3293,24 @@ defining an image-only inference-node interface.
          typecheck`; targeted source search over `src/templates/workflows` for
          retired settings/path/backend/direct-inference terms; `git diff
          --check` for the touched template files.
-    6. Defer runtime/backend `model_path`/`entry_path` findings to the
+    6. Remove retired `inference_settings` and explicit backend requirements
+       from tracked current image workflow fixtures and their smoke validator.
+       - 2026-05-29 implementation slice completed: removed the
+         `puma-lib.inference_settings -> llm-inference.inference_settings`
+         edge from the tracked Juggernaut workflow fixture, updated the
+         current-image workflow smoke to reject explicit `backend_key` instead
+         of requiring it, and documented that saved examples carry only
+         `pumas_model_ref` from `puma-lib`.
+       - No-fallback/no-legacy gate: the smoke validator now enforces
+         scheduler-owned runtime selection and model-ref-only inference
+         authoring. Retired direct inference-node and backend-field terms
+         remain only in rejection/invariant checks.
+       - Verification passed: `node
+         scripts/check-current-image-workflow-smoke.mjs`; JSON parse check for
+         `.pantograph/workflows/juggernaut-x-v10-sdxl.json`; targeted source
+         search over the touched fixture/script/README; `git diff --check` for
+         touched files.
+    7. Defer runtime/backend `model_path`/`entry_path` findings to the
        runtime-dispatch milestone; do not delete them from inference backends in
        this milestone.
   - No-fallback/no-legacy gate: none of these options may preserve

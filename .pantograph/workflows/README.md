@@ -46,7 +46,9 @@ are small enough to review and represent supported runtime behavior.
   graph shapes.
 - Image-generation examples must use canonical `llm-inference` with
   `task_kind = image_generation` and must not use retired direct
-  `diffusion-inference` nodes.
+  `diffusion-inference` nodes. They carry `pumas_model_ref` from `puma-lib`;
+  model-specific inference settings are resolved by backend descriptors, not
+  persisted as `puma-lib` graph edges.
 - Image-generation examples must not persist graph-visible backend/runtime
   selection fields such as `backend_key` or `runtime_hint`; runtime selection
   is scheduler-owned unless a workflow intentionally provides a hard runtime

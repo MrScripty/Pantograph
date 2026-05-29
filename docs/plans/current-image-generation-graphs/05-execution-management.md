@@ -16247,6 +16247,22 @@ Worker rules:
     typecheck`; targeted source search over `src/templates/workflows` for
     retired settings/path/backend/direct-inference terms; `git diff --check`
     for touched template files.
+- 2026-05-29 Milestone 5d tracked image workflow smoke cleanup completed:
+  - Slice scope: `.pantograph/workflows/juggernaut-x-v10-sdxl.json`,
+    `scripts/check-current-image-workflow-smoke.mjs`, the tracked-workflow
+    README, and plan records.
+  - Implementation: removed the retired `puma-lib.inference_settings ->
+    llm-inference.inference_settings` edge from the tracked Juggernaut image
+    workflow and changed the smoke validator to reject explicit `backend_key`
+    instead of requiring it. The README now states that saved image examples
+    carry only `pumas_model_ref` from `puma-lib`.
+  - No-fallback/no-legacy gate: no replacement settings edge or runtime field
+    was added. The smoke validator enforces model-ref-only graph authoring and
+    scheduler-owned runtime selection.
+  - Verification passed: `node scripts/check-current-image-workflow-smoke.mjs`;
+    JSON parse check for `.pantograph/workflows/juggernaut-x-v10-sdxl.json`;
+    targeted source search over the touched fixture/script/README; `git diff
+    --check` for touched files.
 
 ### Traceability Links
 

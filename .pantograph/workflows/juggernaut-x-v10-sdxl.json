@@ -154,13 +154,6 @@
         "target_handle": "pumas_model_ref"
       },
       {
-        "id": "settings-to-image-generation",
-        "source": "puma-lib-juggernaut-x-v10",
-        "source_handle": "inference_settings",
-        "target": "image-generation",
-        "target_handle": "inference_settings"
-      },
-      {
         "id": "steps-to-image-generation",
         "source": "steps-input",
         "source_handle": "value",

@@ -89,8 +89,8 @@ function validateCanonicalImageGraph({
     fail(`${graphLabel} llm-inference node must declare task_kind 'image_generation'`);
   }
 
-  if (inferenceNode.data?.backend_key !== "pytorch") {
-    fail(`${graphLabel} llm-inference node must declare backend_key 'pytorch'`);
+  if (Object.hasOwn(inferenceNode.data ?? {}, "backend_key")) {
+    fail(`${graphLabel} llm-inference node must not declare backend_key`);
   }
 
   if (typeof pumaNode.data?.label !== "string" || pumaNode.data.label.length === 0) {
@@ -110,13 +110,6 @@ function validateCanonicalImageGraph({
     "pumas_model_ref",
     inferenceNodeId,
     "pumas_model_ref",
-  );
-  requireEdge(
-    edges,
-    pumaNodeId,
-    "inference_settings",
-    inferenceNodeId,
-    "inference_settings",
   );
   requireEdge(edges, inferenceNodeId, "image", imageOutputNodeId, "image");
 }
