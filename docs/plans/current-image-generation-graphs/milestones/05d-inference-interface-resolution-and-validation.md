@@ -3034,6 +3034,40 @@ defining an image-only inference-node interface.
       resolved task kind, descriptor fingerprint, and validated constraints; raw
       graph `task_kind`, runtime, device, or trait JSON are resolver inputs only
       and must not be parsed again as execution authority.
+  - 2026-05-29 re-plan boundary: descriptor-backed scheduler projection is
+    already implemented and covered by task-graph/session projection tests, but
+    final runtime-host input materialization cannot be completed inside this
+    checklist item while runtime scheduler dispatch still intentionally fails
+    closed with `runtime scheduler dispatch is not wired`. Continuing directly
+    would require either pretending materialization happened before a
+    dispatch-selected runtime-host handoff exists, reviving the retired
+    whole-run runtime path, or parsing raw graph inference fields as execution
+    authority. All three violate the no-fallback/no-legacy rule.
+  - Required re-plan decision before implementation continues:
+    1. Split this item into two milestones: mark descriptor-backed scheduler
+       projection complete here, then move runtime-host input materialization
+       to the runtime-dispatch milestone that wires selected scheduler handoff
+       into runtime-host execution. This is the recommended path because it
+       preserves current fail-closed behavior and keeps ownership clear.
+    2. Implement a materialization-only pure domain API now that accepts
+       scheduler-selected handoff, upstream task results, graph literals, and
+       descriptor defaults, but leave runtime dispatch unwired. This can be a
+       valid intermediate slice if the API is fully typed and has no runtime
+       execution side effects, but it expands the current milestone beyond the
+       queue/admission gate.
+    3. Wire runtime-host dispatch now and complete materialization end to end
+       in this milestone. This may be the target architecture, but it widens
+       the blast radius into scheduler runtime selection, runtime-host
+       contracts, task result progression, resource reservations, and adapter
+       tests.
+    4. Re-enable or preserve whole-run runtime execution until materialization
+       exists. This is rejected because it preserves retired legacy behavior
+       and masks the missing scheduler-owned runtime-host handoff.
+  - No-fallback/no-legacy gate: implementation must not continue by deriving
+    runtime-host inputs from raw graph `task_kind`, runtime/device strings,
+    `inference_settings`, model paths, current frontend state, Tauri payloads,
+    or the old whole-run host execution path. Until the re-plan is resolved,
+    runtime inference dispatch remains fail-closed with typed diagnostics.
 - [ ] Align the runtime-host input contract with descriptor materialization.
       Runtime-host execution requests must include scheduler-selected handoff
       plus typed, path-free materialized inputs and artifact/result references;

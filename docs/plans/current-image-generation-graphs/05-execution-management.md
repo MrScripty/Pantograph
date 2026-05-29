@@ -16061,6 +16061,28 @@ Worker rules:
   - Discovered issue: `cargo check -p pantograph-workflow-service` still emits
     the pre-existing `set_active_run_execution_plan` dead-code warning outside
     this slice.
+- 2026-05-29 Milestone 5d scheduler projection/materialization re-plan
+  boundary:
+  - Boundary found: descriptor-backed scheduler projection is already
+    implemented and covered by task-graph/session projection tests, but final
+    runtime-host input materialization cannot be completed while runtime
+    scheduler dispatch still intentionally fails closed with `runtime scheduler
+    dispatch is not wired`.
+  - Why implementation stops: completing materialization now would require
+    either pretending materialization happened before a dispatch-selected
+    runtime-host handoff exists, reviving retired whole-run runtime execution,
+    or parsing raw graph inference fields as execution authority. Those options
+    violate the no-fallback/no-legacy rule.
+  - Options recorded: split descriptor projection from runtime-host
+    materialization and move materialization to the runtime-dispatch milestone;
+    add a pure materialization API now with no dispatch side effects; wire
+    runtime-host dispatch now; or reject legacy whole-run fallback. The
+    recommended option is to split projection completion from dispatch-time
+    materialization so runtime inference remains fail-closed until the
+    scheduler-owned runtime-host handoff exists.
+  - Verification context: current targeted queue-admission and executable
+    snapshot tests pass; broad `session_execution --lib` remains blocked by
+    known legacy/runtime session expectations.
 
 ### Traceability Links
 
