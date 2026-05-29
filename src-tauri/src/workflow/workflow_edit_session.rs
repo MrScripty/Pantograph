@@ -2,10 +2,10 @@ use tauri::State;
 
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
-    WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InferenceInterfaceApplyProposalRequest,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping,
+    Position, UndoRedoState, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionCloseRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
@@ -72,6 +72,16 @@ pub async fn update_node_data(
             node_id,
             data,
         })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn apply_inference_interface_update_proposal(
+    request: InferenceInterfaceApplyProposalRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_apply_inference_interface_update_proposal(request)
         .await
         .map_err(|e| e.to_envelope_json())
 }

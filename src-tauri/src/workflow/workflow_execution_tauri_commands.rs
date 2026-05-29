@@ -13,9 +13,9 @@ use pantograph_inference_interface_contracts::{
 };
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
-    WorkflowExecutableValidationSnapshotRecord, WorkflowGraph,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InferenceInterfaceApplyProposalRequest,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping,
+    Position, UndoRedoState, WorkflowExecutableValidationSnapshotRecord, WorkflowGraph,
     WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
     WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphEditSessionGraphResponse,
@@ -58,6 +58,18 @@ pub async fn update_node_data(
         execution_id,
         node_id,
         data,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn apply_inference_interface_update_proposal(
+    request: InferenceInterfaceApplyProposalRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::apply_inference_interface_update_proposal(
+        request,
         workflow_service,
     )
     .await

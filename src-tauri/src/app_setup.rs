@@ -548,6 +548,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::workflow_execution_tauri_commands::undo_workflow,
             crate::workflow::workflow_execution_tauri_commands::redo_workflow,
             crate::workflow::workflow_execution_tauri_commands::update_node_data,
+            crate::workflow::workflow_execution_tauri_commands::apply_inference_interface_update_proposal,
             crate::workflow::workflow_execution_tauri_commands::update_node_position_in_execution,
             crate::workflow::workflow_execution_tauri_commands::add_node_to_execution,
             crate::workflow::workflow_execution_tauri_commands::remove_node_from_execution,

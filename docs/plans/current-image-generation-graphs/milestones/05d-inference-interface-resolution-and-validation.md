@@ -2762,6 +2762,34 @@ defining an image-only inference-node interface.
   - Remaining follow-up: add a thin Tauri command that decodes the typed apply
     request, delegates to `WorkflowService`, and encodes the backend graph
     mutation response without owning proposal validation or graph patch logic.
+- [x] 2026-05-28 option-2 Tauri apply command slice:
+  - Smallest useful vertical slice: expose the backend-owned inference
+    interface proposal apply API through a Tauri command and register it for
+    frontend invocation.
+  - Allowed files touched:
+    `src-tauri/src/workflow/workflow_edit_session.rs`,
+    `src-tauri/src/workflow/workflow_execution_commands.rs`,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`, this
+    Milestone 5d file, and `05-execution-management.md`.
+  - No-fallback/no-legacy result: Tauri only decodes the typed
+    `InferenceInterfaceApplyProposalRequest`, forwards it to
+    `WorkflowService::workflow_graph_apply_inference_interface_update_proposal`,
+    and returns the backend graph mutation response. It does not validate
+    proposal identity, construct patch operations, rewrite node data directly,
+    remove edges, clear literals, compare ports, infer submit authority, or add
+    a compatibility path for stale proposals.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+    `git diff --check`.
+  - Verification deviation: `cargo check --manifest-path src-tauri/Cargo.toml`
+    remains blocked by the pre-existing unrelated missing
+    `set_media_conversion_executor` method on `Arc<WorkflowService>` in
+    `src-tauri/src/app_setup.rs:96`. Before that blocker, Cargo checked
+    `pantograph-workflow-service` and emitted only the known
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: add frontend service plumbing and a minimal Apply
+    action that calls this command with backend proposal ids and explicit
+    confirmation, without constructing proposal patch operations locally.
 - [ ] Wire staged graph editor drift presentation and update preview.
       Option-2 scope: the editor shows authored-current diffs visually on
       nodes/ports/edges, keeps invalid edges visible, displays

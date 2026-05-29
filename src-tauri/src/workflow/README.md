@@ -212,6 +212,12 @@ thin edit-session transport command. Tauri forwards the typed publish request
 to `pantograph-workflow-service` and returns the backend-owned snapshot record;
 it does not compute validation freshness, workflow version fingerprints,
 dependency proof freshness, or scheduler admission authority.
+Inference-interface update proposal application is exposed through the same
+thin edit-session transport boundary. Tauri decodes the typed apply request,
+delegates to `pantograph-workflow-service`, and returns the backend graph
+mutation response; it does not validate proposal identity, construct patch
+operations, rewrite node data, remove edges, clear literals, or infer submit
+authority.
 Managed media conversion is injected into the shared workflow service at
 startup from `app_setup.rs`. The neutral conversion request/result contract
 stays in `pantograph-media-conversion`; the Tauri adapter only resolves

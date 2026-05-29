@@ -15853,6 +15853,30 @@ Worker rules:
     slice.
   - Remaining follow-up: add a thin Tauri command and frontend service wiring
     to call this backend method without duplicating proposal or patch logic.
+- 2026-05-28 Milestone 5d option-2 Tauri apply command slice:
+  - Smallest useful vertical slice: register a transport-only Tauri command
+    for backend-owned inference-interface proposal application.
+  - Allowed files touched:
+    `src-tauri/src/workflow/workflow_edit_session.rs`,
+    `src-tauri/src/workflow/workflow_execution_commands.rs`,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`, the
+    Milestone 5d file, and this execution log.
+  - No-fallback/no-legacy result: the command accepts the typed backend apply
+    request, delegates directly to `WorkflowService`, and returns the backend
+    graph mutation response. Tauri does not own proposal validation, patch
+    construction, node-data mutation, destructive operation handling, or submit
+    authority.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+    `git diff --check`.
+  - Verification deviation: `cargo check --manifest-path src-tauri/Cargo.toml`
+    remains blocked by the pre-existing unrelated missing
+    `set_media_conversion_executor` method on `Arc<WorkflowService>` in
+    `src-tauri/src/app_setup.rs:96`. The check reached
+    `pantograph-workflow-service` first and reported only the known
+    `set_active_run_execution_plan` dead-code warning there.
+  - Remaining follow-up: wire frontend service/client code and the minimal
+    editor Apply action against this command without local proposal patching.
 
 ### Traceability Links
 
