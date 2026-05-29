@@ -20,7 +20,7 @@ on raw invoke payloads.
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
-| `portOptionsCache.ts` | Context-keyed cache for backend-owned port option queries whose valid rows depend on selected model/package/runtime references. |
+| `portOptionsCache.ts` | Context-keyed cache for backend-owned port option queries whose valid rows depend on selected descriptor/model/package/runtime references. |
 | `pumaModelOptionsCache.ts` | Shared Pumas selector-row cache for graph nodes and Library views, including selector cursor handoff against backend update feeds. |
 | `pumaModelOptionsCache.test.ts` | Unit coverage for selector cursor extraction, update-feed invalidation, reload, cache reuse, and read-only update-feed-unavailable behavior. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
@@ -173,6 +173,11 @@ the backend for updates since the snapshot cursor, and it reloads once when the
 handoff reports stale or changed rows. Pumas update feeds may omit the
 `events` field when there are no changes, so the frontend cache treats a
 missing `events` array as empty rather than a transport failure.
+Port option cache keys include stable descriptor/model/package/runtime context
+references. Descriptor fingerprint is the preferred invalidation key for
+descriptor-backed inference options; frontend service code still forwards option
+queries to the backend and does not compute option availability, defaults, or
+validity locally.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`

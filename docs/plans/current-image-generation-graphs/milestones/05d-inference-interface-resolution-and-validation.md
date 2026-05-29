@@ -2872,11 +2872,32 @@ defining an image-only inference-node interface.
   - Remaining follow-up: option-4 full preview/confirmation UX must still add a
     richer destructive-operation review flow before destructive proposals can
     be applied.
-- [ ] Wire `PortOptionsProvider`, selection-input, and option-cache consumers
+- [x] Wire `PortOptionsProvider`, selection-input, and option-cache consumers
       only as descriptor-backed presentation plumbing where reused. Typed
       option identity, defaults, availability, and diagnostics remain owned by
       `pantograph-inference-interface-contracts`, and cache keys/invalidation
       must include descriptor fingerprint or validation session/revision.
+  - 2026-05-28: Completed the descriptor-aware selection-input option query
+    slice.
+  - Smallest useful vertical slice: carry backend validation descriptor
+    fingerprint through `SelectionInputNode` provider queries and the shared
+    port-options cache key while preserving backend-owned option authority.
+  - Allowed files touched:
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/portOptionsCache.test.ts`,
+    `src/services/workflow/README.md`,
+    `src/components/nodes/workflow/selectionInputProviderOptions.ts`,
+    `src/components/nodes/workflow/selectionInputProviderOptions.test.ts`,
+    `src/components/nodes/workflow/README.md`, this Milestone 5d file, and
+    `05-execution-management.md`.
+  - No-fallback/no-legacy result: selection-input and option-cache code pass
+    stable descriptor/model/runtime context references to backend-owned option
+    providers only. They do not compute valid options, defaults, availability,
+    diagnostics, inference settings, runtime support, or submit authority
+    locally.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/selectionInputProviderOptions.test.ts
+    src/services/workflow/portOptionsCache.test.ts`; `npm run typecheck`.
 - [ ] Wire workflow save validation to consume the same descriptor contract.
       Required inputs, optional defaults, valid options, connected upstream
       output types, and explicit runtime/device constraints must be validated

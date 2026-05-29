@@ -49,6 +49,7 @@ export function buildSelectionInputProviderQuery(
     context: compactContext({
       targetNodeId: targetNode.id,
       taskKind: extractTaskKind(targetNode, targetPort),
+      descriptorFingerprint: extractDescriptorFingerprint(targetNode.data),
       selectedModelRef: extractSelectedModelRef(targetNode.data?.pumas_model_ref),
       packageFactsSummaryCursor: extractString(targetNode.data?.package_facts_summary_cursor),
       requestedRuntimeId: extractString(targetNode.data?.runtime),
@@ -117,6 +118,16 @@ function extractTaskKind(targetNode: SelectionInputTargetNode, targetPort: PortD
   );
 }
 
+function extractDescriptorFingerprint(data: Record<string, unknown> | undefined): string | undefined {
+  if (!data) return undefined;
+
+  return (
+    extractStringFromRecord(data.inference_interface_update_proposal, 'current_descriptor_fingerprint') ??
+    extractStringFromRecord(data.inference_interface_drift_report, 'current_fingerprint') ??
+    extractStringFromRecord(data.inference_interface_snapshot, 'descriptor_fingerprint')
+  );
+}
+
 function extractSelectedModelRef(value: unknown): string | undefined {
   const direct = extractString(value);
   if (direct) return direct;
@@ -138,4 +149,9 @@ function extractString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed === '' ? undefined : trimmed;
+}
+
+function extractStringFromRecord(value: unknown, field: string): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  return extractString((value as Record<string, unknown>)[field]);
 }

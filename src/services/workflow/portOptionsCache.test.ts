@@ -26,6 +26,7 @@ test('portOptionsCacheKey includes provider context refs in stable order', () =>
     portId: 'denoising_scheduler',
     context: {
       selectedModelRef: 'pumas://models/diffusion/tiny',
+      descriptorFingerprint: 'descriptor.image_generation.1',
       packageFactsSummaryCursor: 'model-library-updates:2',
       requestedRuntimeId: 'pytorch',
     },
@@ -35,12 +36,23 @@ test('portOptionsCacheKey includes provider context refs in stable order', () =>
     portId: 'denoising_scheduler',
     context: {
       requestedRuntimeId: 'pytorch',
+      descriptorFingerprint: 'descriptor.image_generation.1',
       packageFactsSummaryCursor: 'model-library-updates:2',
       selectedModelRef: 'pumas://models/diffusion/tiny',
     },
   };
 
   assert.equal(portOptionsCacheKey(left), portOptionsCacheKey(right));
+  assert.notEqual(
+    portOptionsCacheKey(left),
+    portOptionsCacheKey({
+      ...left,
+      context: {
+        ...left.context,
+        descriptorFingerprint: 'descriptor.image_generation.2',
+      },
+    }),
+  );
   assert.notEqual(
     portOptionsCacheKey(left),
     portOptionsCacheKey({
@@ -65,6 +77,7 @@ test('loadPortOptions caches rows by node port and provider context', async () =
     portId: 'denoising_scheduler',
     context: {
       targetNodeId: 'node-a',
+      descriptorFingerprint: 'descriptor.image_generation.1',
       selectedModelRef: 'pumas://models/diffusion/tiny',
       packageFactsSummaryCursor: 'model-library-updates:1',
       requestedRuntimeId: 'pytorch',

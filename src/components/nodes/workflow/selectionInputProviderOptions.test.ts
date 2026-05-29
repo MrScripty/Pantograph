@@ -48,6 +48,9 @@ test('buildSelectionInputProviderQuery carries stable context refs without packa
         backend_key: 'pytorch',
         runtime_variant_id: 'pytorch.cuda',
         package_facts_summary_cursor: 'model-library-updates:7',
+        inference_interface_snapshot: {
+          descriptor_fingerprint: 'descriptor.image_generation.7',
+        },
         pumas_model_ref: {
           model_id: 'tiny-sd',
           revision: 'main',
@@ -65,6 +68,7 @@ test('buildSelectionInputProviderQuery carries stable context refs without packa
   assert.deepEqual(query.args.context, {
     targetNodeId: 'image-node',
     taskKind: 'image_generation',
+    descriptorFingerprint: 'descriptor.image_generation.7',
     selectedModelRef: 'tiny-sd@main@diffusers',
     packageFactsSummaryCursor: 'model-library-updates:7',
     requestedRuntimeId: 'pytorch',
@@ -73,6 +77,33 @@ test('buildSelectionInputProviderQuery carries stable context refs without packa
   assert.equal(JSON.stringify(query.args.context).includes('backendId'), false);
   assert.equal(JSON.stringify(query.args.context).includes('runtimeVariantId'), false);
   assert.equal(JSON.stringify(query.args.context).includes('must/not/cross'), false);
+});
+
+test('buildSelectionInputProviderQuery invalidates by current descriptor fingerprint when validation drift exists', () => {
+  const query = buildSelectionInputProviderQuery(
+    {
+      id: 'image-node',
+      data: {
+        task_kind: 'image_generation',
+        inference_interface_snapshot: {
+          descriptor_fingerprint: 'descriptor.image_generation.authored',
+        },
+        inference_interface_drift_report: {
+          current_fingerprint: 'descriptor.image_generation.current',
+        },
+        inference_interface_update_proposal: {
+          current_descriptor_fingerprint: 'descriptor.image_generation.proposed',
+        },
+      },
+    },
+    providerPort(),
+  );
+
+  assert.ok(query);
+  assert.equal(
+    query.args.context?.descriptorFingerprint,
+    'descriptor.image_generation.proposed',
+  );
 });
 
 test('normalizePortOptions keeps backend option values and presentation labels separate', () => {

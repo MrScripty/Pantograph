@@ -2111,6 +2111,7 @@ export interface MaskedPrompt {
 export interface PortOptionsQueryContext {
   targetNodeId?: string;
   taskKind?: string;
+  descriptorFingerprint?: string;
   selectedModelRef?: string;
   packageFactsSummaryCursor?: string;
   requestedRuntimeId?: string;

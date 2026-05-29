@@ -15949,6 +15949,24 @@ Worker rules:
   - Remaining follow-up: option-4 full destructive-operation
     preview/confirmation remains required before destructive proposal
     application is enabled.
+- 2026-05-28 Milestone 5d descriptor-aware selection-input option query slice:
+  - Smallest useful vertical slice: add descriptor fingerprint to the stable
+    provider context references passed by selection-input option queries and
+    covered by the shared port-options cache key.
+  - Allowed files touched: `src/services/workflow/types.ts`,
+    `src/services/workflow/portOptionsCache.test.ts`,
+    `src/services/workflow/README.md`,
+    `src/components/nodes/workflow/selectionInputProviderOptions.ts`,
+    `src/components/nodes/workflow/selectionInputProviderOptions.test.ts`,
+    `src/components/nodes/workflow/README.md`, the Milestone 5d file, and this
+    execution log.
+  - No-fallback/no-legacy result: the selection-input query layer forwards
+    descriptor/model/runtime context to backend-owned providers and never
+    computes option validity, defaults, availability, diagnostics, inference
+    settings, runtime support, or submit authority locally.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/selectionInputProviderOptions.test.ts
+    src/services/workflow/portOptionsCache.test.ts`; `npm run typecheck`.
 
 ### Traceability Links
 
