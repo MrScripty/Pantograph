@@ -16589,6 +16589,37 @@ Worker rules:
     production dependency readiness evidence, then wire scheduler dispatch
     selection and runtime-host request construction from the actual
     dispatch-selected `SchedulerRuntimeHandoff`.
+- 2026-05-29 Milestone 5b dependency-environment provider composition hook
+  slice completed:
+  - Slice scope: workflow service configuration, focused session execution
+    tests, workflow README notes, and plan records.
+  - Implementation: `WorkflowService` now accepts a canonical
+    `SharedDependencyEnvironmentProvider` and wraps it with
+    `DependencyEnvironmentService` as the session runner dependency-readiness
+    provider. The default no-I/O provider remains unchanged.
+  - No-fallback/no-legacy gate: callers can provide only the backend-owned
+    dependency-environment provider facade. The hook does not accept
+    preflight/result JSON, `ModelDependencyRequest`, `ModelRefV2`, graph paths,
+    runtime-host handoff, or executable load targets.
+  - Verification passed: `cargo fmt -p
+    pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_ready_dependency_readiness_stops_at_dispatch_boundary
+    --lib -- --nocapture`; and `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+    --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`;
+    `cargo check -p pantograph-workflow-service --all-features`; `cargo check
+    -p pantograph-workflow-service --no-default-features`; `cargo fmt -p
+    pantograph-workflow-service -- --check`; targeted retired path/model-ref
+    source search over touched source/README/test files; and `git diff
+    --check`.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
+  - Search caveat: allowed pre-existing retired-path hits remain in workflow
+    README negative-path text and an unrelated legacy runtime state fixture in
+    `session_execution.rs`.
+  - Remaining follow-up: production dependency-environment provider/fact source
+    wiring, then scheduler dispatch selection and runtime-host request
+    construction from actual dispatch-selected handoff.
 
 ### Traceability Links
 

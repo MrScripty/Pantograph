@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentService, NotImplementedDependencyEnvironmentProvider,
+    SharedDependencyEnvironmentProvider,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
@@ -67,6 +68,15 @@ impl WorkflowService {
     ) -> Self {
         self.scheduler_task_orchestrator =
             WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port));
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependency_environment_provider(
+        mut self,
+        provider: SharedDependencyEnvironmentProvider,
+    ) -> Self {
+        self.dependency_readiness_provider = Arc::new(DependencyEnvironmentService::new(provider));
         self
     }
 

@@ -1971,6 +1971,17 @@ readiness evidence, collect canonical dispatch candidates, call scheduler
 dispatch selection, and construct runtime-host requests from the
 dispatch-selected `SchedulerRuntimeHandoff`.
 
+2026-05-29 dependency-environment provider composition hook completed.
+`WorkflowService` can now be configured with a canonical
+`DependencyEnvironmentProvider` for scheduler-owned dependency readiness
+admission. Focused session coverage proves the default not-implemented
+provider still stops before dispatch, while an injected ready provider admits
+the runtime task to the dispatch boundary and still fails closed because
+runtime-host dispatch selection/request construction is not wired. This is not
+a production dependency resolver and does not introduce legacy preflight,
+runtime path, or readiness-proof injection surfaces; it only gives the backend
+composition root a typed provider seam for the next production provider slice.
+
 ## Effects On Existing Systems
 
 ### Scheduler

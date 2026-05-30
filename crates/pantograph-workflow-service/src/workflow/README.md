@@ -213,6 +213,11 @@ readiness proof.
   service, so runtime tasks fail closed before runtime-host dispatch until a
   production readiness provider, dispatch selection, and runtime-host request
   construction consume the actual scheduler-selected handoff.
+- Workflow service composition may inject a canonical
+  `DependencyEnvironmentProvider` through service configuration. That provider
+  is wrapped by the workflow-service readiness lifecycle; callers must not
+  inject legacy preflight payloads, readiness-proof JSON, graph paths, or
+  runtime-host dispatch facts through this boundary.
 - Session run submission generates the backend workflow run id before enqueue
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node

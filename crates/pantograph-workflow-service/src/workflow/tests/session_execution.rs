@@ -1,6 +1,11 @@
+use pantograph_dependency_environment_service::DependencyEnvironmentProvider;
 use pantograph_dependency_planning::{
-    produce_dependency_requirements_proof, DependencyNodeTypeId, DependencyPlanningCallerContext,
-    DependencyPlanningRequest, PumasModelRef, SchedulerIntent, ValidatedDependencyPlanningRequest,
+    produce_dependency_requirements_proof, DependencyEnvironmentId,
+    DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
+    DependencyEnvironmentRef, DependencyEnvironmentResult, DependencyEnvironmentValidationState,
+    DependencyNodeTypeId, DependencyPlanningCallerContext, DependencyPlanningRequest,
+    PumasModelRef, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
@@ -268,6 +273,134 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
     assert!(queue.items.is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn workflow_execution_session_ready_dependency_readiness_stops_at_dispatch_boundary() {
+    let host = RuntimeInferenceSessionHost::new();
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            ReadyDependencyEnvironmentProvider,
+        ));
+    let workflow_id = "wf-runtime-ready-dispatch-boundary";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("ready dependency proof should still stop before dispatch wiring");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(
+        error
+            .message()
+            .contains("runtime scheduler dispatch is not wired"),
+        "unexpected error: {error}"
+    );
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id,
+        })
+        .await
+        .expect("list queue after dispatch fail-closed runtime inference run");
+    assert!(queue.items.is_empty());
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ReadyDependencyEnvironmentProvider;
+
+impl DependencyEnvironmentProvider for ReadyDependencyEnvironmentProvider {
+    fn resolve(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        ready_dependency_environment_result(request)
+    }
+
+    fn check(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        ready_dependency_environment_result(request)
+    }
+
+    fn install(
+        &self,
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyEnvironmentResult {
+        ready_dependency_environment_result(request)
+    }
+}
+
+fn ready_dependency_environment_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentResult {
+    let request = request.as_request();
+    DependencyEnvironmentResult {
+        contract_version: 1,
+        action: request.action,
+        identity_key: request.identity_key.clone(),
+        readiness_state: DependencyEnvironmentReadinessState::Ready,
+        install_state: DependencyEnvironmentInstallState::Installed,
+        validation_state: DependencyEnvironmentValidationState::Valid,
+        failure_state: None,
+        dependency_requirements_id: request.dependency_requirements_id.clone(),
+        environment_ref: Some(DependencyEnvironmentRef {
+            environment_id: DependencyEnvironmentId::parse(format!(
+                "test-env-{}",
+                request.identity_key.task_id.as_str()
+            ))
+            .expect("valid environment id"),
+            manifest_id: None,
+        }),
+        requirements: Vec::new(),
+        bindings: Vec::new(),
+        selected_binding_ids: request.identity_key.selected_binding_ids.clone(),
+        binding_statuses: Vec::new(),
+        operation: None,
+        validation_errors: Vec::new(),
+        diagnostics: Vec::new(),
+    }
 }
 
 struct SlowWorkflowIoHost {
