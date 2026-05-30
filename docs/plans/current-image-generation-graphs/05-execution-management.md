@@ -17740,16 +17740,36 @@ Worker rules:
     only warning observed remains the pre-existing
     `set_active_run_execution_plan` dead-code warning in
     `pantograph-workflow-service`.
-  - Discovered issue: `dependency_inventory.rs` is now above the practical
-    decomposition target because it still owns service composition and
-    per-provider dispatch. Do not expand it further for system-package
-    inventory; split dispatch/composition into a dedicated module before the
-    next provider if more wiring is required.
+  - Discovered issue: `dependency_inventory.rs` now combines several reasoning
+    axes: service composition, provider registration, selected-binding dispatch,
+    `cfg(test/standalone)` implementation selection, and fail-closed routing.
+    Do not expand it further for system-package inventory until the next plan
+    runs the coding-standards simplicity/complection review. Split
+    dispatch/composition only where the boundary lets maintainers ignore
+    source-specific provider details safely; do not split solely because of
+    line count.
   - Remaining follow-up: concrete device-id readiness requires a future
     source-owned device inventory snapshot that emits canonical device ids
     rather than deriving them from runtime variants. System-package inventory
     remains separately planned and must not be implemented by direct
     embedded-runtime package-manager probing.
+- 2026-05-30 standards clarification for the system-package re-plan boundary:
+  - The next system-package inventory plan must use the coding standards'
+    simplicity/complection definition, not a numeric decomposition trigger.
+    Required review: identify the independent concepts in the inventory area,
+    which concepts are intentionally coupled, which are accidentally coupled,
+    which boundary owns each decision, and which future changes should not
+    require touching provider-source-specific code.
+  - Acceptable extraction: provider registration/composition and
+    selected-binding dispatch may move behind a focused boundary if that lets
+    concrete provider modules stay cohesive and source-owned. Provider modules
+    should remain together when their invariants, lifecycle, inputs, outputs,
+    and failure behavior form one simple idea.
+  - Not acceptable: adding organizational-only files, splitting a cohesive
+    provider because it is near a line threshold, or implementing
+    system-package readiness through embedded-runtime package-manager probing,
+    shell output parsing, generic requirement names, graph strings, paths,
+    Pumas package names, or Python probes for non-Python requirements.
 
 ### Traceability Links
 

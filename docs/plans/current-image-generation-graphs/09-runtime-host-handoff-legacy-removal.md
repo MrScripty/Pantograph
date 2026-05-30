@@ -523,10 +523,18 @@ Staged implementation:
 
 Standards gates:
 
-- Keep modules below the decomposition target where practical. Split inventory
-  contracts, provider dispatch, Python provider, managed-runtime provider,
-  runtime-feature provider, and device-toolchain provider into named files
-  instead of growing the snapshot producer or Python runtime files.
+- Apply the coding standards' simplicity/complection test before extracting
+  inventory modules. Do not split files merely because they are long; split only
+  where the boundary lets maintainers reason about an independent concern
+  without also understanding unrelated concerns. Provider source projection,
+  provider registration/composition, selected-binding dispatch, shared result
+  projection, lifecycle ownership, and diagnostics/fail-closed policy are the
+  current reasoning axes to review before adding another provider.
+- Keep cohesive provider modules together when their invariants, lifecycle,
+  inputs, outputs, and failure behavior are best understood in one place.
+  Extract dispatch/composition only if it reduces reasoning load by separating
+  provider registration and routing from source-specific observation logic; do
+  not introduce organizational-only files.
 - Use typed ids/enums, `serde(deny_unknown_fields)` on boundary structs,
   bounded diagnostics, validated wrappers or `TryFrom` conversions for raw
   payloads, and explicit freshness/correlation fields.
@@ -783,9 +791,11 @@ Implementation progress:
   include concrete device ids. The slice does not shell-probe drivers or
   toolchains and does not consume scheduler/runtime-registry ranking facts,
   graph strings, display names, backend aliases, package names, paths, or
-  generic requirement names. Follow-up: split the central inventory
-  dispatch/composition module before adding another provider because it now
-  exceeds the practical decomposition target.
+  generic requirement names. Follow-up: before adding system-package inventory,
+  run a standards-driven simplicity/complection review of the central inventory
+  dispatcher. Split provider registration/composition or selected-binding
+  routing only where the new boundary lets maintainers ignore unrelated
+  provider-source details safely; do not split solely because of line count.
 
 ## Verification Strategy
 
