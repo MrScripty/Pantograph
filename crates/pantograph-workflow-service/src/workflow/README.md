@@ -105,6 +105,11 @@ but runtime/device/model ranking remains in `pantograph-scheduler`. The
 default runtime dispatch candidate provider returns no candidates, causing a
 typed scheduler no-selection before any runtime-host dispatch rather than
 falling back to graph paths, node-engine launch, or reduced execution plans.
+Runtime dispatch providers return a candidate set that includes both typed
+candidates and bounded source diagnostics. Workflow-service forwards those
+diagnostics into the scheduler selection request so missing Pumas facts,
+runtime capability facts, reservation facts, or resource-fit facts can be
+reported without fabricating candidates.
 When an explicit canonical dispatch candidate provider and runtime-host port
 are configured, session execution may run a ready runtime task through
 `pantograph-scheduler` dispatch selection, dispatch the selected handoff

@@ -2144,6 +2144,17 @@ resource-owner reservation/resource-fit source. The temporary module-level
 dead-code allowance is limited to this staged bridge and must be removed when
 the production candidate provider consumes it.
 
+2026-05-30 dispatch source-diagnostics propagation slice completed. The
+workflow-service runtime dispatch candidate provider boundary now returns a
+candidate set containing typed candidates plus bounded source diagnostics, and
+workflow-service forwards those diagnostics into
+`SchedulerDispatchSelectionRequest`. Scheduler dispatch selection preserves
+request-level source diagnostics on no-selection decisions and still adds a
+typed `NoCandidates` diagnostic when the candidate set is empty. This lets the
+next production provider report missing Pumas package facts, runtime capability
+facts, reservation facts, or resource-fit facts without fabricating a scheduler
+candidate or hiding the reason behind a generic no-candidates result.
+
 ## Effects On Existing Systems
 
 ### Scheduler

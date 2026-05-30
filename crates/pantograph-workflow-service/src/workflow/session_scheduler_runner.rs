@@ -455,7 +455,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 .clone();
             let dispatch_context =
                 ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
-            let candidates = self
+            let candidate_set = self
                 .service
                 .runtime_dispatch_candidate_provider
                 .runtime_dispatch_candidates(
@@ -471,7 +471,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             let selection_request = runtime_dispatch_selection_request(
                 &dispatch_context.task,
                 readiness_proof,
-                candidates,
+                candidate_set,
             )
             .map_err(|error| {
                 WorkflowServiceError::InvalidRequest(format!(

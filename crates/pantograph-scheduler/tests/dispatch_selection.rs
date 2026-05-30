@@ -1,6 +1,7 @@
 use pantograph_scheduler::{
     select_scheduler_dispatch, SchedulerDispatchCandidate, SchedulerDispatchSelectionDecision,
-    SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionRequest,
+    SchedulerDispatchSelectionDiagnostic, SchedulerDispatchSelectionDiagnosticCode,
+    SchedulerDispatchSelectionDiagnosticSeverity, SchedulerDispatchSelectionRequest,
     SchedulerDispatchSelectionState, ValidatedSchedulerDispatchSelectionDecision,
     ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
 };
@@ -191,6 +192,34 @@ fn no_candidates_fail_closed_with_typed_diagnostics() {
         decision.diagnostics[0].code,
         SchedulerDispatchSelectionDiagnosticCode::NoCandidates
     );
+}
+
+#[test]
+fn request_source_diagnostics_are_preserved_when_no_candidate_is_available() {
+    let mut request = valid_request();
+    request.candidates.clear();
+    request
+        .diagnostics
+        .push(SchedulerDispatchSelectionDiagnostic {
+            severity: SchedulerDispatchSelectionDiagnosticSeverity::Error,
+            code: SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+            message: "Pumas package facts were unavailable for dispatch.".to_string(),
+            candidate_id: None,
+            hint: Some("Resolve package facts through owner selector access.".to_string()),
+        });
+
+    let decision = select(request);
+
+    assert_eq!(decision.state, SchedulerDispatchSelectionState::NoSelection);
+    assert!(decision.diagnostics.iter().any(
+        |diagnostic| diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+    ));
+    assert!(decision.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+            && diagnostic
+                .message
+                .contains("Pumas package facts were unavailable")
+    }));
 }
 
 #[test]

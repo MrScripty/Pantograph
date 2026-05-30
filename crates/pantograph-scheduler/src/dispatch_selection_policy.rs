@@ -17,13 +17,15 @@ pub fn select_scheduler_dispatch(
     request: ValidatedSchedulerDispatchSelectionRequest,
 ) -> Result<ValidatedSchedulerDispatchSelectionDecision, SchedulerContractError> {
     let request = request.into_inner();
-    let diagnostics = duplicate_candidate_diagnostics(&request.candidates);
+    let source_diagnostics = request.diagnostics.clone();
+    let mut diagnostics = duplicate_candidate_diagnostics(&request.candidates);
     if !diagnostics.is_empty() {
+        diagnostics.extend(source_diagnostics);
         return validate_decision(no_selection_decision(request.task_intent, diagnostics));
     }
 
     let mut eligible = Vec::new();
-    let mut diagnostics = Vec::new();
+    let mut diagnostics = source_diagnostics;
     for candidate in &request.candidates {
         match candidate_eligibility(&request, candidate) {
             Ok(()) => eligible.push(candidate.clone()),
@@ -34,11 +36,17 @@ pub fn select_scheduler_dispatch(
     match eligible.as_slice() {
         [candidate] => validate_decision(selected_decision(request, candidate)),
         [] => {
-            if diagnostics.is_empty() {
+            if request.candidates.is_empty() {
                 diagnostics.push(SchedulerDispatchSelectionDiagnostic::error(
                     SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
                     None,
                     "No scheduler dispatch candidates were supplied.",
+                ));
+            } else if diagnostics.is_empty() {
+                diagnostics.push(SchedulerDispatchSelectionDiagnostic::error(
+                    SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
+                    None,
+                    "No scheduler dispatch candidates were eligible.",
                 ));
             }
             validate_decision(no_selection_decision(request.task_intent, diagnostics))

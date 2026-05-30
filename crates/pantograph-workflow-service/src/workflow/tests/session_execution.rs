@@ -31,7 +31,9 @@ use pantograph_scheduler::{
 };
 
 use super::*;
-use crate::workflow::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateProviderError;
+use crate::workflow::runtime_dispatch_selection::{
+    WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+};
 use crate::{
     GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
     WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitHistoryThresholdState,
@@ -2644,7 +2646,7 @@ impl WorkflowRuntimeDispatchCandidateProvider for SingleCanonicalRuntimeDispatch
         task: &WorkflowSchedulerTask,
         _ready_record: &SchedulerTaskStateRecord,
         _readiness_proof: &DependencyReadinessProofEnvelope,
-    ) -> Result<Vec<SchedulerDispatchCandidate>, WorkflowRuntimeDispatchCandidateProviderError>
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
         let intent = task.schedulable_intent.as_ref().ok_or_else(|| {
             WorkflowRuntimeDispatchCandidateProviderError::Failed {
@@ -2676,42 +2678,45 @@ impl WorkflowRuntimeDispatchCandidateProvider for SingleCanonicalRuntimeDispatch
                         task.task_id.as_str()
                     ),
                 })?;
-        Ok(vec![SchedulerDispatchCandidate {
-            candidate_id: SchedulerDispatchCandidateId::parse("candidate.runtime_session_test")
-                .map_err(
-                    |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
-                        message: error.to_string(),
-                    },
-                )?,
-            selected_runtime_id,
-            selected_runtime_variant_id: None,
-            selected_device_ids: vec![selected_device_id.clone()],
-            selected_model_ref: intent.model_ref.clone(),
-            runtime_trait_settings: Vec::new(),
-            reservation: Some(SchedulerResourceReservation {
-                reservation_lease_id: SchedulerReservationLeaseId::parse(
-                    "reservation.runtime_session_test",
-                )
-                .map_err(|error| {
-                    WorkflowRuntimeDispatchCandidateProviderError::Failed {
-                        message: error.to_string(),
-                    }
-                })?,
-                workflow_run_id: intent.workflow_run_id.clone(),
-                task_id: intent.task_id.clone(),
-                device_id: selected_device_id,
-                resource_kind: SchedulerResourceKind::DeviceVram,
-                reserved_bytes: 1,
-            }),
-            resource_fit_assessment: Some(SchedulerResourceFitAssessment {
-                workflow_run_id: intent.workflow_run_id.clone(),
-                task_id: intent.task_id.clone(),
-                state: SchedulerResourceFitState::Fits,
-                diagnostics: Vec::new(),
-            }),
-            batching_group_id: None,
-            candidate_source_diagnostics: Vec::new(),
-        }])
+        Ok(WorkflowRuntimeDispatchCandidateSet {
+            candidates: vec![SchedulerDispatchCandidate {
+                candidate_id: SchedulerDispatchCandidateId::parse("candidate.runtime_session_test")
+                    .map_err(
+                        |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                            message: error.to_string(),
+                        },
+                    )?,
+                selected_runtime_id,
+                selected_runtime_variant_id: None,
+                selected_device_ids: vec![selected_device_id.clone()],
+                selected_model_ref: intent.model_ref.clone(),
+                runtime_trait_settings: Vec::new(),
+                reservation: Some(SchedulerResourceReservation {
+                    reservation_lease_id: SchedulerReservationLeaseId::parse(
+                        "reservation.runtime_session_test",
+                    )
+                    .map_err(|error| {
+                        WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                            message: error.to_string(),
+                        }
+                    })?,
+                    workflow_run_id: intent.workflow_run_id.clone(),
+                    task_id: intent.task_id.clone(),
+                    device_id: selected_device_id,
+                    resource_kind: SchedulerResourceKind::DeviceVram,
+                    reserved_bytes: 1,
+                }),
+                resource_fit_assessment: Some(SchedulerResourceFitAssessment {
+                    workflow_run_id: intent.workflow_run_id.clone(),
+                    task_id: intent.task_id.clone(),
+                    state: SchedulerResourceFitState::Fits,
+                    diagnostics: Vec::new(),
+                }),
+                batching_group_id: None,
+                candidate_source_diagnostics: Vec::new(),
+            }],
+            diagnostics: Vec::new(),
+        })
     }
 }
 

@@ -18219,6 +18219,43 @@ Worker rules:
     recovery/replay/cancellation/duplicate-dispatch prevention and reservation
     release remain open before real multi-run inference workloads depend on
     this path.
+- 2026-05-30 dispatch source-diagnostics propagation slice:
+  - Slice scope: scheduler dispatch-selection policy plus workflow-service
+    runtime dispatch candidate provider boundary only. Allowed files:
+    `crates/pantograph-scheduler/src/dispatch_selection_policy.rs`,
+    `crates/pantograph-scheduler/tests/dispatch_selection.rs`,
+    `crates/pantograph-scheduler/src/README.md`,
+    `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: changed the runtime dispatch candidate provider boundary
+    to return a typed candidate set containing candidates plus source
+    diagnostics, forwards those diagnostics into
+    `SchedulerDispatchSelectionRequest`, and updates scheduler policy to
+    preserve request-level source diagnostics on no-selection while still
+    adding a typed `NoCandidates` diagnostic for empty candidate sets.
+  - Test coverage: added scheduler dispatch-selection coverage proving
+    request-level source diagnostics survive empty-candidate no-selection and
+    do not create a dispatch decision.
+  - No-fallback/no-legacy result: the slice does not create production
+    candidates, does not rank source diagnostics, does not synthesize
+    reservation/resource-fit facts, and does not reintroduce graph paths,
+    `ModelRefV2`, reduced execution plans, frontend/Tauri state, or
+    runtime-host load targets as scheduler authority.
+  - Verification passed: `cargo fmt`, `cargo fmt -- --check`,
+    `cargo test -p pantograph-scheduler --test dispatch_selection`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+    `cargo check -p pantograph-workflow-service`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: connect the staged Pumas bridge, runtime-registry
+    capability facts, and real resource-owner reservation/resource-fit facts
+    into the production candidate provider. Provider source diagnostics should
+    report whichever canonical fact source is unavailable instead of falling
+    back to summaries or synthetic candidates.
 
 ### Traceability Links
 

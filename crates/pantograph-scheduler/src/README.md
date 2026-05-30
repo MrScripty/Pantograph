@@ -80,6 +80,10 @@ change behind stable typed contracts.
   environment ref, reservation/resource facts, and optional batching facts. It
   must not alias runtime-registry technical-fit candidates, scheduler batch
   candidates, executable Pumas load targets, or graph-local path metadata.
+- Request-level dispatch source diagnostics are preserved on no-selection
+  decisions so candidate providers can explain why no canonical candidates
+  were produced. They remain diagnostics only and do not replace required
+  reservation/resource-fit facts or make a candidate eligible.
 - All successful scheduler-facing shapes must validate into typed wrappers
   before policy or host handoff consumes them.
 

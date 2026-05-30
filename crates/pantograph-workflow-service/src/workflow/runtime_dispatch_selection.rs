@@ -1,6 +1,7 @@
 use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
 use pantograph_scheduler::{
-    SchedulerDispatchCandidate, SchedulerDispatchSelectionRequest, SchedulerTaskStateRecord,
+    SchedulerDispatchCandidate, SchedulerDispatchSelectionDiagnostic,
+    SchedulerDispatchSelectionRequest, SchedulerTaskStateRecord,
     ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
 };
 use thiserror::Error;
@@ -17,7 +18,13 @@ pub(crate) trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
         task: &WorkflowSchedulerTask,
         ready_record: &SchedulerTaskStateRecord,
         readiness_proof: &DependencyReadinessProofEnvelope,
-    ) -> Result<Vec<SchedulerDispatchCandidate>, WorkflowRuntimeDispatchCandidateProviderError>;
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>;
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct WorkflowRuntimeDispatchCandidateSet {
+    pub candidates: Vec<SchedulerDispatchCandidate>,
+    pub diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
 }
 
 #[derive(Debug, Default)]
@@ -29,16 +36,16 @@ impl WorkflowRuntimeDispatchCandidateProvider for NoRuntimeDispatchCandidatesPro
         _task: &WorkflowSchedulerTask,
         _ready_record: &SchedulerTaskStateRecord,
         _readiness_proof: &DependencyReadinessProofEnvelope,
-    ) -> Result<Vec<SchedulerDispatchCandidate>, WorkflowRuntimeDispatchCandidateProviderError>
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
-        Ok(Vec::new())
+        Ok(WorkflowRuntimeDispatchCandidateSet::default())
     }
 }
 
 pub(crate) fn runtime_dispatch_selection_request(
     task: &WorkflowSchedulerTask,
     readiness_proof: DependencyReadinessProofEnvelope,
-    candidates: Vec<SchedulerDispatchCandidate>,
+    candidate_set: WorkflowRuntimeDispatchCandidateSet,
 ) -> Result<ValidatedSchedulerDispatchSelectionRequest, WorkflowRuntimeDispatchSelectionError> {
     let Some(task_intent) = task.schedulable_intent.clone() else {
         return Err(WorkflowRuntimeDispatchSelectionError::WorkflowService(
@@ -61,8 +68,8 @@ pub(crate) fn runtime_dispatch_selection_request(
         task_intent,
         readiness_proof,
         environment_ref,
-        candidates,
-        diagnostics: Vec::new(),
+        candidates: candidate_set.candidates,
+        diagnostics: candidate_set.diagnostics,
     }
     .try_into()
     .map_err(WorkflowRuntimeDispatchSelectionError::SchedulerContract)
