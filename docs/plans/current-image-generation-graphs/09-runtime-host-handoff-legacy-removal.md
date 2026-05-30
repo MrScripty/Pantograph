@@ -362,6 +362,17 @@ Implementation progress:
   inventory request/observation contract becomes shared or externally
   serialized; and separately plan system-package inventory before
   implementation.
+- Re-plan boundary before the next provider slice: code search found
+  source-owned managed-runtime snapshots and runtime capability facts, but the
+  plan does not yet define the typed mapping from dependency requirement rows
+  to `ManagedBinaryId`, runtime feature ids, or device/toolchain observation
+  ids. Before implementing managed-runtime, runtime-feature, or
+  device-toolchain providers, decide the source id fields, selected-binding
+  detail shape, freshness/correlation semantics, and exact result-state
+  projection for ready, missing, unavailable, unsupported, and stale facts.
+  Do not implement these providers by parsing generic requirement names,
+  scanning runtime capability display text, shell-probing devices/toolchains,
+  or treating managed-runtime readiness as scheduler runtime selection.
 
 ## Verification Strategy
 

@@ -17299,6 +17299,18 @@ Worker rules:
     `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`.
     `cargo check -p pantograph-embedded-runtime`, direct-probe search,
     line-count review, and `git diff --check`.
+- 2026-05-30 provider source-fact re-plan boundary:
+  - Investigation result: managed-runtime snapshots and runtime capability
+    facts exist, but the plan does not yet define how dependency requirement
+    rows map to `ManagedBinaryId`, runtime feature ids, or device/toolchain
+    observation ids, nor how freshness/correlation and ready/missing/stale
+    states should project into dependency-environment results.
+  - Boundary: stop before implementing managed-runtime, runtime-feature, or
+    device-toolchain inventory providers. The next design step must decide the
+    source id fields, selected-binding detail shape, freshness semantics, and
+    result-state mapping. Do not parse generic requirement names, display
+    labels, graph paths, shell output, or scheduler runtime selection as
+    provider readiness evidence.
 
 ### Traceability Links
 
