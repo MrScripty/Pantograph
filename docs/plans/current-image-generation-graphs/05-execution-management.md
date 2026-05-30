@@ -16884,6 +16884,23 @@ Worker rules:
     `set_active_run_execution_plan` warning through embedded-runtime checks.
   - Remaining follow-up: replace unavailable publication with real host
     package/runtime probes, retry/backoff, and typed failure diagnostics.
+- 2026-05-29 re-plan boundary reached before real dependency-readiness host
+  probes:
+  - Finding: the validated work item currently carries provenance and a
+    `DependencyEnvironmentRequest`, but the request carries only stable
+    identity plus `DependencyRequirementsId`; it does not carry the concrete
+    requirement/binding payload needed for package/runtime probes.
+  - No-fallback/no-legacy gate: do not infer probe work from requirements-id
+    strings, frontend/graph/editor state, technical-fit previews, reduced
+    execution plans, runtime-host load targets, `ModelDependencyRequest`,
+    `ModelRefV2`, or path/model-path data.
+  - Options recorded in Milestone 5b: enrich the work item with a validated
+    requirements payload/proof snapshot; add a backend requirements registry
+    keyed by `DependencyRequirementsId`; reconstruct from planning request at
+    producer drain time; or reuse legacy/preview facts. The legacy/preview path
+    is rejected. The next design choice is between self-contained queue items
+    and a backend registry, with registry favored if requirements are reused
+    across concurrent tasks/runs.
 
 ### Traceability Links
 

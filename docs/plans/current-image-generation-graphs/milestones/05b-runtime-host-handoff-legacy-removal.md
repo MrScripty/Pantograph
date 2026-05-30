@@ -885,3 +885,37 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   emits the known unused `set_active_run_execution_plan` warning through
   embedded-runtime checks. Remaining follow-up: replace unavailable publication
   with real host package/runtime probes plus retry/backoff/failure diagnostics.
+- 2026-05-29 re-plan boundary before real dependency-readiness host probes:
+  the queue-to-provider path is now validated, but real host probes cannot be
+  implemented standards-compliantly from the current producer input alone. A
+  queued `DependencyReadinessWorkItem` carries task/run/session provenance and
+  a validated `DependencyEnvironmentRequest`; that request carries action,
+  path-free identity, planning request, dependency requirements id, and optional
+  environment ref, but it does not carry the concrete requirement and binding
+  payload the producer needs to decide which host package/runtime checks to
+  run. Implementing probes now would require guessing from the requirements id,
+  rereading frontend/graph/editor state, deriving execution readiness from
+  technical-fit previews, or adapting legacy `ModelDependencyRequest`/
+  `ModelRefV2`/path-shaped dependency payloads, all of which violate the
+  no-fallback/no-legacy rule.
+  Options for the next re-plan:
+  (1) extend `DependencyReadinessWorkItem` to carry a validated dependency
+  requirements payload/proof snapshot with the exact requirement and binding
+  rows needed by the producer; this keeps the queue self-contained and
+  deterministic but broadens the shared work-item contract;
+  (2) add a backend-owned dependency requirements registry keyed by
+  `DependencyRequirementsId`; workflow-service stores the validated payload
+  once and the producer resolves ids through a narrow registry trait; this
+  avoids large queue items and supports reuse, but adds registry lifecycle,
+  expiry, and missing-payload diagnostics;
+  (3) have the producer reconstruct requirements from the planning request at
+  drain time; this reduces queue/registry work but risks duplicating planning
+  policy in the producer and makes probe behavior harder to reason about;
+  (4) reuse legacy model dependency/preflight payloads or technical-fit preview
+  facts; rejected because it preserves retired behavior as a successful probe
+  source. Recommendation to evaluate next: option 2 if requirements payloads
+  need reuse across concurrent tasks/runs, otherwise option 1 for the smallest
+  deterministic contract. In either case, real probes must remain in the
+  embedded-runtime/infrastructure async shell with tracked lifecycle ownership,
+  typed unavailable/failed diagnostics, bounded retry/backoff, and no graph,
+  frontend, Tauri, runtime-host, or legacy path-derived probe inputs.
