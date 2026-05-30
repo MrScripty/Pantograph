@@ -160,6 +160,30 @@ The current gap is depth. Pantograph's image-generation family planner needs
 structured family/component facts that are not currently available in a direct,
 consumer-stable shape.
 
+2026-05-30 implementation checkpoint: the current Pumas-Library checkout has
+advanced beyond the original source finding. It now has a focused
+`model_library/package_facts/` implementation with Diffusers extraction,
+summary projection, cache/update support, and contract fixtures. The available
+image package facts include versioned `PumasModelRef`, selected artifact
+identity, artifact kind/storage/validation facts, task modality facts,
+Diffusers pipeline class/version/name evidence, image-generation family
+evidence for SD/SDXL, FLUX/FLUX.2, Qwen Image, Lumina Image, GLM Image, and
+Z-Image, Diffusers component roles, generation defaults, custom-code evidence,
+and advisory backend hints. Pantograph should treat these as factual package
+evidence, not scheduler placement or runtime-execution authority.
+
+The remaining Pantograph/Pumas integration gap is access and projection, not
+basic image fact creation. Owner API access can resolve full package facts, but
+the current Pantograph selector access path reports that local-client and
+read-only modes do not provide full package facts. Pantograph's production
+runtime-dispatch work must therefore start with an owner-API bridge that
+validates and projects path-free Pumas package facts into inference/runtime
+planning diagnostics, while local-client/read-only full-fact requests fail
+closed with typed diagnostics. Selector summaries may support display and
+preflight diagnostics, but they must not be treated as executable dispatch
+authority unless a future re-plan explicitly proves the summary contract is
+sufficient.
+
 ## Implementation Architecture
 
 Pumas should implement this as a package-facts module split before adding new

@@ -18136,6 +18136,48 @@ Worker rules:
     recovery/replay/cancellation/duplicate-dispatch prevention plus reservation
     release remain open before real multi-run inference workloads depend on
     this path.
+- 2026-05-30 production dispatch Pumas-facts bridge re-plan:
+  - Trigger: before implementing the production runtime dispatch candidate
+    provider, the current Pumas-Library checkout was inspected instead of
+    assuming package-fact availability. Pumas already exposes image-model
+    package facts for the required bridge: versioned `PumasModelRef`,
+    artifact kind/storage/validation facts, task modality facts, Diffusers
+    pipeline/version/name evidence, image-generation family evidence,
+    Diffusers component roles, generation defaults, custom-code evidence,
+    backend hints, selector summaries, and package-fact update/cache support.
+  - Current gap: Pantograph does not yet have a production bridge that consumes
+    those Pumas facts with the runtime registry and resource owner to create
+    scheduler dispatch candidates. The current workflow-service provider seam
+    still has only an empty default provider plus test-only explicit candidate
+    facts.
+  - Decision: the next production slice is an owner-API Pumas package-facts
+    bridge, not new Pumas fact creation and not a fake production candidate
+    provider. `pantograph-embedded-runtime` is the initial concrete bridge
+    owner because it already depends on `pumas-library`; workflow-service must
+    remain host-agnostic and consume injected providers/projections.
+  - Access boundary: current local-client/read-only selector paths do not
+    provide full package facts. They must return typed diagnostics for this
+    production bridge rather than falling back to selector summaries, display
+    rows, graph metadata, paths, `ModelRefV2`, reduced execution plans, or
+    frontend/Tauri state as executable authority.
+  - No-fallback/no-legacy result: Pumas package facts may establish factual
+    model/task/family/component/backend-hint evidence, but they are not
+    scheduler candidates by themselves. Non-empty production dispatch
+    candidates remain blocked until validated package facts are combined with
+    runtime-registry capability facts and real resource-owner reservation plus
+    resource-fit facts. `selected_artifact_path`, artifact entry paths, and
+    runtime-host load targets must be rejected or stripped before scheduler
+    dispatch.
+  - Standards alignment: this follows the simplicity/complection rule by
+    separating factual model evidence, host composition, scheduler selection,
+    resource ownership, and runtime-host load-target resolution. It avoids
+    adding direct Pumas business logic to Tauri, frontend, scheduler policy,
+    node-engine, or workflow-service state machines.
+  - Next thin slice: add the production Pumas package-facts bridge contract and
+    owner-API implementation in embedded-runtime composition, with focused
+    workflow-service/embedded-runtime tests proving unavailable/stale/ambiguous
+    or path-carrying facts produce typed diagnostics and no candidates.
+    Continue to fail closed until the reservation/resource-fit owner is wired.
 
 ### Traceability Links
 
