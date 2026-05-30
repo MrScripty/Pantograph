@@ -1,3 +1,12 @@
+use pantograph_dependency_planning::{
+    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, PumasModelRef,
+};
+use pantograph_inference_interface_contracts::{
+    DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
+    InferenceAvailabilityStatus, InferenceInterfaceFingerprint, InferenceTaskKind,
+    WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
+};
+
 use super::*;
 use crate::{
     GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
@@ -188,6 +197,73 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         })
         .await
         .expect("list queue after rejected runtime inference run");
+    assert!(queue.items.is_empty());
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn workflow_execution_session_runtime_run_advances_to_dispatch_boundary_before_fail_closed() {
+    let host = RuntimeInferenceSessionHost::new();
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let workflow_id = "wf-runtime-dispatch-boundary";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime-containing scheduler run should fail closed at dispatch boundary");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(
+        error
+            .message()
+            .contains("runtime scheduler dispatch is not wired"),
+        "unexpected error: {error}"
+    );
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id,
+        })
+        .await
+        .expect("list queue after fail-closed runtime inference run");
     assert!(queue.items.is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
@@ -2298,6 +2374,65 @@ fn runtime_inference_session_graph() -> WorkflowGraph {
         ],
         edges: Vec::new(),
         derived_graph: None,
+    }
+}
+
+fn runtime_executable_validation_snapshot(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+    graph: &WorkflowGraph,
+) -> WorkflowExecutableValidationSnapshotRecord {
+    WorkflowExecutableValidationSnapshotRecord {
+        schema_version: WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION,
+        validation_snapshot_id: WorkflowExecutableValidationSnapshotId::parse(
+            "wfvalsnap_00000000-0000-4000-8000-000000000020",
+        )
+        .expect("valid snapshot id"),
+        workflow_id: version.workflow_id.clone(),
+        workflow_version_id: version.workflow_version_id.clone(),
+        workflow_semantic_version: version.semantic_version.clone(),
+        workflow_execution_fingerprint: version.execution_fingerprint.clone(),
+        descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
+        graph_revision: WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+            .expect("valid graph revision"),
+        validation_session_id: DraftGraphValidationSessionId::parse("runtime_validation_session_1")
+            .expect("valid validation session id"),
+        validation_summary: DraftGraphValidationSummary {
+            status: DraftGraphValidationStatus::Executable,
+            executable: true,
+            enqueue_disabled_reasons: Vec::new(),
+            diagnostics_count: 0,
+            blocking_diagnostics_count: 0,
+        },
+        nodes: vec![WorkflowExecutableValidationSnapshotNode {
+            node_id: WorkflowNodeId::parse("infer").expect("valid node id"),
+            descriptor_fingerprint: InferenceInterfaceFingerprint::parse(
+                "runtime_descriptor_fingerprint_1",
+            )
+            .expect("valid descriptor fingerprint"),
+            task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
+            model_ref: PumasModelRef {
+                model_id: "image/example/tiny-diffusion".to_string(),
+                revision: Some("main".to_string()),
+                selected_artifact_id: Some("diffusers-bundle".to_string()),
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            },
+            constraints: Default::default(),
+            availability_status: InferenceAvailabilityStatus::Available,
+            validation_status: DraftGraphValidationStatus::Executable,
+            trait_settings: Vec::new(),
+            estimate_hints: Vec::new(),
+            dependency_requirements_id: DependencyRequirementsId::parse(
+                "requirements.image_generation.cuda0",
+            )
+            .expect("valid requirements id"),
+            selected_binding_ids: vec![
+                DependencyBindingId::parse("torch-diffusers").expect("valid binding id")
+            ],
+            dependency_override_fingerprint: DependencyOverrideFingerprint::parse("override.none")
+                .expect("valid override fingerprint"),
+            blocking_diagnostics: Vec::new(),
+        }],
     }
 }
 

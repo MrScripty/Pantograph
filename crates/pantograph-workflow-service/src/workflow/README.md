@@ -36,7 +36,7 @@ public exports out of the service crate.
 | `session_lifecycle_api.rs` | Workflow stale cleanup, stale cleanup worker, keep-alive, and close-session facade methods. |
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, session-scoped queue controls, and first-pass GUI-admin queued-run cancel facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
-| `session_scheduler_runner.rs` | Active-run scheduler task progression for session execution; currently owns extracted non-runtime-only source materialization, non-runtime task execution, task-result projection, and no-legacy whole-run host avoidance. |
+| `session_scheduler_runner.rs` | Active-run scheduler task progression for session execution; owns source materialization, allowlisted non-runtime task execution, task-result projection, runtime input readiness advancement to the dispatch boundary, and no-legacy whole-run host avoidance. |
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `task_binding_resolution.rs` | Dependency-to-input binding resolution from materialized scheduler task results into validated scheduler-admissible task intents. |
 | `task_execution_classification.rs` | Single workflow-service boundary that maps immutable node type plus canonical node-contract facts into scheduler execution classes before orchestration or adapters choose a path. |
@@ -204,6 +204,12 @@ readiness proof.
   creation so cancellation state starts from one backend-owned shape.
 - Session execution APIs keep queue admission, runtime preflight, runtime load,
   and run finalization in one helper behind the public facade.
+- Session scheduler runner progression owns only active scheduler task
+  materialization/progression. Runtime-containing runs may advance runtime
+  tasks from `AwaitingInputs` to `WaitingDependencyReadiness` after upstream
+  results materialize, but they must fail closed before runtime-host dispatch
+  until dependency readiness admission, dispatch selection, and runtime-host
+  request construction consume the actual scheduler-selected handoff.
 - Session run submission generates the backend workflow run id before enqueue
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node

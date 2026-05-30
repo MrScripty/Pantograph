@@ -384,11 +384,24 @@ impl WorkflowService {
                 run_snapshot.as_ref(),
                 &queued_run,
             )?;
-            let run_result = self.fail_runtime_scheduler_session_not_wired(
+            let runner = WorkflowSchedulerSessionRunner::new(self);
+            let run_future = runner.run_until_runtime_dispatch_boundary(
                 &session_id,
                 &workflow_run_id,
+                &queued_run.queued.inputs,
                 &scheduler_task_run_summary,
             );
+            let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
+                match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
+                    Ok(result) => result,
+                    Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
+                        "workflow run exceeded timeout_ms {}",
+                        timeout_ms
+                    ))),
+                }
+            } else {
+                run_future.await
+            };
             self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             if let Err(record_error) = self.record_run_terminal_event_if_configured(
                 &session,
@@ -498,38 +511,6 @@ impl WorkflowService {
     ) -> Result<(), WorkflowServiceError> {
         let mut store = self.session_store_guard()?;
         store.set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
-    }
-
-    fn fail_runtime_scheduler_session_not_wired(
-        &self,
-        session_id: &str,
-        workflow_run_id: &str,
-        summary: &WorkflowSchedulerTaskRunSummary,
-    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        if !summary.has_runtime_inference() {
-            return Err(WorkflowServiceError::Internal(
-                "scheduler runtime fail-closed path received a run without runtime inference"
-                    .to_string(),
-            ));
-        }
-        {
-            let mut store = self.session_store_guard()?;
-            self.scheduler_task_orchestrator
-                .fail_runtime_dispatch_not_wired_for_active_run(
-                    &mut store,
-                    session_id,
-                    workflow_run_id,
-                )
-                .map_err(|error| {
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "scheduler runtime dispatch fail-closed transition failed: {error}"
-                    ))
-                })?;
-        }
-        Err(WorkflowServiceError::CapabilityViolation(format!(
-            "runtime scheduler dispatch is not wired for {count} runtime inference task(s); runtime tasks must execute only through dispatch-selected scheduler runtime-host handoff",
-            count = summary.runtime_inference_tasks
-        )))
     }
 
     fn fail_unhandled_scheduler_session_classes(

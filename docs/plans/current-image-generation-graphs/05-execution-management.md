@@ -16500,6 +16500,53 @@ Worker rules:
     rewrite those tests because its approved scope was extraction-only.
   - Remaining follow-up: add runtime-containing progression through
     `WorkflowSchedulerSessionRunner` in the next slice.
+- 2026-05-29 Milestone 5b runtime-containing session runner progression slice
+  completed:
+  - Slice scope: `session_scheduler_runner.rs`, the runtime-containing branch
+    in `session_execution_api.rs`, focused session execution tests, workflow
+    README, and plan records.
+  - Implementation: the dedicated runner now materializes request source
+    inputs, progresses allowlisted non-runtime upstream tasks, advances
+    runtime inference tasks from `AwaitingInputs` to
+    `WaitingDependencyReadiness`, verifies that all non-runtime tasks have
+    completed and runtime tasks have reached the dispatch boundary, and then
+    returns a capability violation before runtime-host dispatch.
+  - No-fallback/no-legacy gate: the slice does not call runtime-host
+    execution, does not load runtime sessions, does not call node-engine
+    whole-run output demand, does not route runtime tasks through `Ready`,
+    does not synthesize handoff from reduced execution-plan projections, and
+    does not adapt readiness into `ModelRefV2`, `ModelDependencyRequest`,
+    graph paths, or executable load targets.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_advances_to_dispatch_boundary_before_fail_closed
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner
+    --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`;
+    `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `git diff --check`;
+    and targeted retired path/model-ref source search over touched session
+    runner/API/README/test files.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
+  - Search caveat: allowed pre-existing retired-path hits remain in workflow
+    README negative-path text and an unrelated legacy runtime state fixture in
+    `session_execution.rs`.
+  - Discovered issue: current graph submit validation still rejects
+    model-specific inference edges such as `prompt -> inference.prompt`
+    because dynamic inference descriptor ports are not yet applied to the
+    static `llm-inference` contract at admission. This slice did not add a
+    fake static prompt port or compatibility shim; the remaining owner is the
+    inference-interface validation/admission work already tracked by the
+    plan.
+  - Remaining follow-up: wire dependency readiness admission, scheduler
+    dispatch selection, and runtime-host request construction from the actual
+    dispatch-selected `SchedulerRuntimeHandoff`.
 
 ### Traceability Links
 

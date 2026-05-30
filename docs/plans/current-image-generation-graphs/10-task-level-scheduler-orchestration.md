@@ -397,6 +397,16 @@ implementation can be considered complete:
    `workflow/session_scheduler_runner.rs`; `session_execution_api.rs` remains
    the admission, timeout, terminal-event, and run-finalization wrapper. No
    runtime-containing progression was added in that slice.
+   Runtime-containing runner progression completed 2026-05-29: the same
+   runner now materializes request source inputs, executes allowlisted
+   non-runtime upstream tasks, advances runtime inference tasks to
+   `WaitingDependencyReadiness`, verifies the dispatch boundary, and fails
+   closed before runtime-host dispatch. This preserves the no-fallback rule:
+   there is still no runtime-host call, no node-engine whole-run output demand,
+   no runtime `Ready` detour, and no reduced-plan handoff synthesis. Remaining
+   task-level work is dependency readiness admission, scheduler dispatch
+   selection, and runtime-host request construction from the actual
+   dispatch-selected `SchedulerRuntimeHandoff`.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.
@@ -1423,6 +1433,20 @@ update legacy session tests that intentionally expect whole-run host/runtime
 behavior to use runtime-task graphs or new scheduler diagnostics, and remove
 the remaining staged orchestrator `dead_code` allowances when runtime dispatch
 is consumed.
+
+2026-05-29 implementation status: the dedicated session scheduler runner now
+owns runtime-containing active-run progression up to, but not beyond, the
+runtime dispatch boundary. Runtime session runs with saved executable
+validation snapshots materialize source inputs, progress allowlisted upstream
+non-runtime tasks, advance runtime tasks from `AwaitingInputs` to
+`WaitingDependencyReadiness`, and then return the scheduler dispatch
+capability violation while host runtime load and legacy whole-run host
+execution remain untouched. The focused test uses the current path-free
+executable validation snapshot fixture. A realistic `prompt ->
+inference.prompt` edge remains blocked by graph submit validation because
+model-specific inference ports are still not applied to the static
+`llm-inference` contract; that is an inference-interface validation/admission
+follow-up, not a reason to add a static compatibility prompt port here.
 
 2026-05-24 implementation status: the session runner no longer has a
 successful legacy whole-run branch for Pumas-materialization-only or

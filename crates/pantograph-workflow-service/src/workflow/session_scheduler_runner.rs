@@ -39,160 +39,12 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 "scheduler session runner received a runtime-containing run".to_string(),
             ));
         }
-        {
-            let mut store = self.service.session_store_guard()?;
-            self.service
-                .scheduler_task_orchestrator
-                .materialize_external_inputs_for_active_run(
-                    &mut store,
-                    session_id,
-                    workflow_run_id,
-                    inputs,
-                )
-                .map_err(|error| {
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "scheduler source-input materialization failed: {error}"
-                    ))
-                })?;
-        }
-
-        let mut progressed = true;
-        while progressed {
-            progressed = false;
-            let (task_graph, records) = active_run_scheduler_task_state_required(
-                self.service,
-                session_id,
-                workflow_run_id,
-            )?;
-            for record in records
-                .iter()
-                .filter(|record| record.state.kind() == SchedulerTaskStateKind::AwaitingInputs)
-            {
-                let Some(task) = task_graph
-                    .tasks
-                    .iter()
-                    .find(|task| task.task_id.as_str() == record.task_id.as_str())
-                else {
-                    return Err(WorkflowServiceError::Internal(format!(
-                        "scheduler task '{}' has state but no task graph entry",
-                        record.task_id.as_str()
-                    )));
-                };
-                if task.execution_class != WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
-                {
-                    continue;
-                }
-                let advanced = {
-                    let mut store = self.service.session_store_guard()?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .advance_awaiting_non_runtime_task_inputs(
-                            &mut store,
-                            session_id,
-                            workflow_run_id,
-                            record.task_id.as_str(),
-                        )
-                        .map_err(|error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler non-runtime input readiness failed: {error}"
-                            ))
-                        })?
-                };
-                progressed |= advanced.is_some();
-            }
-
-            let (_task_graph, records) = active_run_scheduler_task_state_required(
-                self.service,
-                session_id,
-                workflow_run_id,
-            )?;
-            let ready_task_ids = records
-                .iter()
-                .filter(|record| record.state.kind() == SchedulerTaskStateKind::Ready)
-                .map(|record| record.task_id.as_str().to_string())
-                .collect::<Vec<_>>();
-            for task_id in ready_task_ids {
-                let started = {
-                    let mut store = self.service.session_store_guard()?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .start_ready_non_runtime_task(
-                            &mut store,
-                            session_id,
-                            workflow_run_id,
-                            &task_id,
-                        )
-                        .map_err(|error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler non-runtime task start failed: {error}"
-                            ))
-                        })?
-                };
-                let execution_result = self
-                    .service
-                    .scheduler_task_orchestrator
-                    .execute_started_non_runtime_task(&started)
-                    .await;
-                match execution_result {
-                    Ok(result) => {
-                        let mut store = self.service.session_store_guard()?;
-                        self.service
-                            .scheduler_task_orchestrator
-                            .complete_started_non_runtime_task(
-                                &mut store,
-                                session_id,
-                                workflow_run_id,
-                                &started,
-                                result,
-                            )
-                            .map_err(|error| {
-                                WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler non-runtime task completion failed: {error}"
-                                ))
-                            })?;
-                    }
-                    Err(
-                        crate::scheduler::WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
-                            error,
-                        ),
-                    ) => {
-                        let mut store = self.service.session_store_guard()?;
-                        let _ = self
-                            .service
-                            .scheduler_task_orchestrator
-                            .fail_started_non_runtime_task(
-                                &mut store,
-                                session_id,
-                                workflow_run_id,
-                                &started,
-                                &error,
-                            );
-                        return Err(WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler non-runtime task execution failed: {error}"
-                        )));
-                    }
-                    Err(error) => {
-                        return Err(WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler non-runtime task execution failed: {error}"
-                        )));
-                    }
-                }
-                progressed = true;
-            }
-        }
+        self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
+        self.run_progress_loop(session_id, workflow_run_id).await?;
 
         let (task_graph, records) =
             active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
-        if let Some(record) = records
-            .iter()
-            .find(|record| record.state.kind() != SchedulerTaskStateKind::Completed)
-        {
-            return Err(WorkflowServiceError::InvalidRequest(format!(
-                "scheduler task '{}' did not complete; final state was {:?}",
-                record.task_id.as_str(),
-                record.state.kind()
-            )));
-        }
+        ensure_all_scheduler_tasks_completed(&records)?;
         let results = {
             let mut store = self.service.session_store_guard()?;
             store.active_run_scheduler_task_results(session_id, workflow_run_id)?
@@ -212,6 +64,282 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             timing_ms: started_at.elapsed().as_millis(),
         })
     }
+
+    pub(super) async fn run_until_runtime_dispatch_boundary(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        inputs: &[WorkflowPortBinding],
+        summary: &WorkflowSchedulerTaskRunSummary,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if !summary.has_runtime_inference() {
+            return Err(WorkflowServiceError::Internal(
+                "scheduler runtime runner received a run without runtime inference".to_string(),
+            ));
+        }
+
+        self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
+        self.run_progress_loop(session_id, workflow_run_id).await?;
+        self.ensure_runtime_dispatch_boundary_reached(session_id, workflow_run_id)?;
+        self.fail_runtime_dispatch_not_wired(session_id, workflow_run_id, summary)
+    }
+
+    fn materialize_external_inputs(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        inputs: &[WorkflowPortBinding],
+    ) -> Result<(), WorkflowServiceError> {
+        let mut store = self.service.session_store_guard()?;
+        self.service
+            .scheduler_task_orchestrator
+            .materialize_external_inputs_for_active_run(
+                &mut store,
+                session_id,
+                workflow_run_id,
+                inputs,
+            )
+            .map_err(|error| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler source-input materialization failed: {error}"
+                ))
+            })?;
+        Ok(())
+    }
+
+    async fn run_progress_loop(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut progressed = true;
+        while progressed {
+            progressed = self.advance_awaiting_task_inputs(session_id, workflow_run_id)?;
+            progressed |= self
+                .execute_ready_non_runtime_tasks(session_id, workflow_run_id)
+                .await?;
+        }
+        Ok(())
+    }
+
+    fn advance_awaiting_task_inputs(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<bool, WorkflowServiceError> {
+        let (task_graph, records) =
+            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
+        let mut progressed = false;
+        for record in records
+            .iter()
+            .filter(|record| record.state.kind() == SchedulerTaskStateKind::AwaitingInputs)
+        {
+            let Some(task) = task_graph
+                .tasks
+                .iter()
+                .find(|task| task.task_id.as_str() == record.task_id.as_str())
+            else {
+                return Err(WorkflowServiceError::Internal(format!(
+                    "scheduler task '{}' has state but no task graph entry",
+                    record.task_id.as_str()
+                )));
+            };
+            let advanced = match task.execution_class {
+                WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine => {
+                    let mut store = self.service.session_store_guard()?;
+                    self.service
+                        .scheduler_task_orchestrator
+                        .advance_awaiting_non_runtime_task_inputs(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            record.task_id.as_str(),
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler non-runtime input readiness failed: {error}"
+                            ))
+                        })?
+                }
+                WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
+                    let mut store = self.service.session_store_guard()?;
+                    self.service
+                        .scheduler_task_orchestrator
+                        .advance_awaiting_runtime_task_inputs(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            record.task_id.as_str(),
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler runtime input readiness failed: {error}"
+                            ))
+                        })?
+                }
+                _ => None,
+            };
+            progressed |= advanced.is_some();
+        }
+        Ok(progressed)
+    }
+
+    async fn execute_ready_non_runtime_tasks(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<bool, WorkflowServiceError> {
+        let (_task_graph, records) =
+            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
+        let ready_task_ids = records
+            .iter()
+            .filter(|record| record.state.kind() == SchedulerTaskStateKind::Ready)
+            .map(|record| record.task_id.as_str().to_string())
+            .collect::<Vec<_>>();
+        let mut progressed = false;
+        for task_id in ready_task_ids {
+            let started = {
+                let mut store = self.service.session_store_guard()?;
+                self.service
+                    .scheduler_task_orchestrator
+                    .start_ready_non_runtime_task(&mut store, session_id, workflow_run_id, &task_id)
+                    .map_err(|error| {
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler non-runtime task start failed: {error}"
+                        ))
+                    })?
+            };
+            let execution_result = self
+                .service
+                .scheduler_task_orchestrator
+                .execute_started_non_runtime_task(&started)
+                .await;
+            match execution_result {
+                Ok(result) => {
+                    let mut store = self.service.session_store_guard()?;
+                    self.service
+                        .scheduler_task_orchestrator
+                        .complete_started_non_runtime_task(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            &started,
+                            result,
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler non-runtime task completion failed: {error}"
+                            ))
+                        })?;
+                }
+                Err(
+                    crate::scheduler::WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                        error,
+                    ),
+                ) => {
+                    let mut store = self.service.session_store_guard()?;
+                    let _ = self
+                        .service
+                        .scheduler_task_orchestrator
+                        .fail_started_non_runtime_task(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            &started,
+                            &error,
+                        );
+                    return Err(WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler non-runtime task execution failed: {error}"
+                    )));
+                }
+                Err(error) => {
+                    return Err(WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler non-runtime task execution failed: {error}"
+                    )));
+                }
+            }
+            progressed = true;
+        }
+        Ok(progressed)
+    }
+
+    fn ensure_runtime_dispatch_boundary_reached(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let (task_graph, records) =
+            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
+        for task in &task_graph.tasks {
+            let record = records
+                .iter()
+                .find(|record| record.task_id.as_str() == task.task_id.as_str())
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no active task-state record",
+                        task.task_id.as_str()
+                    ))
+                })?;
+            match task.execution_class {
+                WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
+                    if record.state.kind() != SchedulerTaskStateKind::WaitingDependencyReadiness {
+                        return Err(WorkflowServiceError::InvalidRequest(format!(
+                            "runtime scheduler task '{}' did not reach dispatch boundary; final state was {:?}",
+                            record.task_id.as_str(),
+                            record.state.kind()
+                        )));
+                    }
+                }
+                _ => {
+                    if record.state.kind() != SchedulerTaskStateKind::Completed {
+                        return Err(WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler task '{}' did not complete before runtime dispatch boundary; final state was {:?}",
+                            record.task_id.as_str(),
+                            record.state.kind()
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn fail_runtime_dispatch_not_wired(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        summary: &WorkflowSchedulerTaskRunSummary,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let mut store = self.service.session_store_guard()?;
+        self.service
+            .scheduler_task_orchestrator
+            .fail_runtime_dispatch_not_wired_for_active_run(&mut store, session_id, workflow_run_id)
+            .map_err(|error| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler runtime dispatch fail-closed transition failed: {error}"
+                ))
+            })?;
+        Err(WorkflowServiceError::CapabilityViolation(format!(
+            "runtime scheduler dispatch is not wired for {count} runtime inference task(s); runtime tasks must execute only through dispatch-selected scheduler runtime-host handoff",
+            count = summary.runtime_inference_tasks
+        )))
+    }
+}
+
+fn ensure_all_scheduler_tasks_completed(
+    records: &[SchedulerTaskStateRecord],
+) -> Result<(), WorkflowServiceError> {
+    if let Some(record) = records
+        .iter()
+        .find(|record| record.state.kind() != SchedulerTaskStateKind::Completed)
+    {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task '{}' did not complete; final state was {:?}",
+            record.task_id.as_str(),
+            record.state.kind()
+        )));
+    }
+    Ok(())
 }
 
 fn active_run_scheduler_task_state_required(

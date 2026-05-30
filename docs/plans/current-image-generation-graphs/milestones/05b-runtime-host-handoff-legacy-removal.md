@@ -82,7 +82,7 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   must not be used to launch inference or build handoff. Runtime requests must
   include the canonical dependency readiness proof and workflow-service-owned
   materialized runtime inputs derived from validated upstream task results.
-- [ ] Wire the session/runtime runner to call workflow-service runtime input
+- [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
   non-runtime-only progression loop into a dedicated workflow-service scheduler
@@ -443,3 +443,52 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   snapshots; this extraction slice did not widen scope to rewrite those tests.
   Remaining follow-up: add runtime-containing progression through the runner
   in the next slice.
+- 2026-05-29 runtime-containing session runner progression slice completed.
+  Smallest useful vertical slice: extend `workflow/session_scheduler_runner.rs`
+  so runtime-containing session runs materialize request source inputs, advance
+  allowlisted non-runtime upstream tasks through typed scheduler task results,
+  advance runtime inference tasks from `AwaitingInputs` to
+  `WaitingDependencyReadiness`, verify that the active run reached the runtime
+  dispatch boundary, and then fail closed before runtime-host dispatch.
+  Allowed write set: `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  this milestone file, `10-task-level-scheduler-orchestration.md`, workflow
+  README notes, and execution notes. No-fallback confirmation: the slice does
+  not call runtime-host execution, does not call node-engine whole-run output
+  demand, does not route runtime tasks through `Ready`, does not synthesize
+  scheduler handoff from reduced execution-plan projections, does not load
+  runtime sessions, and does not adapt runtime readiness into `ModelRefV2`,
+  `ModelDependencyRequest`, graph paths, or executable load targets. Focused
+  test coverage stores a path-free executable validation snapshot before queue
+  admission and proves runtime-containing runs fail with the scheduler
+  dispatch capability violation after reaching the runtime dispatch boundary,
+  while host runtime-load and whole-run execution attempts remain zero.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_runtime_run_advances_to_dispatch_boundary_before_fail_closed
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner
+  --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`;
+  `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+  pantograph-workflow-service --all-features`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; `git diff --check`;
+  and targeted retired path/model-ref source search over touched session
+  runner/API/README/test files. Search caveat: allowed pre-existing hits
+  remain in documentation negative-path text and an unrelated legacy runtime
+  state fixture in `session_execution.rs`.
+  Verification caveat: `cargo check -p pantograph-workflow-service` still
+  emits the known unused `set_active_run_execution_plan` warning. Discovered
+  issue recorded: the current static `llm-inference` contract does not expose
+  model-specific ports such as `prompt`, so a realistic
+  `prompt -> inference.prompt` runtime-input edge is still rejected by graph
+  submit validation until the inference-interface descriptor ports are applied
+  to saved graph validation/admission. This slice intentionally did not add a
+  fake static prompt port or any compatibility shim. Remaining follow-up:
+  wire dependency readiness admission, scheduler dispatch selection, and
+  runtime-host request construction from the actual dispatch-selected
+  `SchedulerRuntimeHandoff`.
