@@ -4,7 +4,8 @@ use pantograph_dependency_environment_service::{
     InMemoryDependencyRequirementsRegistry,
 };
 use pantograph_dependency_planning::{
-    DependencyEnvironmentReadinessState, DependencyEnvironmentRequest, DependencyEnvironmentResult,
+    DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
+    DependencyEnvironmentRequest, DependencyEnvironmentResult,
     DependencyEnvironmentValidationState, DependencyRequirementsId, DependencyTaskId,
     ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
 };
@@ -172,9 +173,36 @@ fn payload_extraction_rejects_non_ready_result_state() {
         DependencyRequirementsRegistryError::InvalidResultState {
             field: "dependency_environment_result.readiness_state",
             reason:
-                "requirements payloads may only be seeded from ready dependency environment results",
+                "requirements payloads may only be seeded from resolved or ready dependency environment results",
         }
     );
+}
+
+#[test]
+fn payload_extraction_accepts_valid_resolved_result_state() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(READY_RESULT).expect("ready fixture should decode");
+    result.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    result.install_state = DependencyEnvironmentInstallState::NotRequested;
+    result.environment_ref = None;
+    result.binding_statuses.clear();
+    result.operation = None;
+    let result =
+        ValidatedDependencyEnvironmentResult::try_from(result).expect("result should validate");
+
+    let payload = DependencyRequirementsPayload::from_result(&result)
+        .expect("valid resolved result should seed requirements payload");
+
+    assert_eq!(
+        payload.dependency_requirements_id,
+        result
+            .as_result()
+            .dependency_requirements_id
+            .clone()
+            .expect("requirements id")
+    );
+    assert_eq!(payload.requirements.len(), 1);
+    assert_eq!(payload.bindings.len(), 1);
 }
 
 fn payload_from_ready_result() -> DependencyRequirementsPayload {

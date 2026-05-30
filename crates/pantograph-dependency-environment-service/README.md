@@ -66,9 +66,9 @@ state. `InMemoryDependencyRequirementsRegistry` is the first backend-owned
 implementation for single-process composition and tests; durable storage,
 expiry, and eviction belong to the backend composition owner when required.
 Registry payload extraction from `ValidatedDependencyEnvironmentResult` is
-fail-closed: only ready and valid results may seed host-probe payloads.
-Non-ready, invalid, or otherwise diagnostic results remain diagnostics and
-must not be promoted into concrete probe requirements.
+fail-closed: only valid resolved or ready results may seed host-probe payloads.
+Invalid, unavailable, stale, missing-row, or otherwise diagnostic results
+remain diagnostics and must not be promoted into concrete probe requirements.
 
 `DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item` lets a
 producer publish an explicit non-ready snapshot for queued work before real host
@@ -113,9 +113,9 @@ fabricating successful readiness.
   requirement/binding payloads for readiness probes.
 - Missing, stale, or identity-mismatched registry payloads are typed non-ready
   diagnostics; they must not trigger producer-side reconstruction.
-- Registry payload extraction accepts only ready and valid canonical
-  dependency-environment results; diagnostic result states do not seed
-  producer probe inputs.
+- Registry payload extraction accepts only valid resolved or ready canonical
+  dependency-environment results; diagnostic result states do not seed producer
+  probe inputs.
 - Work-item unavailable snapshots are fail-closed diagnostics until a real host
   package/runtime probe replaces them with validated readiness evidence.
 

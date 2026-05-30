@@ -12,8 +12,8 @@ use pantograph_dependency_planning::{
     DependencyReadinessSchedulerTaskId, DependencyReadinessWorkflowId,
     DependencyReadinessWorkflowRunId, DependencyTraitIntent, DependencyTraitIntentId,
     DependencyTraitIntentValue, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyPlanningRequest, ValidatedDependencyReadinessProofEnvelope,
-    ValidatedDependencyReadinessRequestEnvelope,
+    ValidatedDependencyEnvironmentResult, ValidatedDependencyPlanningRequest,
+    ValidatedDependencyReadinessProofEnvelope, ValidatedDependencyReadinessRequestEnvelope,
 };
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord, SchedulerTraitValue};
 use thiserror::Error;
@@ -33,6 +33,16 @@ use super::{
 /// but they must return the path-free dependency preflight proof owned by
 /// `pantograph-dependency-planning`.
 pub(crate) trait WorkflowDependencyReadinessProvider: Send + Sync {
+    fn resolve_dependency_requirements_seed(
+        &self,
+        _request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<
+        Option<ValidatedDependencyEnvironmentResult>,
+        WorkflowDependencyReadinessProviderError,
+    > {
+        Ok(None)
+    }
+
     fn resolve_dependency_readiness(
         &self,
         request: &ValidatedDependencyReadinessRequestEnvelope,
@@ -47,7 +57,10 @@ where
         &self,
         request: &ValidatedDependencyReadinessRequestEnvelope,
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
-        let environment_request = dependency_environment_request_from_readiness_request(request)?;
+        let environment_request = dependency_environment_request_from_readiness_request(
+            request,
+            DependencyEnvironmentAction::Resolve,
+        )?;
         let environment_result = self.handle(&environment_request).map_err(|error| {
             WorkflowDependencyReadinessProviderError::Failed {
                 message: error.to_string(),
@@ -60,6 +73,25 @@ where
             message: error.to_string(),
         })?;
         Ok(Some(preflight_result.into_inner()))
+    }
+
+    fn resolve_dependency_requirements_seed(
+        &self,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<
+        Option<ValidatedDependencyEnvironmentResult>,
+        WorkflowDependencyReadinessProviderError,
+    > {
+        let environment_request = dependency_environment_request_from_readiness_request(
+            request,
+            DependencyEnvironmentAction::Resolve,
+        )?;
+        let environment_result = self.handle(&environment_request).map_err(|error| {
+            WorkflowDependencyReadinessProviderError::Failed {
+                message: error.to_string(),
+            }
+        })?;
+        Ok(Some(environment_result))
     }
 }
 
@@ -127,6 +159,22 @@ impl WorkflowDependencyReadinessLifecycle {
             .transpose()
     }
 
+    pub(crate) fn resolve_dependency_requirements_seed<P>(
+        &self,
+        provider: &P,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<
+        Option<ValidatedDependencyEnvironmentResult>,
+        WorkflowDependencyReadinessLifecycleError,
+    >
+    where
+        P: WorkflowDependencyReadinessProvider + ?Sized,
+    {
+        provider
+            .resolve_dependency_requirements_seed(request)
+            .map_err(WorkflowDependencyReadinessLifecycleError::Provider)
+    }
+
     pub(crate) fn admit_active_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -190,12 +238,13 @@ pub(crate) enum WorkflowDependencyReadinessProviderError {
 
 fn dependency_environment_request_from_readiness_request(
     request: &ValidatedDependencyReadinessRequestEnvelope,
+    action: DependencyEnvironmentAction,
 ) -> Result<ValidatedDependencyEnvironmentRequest, WorkflowDependencyReadinessProviderError> {
     let envelope = request.as_envelope();
     let request = &envelope.readiness_request;
     ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
-        action: DependencyEnvironmentAction::Resolve,
+        action,
         identity_key: request.identity_key.clone(),
         planning_request: request.planning_request.clone(),
         dependency_requirements_id: Some(

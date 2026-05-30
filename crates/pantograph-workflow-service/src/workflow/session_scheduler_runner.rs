@@ -302,6 +302,20 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )
                     .map_err(dependency_readiness_error)?
             };
+            let seed_result = lifecycle
+                .resolve_dependency_requirements_seed(
+                    self.service.dependency_readiness_provider.as_ref(),
+                    &request,
+                )
+                .map_err(dependency_readiness_error)?
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(
+                        "scheduler dependency readiness provider did not return a dependency requirements seed result"
+                            .to_string(),
+                    )
+                })?;
+            self.service
+                .store_dependency_requirements_payload_from_result(&seed_result)?;
             let work_item = dependency_readiness_work_item(
                 session_id,
                 workflow_run_id,
@@ -468,7 +482,7 @@ fn dependency_environment_request_from_readiness_envelope(
     let readiness_request = &envelope.readiness_request;
     ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
-        action: DependencyEnvironmentAction::Resolve,
+        action: DependencyEnvironmentAction::Check,
         identity_key: readiness_request.identity_key.clone(),
         planning_request: readiness_request.planning_request.clone(),
         dependency_requirements_id: Some(

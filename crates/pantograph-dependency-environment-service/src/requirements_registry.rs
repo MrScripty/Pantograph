@@ -53,10 +53,14 @@ impl DependencyRequirementsPayload {
         result: &ValidatedDependencyEnvironmentResult,
     ) -> Result<Self, DependencyRequirementsRegistryError> {
         let result = result.as_result();
-        if result.readiness_state != DependencyEnvironmentReadinessState::Ready {
+        if !matches!(
+            result.readiness_state,
+            DependencyEnvironmentReadinessState::Ready
+                | DependencyEnvironmentReadinessState::Resolved
+        ) {
             return Err(DependencyRequirementsRegistryError::InvalidResultState {
                 field: "dependency_environment_result.readiness_state",
-                reason: "requirements payloads may only be seeded from ready dependency environment results",
+                reason: "requirements payloads may only be seeded from resolved or ready dependency environment results",
             });
         }
         if result.validation_state != DependencyEnvironmentValidationState::Valid {

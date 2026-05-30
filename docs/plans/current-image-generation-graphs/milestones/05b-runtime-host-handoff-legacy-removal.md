@@ -76,16 +76,20 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `DependencyRequirementsId`; workflow-service records the validated payload
   once, and embedded-runtime/infrastructure producers resolve ids through a
   narrow registry trait before probing. Registry seeding uses the selected
-  option-1 source from the post-registry re-plan: workflow-service may insert
-  registry payloads only from a `ValidatedDependencyEnvironmentResult` or an
-  equivalent validated `DependencyRequirementsPayload` produced by the
-  canonical dependency-environment boundary. It must not seed the registry from
+  2026-05-30 two-phase dependency-environment source: workflow-service may
+  insert registry payloads from valid canonical resolve results, ready results,
+  or equivalent validated `DependencyRequirementsPayload` values produced by
+  the canonical dependency-environment boundary when they include matching
+  requirements id, identity key, selected binding ids, requirement rows, and
+  binding rows. Resolve-and-seed must happen before readiness work is queued;
+  check/install host probes happen later in embedded-runtime or infrastructure
+  producers using the registry payload. It must not seed the registry from
   dependency proof identity alone, graph/editor/frontend state, technical-fit
   previews, reduced execution plans, runtime-host load targets,
   `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields. The
-  implemented workflow-service seed boundary stores only ready and valid
-  canonical dependency-environment results; non-ready or invalid results remain
-  typed diagnostics and cannot become host-probe payloads. The
+  earlier ready-only workflow-service seed boundary was a validated guardrail
+  slice; the two-phase resolve/check implementation widens it without
+  accepting invalid, unavailable, stale, missing, or row-mismatched results. The
   synchronous snapshot provider must remain read-only from the caller's
   perspective and must not become the
   producer work source by recording provider misses. Active scheduler-state

@@ -17010,10 +17010,11 @@ Worker rules:
     `InMemoryDependencyRequirementsRegistry` in service configuration, wires
     dependency-readiness composition through that same registry instance, and
     exposes a narrow service method that stores registry payloads only from a
-    `ValidatedDependencyEnvironmentResult`.
-    `pantograph-dependency-environment-service` now rejects payload extraction
-    unless the source result is both ready and valid, and maps invalid
-    source-result states into typed dependency-environment diagnostics.
+    `ValidatedDependencyEnvironmentResult`. This slice initially rejected
+    payload extraction unless the source result was both ready and valid; the
+    later 2026-05-30 two-phase slice widened that guardrail to valid resolved
+    or ready results while preserving typed diagnostic rejection for invalid
+    source-result states.
   - No-fallback/no-legacy result: seeding is result/payload-boundary only. It
     does not derive payloads from dependency proof identity alone,
     requirements-id string parsing, graph/editor/frontend state,
@@ -17032,6 +17033,87 @@ Worker rules:
     boundary before queueing work that real host probes can satisfy. Real
     package/runtime probe implementation and any durable registry lifecycle
     remain later backend composition work.
+- 2026-05-30 two-phase dependency-environment registry seeding re-plan
+  selected:
+  - Problem: the ready-only registry seed guardrail is correct as a
+    no-fallback boundary, but it is too narrow for first-time real host probes.
+    A producer needs concrete requirement and binding rows before it can check
+    package/runtime readiness, while a ready result is normally produced after
+    that check. Keeping ready-only seeding as the production order would create
+    a circular dependency or require another component to duplicate readiness
+    ownership.
+  - Decision: split the dependency-environment flow into resolve and
+    check/install phases. Workflow-service seeds `DependencyRequirementsRegistry`
+    from a valid canonical resolve result, or an equivalent validated
+    `DependencyRequirementsPayload`, that contains the matching requirements id,
+    identity key, selected binding ids, requirement rows, and binding rows. A
+    ready/valid result may also seed the same payload when it already exists,
+    but readiness is not required for registry seeding. After the seed succeeds,
+    workflow-service may enqueue the task-correlated readiness work item.
+    Embedded-runtime or infrastructure producers then resolve the registry
+    payload and perform the check/install host probes that publish ready,
+    unavailable, stale, or invalid snapshots.
+  - Standards result: this keeps validated contracts at the backend boundary,
+    preserves workflow-service as the synchronous orchestration owner for
+    registry seed plus queue order, keeps async host probing under a lifecycle
+    owner, keeps graph/frontend/Tauri/node-engine out of dependency policy,
+    and avoids hidden producer-side reconstruction. The existing ready-only
+    seed implementation becomes a first guardrail slice, not the final
+    production order.
+  - Required implementation details: widen
+    `DependencyRequirementsPayload::from_result` to accept valid resolved
+    dependency-environment results with complete payload rows; retain rejection
+    for invalid, unavailable, stale, missing, or row-mismatched results; update
+    workflow-service dependency readiness admission so resolve-and-seed happens
+    before queue enqueue; do not enqueue if seeding fails; keep check/install
+    probe execution in embedded-runtime/infrastructure; add focused tests for
+    valid-resolved seed success, ready seed success, invalid/unavailable seed
+    rejection, queue-not-enqueued-on-seed-failure, and producer registry lookup
+    using the resolved payload.
+  - No-fallback/no-legacy gate: resolve seed data must come from canonical
+    dependency-environment result/payload contracts only. It must not come from
+    dependency proof identity alone, requirements-id parsing,
+    graph/editor/frontend state, technical-fit previews, reduced execution
+    plans, runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`,
+    `model_path`/`modelPath`, or producer-side reconstruction.
+  - Rejected options: keep ready-only seeding as production order because it
+    blocks first-time probes; put full payloads on every work item because that
+    duplicates rows across concurrent tasks and weakens batching/reuse; move
+    requirement reconstruction into embedded-runtime because that duplicates
+    planning policy outside the canonical backend boundary.
+- 2026-05-30 two-phase dependency-environment registry seed implementation
+  slice completed:
+  - Slice scope: `DependencyRequirementsPayload::from_result` now accepts
+    valid resolved or ready dependency-environment results with complete
+    requirement/binding rows and still rejects invalid, unavailable, stale,
+    missing-row, or row-mismatched results. Workflow-service dependency
+    readiness admission resolves and stores the registry seed before enqueueing
+    dependency-readiness work. Queued producer work now carries a check action,
+    because resolve-and-seed has already happened at the workflow-service
+    boundary.
+  - No-fallback/no-legacy result: registry seed data still comes only from
+    canonical dependency-environment result/payload contracts. Queue admission
+    does not derive rows from dependency proof identity, requirements-id
+    parsing, graph/editor/frontend state, technical-fit previews, reduced
+    execution plans, runtime-host load targets, `ModelDependencyRequest`,
+    `ModelRefV2`, `model_path`/`modelPath`, or producer-side reconstruction.
+  - Verification passed: `cargo test -p
+    pantograph-dependency-environment-service --test requirements_registry`;
+    `cargo test -p pantograph-dependency-environment-service`;
+    `cargo test -p pantograph-workflow-service --test
+    dependency_requirements_registry`; `cargo test -p pantograph-workflow-service
+    readiness_lifecycle`; `cargo test -p
+    pantograph-workflow-service
+    workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch`;
+    `cargo test -p pantograph-workflow-service
+    workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary`;
+    `cargo fmt -- --check`; `git diff --check`.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning in focused test/check commands.
+  - Remaining follow-up: real host package/runtime probe implementation still
+    needs to consume the check work item, resolve the seeded registry payload,
+    perform lifecycle-owned async probes, and publish fresh ready/unavailable
+    snapshots.
 
 ### Traceability Links
 

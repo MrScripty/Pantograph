@@ -4,11 +4,13 @@ use pantograph_dependency_environment_service::{
 };
 use pantograph_dependency_planning::{
     produce_dependency_requirements_proof, DependencyEnvironmentAction, DependencyEnvironmentId,
-    DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
-    DependencyEnvironmentRef, DependencyEnvironmentRequest, DependencyEnvironmentResult,
-    DependencyEnvironmentValidationState, DependencyNodeTypeId, DependencyPlanningCallerContext,
-    DependencyPlanningIdentityKey, DependencyPlanningRequest, PumasModelRef, SchedulerIntent,
-    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+    DependencyEnvironmentInstallState, DependencyEnvironmentKind,
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRef, DependencyEnvironmentRequest,
+    DependencyEnvironmentResult, DependencyEnvironmentValidationState, DependencyNodeTypeId,
+    DependencyPlanningCallerContext, DependencyPlanningIdentityKey, DependencyPlanningRequest,
+    DependencyRequirement, DependencyRequirementBinding, DependencyRequirementKind,
+    DependencyRequirementName, PumasModelRef, PythonPackageManagerKind, PythonRequirementDetails,
+    SchedulerIntent, ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
@@ -263,11 +265,11 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
         .await
         .expect_err("runtime-containing scheduler run should fail closed at readiness admission");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
     assert!(
         error
             .message()
-            .contains("runtime scheduler task 'infer' was not admitted for dispatch"),
+            .contains("dependency requirements registry seed failed"),
         "unexpected error: {error}"
     );
     let queue = service
@@ -277,23 +279,7 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
         .await
         .expect("list queue after fail-closed runtime inference run");
     assert!(queue.items.is_empty());
-    assert_eq!(dependency_readiness_work_queue.len(), 1);
-    let work_item = dependency_readiness_work_queue
-        .pop_next()
-        .expect("dependency-readiness work item should be queued");
-    assert_eq!(work_item.provenance.session_id.as_str(), session_id);
-    assert_eq!(work_item.provenance.task_id.as_str(), "infer");
-    assert_eq!(
-        work_item.request.as_request().action,
-        DependencyEnvironmentAction::Resolve
-    );
-    assert_eq!(
-        work_item
-            .diagnostic_context
-            .as_ref()
-            .map(|context| context.as_str()),
-        Some("runtime task entered WaitingDependencyReadiness")
-    );
+    assert_eq!(dependency_readiness_work_queue.len(), 0);
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
@@ -303,11 +289,13 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
 {
     let host = RuntimeInferenceSessionHost::new();
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
         .with_dependency_environment_provider(std::sync::Arc::new(
             dependency_readiness_provider.clone(),
-        ));
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone());
     let workflow_id = "wf-runtime-ready-dispatch-boundary";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -373,11 +361,28 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
     );
     let queue = service
         .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
-            session_id,
+            session_id: session_id.clone(),
         })
         .await
         .expect("list queue after dispatch fail-closed runtime inference run");
     assert!(queue.items.is_empty());
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+    let work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("dependency-readiness work item should be queued after seed");
+    assert_eq!(work_item.provenance.session_id.as_str(), session_id);
+    assert_eq!(work_item.provenance.task_id.as_str(), "infer");
+    assert_eq!(
+        work_item.request.as_request().action,
+        DependencyEnvironmentAction::Check
+    );
+    assert_eq!(
+        work_item
+            .diagnostic_context
+            .as_ref()
+            .map(|context| context.as_str()),
+        Some("runtime task entered WaitingDependencyReadiness")
+    );
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
@@ -403,14 +408,43 @@ fn ready_dependency_environment_result(
             .expect("valid environment id"),
             manifest_id: None,
         }),
-        requirements: Vec::new(),
-        bindings: Vec::new(),
+        requirements: dependency_requirements(),
+        bindings: dependency_bindings(&request.identity_key.selected_binding_ids),
         selected_binding_ids: request.identity_key.selected_binding_ids.clone(),
         binding_statuses: Vec::new(),
         operation: None,
         validation_errors: Vec::new(),
         diagnostics: Vec::new(),
     }
+}
+
+fn dependency_requirements() -> Vec<DependencyRequirement> {
+    vec![DependencyRequirement {
+        name: DependencyRequirementName::parse("diffusers").expect("valid requirement name"),
+        kind: DependencyRequirementKind::PythonPackage,
+        version_constraint: Some(">=0.29".to_string()),
+        python: Some(PythonRequirementDetails {
+            import_name: Some("diffusers".to_string()),
+            python_requires: Some(">=3.10".to_string()),
+            package_manager: Some(PythonPackageManagerKind::Pip),
+        }),
+    }]
+}
+
+fn dependency_bindings(
+    selected_binding_ids: &[pantograph_dependency_planning::DependencyBindingId],
+) -> Vec<DependencyRequirementBinding> {
+    selected_binding_ids
+        .iter()
+        .map(|binding_id| DependencyRequirementBinding {
+            binding_id: binding_id.clone(),
+            requirement_name: DependencyRequirementName::parse("diffusers")
+                .expect("valid requirement name"),
+            environment_kind: DependencyEnvironmentKind::Python,
+            profile_id: None,
+            python: None,
+        })
+        .collect()
 }
 
 struct SlowWorkflowIoHost {
