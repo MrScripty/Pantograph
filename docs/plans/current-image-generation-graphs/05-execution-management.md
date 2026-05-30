@@ -18485,6 +18485,40 @@ Worker rules:
   - Remaining follow-up: add runtime-registry capability and resource-owner
     source adapters, then build the embedded-runtime final provider that joins
     all source facts into the workflow-service candidate-fact bundle.
+- 2026-05-30 embedded-runtime runtime-registry capability source slice:
+  - Slice scope: embedded-runtime runtime-registry dispatch capability source
+    only. Allowed files:
+    `crates/pantograph-embedded-runtime/src/runtime_dispatch_capability_facts.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: added `RuntimeDispatchCapabilityFactsSource`, a staged
+    source that snapshots the shared runtime registry and projects path-free
+    runtime ids, backend keys, lifecycle status, runtime instance id, loaded
+    model ids, active reservation ids, and admission-budget presence into
+    source-specific capability facts.
+  - Test coverage: added focused tests proving ready runtime registry facts
+    project without paths, an empty registry reports a typed no-runtime
+    diagnostic, and runtimes without backend keys are rejected with a typed
+    diagnostic instead of becoming dispatch facts.
+  - No-fallback/no-legacy result: the source creates no scheduler candidates,
+    no workflow-service final bundle rows, no Pumas-derived runtime matches,
+    no reservations, no resource-fit facts, no graph paths, no `ModelRefV2`,
+    no reduced execution plans, and no summary/cache-row execution authority.
+  - Standards result: this keeps registry snapshot projection separate from
+    Pumas source facts, resource ownership, scheduler ranking, and runtime-host
+    execution. It is intentionally source-specific so final candidate assembly
+    can later require every canonical fact source before emitting candidates.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_capability_facts --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: add the resource-owner reservation/resource-fit source
+    and then implement the final embedded-runtime provider that joins Pumas,
+    runtime capability, and resource facts into the validated workflow-service
+    candidate-fact bundle.
 
 ### Traceability Links
 

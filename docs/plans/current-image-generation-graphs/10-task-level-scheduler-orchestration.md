@@ -2212,6 +2212,10 @@ Implementation order:
    or typed source diagnostics. It does not create workflow-service final
    candidate bundle rows or scheduler candidates.
 3. Add runtime-registry capability source projection.
+   2026-05-30 slice completed: embedded-runtime now has a staged
+   `RuntimeDispatchCapabilityFactsSource` that snapshots the shared runtime
+   registry into path-free source facts and typed diagnostics. It does not
+   join with Pumas facts or create final dispatch candidates.
 4. Add real resource-owner reservation/resource-fit source projection.
 5. Map the validated bundle into `SchedulerDispatchCandidate` values only when
    every required source fact is present and valid.
