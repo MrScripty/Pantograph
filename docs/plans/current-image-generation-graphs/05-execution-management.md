@@ -17447,9 +17447,83 @@ Worker rules:
     `dependency_inventory_tests.rs` 198 lines,
     `dependency_readiness_lifecycle_tests.rs` 443 lines, and `lib.rs` 160
     lines.
-  - Remaining follow-up: add the first real source-owned managed-runtime
-    inventory provider from typed managed-runtime facts before runtime-feature
-    or device-toolchain provider slices.
+  - Remaining follow-up: replace payload-wide inventory dispatch with concrete
+    per-selected-binding dispatch before adding the first real source-owned
+    managed-runtime inventory provider.
+- 2026-05-30 dependency inventory clean-split dispatch re-plan decision:
+  - Decision selected: keep the canonical dependency inventory service, but
+    use explicit concrete per-selected-binding provider dispatch as the next
+    implementation step. This is the clean split needed before the
+    managed-runtime provider: embedded-runtime owns concrete provider
+    composition and source integration; `pantograph-dependency-planning` owns
+    typed requirement/binding/observation/projector contracts; scheduler,
+    workflow-service, node-engine, graph editor, frontend, and Tauri consume
+    validation/readiness facts without importing providers or snapshot sources.
+  - Provider meaning: an inventory provider observes dependency classes, not
+    inference runtimes/backends. Python packages, managed-runtime binaries,
+    runtime features, device toolchains, and system packages are inventory
+    provider domains. PyTorch, Candle, llama.cpp, vLLM, MLX, and similar
+    backends remain inference/runtime concepts and are not used as dispatch
+    keys.
+  - Next thin slice: introduce a provider-scoped request shape and typed
+    dispatch matrix so each selected binding and its referenced requirement row
+    are routed independently. Python package bindings go to the Python
+    provider, managed-runtime binary bindings go to the managed-runtime
+    provider once implemented, and runtime-feature/device-toolchain/system
+    package bindings remain provider-attributed not-implemented until their
+    source-owned providers exist. Mixed Python plus non-Python payloads must
+    produce one observation row per selected binding and call the shared
+    projector once.
+  - Managed-runtime follow-up slice: add the managed-runtime provider from an
+    injected source-owned `ManagedRuntimeSnapshot` source using exact
+    `ManagedBinaryId::key()` matching, typed version/variant/platform
+    narrowing, explicit invalid/ambiguous/missing diagnostics, and readiness
+    state mapping defined in milestone 9.
+  - No-fallback result: do not keep payload-wide routing such as "all selected
+    bindings are Python, otherwise the whole payload is not implemented" after
+    the dispatch slice. Do not recover provider identity from generic
+    requirement names, graph strings, display labels, backend aliases, package
+    names, paths, shell output, or Python probes for non-Python kinds.
+  - Verification required: dispatcher tests for mixed payloads, kind/detail
+    mismatch, unknown requirement references, unowned selected bindings,
+    duplicate provider rows, and removal/replacement of payload-wide dispatch
+    helpers such as `selected_payload_is_python_only`; managed-runtime tests
+    for exact id matching, version/variant/platform narrowing, source state
+    mapping, and no display/backend/path parsing.
+- 2026-05-30 concrete per-binding inventory dispatch slice:
+  - Slice scope: replaced payload-wide dependency-inventory dispatch with a
+    concrete per-selected-binding dispatch plan in embedded-runtime. Python
+    package bindings are scoped to the Python provider; matched non-Python
+    provider domains currently emit provider-attributed not-implemented rows
+    per selected binding until their source-owned providers exist; mismatched
+    binding/requirement kinds emit typed invalid observations.
+  - No-fallback result: mixed Python plus managed-runtime payloads no longer
+    cause the whole payload to bypass Python or return one payload-wide
+    not-implemented result. The Python probe receives only Python package
+    bindings, non-Python bindings do not invoke Python probes, and
+    not-implemented diagnostics no longer recover provider identity by parsing
+    generic requirement names.
+  - Focused tests: added a mixed Python plus managed-runtime payload test that
+    proves one Python probe request is issued for the Python dependency, the
+    managed-runtime binding receives a not-implemented binding status, and the
+    shared projector returns one readiness snapshot from combined observations.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`, targeted search for
+    `selected_payload_is_python_only`, line-count review, and `git diff
+    --check`.
+  - Standards result: provider composition stays in embedded-runtime,
+    observation/result projection stays in `pantograph-dependency-planning`,
+    scheduler/node-engine/graph editor/Tauri remain consumers of readiness
+    facts only, and `src/README.md` was updated for module traceability.
+  - Known issue observed: `cargo check` still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: implement the source-owned managed-runtime inventory
+    provider from `ManagedRuntimeSnapshot` facts using the exact id matching
+    and state-mapping contract in milestone 9 before runtime-feature or
+    device-toolchain provider slices.
 
 ### Traceability Links
 

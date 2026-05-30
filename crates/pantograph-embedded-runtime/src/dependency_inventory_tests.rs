@@ -9,9 +9,10 @@ use pantograph_dependency_environment_service::{
     DependencyRequirementsPayload,
 };
 use pantograph_dependency_planning::{
-    DependencyEnvironmentKind, DependencyEnvironmentReadinessState, DependencyEnvironmentRequest,
-    DependencyPlanningDiagnosticCode, DependencyRequirementKind, DependencyRequirementsId,
-    ValidatedDependencyEnvironmentRequest,
+    DependencyBindingId, DependencyBindingStatusState, DependencyEnvironmentKind,
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRequest,
+    DependencyPlanningDiagnosticCode, DependencyRequirement, DependencyRequirementBinding,
+    DependencyRequirementKind, DependencyRequirementsId, ValidatedDependencyEnvironmentRequest,
 };
 
 use crate::dependency_inventory::DependencyInventoryService;
@@ -109,6 +110,64 @@ async fn inventory_service_reports_not_implemented_for_non_python_payloads_witho
     assert!(probe_runner.requests().is_empty());
 }
 
+#[tokio::test]
+async fn inventory_service_routes_mixed_payloads_per_selected_binding() {
+    let managed_binding_id =
+        DependencyBindingId::parse("llama_cpp.binary").expect("managed binding id");
+    let request = validated_request_with_selected_binding_id(managed_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(managed_binding_id.clone());
+    payload.requirements.push(managed_runtime_requirement_row());
+    payload.bindings.push(managed_runtime_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory = DependencyInventoryService::from_package_probe_runner(probe_runner.clone());
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot.result.readiness_state,
+        DependencyEnvironmentReadinessState::NotImplemented
+    );
+    let probe_requests = probe_runner.requests();
+    assert_eq!(probe_requests.len(), 1);
+    assert_eq!(
+        probe_requests[0]
+            .dependency_ids
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        installed_package_ids(&["diffusers"])
+    );
+    let python_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id.as_str() == "diffusers.scheduler")
+        .expect("python binding status");
+    assert_eq!(python_status.state, DependencyBindingStatusState::Ready);
+    let managed_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == managed_binding_id)
+        .expect("managed binding status");
+    assert_eq!(
+        managed_status.state,
+        DependencyBindingStatusState::NotImplemented
+    );
+}
+
 fn work_item(request: ValidatedDependencyEnvironmentRequest) -> DependencyReadinessWorkItem {
     DependencyReadinessWorkItem::new(
         DependencyReadinessWorkItemProvenance::new(
@@ -129,6 +188,29 @@ fn validated_request() -> ValidatedDependencyEnvironmentRequest {
         DependencyRequirementsId::parse("tiny-sd:pytorch:linux-x86_64:torch-diffusers")
             .expect("requirements id"),
     );
+    ValidatedDependencyEnvironmentRequest::try_from(request)
+        .expect("request fixture should validate")
+}
+
+fn validated_request_with_selected_binding_id(
+    binding_id: DependencyBindingId,
+) -> ValidatedDependencyEnvironmentRequest {
+    let mut request: DependencyEnvironmentRequest = serde_json::from_str(include_str!(
+        "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_resolve_request.json"
+    ))
+    .expect("request fixture should parse");
+    request.dependency_requirements_id = Some(
+        DependencyRequirementsId::parse("tiny-sd:pytorch:linux-x86_64:torch-diffusers")
+            .expect("requirements id"),
+    );
+    request
+        .identity_key
+        .selected_binding_ids
+        .push(binding_id.clone());
+    request
+        .planning_request
+        .selected_binding_ids
+        .push(binding_id);
     ValidatedDependencyEnvironmentRequest::try_from(request)
         .expect("request fixture should validate")
 }
@@ -163,6 +245,29 @@ fn installed_package_ids(values: &[&str]) -> BTreeSet<CapabilityAvailabilityId> 
         .iter()
         .map(|value| CapabilityAvailabilityId::parse(value).expect("valid package id"))
         .collect()
+}
+
+fn managed_runtime_requirement_row() -> DependencyRequirement {
+    serde_json::from_value(serde_json::json!({
+        "name": "llama_cpp",
+        "kind": "runtime_managed_binary",
+        "managed_runtime": {
+            "managed_binary_id": "llama_cpp"
+        }
+    }))
+    .expect("managed runtime requirement row")
+}
+
+fn managed_runtime_binding_row() -> DependencyRequirementBinding {
+    serde_json::from_value(serde_json::json!({
+        "binding_id": "llama_cpp.binary",
+        "requirement_name": "llama_cpp",
+        "environment_kind": "managed_binary",
+        "managed_runtime": {
+            "managed_binary_id": "llama_cpp"
+        }
+    }))
+    .expect("managed runtime binding row")
 }
 
 #[derive(Debug)]

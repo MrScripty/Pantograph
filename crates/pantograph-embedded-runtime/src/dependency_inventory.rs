@@ -8,20 +8,23 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use inference::{CapabilityAvailabilityId, CapabilityAvailabilityReason};
+use inference::CapabilityAvailabilityReason;
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotStatus,
     DependencyEnvironmentSnapshotStoreError, DependencyReadinessWorkItem,
     DependencyRequirementsPayload,
 };
 use pantograph_dependency_planning::{
-    dependency_environment_result_from_inventory_observations, DependencyEnvironmentKind,
-    DependencyInventoryObservationProjection, DependencyInventoryObservationRow,
-    DependencyPlanningDiagnostic, DependencyRequirementKind,
+    dependency_environment_result_from_inventory_observations, DependencyBindingId,
+    DependencyEnvironmentKind, DependencyInventoryObservationProjection,
+    DependencyInventoryObservationRow, DependencyPlanningDiagnostic, DependencyRequirementBinding,
+    DependencyRequirementKind, DependencyRequirementName,
     ValidatedDependencyInventoryObservationProjection,
 };
 
-use crate::dependency_environment_probe_selector::python_probe_request_for_payload;
+use crate::dependency_environment_probe_selector::{
+    python_probe_request_for_payload, ProbeShapeError,
+};
 use crate::dependency_environment_probe_snapshot::{
     dependency_inventory_observations_from_probe_outcome, environment_ref_for_request,
     invalid_probe_shape_observations, observations_from_probe_failures,
@@ -44,6 +47,14 @@ impl DependencyInventoryRequest {
     pub fn new(item: &DependencyReadinessWorkItem, payload: DependencyRequirementsPayload) -> Self {
         Self {
             item: item.clone(),
+            payload,
+        }
+    }
+
+    #[must_use]
+    fn with_payload(&self, payload: DependencyRequirementsPayload) -> Self {
+        Self {
+            item: self.item.clone(),
             payload,
         }
     }
@@ -145,11 +156,110 @@ impl DependencyInventoryDispatchProvider {
 #[async_trait]
 impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
     async fn observe(&self, request: DependencyInventoryRequest) -> DependencyInventoryObservation {
-        if selected_payload_is_python_only(&request.payload) {
-            self.python_provider.observe(request).await
-        } else {
-            self.not_implemented_provider.observe(request).await
+        let dispatch_plan = DependencyInventoryDispatchPlan::for_payload(&request.payload);
+        let mut rows = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        if !dispatch_plan.invalid_binding_ids.is_empty() {
+            let payload = scoped_payload(&request.payload, &dispatch_plan.invalid_binding_ids);
+            let (invalid_rows, invalid_diagnostics) = invalid_probe_shape_observations(
+                &request.item,
+                &payload,
+                ProbeShapeError {
+                    field_path: "dependency_environment.bindings",
+                    message: "Selected dependency binding does not match the referenced requirement kind.",
+                },
+            );
+            rows.extend(invalid_rows);
+            diagnostics.extend(invalid_diagnostics);
         }
+
+        if !dispatch_plan.python_binding_ids.is_empty() {
+            let payload = scoped_payload(&request.payload, &dispatch_plan.python_binding_ids);
+            let observation = self
+                .python_provider
+                .observe(request.with_payload(payload))
+                .await;
+            rows.extend(observation.rows);
+            diagnostics.extend(observation.diagnostics);
+        }
+
+        for binding_id in &dispatch_plan.not_implemented_binding_ids {
+            let payload = scoped_payload(&request.payload, std::slice::from_ref(binding_id));
+            let observation = self
+                .not_implemented_provider
+                .observe(request.with_payload(payload))
+                .await;
+            rows.extend(observation.rows);
+            diagnostics.extend(observation.diagnostics);
+        }
+
+        DependencyInventoryObservation::new(rows, diagnostics)
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct DependencyInventoryDispatchPlan {
+    python_binding_ids: Vec<DependencyBindingId>,
+    not_implemented_binding_ids: Vec<DependencyBindingId>,
+    invalid_binding_ids: Vec<DependencyBindingId>,
+}
+
+impl DependencyInventoryDispatchPlan {
+    fn for_payload(payload: &DependencyRequirementsPayload) -> Self {
+        let requirement_by_name = payload
+            .requirements
+            .iter()
+            .map(|requirement| (requirement.name.clone(), requirement.kind))
+            .collect::<BTreeMap<_, _>>();
+
+        let mut plan = Self::default();
+        for binding in selected_bindings(payload) {
+            let Some(requirement_kind) = requirement_by_name.get(&binding.requirement_name) else {
+                plan.invalid_binding_ids.push(binding.binding_id);
+                continue;
+            };
+            match dispatch_target(binding.environment_kind, *requirement_kind) {
+                Some(DependencyInventoryDispatchTarget::PythonPackage) => {
+                    plan.python_binding_ids.push(binding.binding_id);
+                }
+                Some(DependencyInventoryDispatchTarget::NotImplemented) => {
+                    plan.not_implemented_binding_ids.push(binding.binding_id);
+                }
+                None => plan.invalid_binding_ids.push(binding.binding_id),
+            }
+        }
+        plan
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DependencyInventoryDispatchTarget {
+    PythonPackage,
+    NotImplemented,
+}
+
+fn dispatch_target(
+    environment_kind: DependencyEnvironmentKind,
+    requirement_kind: DependencyRequirementKind,
+) -> Option<DependencyInventoryDispatchTarget> {
+    match (environment_kind, requirement_kind) {
+        (DependencyEnvironmentKind::Python, DependencyRequirementKind::PythonPackage) => {
+            Some(DependencyInventoryDispatchTarget::PythonPackage)
+        }
+        (
+            DependencyEnvironmentKind::ManagedBinary,
+            DependencyRequirementKind::RuntimeManagedBinary,
+        )
+        | (DependencyEnvironmentKind::RuntimeFeature, DependencyRequirementKind::RuntimeFeature)
+        | (
+            DependencyEnvironmentKind::DeviceToolchain,
+            DependencyRequirementKind::DeviceToolchain,
+        )
+        | (DependencyEnvironmentKind::SystemPackage, DependencyRequirementKind::SystemPackage) => {
+            Some(DependencyInventoryDispatchTarget::NotImplemented)
+        }
+        _ => None,
     }
 }
 
@@ -193,7 +303,7 @@ impl DependencyInventoryProvider for NotImplementedDependencyInventoryProvider {
     async fn observe(&self, request: DependencyInventoryRequest) -> DependencyInventoryObservation {
         let failure = PackageReadinessProbeFailure::new(
             PackageReadinessProviderDiagnosticCode::ProbeNotImplemented,
-            non_python_dependency_id(&request.payload),
+            None,
             CapabilityAvailabilityReason::parse(&not_implemented_reason(&request.payload))
                 .expect("inventory provider not implemented reason is valid"),
         );
@@ -230,35 +340,44 @@ fn dependency_environment_result_from_inventory_observation(
         .map_err(DependencyEnvironmentSnapshotStoreError::InvalidSnapshotResult)
 }
 
-fn selected_payload_is_python_only(payload: &DependencyRequirementsPayload) -> bool {
-    let requirement_by_name = payload
-        .requirements
-        .iter()
-        .map(|requirement| (requirement.name.clone(), requirement))
-        .collect::<BTreeMap<_, _>>();
+fn selected_bindings(payload: &DependencyRequirementsPayload) -> Vec<DependencyRequirementBinding> {
     let selected_ids = payload.selected_binding_ids.iter().collect::<BTreeSet<_>>();
-
-    payload.bindings.iter().all(|binding| {
-        if !selected_ids.contains(&binding.binding_id) {
-            return true;
-        }
-        binding.environment_kind == DependencyEnvironmentKind::Python
-            && requirement_by_name
-                .get(&binding.requirement_name)
-                .is_some_and(|requirement| {
-                    requirement.kind == DependencyRequirementKind::PythonPackage
-                })
-    })
+    payload
+        .bindings
+        .iter()
+        .filter(|binding| selected_ids.contains(&binding.binding_id))
+        .cloned()
+        .collect()
 }
 
-fn non_python_dependency_id(
+fn scoped_payload(
     payload: &DependencyRequirementsPayload,
-) -> Option<CapabilityAvailabilityId> {
-    payload
+    selected_binding_ids: &[DependencyBindingId],
+) -> DependencyRequirementsPayload {
+    let selected_ids = selected_binding_ids.iter().collect::<BTreeSet<_>>();
+    let bindings = payload
+        .bindings
+        .iter()
+        .filter(|binding| selected_ids.contains(&binding.binding_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let requirement_names = bindings
+        .iter()
+        .map(|binding| binding.requirement_name.clone())
+        .collect::<BTreeSet<DependencyRequirementName>>();
+    let requirements = payload
         .requirements
         .iter()
-        .find(|requirement| requirement.kind != DependencyRequirementKind::PythonPackage)
-        .and_then(|requirement| CapabilityAvailabilityId::parse(requirement.name.as_str()).ok())
+        .filter(|requirement| requirement_names.contains(&requirement.name))
+        .cloned()
+        .collect::<Vec<_>>();
+    DependencyRequirementsPayload {
+        dependency_requirements_id: payload.dependency_requirements_id.clone(),
+        identity_key: payload.identity_key.clone(),
+        requirements,
+        bindings,
+        selected_binding_ids: selected_binding_ids.to_vec(),
+    }
 }
 
 fn not_implemented_reason(payload: &DependencyRequirementsPayload) -> String {

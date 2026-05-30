@@ -219,7 +219,12 @@ typed diagnostics.
 
 ## Dependency Inventory Service Replan
 
-Selected direction: option 3, canonical dependency inventory service.
+Selected direction: canonical dependency inventory service (the earlier
+non-Python readiness option 3), refined with option 2 concrete
+per-selected-binding provider dispatch inside that service before the first
+real managed-runtime provider. Do not introduce a generic provider registry
+yet; reserve that as a later simplification only after multiple real providers
+prove that explicit dispatch has become repetitive or error-prone.
 
 The next dependency-readiness source should be a service boundary that owns
 cross-kind dependency observation instead of adding more direct probe adapters
@@ -260,6 +265,16 @@ Required ownership:
   contract in `pantograph-dependency-planning` unless implementation proves an
   actual dependency cycle or ownership conflict that requires a narrower
   lower-level contract crate.
+- **Concrete per-binding provider dispatch:** the inventory dispatcher must
+  route each selected binding, plus its referenced requirement row, to the
+  concrete dependency inventory provider that owns that dependency kind. It
+  must not route the whole payload to one provider. Python and managed-runtime
+  selected bindings may therefore be observed by different providers in one
+  payload, then merged into one projection. Unsupported or unowned selected
+  bindings must produce provider-attributed not-implemented observation rows
+  for only those bindings. Provider conflicts, duplicate observations,
+  requirement/binding kind mismatches, and unknown referenced requirements are
+  typed diagnostics, not fallback behavior.
 - **Workflow-service/scheduler:** consume dependency-readiness snapshots and
   proofs only. They must not depend on concrete inventory providers, perform
   host probing, infer package names, or interpret dependency requirement names
@@ -294,6 +309,79 @@ Initial provider ownership:
   shell commands or parsing distro-specific tool output in the snapshot
   producer.
 
+Concrete provider dispatch contract:
+
+- "Provider" means dependency inventory provider, not inference runtime or
+  backend. `llama.cpp`, PyTorch, Candle, vLLM, and MLX are runtime/backend
+  concepts. Inventory providers observe dependency classes such as Python
+  packages, managed-runtime binaries, runtime features, device toolchains, or
+  system packages.
+- The dispatcher owns provider selection only. It may inspect selected binding
+  kind and referenced requirement kind, but it must not interpret provider
+  source ids, package names, backend aliases, display names, paths, or graph
+  strings as readiness proof.
+- A provider-scoped request must carry the immutable work item/request context
+  needed for diagnostics plus the selected binding and referenced requirement
+  rows that provider owns. Providers return observation rows and diagnostics
+  only. They do not build `DependencyEnvironmentResult`, publish snapshots,
+  enqueue scheduler work, or mutate graph/session state.
+- The inventory service merges provider rows, validates coverage through
+  `ValidatedDependencyInventoryObservationProjection`, calls the shared
+  projector once, and publishes the resulting snapshot through the existing
+  producer lifecycle.
+- The first implementation should use explicit fields for the concrete
+  providers: Python package provider, managed-runtime provider, and
+  not-implemented provider. Do not add a generic provider registry, dynamic
+  plugin lookup, ordering rules, or duplicate-provider resolution until a
+  later standards review shows that explicit dispatch is causing meaningful
+  duplication.
+- Initial concrete dispatch must be an explicit typed matrix:
+  `DependencyEnvironmentKind::Python` plus
+  `DependencyRequirementKind::PythonPackage` goes to the Python package
+  provider; `DependencyEnvironmentKind::ManagedBinary` plus
+  `DependencyRequirementKind::RuntimeManagedBinary` goes to the managed-runtime
+  provider; `RuntimeFeature`, `DeviceToolchain`, and `SystemPackage` remain
+  typed not-implemented until their source-owned providers exist. Kind
+  mismatches, unowned selected bindings, missing requirement rows, and duplicate
+  provider rows are invalid/provider diagnostics, not fallback routing.
+
+Managed-runtime provider matching contract:
+
+- The source of truth is an injected embedded-runtime managed-runtime snapshot
+  source backed by `inference::ManagedRuntimeSnapshot` facts. The provider may
+  call existing inference managed-runtime APIs only through that source-owned
+  boundary. If the source performs file I/O, it must isolate blocking work
+  behind the provider boundary and return typed unavailable/stale diagnostics
+  instead of blocking scheduler/session code directly.
+- `ManagedRuntimeRequirementDetails.managed_binary_id` maps to
+  `inference::ManagedBinaryId` by exact key equality with
+  `ManagedBinaryId::key()`. Unknown ids are invalid provider input. Do not
+  match display names, backend aliases, graph-authored strings, package names,
+  or paths.
+- If `ManagedRuntimeBindingDetails.managed_binary_id` is present, it must match
+  the requirement `managed_binary_id`. If omitted, the requirement id is the
+  effective managed binary id.
+- Effective `runtime_variant_id`, `version`/`selected_version`, and
+  `platform_key` constraints are taken from the binding when present and from
+  the requirement otherwise. If both sides specify the same field and disagree,
+  the provider emits an invalid observation row for that binding.
+- If any version, variant, or platform constraint is present, the provider must
+  resolve exactly one matching `ManagedRuntimeVersionStatus` row from the
+  matching snapshot. No match is `Missing`; more than one match is `Invalid`
+  until the contract is refined. If none of those constraints are present, the
+  provider uses the snapshot-level readiness and selection/default facts
+  already computed by the managed-runtime source; it must not choose a version
+  by display label or ordering.
+- `Ready` requires source readiness `Ready`, snapshot `available == true`, and
+  for version-scoped observations the matched version row must also be
+  executable-ready. `Missing` maps to observation `Missing`. `Unknown`,
+  `Downloading`, `Extracting`, and `Validating` map to observation
+  `Unavailable` with diagnostics that explain the non-terminal source state.
+  `Failed` maps to observation `Failed`. `Unsupported` maps to observation
+  `Unavailable` with an unsupported-platform/runtime diagnostic, not to
+  provider `NotImplemented`. Provider `NotImplemented` is reserved for
+  dependency kinds that do not yet have a real provider.
+
 Staged implementation:
 
 1. Add a focused dependency inventory contract and provider trait with typed
@@ -320,11 +408,21 @@ Staged implementation:
    merging those observations into one validated `DependencyEnvironmentResult`.
    Python and unsupported/not-implemented providers should be adapted to the
    projector first without changing successful Python readiness behavior.
-6. Add managed-runtime, runtime-feature, and device-toolchain providers one at
-   a time from their source-owned facts. Each provider slice must add focused
-   observation fixtures, result-projection tests, README ownership updates,
-   and no-fallback tests.
-7. Plan system-package inventory separately before implementation because it
+6. Replace payload-wide inventory dispatch with concrete per-selected-binding
+   dispatch. This slice should introduce the provider-scoped request shape,
+   keep Python behavior unchanged, keep unsupported kinds not-implemented, and
+   prove mixed Python plus not-implemented payloads produce one row per
+   selected binding through the shared projector.
+7. Add the managed-runtime provider from source-owned
+   `ManagedRuntimeSnapshot` facts using the matching and state-mapping
+   contract above. The provider must support mixed Python plus managed-runtime
+   payloads without invoking Python for managed-runtime bindings or rebuilding
+   final dependency-environment results locally.
+8. Add runtime-feature and device-toolchain providers one at a time from their
+   source-owned facts. Each provider slice must add focused observation
+   fixtures, result-projection tests, README ownership updates, and no-fallback
+   tests.
+9. Plan system-package inventory separately before implementation because it
    is platform/package-manager specific and likely needs a host inventory
    source rather than direct probing in embedded-runtime.
 
@@ -346,6 +444,14 @@ Standards gates:
   dependency-environment readiness/install/operation/result-state mapping must
   live in the shared projector so mixed-provider payloads are easy to reason
   about and later consumers can trust the same evidence.
+- After the per-binding dispatcher slice, there must be no payload-wide
+  Python/not-implemented branch such as "if every selected binding is Python,
+  call Python provider, otherwise return not implemented for the whole
+  payload." Routing must be per selected binding, then projected once.
+- Scheduler, workflow-service, node-engine, graph editor, frontend, and Tauri
+  must not import concrete inventory providers or managed-runtime snapshot
+  sources. They consume validated payloads, validation/readiness facts,
+  diagnostics, and submit/admission state only.
 - Do not add third-party dependencies for provider dispatch. If a provider
   genuinely needs a new dependency, record dependency ownership, transitive
   cost, feature impact, and verification before editing manifests.
@@ -369,6 +475,18 @@ Required verification:
 - Targeted searches proving the snapshot producer does not call concrete
   probes directly after migration and does not interpret non-Python generic
   requirement names locally.
+- Targeted searches proving payload-wide dispatch helpers such as
+  `selected_payload_is_python_only` are removed or reduced to test-only
+  historical references after the concrete per-selected-binding dispatcher
+  lands.
+- Dispatcher tests proving payload-wide Python/not-implemented branching is
+  replaced by per-selected-binding routing, mixed selected-binding payloads
+  collect rows from multiple concrete providers, and unknown/mismatched
+  bindings fail closed with typed diagnostics.
+- Managed-runtime provider tests proving exact managed binary id matching,
+  version/variant/platform narrowing, ambiguous-match rejection, missing
+  runtime/version diagnostics, readiness-state mapping, and no use of display
+  names, backend aliases, graph strings, paths, or package names.
 - `cargo fmt -- --check`, focused crate tests, `cargo check` for touched
   crates, line-count review, README traceability updates, and `git diff
   --check`.
@@ -479,6 +597,21 @@ Implementation progress:
   the exact provider contract state. The production inventory module tests
   were split into `dependency_inventory_tests.rs` to keep module sizes under
   the decomposition target.
+- 2026-05-30 concrete per-binding inventory dispatch slice: replaced the
+  payload-wide Python/not-implemented branch with a concrete dispatch plan that
+  routes each selected binding to the provider domain implied by its typed
+  binding and requirement kinds. Python package bindings are checked through
+  the Python provider; matched non-Python domains emit provider-attributed
+  not-implemented rows until their source-owned providers exist; mismatched
+  binding/requirement kinds emit typed invalid observations. Mixed Python plus
+  managed-runtime payloads now project one readiness snapshot from combined
+  provider observations without invoking Python for managed-runtime bindings
+  or parsing generic requirement names for not-implemented provider identity.
+  Verification passed with formatting, focused inventory tests, lifecycle
+  tests, crate check, targeted helper-removal search, line-count review,
+  README traceability update, and `git diff --check`. The only warning
+  observed remains the pre-existing `set_active_run_execution_plan` dead-code
+  warning in `pantograph-workflow-service`.
 
 ## Verification Strategy
 

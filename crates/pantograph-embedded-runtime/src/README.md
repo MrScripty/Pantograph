@@ -22,8 +22,8 @@ packages.
 | `dependency_readiness.rs` | Owns embedded-runtime projection from inference-owned dependency requirement declarations plus host-observed Python package snapshots into typed dependency-readiness facts without probing environments, ranking candidates, or selecting runtimes. |
 | `dependency_environment_probe_snapshot.rs` | Owns dependency inventory observation-row projection from seeded requirements payloads and host package probe outcomes into ready, missing, unavailable, not-implemented, or invalid provider observations without graph/path fallback. |
 | `dependency_environment_probe_selector.rs` | Owns dependency-environment package probe request selection, including explicit environment/profile preservation, runtime attribution, and typed invalid-shape diagnostics before snapshot projection. |
-| `dependency_inventory.rs` | Owns the dependency inventory service boundary used by readiness snapshot production, including provider dispatch, provider-owned observations, shared dependency-planning observation-result projection, and the Python package provider adapter that keeps package probing behind the inventory boundary. |
-| `dependency_inventory_tests.rs` | Focused tests for inventory dispatch through the Python provider, explicit not-implemented rows for selected non-Python bindings, and shared observation projection into readiness snapshots. |
+| `dependency_inventory.rs` | Owns the dependency inventory service boundary used by readiness snapshot production, including concrete per-selected-binding provider dispatch, provider-owned observations, shared dependency-planning observation-result projection, and the Python package provider adapter that keeps package probing behind the inventory boundary. |
+| `dependency_inventory_tests.rs` | Focused tests for per-selected-binding inventory dispatch through the Python provider, explicit not-implemented rows for selected non-Python bindings, mixed provider payload projection, and shared observation projection into readiness snapshots. |
 | `dependency_readiness_lifecycle.rs` | Owns the tracked dependency-readiness snapshot producer lifecycle, including startup validation, task handle ownership, cancellation, shutdown, heartbeat tracing, requirements-registry lookup, and delegation to the dependency-environment probe snapshot projector. |
 | `dependency_readiness_lifecycle_tests.rs` | Focused lifecycle tests for producer shutdown, registry-miss diagnostics, fake package-probe ready/missing/unavailable snapshots, and poll-interval validation. |
 | `package_readiness_provider.rs` | Owns the runtime-scoped package-readiness provider contract that shapes typed environment probe requests, deduplicates probe work within one technical-fit request, and projects probe outcomes into inference-owned dependency-readiness facts without selecting runtimes or calling legacy dependency preflight. |
@@ -132,9 +132,10 @@ Pumas-specific dependency resolution.
   probe requests. Explicit Python probe environments resolve only through the
   configured Python env map, while default-host Python is valid only when the
   canonical payload has no explicit environment/profile identity. Selected
-  non-Python requirement or binding kinds publish provider-owned
-  not-implemented observation rows through the shared dependency-planning
-  projector without invoking Python probes. Unmapped explicit probe
+  non-Python requirement or binding kinds are routed per selected binding and
+  publish provider-owned not-implemented observation rows through the shared
+  dependency-planning projector without invoking Python probes for non-Python
+  bindings or treating the entire payload as one provider domain. Unmapped explicit probe
   environments publish typed diagnostics instead of falling back to graph data,
   paths, inferred package names, or host Python.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
