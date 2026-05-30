@@ -65,6 +65,16 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   publish only validated path-free snapshots, track all spawned tasks, support
   cancellation/shutdown/retry/tracing, and fail closed through existing
   dependency-environment diagnostics when no fresh matching snapshot exists.
+  The production producer source must be a typed backend-owned readiness
+  work-item queue emitted by workflow-service or scheduler when a runtime task
+  enters `WaitingDependencyReadiness`. Work items must carry task/run/session
+  provenance, the validated `DependencyEnvironmentRequest` or stable validated
+  request identity plus required request payload, freshness/retry/cancellation
+  policy, and bounded diagnostic context. The synchronous snapshot provider
+  must remain read-only from the caller's perspective and must not become the
+  producer work source by recording provider misses. Active scheduler-state
+  scanning may be planned later only as a reconciliation/audit loop; it must
+  not be the primary producer input path.
   Workflow-service, scheduler, node-engine, Tauri, frontend, and runtime-host
   adapters must consume the resulting typed readiness state; they must not own
   package probing, install policy, filesystem/process checks, or readiness
@@ -769,3 +779,19 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   typed backend-owned readiness work-item queue, produced when scheduler task
   state reaches dependency-readiness admission and consumed by the
   embedded-runtime lifecycle producer.
+- 2026-05-29 dependency-readiness work-source re-plan selected. Decision:
+  implement option 2 as the production path. Workflow-service or scheduler must
+  enqueue typed readiness work items exactly at the task transition into
+  `WaitingDependencyReadiness`; embedded-runtime or an infrastructure lifecycle
+  owner must consume those items, run host package/runtime probes in the async
+  shell with tracked task ownership, and publish validated
+  `DependencyEnvironmentReadinessSnapshot` values into the shared provider.
+  Standards-aligned constraints: the work-item contract is shared integration
+  owner work; queue lifecycle, cancellation, retry/backoff, leasing/dedupe, and
+  shutdown must be explicit and tested; frontend/Tauri/node-engine/runtime-host
+  adapters remain consumers of typed readiness diagnostics only. Option 3 is
+  retained only as a later reconciliation/audit loop if queue loss or restart
+  recovery requires it. Provider miss journaling must not become the primary
+  source of work, and technical-fit preview facts, graph/editor data, reduced
+  execution plans, runtime-host load targets, `ModelDependencyRequest`,
+  `ModelRefV2`, and path/model-path fields remain forbidden readiness sources.

@@ -16770,6 +16770,30 @@ Worker rules:
     Recommended next design is a typed backend-owned readiness work-item queue
     emitted when scheduler tasks enter `WaitingDependencyReadiness` and drained
     by the embedded-runtime lifecycle producer.
+- 2026-05-29 dependency-readiness work-source re-plan selected:
+  - Decision: implement the typed backend-owned readiness work-item queue as
+    the production producer source. Workflow-service or scheduler emits the
+    item when a runtime task enters `WaitingDependencyReadiness`; the
+    embedded-runtime or infrastructure lifecycle owner drains items, performs
+    host package/runtime probes, and publishes validated
+    `DependencyEnvironmentReadinessSnapshot` values to the shared provider.
+  - Standards result: this keeps scheduler task correlation in the backend
+    application/domain boundary, keeps host probing in the async shell with
+    tracked lifecycle ownership, keeps shared contracts serial integration-owner
+    work, and keeps Tauri/frontend/node-engine/runtime-host adapters free of
+    readiness business logic.
+  - Required planning details before implementation: define the work-item DTO
+    and crate owner; queue lifecycle and storage semantics; dedupe/lease/retry/
+    backoff/cancellation behavior; provenance fields for task/run/session
+    diagnostics; producer-to-provider publication rules; and deterministic
+    tests from `WaitingDependencyReadiness` emission through snapshot
+    publication and fail-closed diagnostics.
+  - Rejected primary paths: provider miss journaling as producer input,
+    frontend/graph/editor scans, technical-fit preview reuse, reduced execution
+    plan inference, runtime-host load-target inference, or legacy
+    `ModelDependencyRequest`/`ModelRefV2`/path adaptation. Active scheduler
+    state scanning remains available only as a later reconciliation/audit loop,
+    not as the production source of work.
 
 ### Traceability Links
 
