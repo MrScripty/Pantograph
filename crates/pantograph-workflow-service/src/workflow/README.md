@@ -229,6 +229,14 @@ readiness proof.
   is wrapped by the workflow-service readiness lifecycle; callers must not
   inject legacy preflight payloads, readiness-proof JSON, graph paths, or
   runtime-host dispatch facts through this boundary.
+- Workflow service owns the shared dependency requirements registry used by
+  dependency-readiness producers. Registry entries may be seeded only from
+  ready and valid `ValidatedDependencyEnvironmentResult` values, or from an
+  equivalent already-validated `DependencyRequirementsPayload` at the canonical
+  backend boundary. Workflow-service must not reconstruct registry payloads
+  from requirements-id strings, graph/editor/frontend state, technical-fit
+  previews, reduced execution plans, runtime-host load targets,
+  `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields.
 - Session run submission generates the backend workflow run id before enqueue
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node

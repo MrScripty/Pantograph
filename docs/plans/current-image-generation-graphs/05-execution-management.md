@@ -17004,6 +17004,34 @@ Worker rules:
   - Deferred long-term option: Pumas/package-facts may later become the
     canonical payload source if it emits the same validated payload contract;
     producer-side reconstruction and legacy/path adapters remain rejected.
+- 2026-05-29 workflow-service dependency requirements registry seeding slice
+  completed:
+  - Slice scope: `pantograph-workflow-service` now owns the shared
+    `InMemoryDependencyRequirementsRegistry` in service configuration, wires
+    dependency-readiness composition through that same registry instance, and
+    exposes a narrow service method that stores registry payloads only from a
+    `ValidatedDependencyEnvironmentResult`.
+    `pantograph-dependency-environment-service` now rejects payload extraction
+    unless the source result is both ready and valid, and maps invalid
+    source-result states into typed dependency-environment diagnostics.
+  - No-fallback/no-legacy result: seeding is result/payload-boundary only. It
+    does not derive payloads from dependency proof identity alone,
+    requirements-id string parsing, graph/editor/frontend state,
+    technical-fit previews, reduced execution plans, runtime-host load
+    targets, `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields.
+    Non-ready or invalid canonical results remain diagnostics and cannot seed
+    host probe inputs.
+  - Verification passed: `cargo test -p pantograph-workflow-service --test
+    dependency_requirements_registry`; `cargo test -p
+    pantograph-dependency-environment-service`; `cargo test -p
+    pantograph-workflow-service dependency_readiness_composition`.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning in focused test/check commands.
+  - Remaining follow-up: production readiness code still must call the
+    registry-seeding method at the canonical dependency-environment result
+    boundary before queueing work that real host probes can satisfy. Real
+    package/runtime probe implementation and any durable registry lifecycle
+    remain later backend composition work.
 
 ### Traceability Links
 

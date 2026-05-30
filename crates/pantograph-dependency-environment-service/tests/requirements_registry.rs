@@ -4,8 +4,9 @@ use pantograph_dependency_environment_service::{
     InMemoryDependencyRequirementsRegistry,
 };
 use pantograph_dependency_planning::{
-    DependencyEnvironmentRequest, DependencyEnvironmentResult, DependencyRequirementsId,
-    DependencyTaskId, ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRequest, DependencyEnvironmentResult,
+    DependencyEnvironmentValidationState, DependencyRequirementsId, DependencyTaskId,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
 };
 
 const RESOLVE_REQUEST: &str = include_str!(
@@ -150,6 +151,28 @@ fn payload_validation_rejects_selected_binding_without_binding_row() {
         DependencyRequirementsRegistryError::InvalidPayload {
             field: "dependency_requirements_payload.bindings",
             reason: "requirements payload must include at least one binding",
+        }
+    );
+}
+
+#[test]
+fn payload_extraction_rejects_non_ready_result_state() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(READY_RESULT).expect("ready fixture should decode");
+    result.readiness_state = DependencyEnvironmentReadinessState::Unavailable;
+    result.validation_state = DependencyEnvironmentValidationState::Unavailable;
+    let result =
+        ValidatedDependencyEnvironmentResult::try_from(result).expect("result should validate");
+
+    let error = DependencyRequirementsPayload::from_result(&result)
+        .expect_err("non-ready result should not seed requirements payload");
+
+    assert_eq!(
+        error,
+        DependencyRequirementsRegistryError::InvalidResultState {
+            field: "dependency_environment_result.readiness_state",
+            reason:
+                "requirements payloads may only be seeded from ready dependency environment results",
         }
     );
 }

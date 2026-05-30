@@ -3,9 +3,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use pantograph_dependency_environment_service::{
-    DependencyEnvironmentService, DependencyReadinessWorkQueue,
+    DependencyEnvironmentService, DependencyReadinessWorkQueue, DependencyRequirementsPayload,
+    DependencyRequirementsRegistryError, InMemoryDependencyRequirementsRegistry,
     NotImplementedDependencyEnvironmentProvider, SharedDependencyEnvironmentProvider,
 };
+use pantograph_dependency_planning::ValidatedDependencyEnvironmentResult;
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
     RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
@@ -60,6 +62,9 @@ impl WorkflowService {
             scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
             dependency_readiness_provider: default_dependency_readiness_provider(),
             dependency_readiness_work_queue: Arc::new(DependencyReadinessWorkQueue::new()),
+            dependency_requirements_registry: Arc::new(
+                InMemoryDependencyRequirementsRegistry::new(),
+            ),
         }
     }
 
@@ -91,6 +96,26 @@ impl WorkflowService {
     ) -> Self {
         self.dependency_readiness_work_queue = work_queue;
         self
+    }
+
+    #[must_use]
+    pub fn with_dependency_requirements_registry(
+        mut self,
+        registry: Arc<InMemoryDependencyRequirementsRegistry>,
+    ) -> Self {
+        self.dependency_requirements_registry = registry;
+        self
+    }
+
+    pub fn store_dependency_requirements_payload_from_result(
+        &self,
+        result: &ValidatedDependencyEnvironmentResult,
+    ) -> Result<(), WorkflowServiceError> {
+        let payload = DependencyRequirementsPayload::from_result(result)
+            .map_err(dependency_requirements_registry_error)?;
+        self.dependency_requirements_registry
+            .insert_payload(payload);
+        Ok(())
     }
 
     pub fn with_artifact_store(mut self, store: ArtifactStore) -> Self {
@@ -301,6 +326,14 @@ fn default_scheduler_task_orchestrator() -> WorkflowSchedulerTaskOrchestrator {
 fn default_dependency_readiness_provider() -> Arc<dyn WorkflowDependencyReadinessProvider> {
     Arc::new(DependencyEnvironmentService::new(
         NotImplementedDependencyEnvironmentProvider,
+    ))
+}
+
+fn dependency_requirements_registry_error(
+    error: DependencyRequirementsRegistryError,
+) -> WorkflowServiceError {
+    WorkflowServiceError::InvalidRequest(format!(
+        "dependency requirements registry seed failed: {error}"
     ))
 }
 

@@ -83,6 +83,9 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   dependency proof identity alone, graph/editor/frontend state, technical-fit
   previews, reduced execution plans, runtime-host load targets,
   `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields. The
+  implemented workflow-service seed boundary stores only ready and valid
+  canonical dependency-environment results; non-ready or invalid results remain
+  typed diagnostics and cannot become host-probe payloads. The
   synchronous snapshot provider must remain read-only from the caller's
   perspective and must not become the
   producer work source by recording provider misses. Active scheduler-state

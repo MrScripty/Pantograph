@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use pantograph_dependency_planning::{
-    DependencyBindingId, DependencyPlanningContractError, DependencyPlanningIdentityKey,
-    DependencyRequirement, DependencyRequirementBinding, DependencyRequirementName,
-    DependencyRequirementsId, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyEnvironmentResult,
+    DependencyBindingId, DependencyEnvironmentReadinessState, DependencyEnvironmentValidationState,
+    DependencyPlanningContractError, DependencyPlanningIdentityKey, DependencyRequirement,
+    DependencyRequirementBinding, DependencyRequirementName, DependencyRequirementsId,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
 };
 
 /// Concrete dependency requirements and bindings needed by host readiness probes.
@@ -53,6 +53,18 @@ impl DependencyRequirementsPayload {
         result: &ValidatedDependencyEnvironmentResult,
     ) -> Result<Self, DependencyRequirementsRegistryError> {
         let result = result.as_result();
+        if result.readiness_state != DependencyEnvironmentReadinessState::Ready {
+            return Err(DependencyRequirementsRegistryError::InvalidResultState {
+                field: "dependency_environment_result.readiness_state",
+                reason: "requirements payloads may only be seeded from ready dependency environment results",
+            });
+        }
+        if result.validation_state != DependencyEnvironmentValidationState::Valid {
+            return Err(DependencyRequirementsRegistryError::InvalidResultState {
+                field: "dependency_environment_result.validation_state",
+                reason: "requirements payloads may only be seeded from valid dependency environment results",
+            });
+        }
         let Some(dependency_requirements_id) = result.dependency_requirements_id.clone() else {
             return Err(DependencyRequirementsRegistryError::MissingRequirementsId);
         };
@@ -292,6 +304,11 @@ pub enum DependencyRequirementsRegistryError {
     },
     #[error("dependency requirements payload field is invalid: {field}: {reason}")]
     InvalidPayload {
+        field: &'static str,
+        reason: &'static str,
+    },
+    #[error("dependency requirements source result field is invalid: {field}: {reason}")]
+    InvalidResultState {
         field: &'static str,
         reason: &'static str,
     },

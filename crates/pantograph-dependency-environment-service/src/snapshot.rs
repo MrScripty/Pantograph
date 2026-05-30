@@ -370,6 +370,12 @@ fn producer_requirements_registry_unavailable_result(
             format!("Dependency requirements payload field is invalid: {field}: {reason}."),
             "dependency_environment.requirements_registry.payload",
         ),
+        DependencyRequirementsRegistryError::InvalidResultState { field, reason } => (
+            DependencyEnvironmentValidationState::Invalid,
+            DependencyPlanningDiagnosticCode::InvalidRequest,
+            format!("Dependency requirements source result field is invalid: {field}: {reason}."),
+            "dependency_environment.requirements_registry.source_result",
+        ),
         DependencyRequirementsRegistryError::InvalidContract(error) => (
             DependencyEnvironmentValidationState::Invalid,
             DependencyPlanningDiagnosticCode::InvalidRequest,
