@@ -239,6 +239,18 @@ Required ownership:
   dependency-cycle reason to introduce a narrower lower-level contract crate.
   If that happens, stop and re-plan the crate boundary before editing
   manifests or lockfiles.
+- **Typed provider source details:** non-Python requirement kinds must add
+  typed per-kind detail structs to `pantograph-dependency-planning` before
+  their inventory providers are implemented. `RuntimeManagedBinary` must carry
+  managed-runtime source identity such as `ManagedBinaryId` plus optional
+  selected version/variant/platform scope as typed fields. `RuntimeFeature`
+  must carry typed runtime/capability feature identity without using display
+  labels. `DeviceToolchain` must carry typed device/toolchain observation
+  identity without shell probing. These fields are the provider input contract;
+  providers must not recover source identity from generic requirement names.
+  A dedicated lower-level inventory contract crate remains an escape hatch only
+  if extending `pantograph-dependency-planning` creates an actual dependency
+  cycle or ownership conflict.
 - **Workflow-service/scheduler:** consume dependency-readiness snapshots and
   proofs only. They must not depend on concrete inventory providers, perform
   host probing, infer package names, or interpret dependency requirement names
@@ -287,10 +299,16 @@ Staged implementation:
 3. Register typed unsupported/not-implemented providers for non-Python
    requirement kinds so mixed payloads fail closed with provider-attributed
    diagnostics instead of stringly local interpretation.
-4. Add managed-runtime, runtime-feature, and device-toolchain providers one at
+4. Extend `pantograph-dependency-planning` with typed per-kind requirement and
+   binding details for `RuntimeManagedBinary`, `RuntimeFeature`, and
+   `DeviceToolchain`. This is a contract-first slice: add validated structs,
+   `serde(deny_unknown_fields)` fixtures, unknown-field rejection tests,
+   invalid-kind/detail tests, and README traceability before any provider reads
+   those fields.
+5. Add managed-runtime, runtime-feature, and device-toolchain providers one at
    a time from their source-owned facts. Each provider slice must add focused
    serde fixtures, README ownership updates, and no-fallback tests.
-5. Plan system-package inventory separately before implementation because it
+6. Plan system-package inventory separately before implementation because it
    is platform/package-manager specific and likely needs a host inventory
    source rather than direct probing in embedded-runtime.
 
@@ -303,6 +321,10 @@ Standards gates:
 - Use typed ids/enums, `serde(deny_unknown_fields)` on boundary structs,
   bounded diagnostics, validated wrappers or `TryFrom` conversions for raw
   payloads, and explicit freshness/correlation fields.
+- Keep provider source ids as typed contract fields. Do not parse
+  `DependencyRequirementName`, runtime display names, backend aliases, package
+  names, or graph-authored strings to recover managed-runtime, feature, or
+  toolchain identity.
 - Do not add third-party dependencies for provider dispatch. If a provider
   genuinely needs a new dependency, record dependency ownership, transitive
   cost, feature impact, and verification before editing manifests.
@@ -373,6 +395,16 @@ Implementation progress:
   Do not implement these providers by parsing generic requirement names,
   scanning runtime capability display text, shell-probing devices/toolchains,
   or treating managed-runtime readiness as scheduler runtime selection.
+- 2026-05-30 re-plan decision: use the `pantograph-dependency-planning`
+  contract-first path for non-Python inventory sources. Add typed per-kind
+  detail structs and fixtures in the shared dependency-planning crate before
+  implementing managed-runtime, runtime-feature, or device-toolchain providers.
+  This keeps source identity in validated contracts, avoids new crate and
+  lockfile churn, preserves current ownership, and matches the standards for
+  typed boundaries, README/fixture traceability, narrow modules, sync
+  validation with async provider I/O, and no fallback behavior. Revisit a
+  dedicated inventory contract crate only if implementation proves a dependency
+  cycle or ownership conflict.
 
 ## Verification Strategy
 

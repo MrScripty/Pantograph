@@ -17311,6 +17311,26 @@ Worker rules:
     result-state mapping. Do not parse generic requirement names, display
     labels, graph paths, shell output, or scheduler runtime selection as
     provider readiness evidence.
+- 2026-05-30 provider source-fact re-plan decision:
+  - Decision selected: extend `pantograph-dependency-planning` with typed
+    per-kind detail structs before adding managed-runtime, runtime-feature, or
+    device-toolchain inventory providers. This keeps dependency requirement
+    source identity in the shared dependency contract instead of recovering it
+    from generic names or display labels.
+  - Contract direction: `RuntimeManagedBinary` details carry typed
+    managed-runtime identity such as `ManagedBinaryId` plus optional
+    version/variant/platform scope; `RuntimeFeature` details carry typed
+    runtime/capability feature identity; `DeviceToolchain` details carry typed
+    device/toolchain observation identity. Each detail struct must validate its
+    fields and use `serde(deny_unknown_fields)` fixtures.
+  - Standards/no-fallback result: provider source ids must be validated typed
+    fields, not parsed `DependencyRequirementName` strings, backend aliases,
+    display names, graph-authored strings, shell output, Pumas package names,
+    or scheduler runtime selections. Keep validation synchronous and provider
+    I/O async at the source-owned boundary.
+  - Plan updates: `09-runtime-host-handoff-legacy-removal.md` now records the
+    typed per-kind details ownership, updated staged sequence, standards
+    gates, and crate-boundary escape hatch if a real dependency cycle appears.
 
 ### Traceability Links
 
