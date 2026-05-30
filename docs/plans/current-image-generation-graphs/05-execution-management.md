@@ -17770,6 +17770,35 @@ Worker rules:
     system-package readiness through embedded-runtime package-manager probing,
     shell output parsing, generic requirement names, graph strings, paths,
     Pumas package names, or Python probes for non-Python requirements.
+- 2026-05-30 system-package inventory option-3 re-plan decision:
+  - Decision selected: use option 3, a full staged plan that designs the
+    system-package source contract and the dependency-inventory
+    simplicity/complection boundary together before implementation.
+  - Re-plan scope: identify independent concepts in the inventory area,
+    intentional coupling, accidental coupling risk, decision ownership, and
+    future changes that should not require touching provider-source-specific
+    code. The review must decide whether provider registration/composition,
+    selected-binding dispatch, `cfg(test/standalone)` implementation selection,
+    and fail-closed routing remain one coherent concern or should be separated
+    because the boundary reduces reasoning load.
+  - Source ownership: host/system inventory owns platform/package-manager
+    probing, caching, freshness, stale/unsupported diagnostics, and typed
+    package facts. Dependency inventory may consume a validated source snapshot
+    and map typed requirements to observations, but must not own package-manager
+    probing policy.
+  - Required contract: typed package ids, platform/package-manager ids,
+    optional version/status facts, freshness/correlation fields, bounded
+    diagnostics, source-owned alternatives where useful,
+    `serde(deny_unknown_fields)` for serialized boundary structs, and
+    validated wrappers or `TryFrom` conversions for raw source rows.
+  - Implementation order after planning: optional decomposition-only slice if
+    the complection review proves it reduces reasoning load; typed
+    fail-closed/not-implemented system-package provider with mixed-payload
+    tests; real host inventory source in platform-specific modules; then
+    readiness lifecycle integration. No slice may infer readiness from shell
+    output parsing, generic requirement names, graph strings, paths, Pumas
+    package names, Python probes for non-Python requirements, or scheduler
+    policy.
 
 ### Traceability Links
 

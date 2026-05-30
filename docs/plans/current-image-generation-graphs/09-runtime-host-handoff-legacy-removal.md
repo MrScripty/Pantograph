@@ -518,8 +518,35 @@ Staged implementation:
    and prove explicit unavailable constraints surface bounded alternatives
    without auto-selecting them.
 12. Plan system-package inventory separately before implementation because it
-   is platform/package-manager specific and likely needs a host inventory
-   source rather than direct probing in embedded-runtime.
+   is platform/package-manager specific and needs a host inventory source
+   rather than direct probing in embedded-runtime.
+13. Selected system-package path: use option 3, a full staged plan that designs
+   the system-package source contract and the inventory simplicity/complection
+   boundary together before implementation. This is not a permission to split
+   files by size; it is a requirement to identify the independent concerns,
+   intentional coupling, accidental coupling risk, and owner for each decision
+   before adding package-manager facts.
+14. Run an inventory simplicity/complection planning slice before any
+   system-package provider code. The slice must decide whether
+   provider registration/composition, selected-binding dispatch,
+   `cfg(test/standalone)` implementation selection, and fail-closed routing are
+   still a single coherent concern or should be separated because the new
+   boundary lets maintainers ignore source-specific provider details safely.
+   Preserve the existing inventory facade unless the plan records an explicit
+   API-breaking reason.
+15. Define the system-package source contract before implementation. The
+   contract must use typed package ids, platform/package-manager ids, optional
+   version/status facts, freshness/correlation fields, bounded diagnostics,
+   source-owned alternatives where useful, `serde(deny_unknown_fields)` where
+   serialized, and validated wrappers or `TryFrom` conversions for raw source
+   rows. The dependency inventory provider may consume this source snapshot but
+   must not own package-manager probing policy.
+16. Implement system-package inventory in validated slices after the contract:
+   first a typed fail-closed/not-implemented provider that proves mixed payloads
+   keep system-package diagnostics isolated from other providers, then the real
+   host inventory source in platform-specific modules owned by the host/system
+   inventory boundary. Real package-manager probing must stay out of graph
+   editor, scheduler, shared projector, and provider dispatch code.
 
 Standards gates:
 
@@ -535,6 +562,11 @@ Standards gates:
   Extract dispatch/composition only if it reduces reasoning load by separating
   provider registration and routing from source-specific observation logic; do
   not introduce organizational-only files.
+- For system-package inventory, separate the host package fact source from the
+  dependency inventory provider. The host source owns platform/package-manager
+  probing, caching, freshness, and stale/unsupported diagnostics; dependency
+  inventory owns typed requirement-to-observation matching and shared projector
+  input only.
 - Use typed ids/enums, `serde(deny_unknown_fields)` on boundary structs,
   bounded diagnostics, validated wrappers or `TryFrom` conversions for raw
   payloads, and explicit freshness/correlation fields.
