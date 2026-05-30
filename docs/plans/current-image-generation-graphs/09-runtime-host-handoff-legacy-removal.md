@@ -905,6 +905,17 @@ Implementation progress:
   package-manager probing, scheduler policy, graph/path/Pumas-name inference,
   compatibility shims, or legacy preflight behavior. Follow-up: add the typed
   system-package provider against validated source snapshots.
+- 2026-05-30 typed system-package inventory provider slice: added a
+  source-owned system-package inventory provider for `SystemPackage` bindings.
+  The provider consumes only validated `SystemPackageProviderSourceSnapshot`
+  facts, matches explicit package/package-manager/platform/architecture details,
+  maps source state to observation rows, preserves source alternatives, and
+  returns typed invalid diagnostics for missing or contradictory details.
+  Standalone composition now routes system-package bindings through this
+  provider with a not-implemented source until real host inventory exists;
+  tests inject ready and unavailable sources. No package-manager probing, shell
+  parsing, graph/path/package-name inference, Python probe reuse, scheduler
+  policy, compatibility shim, or legacy preflight behavior was added.
 
 ## Verification Strategy
 

@@ -34,6 +34,8 @@ pub(crate) struct DependencyInventoryDispatchProvider {
     runtime_feature_provider: Arc<dyn DependencyInventoryProvider>,
     #[cfg(any(test, feature = "standalone"))]
     device_toolchain_provider: Arc<dyn DependencyInventoryProvider>,
+    #[cfg(any(test, feature = "standalone"))]
+    system_package_provider: Arc<dyn DependencyInventoryProvider>,
     not_implemented_provider: NotImplementedDependencyInventoryProvider,
 }
 
@@ -47,6 +49,8 @@ impl DependencyInventoryDispatchProvider {
             runtime_feature_provider: Arc::new(NotImplementedDependencyInventoryProvider),
             #[cfg(any(test, feature = "standalone"))]
             device_toolchain_provider: Arc::new(NotImplementedDependencyInventoryProvider),
+            #[cfg(any(test, feature = "standalone"))]
+            system_package_provider: Arc::new(NotImplementedDependencyInventoryProvider),
             not_implemented_provider: NotImplementedDependencyInventoryProvider,
         }
     }
@@ -61,6 +65,7 @@ impl DependencyInventoryDispatchProvider {
             managed_runtime_provider,
             runtime_feature_provider: Arc::new(NotImplementedDependencyInventoryProvider),
             device_toolchain_provider: Arc::new(NotImplementedDependencyInventoryProvider),
+            system_package_provider: Arc::new(NotImplementedDependencyInventoryProvider),
             not_implemented_provider: NotImplementedDependencyInventoryProvider,
         }
     }
@@ -76,6 +81,7 @@ impl DependencyInventoryDispatchProvider {
             managed_runtime_provider,
             runtime_feature_provider,
             device_toolchain_provider: Arc::new(NotImplementedDependencyInventoryProvider),
+            system_package_provider: Arc::new(NotImplementedDependencyInventoryProvider),
             not_implemented_provider: NotImplementedDependencyInventoryProvider,
         }
     }
@@ -86,12 +92,14 @@ impl DependencyInventoryDispatchProvider {
         managed_runtime_provider: Arc<dyn DependencyInventoryProvider>,
         runtime_feature_provider: Arc<dyn DependencyInventoryProvider>,
         device_toolchain_provider: Arc<dyn DependencyInventoryProvider>,
+        system_package_provider: Arc<dyn DependencyInventoryProvider>,
     ) -> Self {
         Self {
             python_provider,
             managed_runtime_provider,
             runtime_feature_provider,
             device_toolchain_provider,
+            system_package_provider,
             not_implemented_provider: NotImplementedDependencyInventoryProvider,
         }
     }
@@ -166,6 +174,18 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
+        #[cfg(any(test, feature = "standalone"))]
+        if !dispatch_plan.system_package_binding_ids.is_empty() {
+            let payload =
+                scoped_payload(&request.payload, &dispatch_plan.system_package_binding_ids);
+            let observation = self
+                .system_package_provider
+                .observe(request.with_payload(payload))
+                .await;
+            rows.extend(observation.rows);
+            diagnostics.extend(observation.diagnostics);
+        }
+
         #[cfg(not(any(test, feature = "standalone")))]
         let not_implemented_binding_ids = dispatch_plan
             .not_implemented_binding_ids
@@ -173,6 +193,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             .chain(dispatch_plan.managed_runtime_binding_ids.iter())
             .chain(dispatch_plan.runtime_feature_binding_ids.iter())
             .chain(dispatch_plan.device_toolchain_binding_ids.iter())
+            .chain(dispatch_plan.system_package_binding_ids.iter())
             .collect::<Vec<_>>();
         #[cfg(any(test, feature = "standalone"))]
         let not_implemented_binding_ids = dispatch_plan
@@ -200,6 +221,7 @@ struct DependencyInventoryDispatchPlan {
     managed_runtime_binding_ids: Vec<DependencyBindingId>,
     runtime_feature_binding_ids: Vec<DependencyBindingId>,
     device_toolchain_binding_ids: Vec<DependencyBindingId>,
+    system_package_binding_ids: Vec<DependencyBindingId>,
     not_implemented_binding_ids: Vec<DependencyBindingId>,
     invalid_binding_ids: Vec<DependencyBindingId>,
 }
@@ -234,6 +256,11 @@ impl DependencyInventoryDispatchPlan {
                 Some(DependencyInventoryDispatchTarget::DeviceToolchain) => {
                     plan.device_toolchain_binding_ids.push(binding.binding_id);
                 }
+                #[cfg(any(test, feature = "standalone"))]
+                Some(DependencyInventoryDispatchTarget::SystemPackage) => {
+                    plan.system_package_binding_ids.push(binding.binding_id);
+                }
+                #[cfg(not(any(test, feature = "standalone")))]
                 Some(DependencyInventoryDispatchTarget::NotImplemented) => {
                     plan.not_implemented_binding_ids.push(binding.binding_id);
                 }
@@ -253,6 +280,9 @@ enum DependencyInventoryDispatchTarget {
     RuntimeFeature,
     #[cfg(any(test, feature = "standalone"))]
     DeviceToolchain,
+    #[cfg(any(test, feature = "standalone"))]
+    SystemPackage,
+    #[cfg(not(any(test, feature = "standalone")))]
     NotImplemented,
 }
 
@@ -276,7 +306,7 @@ fn dispatch_target(
             DependencyRequirementKind::DeviceToolchain,
         ) => Some(device_toolchain_dispatch_target()),
         (DependencyEnvironmentKind::SystemPackage, DependencyRequirementKind::SystemPackage) => {
-            Some(DependencyInventoryDispatchTarget::NotImplemented)
+            Some(system_package_dispatch_target())
         }
         _ => None,
     }
@@ -309,6 +339,16 @@ fn device_toolchain_dispatch_target() -> DependencyInventoryDispatchTarget {
 
 #[cfg(not(any(test, feature = "standalone")))]
 fn device_toolchain_dispatch_target() -> DependencyInventoryDispatchTarget {
+    DependencyInventoryDispatchTarget::NotImplemented
+}
+
+#[cfg(any(test, feature = "standalone"))]
+fn system_package_dispatch_target() -> DependencyInventoryDispatchTarget {
+    DependencyInventoryDispatchTarget::SystemPackage
+}
+
+#[cfg(not(any(test, feature = "standalone")))]
+fn system_package_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::NotImplemented
 }
 

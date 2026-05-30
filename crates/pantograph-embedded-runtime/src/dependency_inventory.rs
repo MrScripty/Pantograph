@@ -39,6 +39,12 @@ use crate::dependency_inventory_runtime_feature::RuntimeFeatureDependencyInvento
 use crate::dependency_inventory_runtime_feature_source::GatewayRuntimeFeatureProviderSource;
 #[cfg(any(test, feature = "standalone"))]
 use crate::dependency_inventory_runtime_feature_source::RuntimeFeatureProviderSource;
+#[cfg(any(test, feature = "standalone"))]
+use crate::dependency_inventory_system_package::SystemPackageDependencyInventoryProvider;
+#[cfg(any(test, feature = "standalone"))]
+use crate::dependency_inventory_system_package_source::NotImplementedSystemPackageProviderSource;
+#[cfg(test)]
+use crate::dependency_inventory_system_package_source::SystemPackageProviderSource;
 use crate::package_readiness_provider::PackageReadinessProbeRunner;
 use crate::python_package_readiness_probe::ProcessPythonPackageReadinessProbeRunner;
 
@@ -200,12 +206,51 @@ impl DependencyInventoryService {
         let device_toolchain_provider = Arc::new(DeviceToolchainDependencyInventoryProvider::new(
             device_toolchain_source,
         ));
+        let system_package_provider = Arc::new(SystemPackageDependencyInventoryProvider::new(
+            Arc::new(NotImplementedSystemPackageProviderSource),
+        ));
         Self::new(Arc::new(
             DependencyInventoryDispatchProvider::new_with_managed_runtime_and_runtime_feature_and_device_toolchain(
                 python_provider,
                 managed_runtime_provider,
                 runtime_feature_provider,
                 device_toolchain_provider,
+                system_package_provider,
+            ),
+        ))
+    }
+
+    #[must_use]
+    #[cfg(test)]
+    pub(crate) fn from_package_probe_runner_and_managed_runtime_and_runtime_feature_and_device_toolchain_and_system_package_sources(
+        package_probe_runner: Arc<dyn PackageReadinessProbeRunner>,
+        managed_runtime_source: Arc<dyn ManagedRuntimeSnapshotSource>,
+        runtime_feature_source: Arc<dyn RuntimeFeatureProviderSource>,
+        device_toolchain_source: Arc<dyn DeviceToolchainProviderSource>,
+        system_package_source: Arc<dyn SystemPackageProviderSource>,
+    ) -> Self {
+        let python_provider = Arc::new(PythonPackageDependencyInventoryProvider::new(
+            package_probe_runner,
+        ));
+        let managed_runtime_provider = Arc::new(ManagedRuntimeDependencyInventoryProvider::new(
+            managed_runtime_source,
+        ));
+        let runtime_feature_provider = Arc::new(RuntimeFeatureDependencyInventoryProvider::new(
+            runtime_feature_source,
+        ));
+        let device_toolchain_provider = Arc::new(DeviceToolchainDependencyInventoryProvider::new(
+            device_toolchain_source,
+        ));
+        let system_package_provider = Arc::new(SystemPackageDependencyInventoryProvider::new(
+            system_package_source,
+        ));
+        Self::new(Arc::new(
+            DependencyInventoryDispatchProvider::new_with_managed_runtime_and_runtime_feature_and_device_toolchain(
+                python_provider,
+                managed_runtime_provider,
+                runtime_feature_provider,
+                device_toolchain_provider,
+                system_package_provider,
             ),
         ))
     }

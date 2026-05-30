@@ -17926,6 +17926,47 @@ Worker rules:
   - Remaining follow-up: add the typed system-package inventory provider that
     consumes only validated source snapshots and initially receives a
     not-implemented/empty host source in production composition.
+- 2026-05-30 typed system-package inventory provider slice:
+  - Slice scope: embedded-runtime provider/source/dispatch integration only.
+    Allowed files: `crates/pantograph-embedded-runtime/src/dependency_inventory_system_package.rs`,
+    `crates/pantograph-embedded-runtime/src/dependency_inventory_system_package_source.rs`,
+    `crates/pantograph-embedded-runtime/src/dependency_inventory.rs`,
+    `crates/pantograph-embedded-runtime/src/dependency_inventory_dispatch.rs`,
+    `crates/pantograph-embedded-runtime/src/dependency_inventory_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`, the embedded-runtime
+    source README, and this plan record.
+  - Implementation: added `SystemPackageDependencyInventoryProvider` that
+    consumes `SystemPackageProviderSourceSnapshot` through
+    `ValidatedSystemPackageProviderSourceSnapshot`, matches selected
+    system-package bindings by explicit typed package/package-manager/platform/
+    architecture details, maps source states to provider-owned observation
+    rows, preserves bounded alternatives, and emits typed invalid diagnostics
+    for missing details or mismatched binding constraints. Added the
+    `SystemPackageProviderSource` contract plus a default
+    `NotImplementedSystemPackageProviderSource` for standalone composition
+    until real host inventory exists.
+  - Dispatch/composition result: system-package selected bindings now route to
+    the typed provider under test/standalone composition; default standalone
+    wiring uses the not-implemented source, while tests can inject a ready or
+    unavailable source snapshot. Non-standalone builds still fail closed through
+    the existing not-implemented path unless a source-backed provider is
+    compiled into that composition.
+  - No-fallback/no-legacy result: the provider does not execute package-manager
+    commands, parse shell output, inspect graph paths, infer package names from
+    generic requirement names, rank scheduler candidates, or reuse Python probe
+    behavior. Package-manager version constraints are rejected as typed invalid
+    rows until the system-package source contract can prove those facts.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --features standalone`, and
+    `git diff --check`. The only warning observed remains the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: decide whether the next milestone step is a real host
+    system-package source design or returning to scheduler/runtime-host
+    execution slices.
 
 ### Traceability Links
 

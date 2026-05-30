@@ -19,6 +19,7 @@ use pantograph_dependency_planning::{
     DependencyRequirementBinding, DependencyRequirementKind, DependencyRequirementsId,
     DeviceToolchainProviderSourceRow, DeviceToolchainProviderSourceSnapshot,
     RuntimeFeatureProviderSourceRow, RuntimeFeatureProviderSourceSnapshot,
+    SystemPackageProviderSourceRow, SystemPackageProviderSourceSnapshot,
     ValidatedDependencyEnvironmentRequest,
 };
 
@@ -26,6 +27,9 @@ use crate::dependency_inventory::DependencyInventoryService;
 use crate::dependency_inventory_device_toolchain_source::DeviceToolchainProviderSource;
 use crate::dependency_inventory_managed_runtime::ManagedRuntimeSnapshotSource;
 use crate::dependency_inventory_runtime_feature_source::RuntimeFeatureProviderSource;
+use crate::dependency_inventory_system_package_source::{
+    SystemPackageProviderSource, SystemPackageProviderSourceError,
+};
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
 use crate::package_readiness_provider::{
     PackageReadinessEnvironmentSelector, PackageReadinessProbeFailure,
@@ -332,6 +336,162 @@ async fn inventory_service_routes_device_toolchain_payloads_with_alternatives() 
     );
 }
 
+#[tokio::test]
+async fn inventory_service_routes_system_package_payloads_through_source_snapshot() {
+    let system_package_binding_id =
+        DependencyBindingId::parse("apt.libcuda").expect("system package binding id");
+    let request = validated_request_with_selected_binding_id(system_package_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(system_package_binding_id.clone());
+    payload.requirements.push(system_package_requirement_row());
+    payload.bindings.push(system_package_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory = DependencyInventoryService::from_package_probe_runner_and_managed_runtime_and_runtime_feature_and_device_toolchain_and_system_package_sources(
+        probe_runner.clone(),
+        Arc::new(FakeManagedRuntimeSnapshotSource::ready()),
+        Arc::new(FakeRuntimeFeatureProviderSource::ready()),
+        Arc::new(FakeDeviceToolchainProviderSource::with_unavailable_mps_alternative()),
+        Arc::new(FakeSystemPackageProviderSource::ready()),
+    );
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot.result.readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(probe_runner.requests().len(), 1);
+    let system_package_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == system_package_binding_id)
+        .expect("system package binding status");
+    assert_eq!(
+        system_package_status.state,
+        DependencyBindingStatusState::Ready
+    );
+}
+
+#[tokio::test]
+async fn inventory_service_reports_not_implemented_for_system_package_without_host_source() {
+    let system_package_binding_id =
+        DependencyBindingId::parse("apt.libcuda").expect("system package binding id");
+    let request = validated_request_with_selected_binding_id(system_package_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(system_package_binding_id.clone());
+    payload.requirements.push(system_package_requirement_row());
+    payload.bindings.push(system_package_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory = DependencyInventoryService::from_package_probe_runner_and_managed_runtime_and_runtime_feature_and_device_toolchain_sources(
+        probe_runner.clone(),
+        Arc::new(FakeManagedRuntimeSnapshotSource::ready()),
+        Arc::new(FakeRuntimeFeatureProviderSource::ready()),
+        Arc::new(FakeDeviceToolchainProviderSource::with_unavailable_mps_alternative()),
+    );
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot.result.readiness_state,
+        DependencyEnvironmentReadinessState::NotImplemented
+    );
+    assert_eq!(probe_runner.requests().len(), 1);
+    let system_package_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == system_package_binding_id)
+        .expect("system package binding status");
+    assert_eq!(
+        system_package_status.state,
+        DependencyBindingStatusState::NotImplemented
+    );
+    assert_eq!(
+        system_package_status
+            .diagnostics
+            .first()
+            .map(|diagnostic| diagnostic.code.clone()),
+        Some(DependencyPlanningDiagnosticCode::NotImplemented)
+    );
+}
+
+#[tokio::test]
+async fn inventory_service_reports_unavailable_when_system_package_source_is_unavailable() {
+    let system_package_binding_id =
+        DependencyBindingId::parse("apt.libcuda").expect("system package binding id");
+    let request = validated_request_with_selected_binding_id(system_package_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(system_package_binding_id.clone());
+    payload.requirements.push(system_package_requirement_row());
+    payload.bindings.push(system_package_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory = DependencyInventoryService::from_package_probe_runner_and_managed_runtime_and_runtime_feature_and_device_toolchain_and_system_package_sources(
+        probe_runner,
+        Arc::new(FakeManagedRuntimeSnapshotSource::ready()),
+        Arc::new(FakeRuntimeFeatureProviderSource::ready()),
+        Arc::new(FakeDeviceToolchainProviderSource::with_unavailable_mps_alternative()),
+        Arc::new(FakeUnavailableSystemPackageProviderSource),
+    );
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot.result.readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    let system_package_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == system_package_binding_id)
+        .expect("system package binding status");
+    assert_eq!(
+        system_package_status.state,
+        DependencyBindingStatusState::Unavailable
+    );
+    assert_eq!(
+        system_package_status
+            .diagnostics
+            .first()
+            .map(|diagnostic| diagnostic.code.clone()),
+        Some(DependencyPlanningDiagnosticCode::RuntimeUnavailable)
+    );
+}
+
 fn work_item(request: ValidatedDependencyEnvironmentRequest) -> DependencyReadinessWorkItem {
     DependencyReadinessWorkItem::new(
         DependencyReadinessWorkItemProvenance::new(
@@ -497,6 +657,35 @@ fn device_toolchain_binding_row() -> DependencyRequirementBinding {
     .expect("device toolchain binding row")
 }
 
+fn system_package_requirement_row() -> DependencyRequirement {
+    serde_json::from_value(serde_json::json!({
+        "name": "libcuda",
+        "kind": "system_package",
+        "system_package": {
+            "package_id": "libcuda",
+            "package_manager_id": "apt",
+            "platform_id": "linux-x86_64",
+            "architecture": "x86_64"
+        }
+    }))
+    .expect("system package requirement row")
+}
+
+fn system_package_binding_row() -> DependencyRequirementBinding {
+    serde_json::from_value(serde_json::json!({
+        "binding_id": "apt.libcuda",
+        "requirement_name": "libcuda",
+        "environment_kind": "system_package",
+        "system_package": {
+            "package_id": "libcuda",
+            "package_manager_id": "apt",
+            "platform_id": "linux-x86_64",
+            "architecture": "x86_64"
+        }
+    }))
+    .expect("system package binding row")
+}
+
 #[derive(Debug)]
 struct FakePackageProbeRunner {
     outcome: PackageReadinessProbeOutcome,
@@ -517,6 +706,14 @@ struct FakeRuntimeFeatureProviderSource {
 struct FakeDeviceToolchainProviderSource {
     snapshot: DeviceToolchainProviderSourceSnapshot,
 }
+
+#[derive(Debug)]
+struct FakeSystemPackageProviderSource {
+    snapshot: SystemPackageProviderSourceSnapshot,
+}
+
+#[derive(Debug)]
+struct FakeUnavailableSystemPackageProviderSource;
 
 impl FakeRuntimeFeatureProviderSource {
     fn ready() -> Self {
@@ -628,6 +825,38 @@ impl FakeDeviceToolchainProviderSource {
     }
 }
 
+impl FakeSystemPackageProviderSource {
+    fn ready() -> Self {
+        Self {
+            snapshot: SystemPackageProviderSourceSnapshot {
+                contract_version: 1,
+                rows: vec![SystemPackageProviderSourceRow {
+                    package_id: pantograph_dependency_planning::SystemPackageSourceId::parse(
+                        "libcuda",
+                    )
+                    .expect("package id"),
+                    package_manager_id:
+                        pantograph_dependency_planning::SystemPackageManagerSourceId::parse("apt")
+                            .expect("package manager id"),
+                    platform_id: pantograph_dependency_planning::HostPlatformSourceId::parse(
+                        "linux-x86_64",
+                    )
+                    .expect("platform id"),
+                    architecture: Some("x86_64".to_string()),
+                    installed_version: Some("550.54".to_string()),
+                    state: DependencyProviderSourceState::Ready,
+                    freshness:
+                        pantograph_dependency_planning::DependencyInventoryObservationFreshness::Fresh,
+                    checked_at_ms: None,
+                    diagnostics: Vec::new(),
+                    alternatives: Vec::new(),
+                }],
+                diagnostics: Vec::new(),
+            },
+        }
+    }
+}
+
 impl FakeManagedRuntimeSnapshotSource {
     fn ready() -> Self {
         Self {
@@ -684,6 +913,26 @@ impl RuntimeFeatureProviderSource for FakeRuntimeFeatureProviderSource {
 impl DeviceToolchainProviderSource for FakeDeviceToolchainProviderSource {
     async fn snapshot(&self) -> Result<DeviceToolchainProviderSourceSnapshot, String> {
         Ok(self.snapshot.clone())
+    }
+}
+
+#[async_trait]
+impl SystemPackageProviderSource for FakeSystemPackageProviderSource {
+    async fn snapshot(
+        &self,
+    ) -> Result<SystemPackageProviderSourceSnapshot, SystemPackageProviderSourceError> {
+        Ok(self.snapshot.clone())
+    }
+}
+
+#[async_trait]
+impl SystemPackageProviderSource for FakeUnavailableSystemPackageProviderSource {
+    async fn snapshot(
+        &self,
+    ) -> Result<SystemPackageProviderSourceSnapshot, SystemPackageProviderSourceError> {
+        Err(SystemPackageProviderSourceError::Unavailable(
+            "system package source unavailable".to_string(),
+        ))
     }
 }
 
