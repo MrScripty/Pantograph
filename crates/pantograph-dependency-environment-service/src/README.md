@@ -9,6 +9,7 @@ trait, not-implemented provider, and typed service errors.
 | ----------- | ----------- |
 | `lib.rs` | Public facade, provider trait, no-I/O provider, and error type. |
 | `snapshot.rs` | Synchronous path-free readiness snapshot provider. |
+| `work_queue.rs` | Typed readiness producer work-item DTOs and in-memory queue contract. |
 
 ## Problem
 Workflow-service needs a backend-owned service contract that can be wired to
@@ -27,6 +28,11 @@ Keep the facade and simple no-I/O provider in `lib.rs`. Put the readiness
 snapshot provider in `snapshot.rs` because it is the first production-oriented
 provider contract and owns separate matching/fail-closed behavior.
 
+Put readiness producer work items in `work_queue.rs`. The queue is synchronous
+and in-memory for this slice; it establishes the shared DTO and deterministic
+dedupe/dequeue behavior before workflow-service emits items or embedded-runtime
+drains them.
+
 The snapshot provider keys readiness by canonical stable request identity:
 action, path-free dependency identity key, dependency requirements id, and
 request environment ref. It validates the producer planning request before
@@ -40,6 +46,8 @@ the dependency environment requirements.
   new workflow runs with identical dependency requirements.
 - Make the facade async now: rejected because the current implementation has no
   awaited I/O.
+- Record snapshot provider misses as producer work: rejected because provider
+  reads must remain side-effect free from the caller's perspective.
 
 ## Invariants
 - Service methods validate provider output before returning.
@@ -49,11 +57,16 @@ the dependency environment requirements.
   return validated non-ready results with typed diagnostics.
 - Snapshot provider never probes filesystem, package managers, Pumas, runtime
   hosts, or executable load targets.
+- Readiness work items carry scheduler/task provenance and validated requests;
+  they do not represent readiness success and do not invoke probes by
+  themselves.
 
 ## Revisit Triggers
 - Production Pumas provider implementation is added.
 - Service methods need async provider I/O.
 - Scheduler readiness/admission projection becomes part of this crate.
+- Readiness work requires durable queue storage, distributed leasing, or
+  restart recovery.
 
 ## Dependencies
 **Internal:** `pantograph-dependency-planning`.
@@ -93,6 +106,8 @@ let _service = DependencyEnvironmentService::new(provider);
 - The facade does not own background tasks, retries, or shutdown.
 - Snapshot insertion is synchronous and deterministic; async producers must own
   their task lifecycle outside this crate and only publish validated snapshots.
+- Work queue insertion and dequeue are synchronous and deterministic; async
+  producer tasks must be owned outside this crate.
 
 ## Structured Producer Contract
 - The facade produces shared dependency-environment result contracts.

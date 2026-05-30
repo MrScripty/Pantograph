@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 mod snapshot;
+mod work_queue;
 
 use pantograph_dependency_planning::{
     DependencyEnvironmentAction, DependencyEnvironmentFailureState,
@@ -21,6 +22,13 @@ use pantograph_dependency_planning::{
 pub use snapshot::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
     DependencyEnvironmentReadinessSnapshotStatus, DependencyEnvironmentSnapshotStoreError,
+};
+pub use work_queue::{
+    DependencyReadinessCancellationScopeId, DependencyReadinessDiagnosticContext,
+    DependencyReadinessFreshnessPolicy, DependencyReadinessTaskId, DependencyReadinessWorkItem,
+    DependencyReadinessWorkItemProvenance, DependencyReadinessWorkQueue,
+    DependencyReadinessWorkQueueError, DependencyReadinessWorkQueueEvent,
+    DependencyReadinessWorkflowRunId, DependencyReadinessWorkflowSessionId,
 };
 
 /// Fallible dependency-environment service errors.

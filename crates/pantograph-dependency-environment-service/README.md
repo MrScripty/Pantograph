@@ -13,7 +13,7 @@ legacy path-shaped model dependency resolvers.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `Cargo.toml` | Crate manifest and direct dependency ownership. |
-| `src/` | Public service facade, provider trait, snapshot provider, typed errors, and source README. |
+| `src/` | Public service facade, provider trait, snapshot provider, readiness work queue, typed errors, and source README. |
 | `tests/` | Public API contract tests for the no-I/O service boundary. |
 
 ## Problem
@@ -48,6 +48,15 @@ its producer planning request before insertion, but caller context such as a
 workflow run id is not part of the readiness key because it does not change the
 dependency environment requirements.
 
+The production producer source is represented by `DependencyReadinessWorkQueue`
+and `DependencyReadinessWorkItem`. Workflow-service or scheduler emits work
+items when runtime tasks enter `WaitingDependencyReadiness`; infrastructure or
+embedded-runtime lifecycle owners drain the queue and publish validated
+snapshots. Work items carry task/run/session provenance, a validated
+dependency-environment request, bounded diagnostic context, retry/freshness
+policy, and cancellation scope without making the snapshot provider record
+misses.
+
 ## Alternatives Rejected
 - Reuse node-engine `ModelDependencyRequest`: rejected because it preserves
   path-shaped legacy behavior.
@@ -57,6 +66,12 @@ dependency environment requirements.
 - Key readiness snapshots by full planning request: rejected because caller
   context is provenance data and would prevent one validated readiness snapshot
   from serving later runs with identical dependency requirements.
+- Use snapshot provider misses as the producer work source: rejected because
+  the provider must stay read-only from the caller's perspective and must not
+  hide write side effects in dependency-readiness resolution.
+- Let the producer scan frontend, graph editor, technical-fit preview, or
+  runtime-host load-target state: rejected because producer work must come from
+  backend scheduler task state and validated dependency-environment requests.
 
 ## Invariants
 - All public service inputs are validated dependency-planning contracts.
@@ -69,6 +84,9 @@ dependency environment requirements.
   produce validated non-ready diagnostic results.
 - Snapshot provider does not probe Pumas, package managers, filesystems,
   runtimes, or executable load targets.
+- Readiness work queue items are task-correlated producer inputs, not readiness
+  proof. They do not publish snapshots, probe hosts, or make dependency
+  readiness successful.
 
 ## Revisit Triggers
 - Pumas exposes concrete dependency-environment resolve/check/install APIs.
@@ -77,6 +95,8 @@ dependency environment requirements.
 - Scheduler admission begins consuming dependency readiness proofs from service
   results.
 - A second provider implementation needs async I/O in the provider boundary.
+- Readiness work needs durable persistence, leasing across processes, or
+  restart recovery beyond the in-memory queue contract.
 
 ## Dependencies
 **Internal:** `pantograph-dependency-planning` for request/result contracts.
@@ -118,6 +138,10 @@ let service = DependencyEnvironmentService::new(provider);
 - Snapshot lifecycle: producers outside this crate own async probing,
   cancellation, retries, tracing, and shutdown. This crate accepts only
   already-validated synchronous snapshots.
+- Work queue lifecycle: backend application owners enqueue validated work
+  items; infrastructure or embedded-runtime lifecycle owners drain them. Queue
+  items are not provider misses and must not be derived from frontend or legacy
+  path data.
 - Error behavior: invalid provider output is returned as a typed service error;
   missing provider behavior is represented as a validated not-implemented
   result.

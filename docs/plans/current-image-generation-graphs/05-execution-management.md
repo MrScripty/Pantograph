@@ -16794,6 +16794,25 @@ Worker rules:
     `ModelDependencyRequest`/`ModelRefV2`/path adaptation. Active scheduler
     state scanning remains available only as a later reconciliation/audit loop,
     not as the production source of work.
+- 2026-05-29 dependency-readiness work-item contract slice completed:
+  - Slice scope: shared work-item DTOs and in-memory queue contract in
+    `pantograph-dependency-environment-service`, focused queue/provider tests,
+    crate README/source README updates, and plan ledger updates.
+  - No-fallback/no-legacy result: the queue accepts only validated
+    dependency-environment requests and backend task/run/session provenance.
+    It does not derive work from provider misses, frontend/graph/editor state,
+    technical-fit preview facts, runtime-host load targets, reduced execution
+    plans, `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields.
+  - Verification: `cargo test -p pantograph-dependency-environment-service --
+    --nocapture`; `cargo check -p pantograph-dependency-environment-service`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-embedded-runtime`; `cargo fmt -p
+    pantograph-dependency-environment-service -- --check`.
+  - Caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning.
+  - Remaining follow-up: wire one shared queue through composition, then emit
+    one work item when each runtime task enters `WaitingDependencyReadiness`
+    before adding producer-side host probes and snapshot publication.
 
 ### Traceability Links
 

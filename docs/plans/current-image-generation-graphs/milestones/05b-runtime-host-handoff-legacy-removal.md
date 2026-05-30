@@ -795,3 +795,26 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   source of work, and technical-fit preview facts, graph/editor data, reduced
   execution plans, runtime-host load targets, `ModelDependencyRequest`,
   `ModelRefV2`, and path/model-path fields remain forbidden readiness sources.
+- 2026-05-29 dependency-readiness work-item contract slice completed. Smallest
+  useful vertical slice: define the shared backend-owned work-item DTO and
+  in-memory queue contract before wiring scheduler emission or producer
+  draining. Allowed write set: `pantograph-dependency-environment-service`
+  public API/source README/tests plus this plan and execution-management
+  ledger. No-fallback/no-legacy result: work items require validated
+  `DependencyEnvironmentRequest` values and task/run/session provenance, do not
+  publish snapshots, do not probe hosts, do not record provider misses, and do
+  not read frontend/graph/editor/technical-fit/runtime-host/legacy path data.
+  Added `DependencyReadinessWorkItem`,
+  `DependencyReadinessWorkItemProvenance`, typed provenance/cancellation ids,
+  `DependencyReadinessFreshnessPolicy`,
+  `DependencyReadinessDiagnosticContext`, and `DependencyReadinessWorkQueue`
+  with FIFO dequeue and dedupe by provenance plus validated request key.
+  Verification passed: `cargo test -p pantograph-dependency-environment-service
+  -- --nocapture`; `cargo check -p pantograph-dependency-environment-service`;
+  `cargo check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-embedded-runtime`; `cargo fmt -p
+  pantograph-dependency-environment-service -- --check`. Verification caveat:
+  workflow-service still emits the known unused
+  `set_active_run_execution_plan` warning. Remaining follow-up: compose this
+  queue through workflow-service/embedded-runtime construction, then emit work
+  items exactly when runtime tasks enter `WaitingDependencyReadiness`.
