@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use pantograph_dependency_planning::{
     DependencyEnvironmentRef, DependencyPlanningContractError, DependencyReadinessProofEnvelope,
     DeviceIntentId, PumasModelRef, RuntimeIntentId,
@@ -91,28 +90,6 @@ impl TryFrom<WorkflowRuntimeDispatchCandidateFactBundle>
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WorkflowRuntimeDispatchCandidateFactSourceKind {
-    PumasPackageFacts,
-    RuntimeCapabilityFacts,
-    ResourceReservationFacts,
-}
-
-#[async_trait]
-pub trait WorkflowRuntimeDispatchCandidateFactSource: Send + Sync {
-    fn source_kind(&self) -> WorkflowRuntimeDispatchCandidateFactSourceKind;
-
-    async fn collect_candidate_facts(
-        &self,
-        task: &WorkflowSchedulerTask,
-        ready_record: &SchedulerTaskStateRecord,
-        readiness_proof: &DependencyReadinessProofEnvelope,
-    ) -> Result<
-        ValidatedWorkflowRuntimeDispatchCandidateFactBundle,
-        WorkflowRuntimeDispatchCandidateFactSourceError,
-    >;
-}
-
 #[derive(Debug, Default)]
 pub(crate) struct NoRuntimeDispatchCandidatesProvider;
 
@@ -166,15 +143,6 @@ pub(crate) fn runtime_dispatch_selection_request(
 pub enum WorkflowRuntimeDispatchCandidateProviderError {
     #[error("runtime dispatch candidate provider failed: {message}")]
     Failed { message: String },
-}
-
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum WorkflowRuntimeDispatchCandidateFactSourceError {
-    #[error("runtime dispatch candidate fact source failed: {message}")]
-    Failed { message: String },
-    #[error("runtime dispatch candidate fact source returned invalid facts")]
-    Contract(#[from] WorkflowRuntimeDispatchCandidateFactBundleError),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

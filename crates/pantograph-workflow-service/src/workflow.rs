@@ -145,9 +145,8 @@ pub(crate) use self::runtime_dispatch_selection::{
 pub use self::runtime_dispatch_selection::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
-    WorkflowRuntimeDispatchCandidateFactSource, WorkflowRuntimeDispatchCandidateFactSourceError,
-    WorkflowRuntimeDispatchCandidateFactSourceKind, WorkflowRuntimeDispatchCandidateProvider,
-    WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+    WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
+    WorkflowRuntimeDispatchCandidateSet,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 pub(crate) use self::runtime_host_task_input_mapping::{

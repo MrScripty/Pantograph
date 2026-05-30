@@ -110,16 +110,12 @@ candidates and bounded source diagnostics. Workflow-service forwards those
 diagnostics into the scheduler selection request so missing Pumas facts,
 runtime capability facts, reservation facts, or resource-fit facts can be
 reported without fabricating candidates.
-The staged production-provider contract introduces an async source-provider
-boundary and a validated path-free candidate-fact bundle before candidate
-mapping. Source providers own Pumas, runtime capability, and resource
-reservation/fitting facts; the bundle currently forwards diagnostics only and
-does not emit production candidates until every required canonical fact source
-is wired.
-These contracts and the runtime dispatch candidate-provider injection point are
-public workflow-service API so embedded-runtime composition can provide
-concrete source/provider implementations without moving Pumas or resource-owner
-logic into workflow-service.
+The staged production-provider contract introduces a validated path-free
+candidate-fact bundle before candidate mapping. Embedded-runtime composition
+owns the concrete async Pumas, runtime capability, and resource
+reservation/fitting source providers; workflow-service exposes only the final
+bundle/provider API and currently forwards diagnostics without emitting
+production candidates until every required canonical fact source is wired.
 When an explicit canonical dispatch candidate provider and runtime-host port
 are configured, session execution may run a ready runtime task through
 `pantograph-scheduler` dispatch selection, dispatch the selected handoff

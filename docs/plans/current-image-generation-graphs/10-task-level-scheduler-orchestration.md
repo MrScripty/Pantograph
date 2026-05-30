@@ -2186,21 +2186,26 @@ values, runtime-host internals, and arbitrary JSON.
 
 Implementation order:
 
-1. Define async source-provider traits and the validated candidate-fact bundle
-   without emitting non-empty production candidates.
-   2026-05-30 slice completed: workflow-service now has the staged async
-   source-provider trait/source-kind enum and validated path-free
-   candidate-fact bundle. The bundle validates typed facts and rejects
-   path-carrying model refs or duplicate candidate ids, but its only current
-   conversion into the dispatch candidate set preserves diagnostics and emits
-   zero candidates until all required source adapters are wired.
-   2026-05-30 API boundary follow-up completed: these source/bundle/provider
+1. Define the validated final candidate-fact bundle and candidate-provider
+   injection point without emitting non-empty production candidates.
+   2026-05-30 slice completed: workflow-service now has the staged validated
+   path-free candidate-fact bundle. The bundle validates typed facts and
+   rejects path-carrying model refs or duplicate candidate ids, but its only
+   current conversion into the dispatch candidate set preserves diagnostics
+   and emits zero candidates until all required source adapters are wired.
+   2026-05-30 API boundary follow-up completed: the final bundle/provider
    contracts and the runtime dispatch candidate-provider injection point are
-   now public workflow-service API so embedded-runtime composition can
-   implement concrete Pumas/resource source adapters without moving
-   infrastructure access into workflow-service.
-2. Adapt the staged Pumas owner-API package-facts bridge into the Pumas source
-   provider and preserve missing/unsupported/stale facts as source diagnostics.
+   now public workflow-service API so embedded-runtime composition can inject
+   a concrete final provider without moving infrastructure access into
+   workflow-service.
+   2026-05-30 source ownership correction: concrete async source-provider
+   traits belong in embedded-runtime composition, not workflow-service API. A
+   Pumas-only source cannot truthfully return the final bundle because final
+   candidate facts require runtime capability plus real reservation/resource
+   fit evidence from other owners.
+2. Adapt the staged Pumas owner-API package-facts bridge into an
+   embedded-runtime Pumas source provider and preserve
+   missing/unsupported/stale facts as source diagnostics.
 3. Add runtime-registry capability source projection.
 4. Add real resource-owner reservation/resource-fit source projection.
 5. Map the validated bundle into `SchedulerDispatchCandidate` values only when

@@ -18314,9 +18314,13 @@ Worker rules:
     targets, local paths, selector summaries, display rows, graph-authored
     fallback values, runtime-host internals, or arbitrary JSON.
   - Implementation order:
-    1. Define the async source-provider traits and validated bundle DTO in the
-       composition layer without emitting non-empty production candidates.
-    2. Adapt the staged Pumas bridge into the Pumas source provider and prove
+    1. Define the validated final bundle DTO in workflow-service without
+       emitting non-empty production candidates. Concrete async source-provider
+       traits are embedded-runtime composition concerns, not workflow-service
+       API, because a Pumas-only source cannot truthfully provide final
+       reservation/resource-fit facts.
+    2. Adapt the staged Pumas bridge into an embedded-runtime Pumas source
+       provider and prove
        missing/unsupported/stale Pumas facts become source diagnostics.
     3. Add runtime-registry capability source projection.
     4. Add real resource-owner reservation/resource-fit source projection.
@@ -18347,12 +18351,12 @@ Worker rules:
     `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
     `crates/pantograph-workflow-service/src/workflow/README.md`,
     `10-task-level-scheduler-orchestration.md`, and this execution log.
-  - Implementation: added the staged async source-provider trait, source-kind
-    enum, validated path-free candidate-fact bundle DTO, candidate-fact row
-    DTO, validation errors, and a diagnostic-only conversion into the existing
-    `WorkflowRuntimeDispatchCandidateSet`. The conversion intentionally emits
-    no `SchedulerDispatchCandidate` values until Pumas, runtime capability,
-    and real resource reservation/resource-fit sources are wired.
+  - Implementation: added the validated path-free candidate-fact bundle DTO,
+    candidate-fact row DTO, validation errors, and a diagnostic-only
+    conversion into the existing `WorkflowRuntimeDispatchCandidateSet`. The
+    conversion intentionally emits no `SchedulerDispatchCandidate` values until
+    Pumas, runtime capability, and real resource reservation/resource-fit
+    sources are wired.
   - Test coverage: added focused unit tests proving path-free facts validate,
     path-carrying model refs are rejected, duplicate candidate ids are
     rejected, and a validated bundle does not emit candidates before the
@@ -18363,10 +18367,10 @@ Worker rules:
     paths, selector summaries, display rows, graph fallback values,
     `ModelRefV2`, reduced execution plans, frontend/Tauri state, or arbitrary
     JSON as dispatch authority.
-  - Standards/deviation note: the source-provider trait/source-kind enum are
-    staged behind scoped `dead_code` allowances because the next slices will
-    add the concrete Pumas, runtime capability, and resource source adapters.
-    The allowances must be removed when those adapters are wired.
+  - Standards/deviation note: the final bundle is staged without candidate
+    mapping because the next slices must add concrete Pumas, runtime
+    capability, and resource source adapters in the composition layer before
+    candidate creation is truthful.
   - Verification passed: `cargo fmt -- --check`,
     `cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
     `cargo check -p pantograph-workflow-service`, and `git diff --check`.
@@ -18383,8 +18387,8 @@ Worker rules:
     workflow-service. That would prevent embedded-runtime composition from
     implementing/injecting the concrete Pumas source without moving Pumas
     access into workflow-service.
-  - Slice scope: expose only the already-defined workflow-service runtime
-    dispatch source/bundle/provider contracts and provider injection point.
+  - Slice scope: expose only the already-defined workflow-service final
+    runtime dispatch bundle/provider contracts and provider injection point.
     Allowed files:
     `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
     `crates/pantograph-workflow-service/src/workflow.rs`,
@@ -18392,8 +18396,8 @@ Worker rules:
     `crates/pantograph-workflow-service/src/workflow/README.md`, and this
     execution log.
   - Implementation: made the candidate-fact bundle contract, validated
-    wrapper, source-provider trait, source-kind enum, source/provider errors,
-    candidate set, candidate provider trait, bundle contract version, and
+    wrapper, candidate set, candidate provider trait/provider error, bundle
+    contract version, and
     `WorkflowService::with_runtime_dispatch_candidate_provider` public API.
   - No-fallback/no-legacy result: this exposes contracts only. It does not add
     production candidates, source adapters, Pumas calls, runtime-registry
@@ -18412,7 +18416,42 @@ Worker rules:
     `set_active_run_execution_plan` dead-code warning in
     `pantograph-workflow-service`.
   - Remaining follow-up: implement the embedded-runtime Pumas source provider
-    against the now-public source/bundle contracts.
+    and have embedded-runtime composition adapt source-specific facts into the
+    now-public final bundle/provider contracts.
+- 2026-05-30 candidate-fact source ownership correction:
+  - Trigger: before implementing the Pumas source provider, the public
+    workflow-service source-provider trait was found to return the final
+    candidate-fact bundle. That shape would force a Pumas-only source either
+    to fabricate reservation/resource-fit facts or to return an empty final
+    bundle, which would complect source facts with final candidate assembly.
+  - Decision: workflow-service owns only the final path-free candidate-fact
+    bundle, runtime dispatch candidate set, candidate-provider trait, and
+    provider injection point. Concrete async source-provider traits and
+    source-specific DTOs belong in embedded-runtime composition, where Pumas,
+    runtime-registry, and resource-owner facts can remain separate until the
+    final bundle assembly step.
+  - Implementation: removed the generic workflow-service source-provider
+    trait/source-kind/source-error API while keeping the public final
+    bundle/provider boundary exposed for embedded-runtime injection.
+  - No-fallback/no-legacy result: this correction removes a misleading
+    contract and adds no candidates, Pumas calls, runtime-registry queries,
+    reservations, graph paths, `ModelRefV2`, reduced execution plans,
+    frontend/Tauri state, or summary-derived execution authority.
+  - Standards result: this better follows the simplicity/complection rule
+    because source-specific facts do not have to masquerade as final candidate
+    facts. It keeps workflow-service host-agnostic and leaves source lifecycle
+    ownership with embedded-runtime/resource composition.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: add the Pumas-specific async source provider and DTO
+    in embedded-runtime composition, then adapt its source facts plus future
+    runtime/resource sources into the final workflow-service candidate-fact
+    bundle.
 
 ### Traceability Links
 
