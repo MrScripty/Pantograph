@@ -17110,10 +17110,40 @@ Worker rules:
     `cargo fmt -- --check`; `git diff --check`.
   - Verification caveat: workflow-service still emits the known unused
     `set_active_run_execution_plan` warning in focused test/check commands.
-  - Remaining follow-up: real host package/runtime probe implementation still
-    needs to consume the check work item, resolve the seeded registry payload,
-    perform lifecycle-owned async probes, and publish fresh ready/unavailable
-    snapshots.
+- 2026-05-30 embedded dependency-readiness host package probe slice completed:
+  - Slice scope: `pantograph-embedded-runtime` now injects the process-backed
+    Python package probe runner into the dependency-readiness snapshot producer,
+    resolves each queued check work item through the seeded
+    `DependencyRequirementsRegistry`, and projects host package probe outcomes
+    into fresh dependency-environment snapshots. The projection is isolated in
+    `dependency_environment_probe_snapshot.rs`; the lifecycle module retains
+    task ownership, cancellation, polling, registry lookup, and publication.
+  - No-fallback/no-legacy result: producer-side probe inputs come only from the
+    validated `DependencyRequirementsPayload` selected binding rows seeded by
+    workflow-service. Unsupported requirement or binding kinds, invalid package
+    ids, missing registry payloads, stale registry payloads, Python-unavailable
+    probe failures, and process probe failures publish typed non-ready or
+    invalid dependency-environment diagnostics. The producer does not recover by
+    parsing requirements ids, reading graph/editor/frontend state, inspecting
+    model paths, reconstructing dependency rows, or invoking legacy dependency
+    preflight.
+  - Standards result: embedded-runtime now has a direct production dependency
+    on the shared dependency-planning contract crate because production probe
+    snapshots construct dependency-environment result DTOs. Projection logic and
+    lifecycle tests were split out of the lifecycle module to preserve
+    single-owner boundaries, keep async lifecycle orchestration separate from
+    sync DTO shaping, and keep touched Rust files within the standards
+    decomposition target.
+  - Verification passed: `cargo fmt -- --check`; `cargo test -p
+    pantograph-embedded-runtime dependency_readiness_lifecycle`; `cargo check
+    -p pantograph-embedded-runtime`.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning in focused test/check commands.
+  - Remaining follow-up: runtime-managed binary, system-package,
+    runtime-feature, and device-toolchain dependency environment probes still
+    require dedicated typed probe adapters before those requirement kinds can
+    publish ready evidence; they currently fail closed as typed invalid
+    producer diagnostics.
 
 ### Traceability Links
 

@@ -34,6 +34,7 @@ workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
 pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-dependency-environment-service = { path = "../pantograph-dependency-environment-service" }
+pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
 pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
 pantograph-runtime-host-contracts = { path = "../pantograph-runtime-host-contracts" }
@@ -66,5 +67,4 @@ tokio-stream = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 
 [dev-dependencies]
-pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
 tempfile.workspace = true
