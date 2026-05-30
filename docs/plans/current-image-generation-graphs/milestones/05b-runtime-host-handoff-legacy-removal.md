@@ -974,3 +974,25 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   payload when dependency-readiness source data is produced or consumed, and
   the embedded-runtime/infrastructure producer must resolve the registry entry
   before publishing unavailable/ready snapshots or running real probes.
+- 2026-05-29 dependency readiness producer registry-lookup slice completed.
+  Smallest useful vertical slice: require the embedded-runtime
+  dependency-readiness snapshot producer to receive the backend requirements
+  registry, resolve each queued work item's `DependencyRequirementsId` before
+  publishing the no-probe unavailable snapshot, and publish typed unavailable
+  diagnostics when the registry payload is missing, stale, invalid, or
+  mismatched. Allowed write set: dependency-environment snapshot diagnostic
+  helper, embedded-runtime producer lifecycle/tests/README and constructor call
+  sites, this milestone, and execution-management ledger.
+  No-fallback/no-legacy result: the producer no longer drains work solely from
+  the request id and never reconstructs requirement/binding payloads from
+  graph/editor/frontend state, technical-fit previews, reduced execution
+  plans, runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`, or
+  path/model-path fields. Verification passed: `cargo test -p
+  pantograph-embedded-runtime dependency_readiness_lifecycle`; `cargo test -p
+  pantograph-dependency-environment-service`; `cargo check -p
+  pantograph-uniffi`; `cargo fmt`; `git diff --check`. Verification caveat:
+  workflow-service still emits the known unused `set_active_run_execution_plan`
+  warning through dependent crate checks. Remaining follow-up: workflow-service
+  still needs a standards-compliant source of concrete validated
+  requirement/binding payloads to seed the registry before real host probes can
+  produce ready evidence.

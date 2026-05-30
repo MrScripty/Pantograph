@@ -2,8 +2,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use pantograph_dependency_environment_service::{
-    DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
-    DependencyReadinessWorkQueue,
+    resolve_dependency_requirements_payload, DependencyEnvironmentReadinessSnapshot,
+    DependencyEnvironmentReadinessSnapshotProvider, DependencyReadinessWorkQueue,
+    DependencyRequirementsRegistry,
 };
 
 use crate::EmbeddedRuntimeError;
@@ -27,10 +28,11 @@ impl Default for EmbeddedDependencyReadinessSnapshotProducerConfig {
 /// The current lifecycle is intentionally no-probe: it owns task startup and
 /// shutdown without publishing fabricated snapshots. Real package/runtime
 /// probes must be added behind this lifecycle in a later slice.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct EmbeddedDependencyReadinessSnapshotProducer {
     snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
     work_queue: Arc<DependencyReadinessWorkQueue>,
+    requirements_registry: Arc<dyn DependencyRequirementsRegistry>,
     config: EmbeddedDependencyReadinessSnapshotProducerConfig,
 }
 
@@ -39,10 +41,12 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
     pub fn new(
         snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
         work_queue: Arc<DependencyReadinessWorkQueue>,
+        requirements_registry: Arc<dyn DependencyRequirementsRegistry>,
     ) -> Self {
         Self {
             snapshot_provider,
             work_queue,
+            requirements_registry,
             config: EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
         }
     }
@@ -70,6 +74,7 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
 
         let snapshot_provider = self.snapshot_provider;
         let work_queue = self.work_queue;
+        let requirements_registry = self.requirements_registry;
         let poll_interval = self.config.poll_interval;
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
         let join_handle = runtime_handle.spawn(async move {
@@ -84,9 +89,19 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
                     }
                     _ = interval.tick() => {
                         while let Some(item) = work_queue.pop_next() {
-                            match DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item(&item)
-                                .and_then(|snapshot| snapshot_provider.insert_snapshot(snapshot))
-                            {
+                            let snapshot = match resolve_dependency_requirements_payload(
+                                requirements_registry.as_ref(),
+                                &item.request,
+                            ) {
+                                Ok(_payload) => DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item(&item),
+                                Err(error) => {
+                                    DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item_registry_error(
+                                        &item,
+                                        &error,
+                                    )
+                                }
+                            };
+                            match snapshot.and_then(|snapshot| snapshot_provider.insert_snapshot(snapshot)) {
                                 Ok(()) => {}
                                 Err(error) => {
                                     log::error!(
@@ -160,9 +175,12 @@ mod tests {
         DependencyReadinessTaskId, DependencyReadinessWorkItem,
         DependencyReadinessWorkItemProvenance, DependencyReadinessWorkQueue,
         DependencyReadinessWorkflowRunId, DependencyReadinessWorkflowSessionId,
+        DependencyRequirementsPayload, InMemoryDependencyRequirementsRegistry,
     };
     use pantograph_dependency_planning::{
-        DependencyEnvironmentReadinessState, ValidatedDependencyEnvironmentRequest,
+        DependencyEnvironmentReadinessState, DependencyEnvironmentRequest,
+        DependencyEnvironmentValidationState, DependencyPlanningDiagnosticCode,
+        DependencyRequirementsId, ValidatedDependencyEnvironmentRequest,
     };
 
     use super::{
@@ -174,9 +192,11 @@ mod tests {
     async fn producer_lifecycle_shutdown_is_idempotent_and_does_not_publish_snapshots() {
         let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
         let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+        let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
         let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
             snapshot_provider.clone(),
             work_queue.clone(),
+            requirements_registry,
         )
         .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
             poll_interval: Duration::from_millis(5),
@@ -199,10 +219,13 @@ mod tests {
         let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
         let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
         let request = validated_request();
+        let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
+        requirements_registry.insert_payload(requirements_payload(&request));
         work_queue.enqueue(work_item(request.clone()));
         let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
             snapshot_provider.clone(),
             work_queue.clone(),
+            requirements_registry,
         )
         .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
             poll_interval: Duration::from_millis(5),
@@ -222,15 +245,67 @@ mod tests {
         handle.shutdown().await;
     }
 
+    #[tokio::test]
+    async fn producer_publishes_typed_unavailable_snapshot_when_registry_payload_is_missing() {
+        let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
+        let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+        let request = validated_request();
+        let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
+        work_queue.enqueue(work_item(request.clone()));
+        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+            snapshot_provider.clone(),
+            work_queue.clone(),
+            requirements_registry,
+        )
+        .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: Duration::from_millis(5),
+        });
+        let handle = producer
+            .spawn(tokio::runtime::Handle::current())
+            .expect("producer should spawn");
+
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let result = snapshot_provider.resolve(&request);
+        assert!(work_queue.is_empty());
+        assert_eq!(
+            result.readiness_state,
+            DependencyEnvironmentReadinessState::Unavailable
+        );
+        assert_eq!(
+            result.validation_state,
+            DependencyEnvironmentValidationState::Unavailable
+        );
+        assert_eq!(
+            result
+                .diagnostics
+                .first()
+                .map(|diagnostic| diagnostic.code.clone()),
+            Some(DependencyPlanningDiagnosticCode::InternalError)
+        );
+        assert_eq!(
+            result
+                .diagnostics
+                .first()
+                .and_then(|diagnostic| diagnostic.field_path.as_deref()),
+            Some("dependency_environment.requirements_registry")
+        );
+        handle.shutdown().await;
+    }
+
     #[test]
     fn producer_rejects_zero_poll_interval() {
         let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
         let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
-        let producer =
-            EmbeddedDependencyReadinessSnapshotProducer::new(snapshot_provider, work_queue)
-                .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
-                    poll_interval: Duration::ZERO,
-                });
+        let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
+        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+            snapshot_provider,
+            work_queue,
+            requirements_registry,
+        )
+        .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: Duration::ZERO,
+        });
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
 
         let error = producer
@@ -252,11 +327,44 @@ mod tests {
     }
 
     fn validated_request() -> ValidatedDependencyEnvironmentRequest {
-        let value: serde_json::Value = serde_json::from_str(include_str!(
+        let mut request: DependencyEnvironmentRequest = serde_json::from_str(include_str!(
             "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_resolve_request.json"
         ))
         .expect("request fixture should parse");
-        ValidatedDependencyEnvironmentRequest::try_from(value)
+        request.dependency_requirements_id = Some(
+            DependencyRequirementsId::parse("tiny-sd:pytorch:linux-x86_64:torch-diffusers")
+                .expect("requirements id"),
+        );
+        ValidatedDependencyEnvironmentRequest::try_from(request)
             .expect("request fixture should validate")
+    }
+
+    fn requirements_payload(
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> DependencyRequirementsPayload {
+        let result = snapshot_provider_ready_result(request);
+        let result =
+            pantograph_dependency_planning::ValidatedDependencyEnvironmentResult::try_from(result)
+                .expect("ready result should validate");
+        DependencyRequirementsPayload::from_result(&result).expect("requirements payload")
+    }
+
+    fn snapshot_provider_ready_result(
+        request: &ValidatedDependencyEnvironmentRequest,
+    ) -> pantograph_dependency_planning::DependencyEnvironmentResult {
+        let mut result: pantograph_dependency_planning::DependencyEnvironmentResult =
+            serde_json::from_str(include_str!(
+                "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_ready_result.json"
+            ))
+            .expect("ready fixture should decode");
+        result.action = request.as_request().action;
+        result.identity_key = request.as_request().identity_key.clone();
+        result.dependency_requirements_id = request.as_request().dependency_requirements_id.clone();
+        result.selected_binding_ids = request
+            .as_request()
+            .identity_key
+            .selected_binding_ids
+            .clone();
+        result
     }
 }

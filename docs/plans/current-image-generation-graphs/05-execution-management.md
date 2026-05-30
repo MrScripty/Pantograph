@@ -16955,6 +16955,28 @@ Worker rules:
     then wire the embedded-runtime/infrastructure producer to resolve the
     registry entry before unavailable/ready snapshot publication and real host
     probes.
+- 2026-05-29 dependency readiness producer registry-lookup slice completed:
+  - Slice scope: embedded-runtime dependency-readiness snapshot producer now
+    receives the backend requirements registry, resolves each queued work item
+    by `DependencyRequirementsId` before publishing no-probe unavailable
+    snapshots, and publishes typed unavailable diagnostics when the payload is
+    missing, stale, invalid, or mismatched. Binding/standalone constructor
+    paths pass the same registry created by workflow dependency-readiness
+    composition.
+  - No-fallback/no-legacy result: producer lookup is registry-only. It does not
+    reconstruct requirement/binding payloads from requirements-id strings,
+    graph/editor/frontend state, technical-fit previews, reduced execution
+    plans, runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`,
+    or path/model-path fields.
+  - Verification: `cargo test -p pantograph-embedded-runtime
+    dependency_readiness_lifecycle`; `cargo test -p
+    pantograph-dependency-environment-service`; `cargo check -p
+    pantograph-uniffi`; `cargo fmt`; `git diff --check`.
+  - Caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning through dependent crate checks.
+  - Remaining follow-up: workflow-service still must seed the registry from a
+    concrete validated requirement/binding payload source before real host
+    probes can produce ready evidence.
 
 ### Traceability Links
 

@@ -111,11 +111,14 @@ Pumas-specific dependency resolution.
   an observed executable runtime. Use `pytorch` for the executable runtime and
   `pytorch.diffusers` only where a runtime-variant distinction is needed.
 - Standalone and binding-owned workflow services must be constructed with the
-  shared dependency-readiness snapshot provider and readiness work queue before
-  the service is wrapped in `Arc`. Embedded runtimes that own the matching
-  provider and queue must also own the tracked dependency-readiness snapshot
-  producer lifecycle. The current lifecycle drains queued work into explicit
-  unavailable snapshots and performs no host package/runtime probes; missing or
+  shared dependency-readiness snapshot provider, readiness work queue, and
+  dependency requirements registry before the service is wrapped in `Arc`.
+  Embedded runtimes that own the matching provider, queue, and registry must
+  also own the tracked dependency-readiness snapshot producer lifecycle. The
+  current lifecycle drains queued work into explicit unavailable snapshots only
+  after resolving the work item's `DependencyRequirementsId` through the
+  backend registry; missing or stale registry payloads publish typed non-ready
+  diagnostics. It performs no host package/runtime probes, and missing or
   unavailable snapshots must continue to fail closed until real host probes are
   wired.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved

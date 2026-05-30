@@ -11,6 +11,7 @@ use pantograph_dependency_planning::{
     ValidatedDependencyEnvironmentResult,
 };
 
+use crate::DependencyRequirementsRegistryError;
 use crate::{DependencyEnvironmentProvider, DependencyReadinessWorkItem};
 
 /// Freshness state for a backend-owned dependency-readiness snapshot.
@@ -72,6 +73,24 @@ impl DependencyEnvironmentReadinessSnapshot {
         Self::for_request(
             &item.request,
             producer_unavailable_result(&item.request),
+            DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+        )
+    }
+
+    /// Creates a fresh non-ready snapshot for queued work whose requirements
+    /// registry payload could not be resolved.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the generated snapshot is not internally
+    /// consistent with the queued request.
+    pub fn unavailable_for_work_item_registry_error(
+        item: &DependencyReadinessWorkItem,
+        error: &DependencyRequirementsRegistryError,
+    ) -> Result<Self, DependencyEnvironmentSnapshotStoreError> {
+        Self::for_request(
+            &item.request,
+            producer_requirements_registry_unavailable_result(&item.request, error),
             DependencyEnvironmentReadinessSnapshotStatus::Fresh,
         )
     }
@@ -303,6 +322,72 @@ fn producer_unavailable_result(
     )
 }
 
+fn producer_requirements_registry_unavailable_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+    error: &DependencyRequirementsRegistryError,
+) -> DependencyEnvironmentResult {
+    let (validation_state, diagnostic_code, message, field_path) = match error {
+        DependencyRequirementsRegistryError::MissingRequirementsId => (
+            DependencyEnvironmentValidationState::Invalid,
+            DependencyPlanningDiagnosticCode::InvalidRequest,
+            "Dependency readiness work item is missing a dependency requirements id.".to_string(),
+            "dependency_environment.request.dependency_requirements_id",
+        ),
+        DependencyRequirementsRegistryError::MissingPayload {
+            dependency_requirements_id,
+        } => (
+            DependencyEnvironmentValidationState::Unavailable,
+            DependencyPlanningDiagnosticCode::InternalError,
+            format!(
+                "Dependency requirements payload is missing for {dependency_requirements_id}."
+            ),
+            "dependency_environment.requirements_registry",
+        ),
+        DependencyRequirementsRegistryError::StalePayload {
+            dependency_requirements_id,
+        } => (
+            DependencyEnvironmentValidationState::Stale,
+            DependencyPlanningDiagnosticCode::ArtifactStale,
+            format!(
+                "Dependency requirements payload is stale for {dependency_requirements_id}."
+            ),
+            "dependency_environment.requirements_registry.status",
+        ),
+        DependencyRequirementsRegistryError::MismatchedPayload {
+            dependency_requirements_id,
+            field,
+        } => (
+            DependencyEnvironmentValidationState::Invalid,
+            DependencyPlanningDiagnosticCode::InvalidRequest,
+            format!(
+                "Dependency requirements payload for {dependency_requirements_id} does not match request field {field}."
+            ),
+            "dependency_environment.requirements_registry.identity",
+        ),
+        DependencyRequirementsRegistryError::InvalidPayload { field, reason } => (
+            DependencyEnvironmentValidationState::Invalid,
+            DependencyPlanningDiagnosticCode::InvalidRequest,
+            format!("Dependency requirements payload field is invalid: {field}: {reason}."),
+            "dependency_environment.requirements_registry.payload",
+        ),
+        DependencyRequirementsRegistryError::InvalidContract(error) => (
+            DependencyEnvironmentValidationState::Invalid,
+            DependencyPlanningDiagnosticCode::InvalidRequest,
+            format!("Dependency requirements payload contract is invalid: {error}."),
+            "dependency_environment.requirements_registry.payload",
+        ),
+    };
+    diagnostic_result_with_message(
+        request,
+        DependencyEnvironmentReadinessState::Unavailable,
+        validation_state,
+        DependencyEnvironmentFailureState::RequirementsUnavailable,
+        diagnostic_code,
+        message,
+        field_path,
+    )
+}
+
 fn diagnostic_result(
     request: &ValidatedDependencyEnvironmentRequest,
     readiness_state: DependencyEnvironmentReadinessState,
@@ -310,6 +395,26 @@ fn diagnostic_result(
     failure_state: DependencyEnvironmentFailureState,
     diagnostic_code: DependencyPlanningDiagnosticCode,
     message: &'static str,
+    field_path: &'static str,
+) -> DependencyEnvironmentResult {
+    diagnostic_result_with_message(
+        request,
+        readiness_state,
+        validation_state,
+        failure_state,
+        diagnostic_code,
+        message.to_string(),
+        field_path,
+    )
+}
+
+fn diagnostic_result_with_message(
+    request: &ValidatedDependencyEnvironmentRequest,
+    readiness_state: DependencyEnvironmentReadinessState,
+    validation_state: DependencyEnvironmentValidationState,
+    failure_state: DependencyEnvironmentFailureState,
+    diagnostic_code: DependencyPlanningDiagnosticCode,
+    message: String,
     field_path: &'static str,
 ) -> DependencyEnvironmentResult {
     let request = request.as_request();
@@ -336,7 +441,7 @@ fn diagnostic_result(
         diagnostics: vec![DependencyPlanningDiagnostic {
             code: diagnostic_code,
             severity: DependencyPlanningSeverity::Error,
-            message: message.to_string(),
+            message,
             model_id: Some(request.identity_key.model_ref.model_id.clone()),
             runtime_id: request
                 .identity_key
