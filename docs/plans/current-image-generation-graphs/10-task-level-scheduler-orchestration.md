@@ -2015,7 +2015,7 @@ must be carried forward from the admission step because a task in `Ready` state
 no longer has the `WaitingDependencyReadiness` context needed to rebuild the
 readiness request safely.
 
-Remaining production runtime dispatch work after this slice:
+Remaining production runtime dispatch work at that point:
 
 - Add the production provider that gathers canonical runtime/resource/Pumas
   dispatch candidates without ranking them.
@@ -2038,6 +2038,32 @@ runtime-host adapters mutate scheduler state directly. The helpers are not yet
 used by session execution for successful runtime dispatch; that remains
 blocked until production candidate collection, dispatch-selected handoff
 execution, and result persistence are wired in one validated slice.
+
+2026-05-30 injected runtime dispatch completion slice completed. Session
+execution now uses the runtime task start/completion helpers around
+`pantograph-scheduler` dispatch selection and the shared runtime-host execution
+port, then projects completed scheduler task results into requested workflow
+outputs. This removes the previous artificial non-empty-candidate blocker from
+the session runner, but does not add a production candidate source. The default
+runtime dispatch candidate provider still returns no candidates, so production
+runtime-containing runs fail closed through scheduler no-selection before any
+runtime-host call unless a real canonical provider is explicitly configured.
+The successful-path coverage uses a test-only provider with explicit typed
+runtime, device, model, reservation, and resource-fit facts from the saved
+executable validation snapshot and scheduler task intent. That test scaffolding
+must not become production policy, runtime discovery, or fallback synthesis.
+
+Remaining production runtime dispatch work after this slice:
+
+- Add the production provider that gathers canonical runtime/resource/Pumas
+  dispatch candidates without ranking them or reading graph paths, frontend
+  state, reduced execution plans, `ModelRefV2`, or runtime-host load targets.
+- Replace the temporary fail-closed terminal transition label/message used for
+  scheduler no-selection with task-state diagnostics that preserve the
+  scheduler dispatch-selection diagnostics.
+- Add durable recovery/replay/cancellation/duplicate-dispatch prevention and
+  reservation-release behavior before real multi-run inference workloads rely
+  on this in-memory completion path.
 
 ## Effects On Existing Systems
 

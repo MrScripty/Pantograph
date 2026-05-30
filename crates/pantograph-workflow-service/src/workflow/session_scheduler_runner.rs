@@ -24,7 +24,7 @@ use super::validation::{
 use super::{
     project_scheduler_task_results_to_outputs, runtime_dispatch_selection_request, WorkflowHost,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
@@ -40,7 +40,6 @@ struct AdmittedRuntimeTaskReadiness {
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
-    materialized_results: Vec<WorkflowSchedulerTaskResult>,
 }
 
 impl<'a> WorkflowSchedulerSessionRunner<'a> {
@@ -92,10 +91,14 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     pub(super) async fn run_until_runtime_dispatch_boundary(
         &self,
+        host: &impl WorkflowHost,
         session_id: &str,
         workflow_run_id: &str,
+        workflow_id: &str,
         inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
         summary: &WorkflowSchedulerTaskRunSummary,
+        started_at: Instant,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         if !summary.has_runtime_inference() {
             return Err(WorkflowServiceError::Internal(
@@ -108,10 +111,14 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         let admitted_runtime_readiness =
             self.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
         self.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
-        self.fail_runtime_dispatch_without_candidates(
+        self.run_runtime_dispatch_ready_tasks(
+            host,
             session_id,
             workflow_run_id,
+            workflow_id,
+            output_targets,
             summary,
+            started_at,
             &admitted_runtime_readiness,
         )
         .await
@@ -419,11 +426,15 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         Ok(())
     }
 
-    async fn fail_runtime_dispatch_without_candidates(
+    async fn run_runtime_dispatch_ready_tasks(
         &self,
+        host: &impl WorkflowHost,
         session_id: &str,
         workflow_run_id: &str,
+        workflow_id: &str,
+        output_targets: Option<&[WorkflowOutputTarget]>,
         summary: &WorkflowSchedulerTaskRunSummary,
+        started_at: Instant,
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let runtime_task_ids =
@@ -457,12 +468,6 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         "runtime dispatch candidate collection failed: {error}"
                     ))
                 })?;
-            if !candidates.is_empty() {
-                return Err(WorkflowServiceError::CapabilityViolation(format!(
-                    "runtime dispatch candidate collection returned {count} candidate(s), but runtime task running and result persistence are not wired in workflow-service yet",
-                    count = candidates.len()
-                )));
-            }
             let selection_request = runtime_dispatch_selection_request(
                 &dispatch_context.task,
                 readiness_proof,
@@ -473,6 +478,17 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     "runtime dispatch selection request failed: {error}"
                 ))
             })?;
+            let started_runtime_task = {
+                let mut store = self.service.session_store_guard()?;
+                self.service
+                    .scheduler_task_orchestrator
+                    .start_ready_runtime_task(&mut store, session_id, workflow_run_id, task_id)
+                    .map_err(|error| {
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler runtime task start failed: {error}"
+                        ))
+                    })?
+            };
             let execution_request_id =
                 format!("workflow-runtime-task:{}:{}", workflow_run_id, task_id);
             let dispatch_result = self
@@ -480,44 +496,71 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 .scheduler_task_orchestrator
                 .select_and_dispatch_runtime_task(
                     execution_request_id,
-                    &dispatch_context.task,
-                    &dispatch_context.materialized_results,
+                    &started_runtime_task.task,
+                    &started_runtime_task.materialized_results,
                     selection_request,
                 )
                 .await;
-            if let Err(error) = dispatch_result {
-                let mut store = self.service.session_store_guard()?;
-                self.service
-                    .scheduler_task_orchestrator
-                    .fail_runtime_dispatch_not_wired_for_active_run(
-                        &mut store,
-                        session_id,
-                        workflow_run_id,
-                    )
-                    .map_err(|error| {
-                        WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler runtime dispatch fail-closed transition failed: {error}"
-                        ))
-                    })?;
-                return Err(WorkflowServiceError::CapabilityViolation(format!(
-                    "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
-                    count = summary.runtime_inference_tasks
-                )));
+            match dispatch_result {
+                Ok(result) => {
+                    let mut store = self.service.session_store_guard()?;
+                    self.service
+                        .scheduler_task_orchestrator
+                        .complete_started_runtime_task(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                            &started_runtime_task,
+                            result,
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler runtime task completion failed: {error}"
+                            ))
+                        })?;
+                }
+                Err(error) => {
+                    let mut store = self.service.session_store_guard()?;
+                    self.service
+                        .scheduler_task_orchestrator
+                        .fail_runtime_dispatch_not_wired_for_active_run(
+                            &mut store,
+                            session_id,
+                            workflow_run_id,
+                        )
+                        .map_err(|error| {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "scheduler runtime dispatch fail-closed transition failed: {error}"
+                            ))
+                        })?;
+                    return Err(WorkflowServiceError::CapabilityViolation(format!(
+                        "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
+                        count = summary.runtime_inference_tasks
+                    )));
+                }
             }
         }
-        let mut store = self.service.session_store_guard()?;
-        self.service
-            .scheduler_task_orchestrator
-            .fail_runtime_dispatch_not_wired_for_active_run(&mut store, session_id, workflow_run_id)
+        let (task_graph, records) =
+            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
+        ensure_all_scheduler_tasks_completed(&records)?;
+        let results = {
+            let mut store = self.service.session_store_guard()?;
+            store.active_run_scheduler_task_results(session_id, workflow_run_id)?
+        };
+        let targets = scheduler_output_targets_for_run(host, workflow_id, output_targets).await?;
+        let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
             .map_err(|error| {
                 WorkflowServiceError::InvalidRequest(format!(
-                    "scheduler runtime dispatch fail-closed transition failed: {error}"
+                    "scheduler task output projection failed: {error}"
                 ))
             })?;
-        Err(WorkflowServiceError::CapabilityViolation(format!(
-            "runtime scheduler dispatch is not wired for {count} runtime inference task(s); runtime tasks must execute only through dispatch-selected scheduler runtime-host handoff",
-            count = summary.runtime_inference_tasks
-        )))
+        validate_host_output_bindings(&outputs, "outputs")?;
+        validate_requested_outputs_produced(&targets, &outputs)?;
+        Ok(WorkflowRunResponse {
+            workflow_run_id: workflow_run_id.to_string(),
+            outputs,
+            timing_ms: started_at.elapsed().as_millis(),
+        })
     }
 }
 
@@ -527,7 +570,7 @@ fn ready_runtime_dispatch_context(
     workflow_run_id: &str,
     task_id: &str,
 ) -> Result<ReadyRuntimeDispatchContext, WorkflowServiceError> {
-    let mut store = service.session_store_guard()?;
+    let store = service.session_store_guard()?;
     let (task_graph, records) = store
         .active_run_scheduler_task_state(session_id, workflow_run_id)?
         .ok_or_else(|| {
@@ -557,13 +600,7 @@ fn ready_runtime_dispatch_context(
             ))
         })?
         .clone();
-    let materialized_results =
-        store.active_run_scheduler_task_results(session_id, workflow_run_id)?;
-    Ok(ReadyRuntimeDispatchContext {
-        task,
-        ready_record,
-        materialized_results,
-    })
+    Ok(ReadyRuntimeDispatchContext { task, ready_record })
 }
 
 fn runtime_task_ids_in_state(

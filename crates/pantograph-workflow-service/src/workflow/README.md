@@ -37,7 +37,7 @@ public exports out of the service crate.
 | `session_lifecycle_api.rs` | Workflow stale cleanup, stale cleanup worker, keep-alive, and close-session facade methods. |
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, session-scoped queue controls, and first-pass GUI-admin queued-run cancel facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
-| `session_scheduler_runner.rs` | Active-run scheduler task progression for session execution; owns source materialization, allowlisted non-runtime task execution, task-result projection, runtime input readiness advancement to the dispatch boundary, and no-legacy whole-run host avoidance. |
+| `session_scheduler_runner.rs` | Active-run scheduler task progression for session execution; owns source materialization, allowlisted non-runtime task execution, runtime readiness advancement, scheduler dispatch-selected runtime-host execution when canonical candidates are configured, task-result persistence/projection, and no-legacy whole-run host avoidance. |
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `task_binding_resolution.rs` | Dependency-to-input binding resolution from materialized scheduler task results into validated scheduler-admissible task intents. |
 | `task_execution_classification.rs` | Single workflow-service boundary that maps immutable node type plus canonical node-contract facts into scheduler execution classes before orchestration or adapters choose a path. |
@@ -105,6 +105,14 @@ but runtime/device/model ranking remains in `pantograph-scheduler`. The
 default runtime dispatch candidate provider returns no candidates, causing a
 typed scheduler no-selection before any runtime-host dispatch rather than
 falling back to graph paths, node-engine launch, or reduced execution plans.
+When an explicit canonical dispatch candidate provider and runtime-host port
+are configured, session execution may run a ready runtime task through
+`pantograph-scheduler` dispatch selection, dispatch the selected handoff
+through the shared runtime-host execution port, persist the terminal result,
+and project requested outputs from scheduler task results. The provider must
+supply typed runtime, device, model, reservation, and resource-fit facts; the
+session runner must not synthesize those facts from graph paths, frontend
+state, reduced execution plans, `ModelRefV2`, or runtime-host load targets.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and

@@ -109,12 +109,13 @@ build a dispatch-selected `SchedulerRuntimeHandoff`, and dispatch through the
 shared runtime-host port. It does not create dispatch candidates, rank runtime
 policy, inspect model paths, or call Pumas; candidate assembly remains a
 separate provider/session concern.
-It also owns the first runtime task persistence helpers: ready runtime tasks
-can be moved to `Running`, and terminal runtime-host results can be atomically
-stored with the `Completed` transition through the same task-result store used
-by non-runtime tasks. Session execution must not use these helpers for
-successful runtime dispatch until candidate collection, selected handoff
-dispatch, and result persistence are wired as one vertical slice.
+It also owns the runtime task persistence helpers: ready runtime tasks can be
+moved to `Running`, and terminal runtime-host results can be atomically stored
+with the `Completed` transition through the same task-result store used by
+non-runtime tasks. Session execution uses these helpers only after dependency
+readiness admission and scheduler dispatch selection have produced a
+dispatch-selected runtime-host handoff; default no-candidate production wiring
+still fails closed before runtime-host dispatch.
 Session execution now reaches that dispatch-selection boundary for admitted
 runtime tasks. Workflow-service carries the readiness proof produced during
 admission into dispatch-selection request assembly and asks the configured
@@ -122,6 +123,11 @@ runtime dispatch candidate provider for canonical candidates. The default
 provider returns an empty candidate list, so the scheduler selector returns a
 typed no-selection diagnostic before runtime-host dispatch instead of using
 legacy graph paths, node-engine launch, or reduced execution-plan handoff.
+When a canonical provider is configured, runtime tasks can complete through
+the shared runtime-host execution port and persist typed scheduler task
+results, but candidate assembly remains outside the scheduler task
+orchestrator and must not be synthesized from graph/editor state or legacy
+runtime contracts.
 The scheduler task orchestrator also owns the workflow-service bridge from
 `WaitingDependencyReadiness` into scheduler readiness admission. It consumes
 only a path-free `DependencyPreflightResult`, applies

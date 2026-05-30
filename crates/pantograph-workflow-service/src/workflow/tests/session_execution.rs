@@ -8,17 +8,30 @@ use pantograph_dependency_planning::{
     DependencyEnvironmentReadinessState, DependencyEnvironmentRef, DependencyEnvironmentRequest,
     DependencyEnvironmentResult, DependencyEnvironmentValidationState, DependencyNodeTypeId,
     DependencyPlanningCallerContext, DependencyPlanningIdentityKey, DependencyPlanningRequest,
-    DependencyRequirement, DependencyRequirementBinding, DependencyRequirementKind,
-    DependencyRequirementName, PumasModelRef, PythonPackageManagerKind, PythonRequirementDetails,
-    SchedulerIntent, ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+    DependencyReadinessProofEnvelope, DependencyRequirement, DependencyRequirementBinding,
+    DependencyRequirementKind, DependencyRequirementName, DeviceIntentId, PumasModelRef,
+    PythonPackageManagerKind, PythonRequirementDetails, RuntimeIntentId, SchedulerIntent,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
     InferenceAvailabilityStatus, InferenceInterfaceFingerprint, InferenceTaskKind,
     WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
+use pantograph_runtime_host_contracts::{
+    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+};
+use pantograph_scheduler::{
+    SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerReservationLeaseId,
+    SchedulerResourceFitAssessment, SchedulerResourceFitState, SchedulerResourceKind,
+    SchedulerResourceReservation, SchedulerTaskStateRecord,
+};
 
 use super::*;
+use crate::workflow::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateProviderError;
 use crate::{
     GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
     WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitHistoryThresholdState,
@@ -383,6 +396,113 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
             .map(|context| context.as_str()),
         Some("runtime task entered WaitingDependencyReadiness")
     );
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection() {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone());
+    let workflow_id = "wf-runtime-selected-dispatch";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("ready runtime task should dispatch through scheduler selection");
+
+    assert_eq!(response.outputs.len(), 1);
+    assert_eq!(response.outputs[0].node_id, "infer");
+    assert_eq!(response.outputs[0].port_id, "image");
+    assert_eq!(
+        response.outputs[0].value,
+        serde_json::json!({
+            "artifact_id": "runtime-output-image",
+            "media_type": "image_png"
+        })
+    );
+    let recorded = runtime_host_port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0]
+            .handoff
+            .dispatch_decision
+            .as_ref()
+            .expect("dispatch-selected handoff")
+            .selected_runtime_id
+            .as_str(),
+        "pytorch"
+    );
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+    let work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("dependency-readiness work item should be queued after seed");
+    assert_eq!(work_item.provenance.session_id.as_str(), session_id);
+    assert_eq!(work_item.provenance.task_id.as_str(), "infer");
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
@@ -2469,6 +2589,132 @@ impl RuntimeInferenceSessionHost {
     }
 }
 
+#[derive(Default)]
+struct CompletingRuntimeHostPort {
+    requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
+}
+
+impl CompletingRuntimeHostPort {
+    fn requests(&self) -> Vec<RuntimeHostExecutionRequest> {
+        self.requests
+            .lock()
+            .expect("runtime host request lock")
+            .clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl RuntimeHostExecutionPort for CompletingRuntimeHostPort {
+    async fn execute_runtime_host_request(
+        &self,
+        request: RuntimeHostExecutionRequest,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        self.requests
+            .lock()
+            .expect("runtime host request lock")
+            .push(request.clone());
+        Ok(RuntimeHostExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            execution_request_id: request.execution_request_id,
+            workflow_id: request.handoff.task_intent.workflow_id,
+            workflow_run_id: request.handoff.task_intent.workflow_run_id,
+            node_id: request.handoff.task_intent.node_id,
+            task_id: request.handoff.task_intent.task_id,
+            state: RuntimeHostExecutionState::Completed,
+            outputs: vec![RuntimeHostExecutionOutput {
+                port_id: "image".to_string(),
+                value: RuntimeHostExecutionOutputValue::MediaArtifactRef(
+                    RuntimeHostExecutionMediaArtifactRef {
+                        artifact_id: "runtime-output-image".to_string(),
+                        media_type: Some("image_png".to_string()),
+                    },
+                ),
+            }],
+            diagnostics: Vec::new(),
+            terminal_metadata: None,
+        })
+    }
+}
+
+struct SingleCanonicalRuntimeDispatchCandidateProvider;
+
+impl WorkflowRuntimeDispatchCandidateProvider for SingleCanonicalRuntimeDispatchCandidateProvider {
+    fn runtime_dispatch_candidates(
+        &self,
+        task: &WorkflowSchedulerTask,
+        _ready_record: &SchedulerTaskStateRecord,
+        _readiness_proof: &DependencyReadinessProofEnvelope,
+    ) -> Result<Vec<SchedulerDispatchCandidate>, WorkflowRuntimeDispatchCandidateProviderError>
+    {
+        let intent = task.schedulable_intent.as_ref().ok_or_else(|| {
+            WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!(
+                    "runtime scheduler task '{}' is missing schedulable intent",
+                    task.task_id.as_str()
+                ),
+            }
+        })?;
+        let selected_runtime_id =
+            intent
+                .constraints
+                .requested_runtime_id
+                .clone()
+                .ok_or_else(|| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                    message: format!(
+                    "runtime scheduler task '{}' has no requested runtime id for test candidate",
+                    task.task_id.as_str()
+                ),
+                })?;
+        let selected_device_id =
+            intent
+                .constraints
+                .requested_device_id
+                .clone()
+                .ok_or_else(|| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                    message: format!(
+                        "runtime scheduler task '{}' has no requested device id for test candidate",
+                        task.task_id.as_str()
+                    ),
+                })?;
+        Ok(vec![SchedulerDispatchCandidate {
+            candidate_id: SchedulerDispatchCandidateId::parse("candidate.runtime_session_test")
+                .map_err(
+                    |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                        message: error.to_string(),
+                    },
+                )?,
+            selected_runtime_id,
+            selected_runtime_variant_id: None,
+            selected_device_ids: vec![selected_device_id.clone()],
+            selected_model_ref: intent.model_ref.clone(),
+            runtime_trait_settings: Vec::new(),
+            reservation: Some(SchedulerResourceReservation {
+                reservation_lease_id: SchedulerReservationLeaseId::parse(
+                    "reservation.runtime_session_test",
+                )
+                .map_err(|error| {
+                    WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                        message: error.to_string(),
+                    }
+                })?,
+                workflow_run_id: intent.workflow_run_id.clone(),
+                task_id: intent.task_id.clone(),
+                device_id: selected_device_id,
+                resource_kind: SchedulerResourceKind::DeviceVram,
+                reserved_bytes: 1,
+            }),
+            resource_fit_assessment: Some(SchedulerResourceFitAssessment {
+                workflow_run_id: intent.workflow_run_id.clone(),
+                task_id: intent.task_id.clone(),
+                state: SchedulerResourceFitState::Fits,
+                diagnostics: Vec::new(),
+            }),
+            batching_group_id: None,
+            candidate_source_diagnostics: Vec::new(),
+        }])
+    }
+}
+
 #[async_trait::async_trait]
 impl WorkflowHost for RuntimeInferenceSessionHost {
     async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
@@ -2498,9 +2744,38 @@ impl WorkflowHost for RuntimeInferenceSessionHost {
 
     async fn workflow_io(
         &self,
-        workflow_id: &str,
+        _workflow_id: &str,
     ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
-        self.inner.workflow_io(workflow_id).await
+        Ok(WorkflowIoResponse {
+            inputs: vec![WorkflowIoNode {
+                node_id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                name: None,
+                description: None,
+                ports: vec![WorkflowIoPort {
+                    port_id: "text".to_string(),
+                    name: None,
+                    description: None,
+                    data_type: Some("string".to_string()),
+                    required: Some(true),
+                    multiple: Some(false),
+                }],
+            }],
+            outputs: vec![WorkflowIoNode {
+                node_id: "infer".to_string(),
+                node_type: "llm-inference".to_string(),
+                name: None,
+                description: None,
+                ports: vec![WorkflowIoPort {
+                    port_id: "image".to_string(),
+                    name: None,
+                    description: None,
+                    data_type: Some("media_artifact_ref".to_string()),
+                    required: Some(false),
+                    multiple: Some(false),
+                }],
+            }],
+        })
     }
 
     async fn runtime_capabilities(
@@ -2611,7 +2886,14 @@ fn runtime_executable_validation_snapshot(
             .expect("valid descriptor fingerprint"),
             task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
             model_ref,
-            constraints: Default::default(),
+            constraints: pantograph_scheduler::SchedulerRuntimeDeviceConstraints {
+                requested_runtime_id: Some(
+                    RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
+                ),
+                requested_device_id: Some(
+                    DeviceIntentId::parse("cuda:0").expect("valid device id"),
+                ),
+            },
             availability_status: InferenceAvailabilityStatus::Available,
             validation_status: DraftGraphValidationStatus::Executable,
             trait_settings: Vec::new(),
@@ -2685,8 +2967,10 @@ fn runtime_dependency_planning_request(
         ),
         expected_artifact_kind: None,
         scheduler_intent: SchedulerIntent {
-            requested_runtime_id: None,
-            requested_device_id: None,
+            requested_runtime_id: Some(
+                RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
+            ),
+            requested_device_id: Some(DeviceIntentId::parse("cuda:0").expect("valid device id")),
         },
         platform_context: None,
         selected_binding_ids,

@@ -18052,6 +18052,55 @@ Worker rules:
   - Remaining follow-up: wire session execution to use these helpers only after
     production dispatch candidates and selected runtime-host dispatch are
     available in the same validated vertical slice.
+- 2026-05-30 injected runtime dispatch completion slice:
+  - Slice scope: workflow-service session runtime dispatch completion with
+    injected canonical candidates only. Allowed files:
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    the workflow/scheduler READMEs, `10-task-level-scheduler-orchestration.md`,
+    and this plan record.
+  - Implementation: session execution now starts a ready runtime task, asks the
+    configured runtime dispatch candidate provider for canonical candidates,
+    calls scheduler dispatch selection, dispatches the selected handoff through
+    the shared runtime-host execution port, persists the terminal runtime-host
+    response as a scheduler task result, and projects requested workflow
+    outputs from scheduler task results. The default provider still returns no
+    candidates, so production runs remain fail-closed before runtime-host
+    dispatch unless a real canonical provider is configured.
+  - Test coverage: added a session-level successful runtime dispatch test with
+    a test-only candidate provider and runtime-host port. The provider uses
+    explicit typed runtime/device/model/reservation/resource-fit facts from the
+    saved executable validation snapshot and scheduler task intent; it does not
+    infer defaults, rank candidates, read graph paths, or synthesize production
+    runtime facts.
+  - No-fallback/no-legacy result: no whole-run host execution, session runtime
+    loading, node-engine output demand, reduced execution plan, `ModelRefV2`,
+    `model_path`, graph path, frontend/Tauri fact, or runtime-host load-target
+    fallback was added. The successful branch requires scheduler dispatch
+    selection plus a dispatch-selected runtime-host handoff.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+    and
+    `cargo test -p pantograph-workflow-service workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-workflow-service --all-features`,
+    `cargo check -p pantograph-workflow-service --no-default-features`, and
+    `git diff --check`. The only warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Legacy-path search result: targeted search of the touched workflow-service
+    runtime dispatch files found no new legacy execution references in the
+    session runner or session API. It did find the pre-existing
+    `active_model_path` fixture in
+    `workflow_execution_session_records_load_completed_only_with_runtime_proof`
+    inside `workflow/tests/session_execution.rs`; that fixture is unrelated to
+    this runtime dispatch slice and remains a deferred legacy-test cleanup
+    finding rather than an approved scope expansion.
+  - Remaining follow-up: add the production canonical candidate provider,
+    preserve scheduler no-selection diagnostics in task state, and add durable
+    recovery/replay/cancellation/duplicate-dispatch prevention plus reservation
+    release before real multi-run inference workloads depend on this path.
 
 ### Traceability Links
 

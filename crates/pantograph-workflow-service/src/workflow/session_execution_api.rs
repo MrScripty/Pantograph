@@ -384,12 +384,17 @@ impl WorkflowService {
                 run_snapshot.as_ref(),
                 &queued_run,
             )?;
+            let run_started_at = std::time::Instant::now();
             let runner = WorkflowSchedulerSessionRunner::new(self);
             let run_future = runner.run_until_runtime_dispatch_boundary(
+                host,
                 &session_id,
                 &workflow_run_id,
+                &queued_run.workflow_id,
                 &queued_run.queued.inputs,
+                queued_run.queued.output_targets.as_deref(),
                 &scheduler_task_run_summary,
+                run_started_at,
             );
             let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
                 match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
