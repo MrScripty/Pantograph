@@ -950,3 +950,27 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   concurrent tasks/runs; producer-side reconstruction because it duplicates
   planning policy in embedded-runtime; legacy/preview-fact reuse because it
   preserves retired behavior.
+- 2026-05-29 dependency requirements registry contract/storage slice
+  completed. Smallest useful vertical slice: define the path-free
+  `DependencyRequirementsPayload`, `DependencyRequirementsRegistry` lookup
+  trait, fresh/stale registry entry status, typed missing/stale/mismatched
+  diagnostics, and first in-memory backend registry implementation in
+  `pantograph-dependency-environment-service`; expose the registry through
+  workflow dependency-readiness composition beside the snapshot provider and
+  work queue. Allowed write set: dependency-environment-service registry
+  module/tests/README/public exports, workflow-service dependency-readiness
+  composition tests, this milestone, and execution-management ledger.
+  No-fallback/no-legacy result: payloads can be built only from validated
+  dependency-environment results or typed payload constructors, and lookup
+  failures return typed diagnostics instead of deriving requirements from
+  graph/editor/frontend state, technical-fit previews, reduced execution
+  plans, runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`, or
+  path/model-path fields. Verification passed: `cargo test -p
+  pantograph-dependency-environment-service`; `cargo test -p
+  pantograph-workflow-service dependency_readiness_composition`; `cargo fmt`;
+  `git diff --check`. Verification caveat: the focused workflow-service test
+  command still emits the known unused `set_active_run_execution_plan`
+  warning. Remaining follow-up: workflow-service must store the validated
+  payload when dependency-readiness source data is produced or consumed, and
+  the embedded-runtime/infrastructure producer must resolve the registry entry
+  before publishing unavailable/ready snapshots or running real probes.

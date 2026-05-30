@@ -16930,6 +16930,31 @@ Worker rules:
     reduced execution plan inference, runtime-host load-target inference,
     `ModelDependencyRequest`, `ModelRefV2`, or path/model-path adaptation
     because they violate the no-fallback/no-legacy rule.
+- 2026-05-29 dependency requirements registry contract/storage slice
+  completed:
+  - Slice scope: `pantograph-dependency-environment-service` now defines the
+    path-free `DependencyRequirementsPayload`, fresh/stale registry entries, a
+    narrow `DependencyRequirementsRegistry` lookup trait, typed
+    missing/stale/mismatched diagnostics, and the first in-memory backend
+    registry. `pantograph-workflow-service` dependency-readiness composition now
+    creates and exposes one registry instance beside the shared snapshot
+    provider and work queue.
+  - No-fallback/no-legacy result: registry payloads come from validated
+    dependency-environment results or typed payload construction only. Lookup
+    failures remain typed diagnostics and do not derive probe inputs from
+    requirements-id string parsing, graph/editor/frontend state, technical-fit
+    previews, reduced execution plans, runtime-host load targets,
+    `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields.
+  - Verification: `cargo test -p pantograph-dependency-environment-service`;
+    `cargo test -p pantograph-workflow-service
+    dependency_readiness_composition`; `cargo fmt`; `git diff --check`.
+  - Caveat: the focused workflow-service command still emits the known unused
+    `set_active_run_execution_plan` warning.
+  - Remaining follow-up: wire workflow-service to store the validated
+    requirement/binding payload at the dependency-readiness source boundary,
+    then wire the embedded-runtime/infrastructure producer to resolve the
+    registry entry before unavailable/ready snapshot publication and real host
+    probes.
 
 ### Traceability Links
 

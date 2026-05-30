@@ -57,6 +57,15 @@ dependency-environment request, bounded diagnostic context, retry/freshness
 policy, and cancellation scope without making the snapshot provider record
 misses.
 
+Concrete requirement and binding rows used by host readiness probes are owned
+by `DependencyRequirementsRegistry`. Producers resolve the work item's
+`DependencyRequirementsId` through the registry before probing; they do not
+reconstruct requirements from the graph, frontend, technical-fit previews,
+runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`, or path-like
+state. `InMemoryDependencyRequirementsRegistry` is the first backend-owned
+implementation for single-process composition and tests; durable storage,
+expiry, and eviction belong to the backend composition owner when required.
+
 `DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item` lets a
 producer publish an explicit non-ready snapshot for queued work before real host
 probe evidence exists. This proves the queue-to-provider path without
@@ -77,6 +86,10 @@ fabricating successful readiness.
 - Let the producer scan frontend, graph editor, technical-fit preview, or
   runtime-host load-target state: rejected because producer work must come from
   backend scheduler task state and validated dependency-environment requests.
+- Let the producer reconstruct requirements from a requirements-id string,
+  reduced execution plans, runtime-host load targets, or legacy model refs:
+  rejected because the producer must consume a backend registry payload and
+  fail closed when it is missing, stale, or mismatched.
 
 ## Invariants
 - All public service inputs are validated dependency-planning contracts.
@@ -92,6 +105,10 @@ fabricating successful readiness.
 - Readiness work queue items are task-correlated producer inputs, not readiness
   proof. They do not publish snapshots, probe hosts, or make dependency
   readiness successful.
+- Dependency requirements registry entries are the only source of concrete
+  requirement/binding payloads for readiness probes.
+- Missing, stale, or identity-mismatched registry payloads are typed non-ready
+  diagnostics; they must not trigger producer-side reconstruction.
 - Work-item unavailable snapshots are fail-closed diagnostics until a real host
   package/runtime probe replaces them with validated readiness evidence.
 

@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+mod requirements_registry;
 mod snapshot;
 mod work_queue;
 
@@ -18,6 +19,12 @@ use pantograph_dependency_planning::{
     DependencyPlanningContractError, DependencyPlanningDiagnostic,
     DependencyPlanningDiagnosticCode, DependencyPlanningSeverity,
     ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
+};
+pub use requirements_registry::{
+    resolve_dependency_requirements_payload, DependencyRequirementsPayload,
+    DependencyRequirementsRegistry, DependencyRequirementsRegistryEntry,
+    DependencyRequirementsRegistryError, DependencyRequirementsRegistryStatus,
+    InMemoryDependencyRequirementsRegistry, SharedDependencyRequirementsRegistry,
 };
 pub use snapshot::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,

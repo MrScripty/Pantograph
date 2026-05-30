@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentReadinessSnapshotProvider, DependencyReadinessWorkQueue,
+    InMemoryDependencyRequirementsRegistry,
 };
 
 use super::{WorkflowService, WorkflowServiceError};
@@ -16,6 +17,7 @@ use super::{WorkflowService, WorkflowServiceError};
 pub struct WorkflowDependencyReadinessComponents {
     snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
     work_queue: Arc<DependencyReadinessWorkQueue>,
+    requirements_registry: Arc<InMemoryDependencyRequirementsRegistry>,
 }
 
 impl Default for WorkflowDependencyReadinessComponents {
@@ -30,6 +32,20 @@ impl WorkflowDependencyReadinessComponents {
         Self {
             snapshot_provider: Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new()),
             work_queue: Arc::new(DependencyReadinessWorkQueue::new()),
+            requirements_registry: Arc::new(InMemoryDependencyRequirementsRegistry::new()),
+        }
+    }
+
+    #[must_use]
+    pub fn with_parts(
+        snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
+        work_queue: Arc<DependencyReadinessWorkQueue>,
+        requirements_registry: Arc<InMemoryDependencyRequirementsRegistry>,
+    ) -> Self {
+        Self {
+            snapshot_provider,
+            work_queue,
+            requirements_registry,
         }
     }
 
@@ -38,10 +54,11 @@ impl WorkflowDependencyReadinessComponents {
         snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
         work_queue: Arc<DependencyReadinessWorkQueue>,
     ) -> Self {
-        Self {
+        Self::with_parts(
             snapshot_provider,
             work_queue,
-        }
+            Arc::new(InMemoryDependencyRequirementsRegistry::new()),
+        )
     }
 
     #[must_use]
@@ -52,6 +69,11 @@ impl WorkflowDependencyReadinessComponents {
     #[must_use]
     pub fn work_queue(&self) -> Arc<DependencyReadinessWorkQueue> {
         self.work_queue.clone()
+    }
+
+    #[must_use]
+    pub fn requirements_registry(&self) -> Arc<InMemoryDependencyRequirementsRegistry> {
+        self.requirements_registry.clone()
     }
 
     #[must_use]
@@ -82,29 +104,38 @@ mod tests {
         let components = WorkflowDependencyReadinessComponents::new();
         let provider = components.snapshot_provider();
         let work_queue = components.work_queue();
+        let requirements_registry = components.requirements_registry();
         let service = components.workflow_service();
         let shared = Arc::new(service);
 
         assert_eq!(provider.snapshot_count(), 0);
         assert!(work_queue.is_empty());
+        assert!(requirements_registry.is_empty());
         assert_eq!(Arc::strong_count(&provider), 4);
         assert_eq!(Arc::strong_count(&work_queue), 3);
+        assert_eq!(Arc::strong_count(&requirements_registry), 2);
         drop(shared);
         assert_eq!(Arc::strong_count(&provider), 2);
         assert_eq!(Arc::strong_count(&work_queue), 2);
+        assert_eq!(Arc::strong_count(&requirements_registry), 2);
     }
 
     #[test]
     fn components_accept_injected_snapshot_provider_and_work_queue() {
         let provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
         let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
-        let components =
-            WorkflowDependencyReadinessComponents::with_snapshot_provider_and_work_queue(
-                provider.clone(),
-                work_queue.clone(),
-            );
+        let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
+        let components = WorkflowDependencyReadinessComponents::with_parts(
+            provider.clone(),
+            work_queue.clone(),
+            requirements_registry.clone(),
+        );
 
         assert!(Arc::ptr_eq(&provider, &components.snapshot_provider()));
         assert!(Arc::ptr_eq(&work_queue, &components.work_queue()));
+        assert!(Arc::ptr_eq(
+            &requirements_registry,
+            &components.requirements_registry()
+        ));
     }
 }
