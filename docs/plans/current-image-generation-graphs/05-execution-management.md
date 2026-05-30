@@ -18285,6 +18285,62 @@ Worker rules:
     source diagnostics rather than fabricating candidates, blocking on async
     work inside scheduler policy, or treating summaries/cache rows as
     executable authority.
+- 2026-05-30 production dispatch candidate fact-collection re-plan decision:
+  - Selected option: use explicit async source-provider composition, then pass
+    only a validated path-free candidate-fact bundle into the synchronous
+    scheduler selector. This is option 3 from the re-plan boundary.
+  - Decision details: keep scheduler dispatch selection synchronous and pure.
+    It may validate/rank supplied typed facts, but it must not query Pumas,
+    runtime hosts, resource owners, history stores, or other infrastructure.
+    Fact collection happens before selection through small async source
+    providers with clear ownership:
+    - Pumas package-facts source: owned by embedded-runtime composition while
+      Pumas remains the concrete owner-API dependency; it resolves only
+      path-free package/task/family/backend evidence through the staged
+      owner-API bridge.
+    - Runtime capability source: owned by the runtime-registry integration
+      boundary; it supplies typed runtime/backend/device capability evidence
+      without becoming scheduler policy.
+    - Resource reservation/resource-fit source: owned by the backend resource
+      owner; it supplies real reservation leases and fit assessments, or typed
+      source diagnostics when unavailable.
+  - Candidate-fact bundle contract: add a small validated bundle before
+    production candidate creation. The bundle contains canonical
+    source-diagnostic rows plus only typed, path-free facts that are legal for
+    scheduler dispatch candidates: runtime id/variant, selected device ids,
+    selected `PumasModelRef`, trait settings, dependency environment ref,
+    reservation lease, resource-fit assessment, and optional batching fact when
+    owned by its canonical source. It must not contain executable Pumas load
+    targets, local paths, selector summaries, display rows, graph-authored
+    fallback values, runtime-host internals, or arbitrary JSON.
+  - Implementation order:
+    1. Define the async source-provider traits and validated bundle DTO in the
+       composition layer without emitting non-empty production candidates.
+    2. Adapt the staged Pumas bridge into the Pumas source provider and prove
+       missing/unsupported/stale Pumas facts become source diagnostics.
+    3. Add runtime-registry capability source projection.
+    4. Add real resource-owner reservation/resource-fit source projection.
+    5. Only after all required facts validate, map the bundle into
+       `SchedulerDispatchCandidate` values and call the existing synchronous
+       scheduler selector.
+  - Option 2 disposition: precomputed validated candidate-fact snapshots remain
+    the likely future durability/replay layer, but they are not the immediate
+    implementation boundary. After the option 3 bundle exists and real
+    inference workloads expose replay/recovery needs, persist that validated
+    bundle or an equivalent snapshot with explicit freshness and invalidation
+    semantics.
+  - Standards alignment: this follows the simplicity/complection rule by
+    separating async infrastructure fact collection, source ownership,
+    validated DTO shape, scheduler policy, and runtime-host load-target
+    execution. It follows the single-owner rule by keeping Pumas, runtime
+    capability, and resource reservation lifecycles with their owners. It also
+    follows async standards by avoiding blocking Pumas/resource work inside
+    synchronous scheduler selection.
+  - Guardrail: until the bundle validates with Pumas facts, runtime capability
+    facts, and real reservation/resource-fit facts, the provider must return
+    no candidates plus typed source diagnostics. Do not synthesize CPU/auto
+    fallbacks, placeholder leases, generic runtime candidates, graph-path
+    candidates, or summary-derived execution authority.
 
 ### Traceability Links
 

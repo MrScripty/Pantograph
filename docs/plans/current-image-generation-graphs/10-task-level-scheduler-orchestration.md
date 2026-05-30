@@ -2166,6 +2166,42 @@ composition that hands a validated path-free bundle to the existing synchronous
 scheduler selector. Do not create candidates from summaries, cached display
 rows, graph paths, or blocking ad hoc Pumas calls while this boundary is open.
 
+2026-05-30 re-plan decision: use async source-provider composition for the
+production dispatch candidate provider. The immediate implementation target is
+not a precomputed persisted snapshot. Instead, the composition layer will call
+explicit async source providers for Pumas package facts, runtime-registry
+capability facts, and resource-owner reservation/resource-fit facts, then build
+a validated path-free candidate-fact bundle for the existing synchronous
+scheduler selector. Scheduler policy stays pure and synchronous; source
+providers own infrastructure access and lifecycle freshness.
+
+The candidate-fact bundle is the immediate contract boundary. It must contain
+only facts that are legal to project into `SchedulerDispatchCandidate`: runtime
+id and optional runtime variant, selected device ids, selected `PumasModelRef`,
+runtime trait settings, dependency environment ref, real reservation lease,
+real resource-fit assessment, optional batching fact when owned by the batching
+source, and bounded source diagnostics. It must reject executable Pumas load
+targets, local paths, selector summaries, display rows, graph-authored fallback
+values, runtime-host internals, and arbitrary JSON.
+
+Implementation order:
+
+1. Define async source-provider traits and the validated candidate-fact bundle
+   without emitting non-empty production candidates.
+2. Adapt the staged Pumas owner-API package-facts bridge into the Pumas source
+   provider and preserve missing/unsupported/stale facts as source diagnostics.
+3. Add runtime-registry capability source projection.
+4. Add real resource-owner reservation/resource-fit source projection.
+5. Map the validated bundle into `SchedulerDispatchCandidate` values only when
+   every required source fact is present and valid.
+
+Precomputed validated candidate-fact snapshots remain the likely future
+durability/replay layer, but they are deferred until the option 3 bundle exists
+and real inference workloads expose concrete replay, recovery, and freshness
+requirements. Until then, missing source facts must produce typed
+no-candidate diagnostics rather than synthetic candidates, blocking calls in
+scheduler policy, or summary/cache-row execution authority.
+
 ## Effects On Existing Systems
 
 ### Scheduler
