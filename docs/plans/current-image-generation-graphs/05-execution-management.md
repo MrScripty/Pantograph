@@ -17236,6 +17236,34 @@ Worker rules:
     must continue to fail closed with typed diagnostics instead of publishing
     ready evidence.
   - Verification passed for this boundary record: `git diff --check`.
+- 2026-05-30 non-Python dependency readiness re-plan decision:
+  - Decision selected: use option 3, a canonical dependency inventory service.
+    The dependency-readiness snapshot producer remains the async queue/snapshot
+    lifecycle owner, but it should ask an inventory boundary for observations
+    instead of directly growing one probe adapter per requirement kind.
+  - Selected architecture: add a focused dependency inventory contract and
+    provider trait with typed request context, observation rows,
+    freshness/correlation fields, and provider-attributed diagnostics. Migrate
+    the existing Python package/env-map probe behind this boundary first,
+    preserving current behavior. Non-Python kinds register typed
+    unsupported/not-implemented providers until their source-owned facts are
+    planned and implemented.
+  - Provider ownership: Python package readiness uses the existing no-shell
+    env-map package probe; managed runtime readiness consumes managed-runtime
+    inventory; runtime-feature readiness consumes runtime-registry/capability
+    facts; device-toolchain readiness consumes device/runtime observations;
+    system-package readiness remains not implemented until a host/system
+    package inventory owner and platform/package-manager contract are planned.
+  - Standards/no-fallback result: the inventory service must not infer
+    readiness from graph paths, Pumas package names, generic requirement names,
+    shell commands, Python probes for non-Python kinds, or old dependency
+    preflight. Contracts stay typed and validated, provider I/O stays behind
+    source-owned infrastructure boundaries, and direct producer-to-probe calls
+    should be removed once the Python provider is migrated.
+  - Plan updates: `09-runtime-host-handoff-legacy-removal.md` now includes the
+    dependency inventory service re-plan, staged implementation, standards
+    gates, and verification requirements.
+  - Verification passed for this plan update: `git diff --check`.
 
 ### Traceability Links
 

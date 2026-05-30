@@ -119,8 +119,12 @@ Use the clean replacement path:
    composition root before `WorkflowService` is shared, wire the same provider
    into runtime readiness admission and graph-session dependency actions, and
    keep async host package/runtime probing in an embedded-runtime or
-   infrastructure lifecycle owner. Until that producer publishes validated
-   snapshots, missing readiness must fail closed.
+   infrastructure lifecycle owner. The selected next architecture is a
+   canonical dependency inventory service: the snapshot producer asks the
+   inventory boundary for dependency observations, and concrete providers own
+   Python package, managed-runtime, runtime-feature, device-toolchain, and
+   system-package source integration. Until that inventory path publishes
+   validated snapshots, missing readiness must fail closed.
 4. Add runtime-host load-target resolution from Pumas refs/artifact identity to
    executable facts at the host boundary only.
 5. Add a scheduler-owned runtime-host execution port and dispatch orchestrator.
@@ -212,6 +216,119 @@ typed diagnostics.
    helpers, `PlannedInferenceExecutionHost`,
    `EmbeddedPlannedInferenceExecutionHost`, frontend `modelPath` dependency
    actions, and path-shaped success fixtures.
+
+## Dependency Inventory Service Replan
+
+Selected direction: option 3, canonical dependency inventory service.
+
+The next dependency-readiness source should be a service boundary that owns
+cross-kind dependency observation instead of adding more direct probe adapters
+to the dependency-readiness snapshot producer. The producer remains the async
+lifecycle owner for queued readiness work and snapshot publication, but it
+should ask a dependency inventory service to check a validated
+`DependencyRequirementsPayload` against the selected runtime/device/environment
+context. Concrete inventory providers own source integration and return typed
+observations; the producer projects those observations into
+dependency-environment snapshots.
+
+Required ownership:
+
+- **Shared dependency contract:** `pantograph-dependency-planning` remains the
+  owner for dependency-environment requirement rows, binding rows, result
+  states, diagnostics, and serde fixtures unless implementation discovers a
+  dependency-cycle reason to introduce a narrower lower-level contract crate.
+  If that happens, stop and re-plan the crate boundary before editing
+  manifests or lockfiles.
+- **Workflow-service/scheduler:** consume dependency-readiness snapshots and
+  proofs only. They must not depend on concrete inventory providers, perform
+  host probing, infer package names, or interpret dependency requirement names
+  as policy.
+- **Embedded-runtime/infrastructure:** compose the inventory service and its
+  concrete providers. Provider implementations may perform I/O only inside
+  their source-owned boundary and must return typed unavailable, stale,
+  invalid, unsupported, or not-implemented diagnostics.
+- **Graph editor/node-engine/frontend/Tauri:** display validation/readiness
+  facts and submit typed user constraints only. They must not own inventory
+  state, probe configuration, backend package-manager policy, executable load
+  targets, or optimistic backend readiness.
+
+Initial provider ownership:
+
+- **Python package provider:** migrate the existing env-map plus no-shell
+  package-readiness probe behind the dependency inventory service first. This
+  proves the architecture without changing successful Python readiness
+  behavior.
+- **Managed runtime provider:** consume managed-runtime inventory facts for
+  `RuntimeManagedBinary`. It must not scan paths or infer binary readiness from
+  graph data.
+- **Runtime feature provider:** consume runtime-registry/capability facts for
+  `RuntimeFeature`. It must not move runtime selection policy out of the
+  scheduler/runtime registry.
+- **Device toolchain provider:** consume device/runtime observation facts for
+  `DeviceToolchain`. It must not shell-probe drivers/toolchains ad hoc inside
+  dependency planning.
+- **System package provider:** remains typed not-implemented until a
+  host/system package inventory owner, platform support matrix, and
+  package-manager contract are planned. Do not implement this by running local
+  shell commands or parsing distro-specific tool output in the snapshot
+  producer.
+
+Staged implementation:
+
+1. Add a focused dependency inventory contract and provider trait with typed
+   request context, observation rows, freshness/correlation fields, and
+   diagnostics. Validation and dispatch should be synchronous and
+   correct-by-construction; provider I/O stays async behind the provider
+   boundary.
+2. Move the existing Python package-readiness path behind the inventory
+   service. The behavior must remain no-fallback: explicit Python environments
+   use only configured env-map ids, and default-host Python is selected only
+   when the canonical payload has no explicit environment/profile identity.
+3. Register typed unsupported/not-implemented providers for non-Python
+   requirement kinds so mixed payloads fail closed with provider-attributed
+   diagnostics instead of stringly local interpretation.
+4. Add managed-runtime, runtime-feature, and device-toolchain providers one at
+   a time from their source-owned facts. Each provider slice must add focused
+   serde fixtures, README ownership updates, and no-fallback tests.
+5. Plan system-package inventory separately before implementation because it
+   is platform/package-manager specific and likely needs a host inventory
+   source rather than direct probing in embedded-runtime.
+
+Standards gates:
+
+- Keep modules below the decomposition target where practical. Split inventory
+  contracts, provider dispatch, Python provider, managed-runtime provider,
+  runtime-feature provider, and device-toolchain provider into named files
+  instead of growing the snapshot producer or Python runtime files.
+- Use typed ids/enums, `serde(deny_unknown_fields)` on boundary structs,
+  bounded diagnostics, validated wrappers or `TryFrom` conversions for raw
+  payloads, and explicit freshness/correlation fields.
+- Do not add third-party dependencies for provider dispatch. If a provider
+  genuinely needs a new dependency, record dependency ownership, transitive
+  cost, feature impact, and verification before editing manifests.
+- Do not preserve dual successful paths. After Python readiness is behind the
+  inventory service, direct producer-to-package-probe calls should be removed
+  or reduced to private provider implementation details.
+- Do not recover from missing inventory facts by inspecting graph paths, Pumas
+  package names, generic requirement names, shell output, Python package probes
+  for non-Python kinds, or old dependency preflight.
+
+Required verification:
+
+- Contract/serde fixtures for inventory requests, observations, stale facts,
+  unsupported provider diagnostics, invalid kind/binding shape, mixed-kind
+  payloads, and unknown-field rejection.
+- Focused provider tests proving Python behavior is preserved through the
+  inventory boundary and non-Python kinds fail closed until their source-owned
+  providers exist.
+- Producer lifecycle tests proving snapshots are published only from inventory
+  observations and not from reconstructed graph/path/package-name data.
+- Targeted searches proving the snapshot producer does not call concrete
+  probes directly after migration and does not interpret non-Python generic
+  requirement names locally.
+- `cargo fmt -- --check`, focused crate tests, `cargo check` for touched
+  crates, line-count review, README traceability updates, and `git diff
+  --check`.
 
 ## Verification Strategy
 
