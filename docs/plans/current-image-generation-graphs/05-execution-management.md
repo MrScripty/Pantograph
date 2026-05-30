@@ -16977,6 +16977,33 @@ Worker rules:
   - Remaining follow-up: workflow-service still must seed the registry from a
     concrete validated requirement/binding payload source before real host
     probes can produce ready evidence.
+- 2026-05-29 registry seeding source re-plan selected:
+  - Decision: use the latest option 1. Workflow-service will seed the backend
+    `DependencyRequirementsRegistry` from a
+    `ValidatedDependencyEnvironmentResult` or equivalent validated
+    `DependencyRequirementsPayload` produced by the canonical
+    dependency-environment boundary. This decision is about the post-registry
+    payload source; it does not switch back to the earlier self-contained
+    work-item-payload option.
+  - Standards result: this keeps registry payload creation at a validated
+    backend boundary, preserves small task-correlated work items, keeps
+    embedded-runtime out of planning policy, keeps graph/frontend/Tauri out of
+    execution readiness ownership, and leaves async host probing in the
+    embedded-runtime/infrastructure lifecycle.
+  - Required implementation details: add a workflow-service storage slice that
+    validates the result/payload contract before insertion; insert the registry
+    payload before queueing readiness work; verify id, identity key, selected
+    binding ids, requirement rows, binding rows, and freshness/status; reject
+    missing rows, stale/unavailable/invalid result state, and mismatches with
+    typed diagnostics.
+  - No-fallback/no-legacy gate: registry seeding must not derive payloads from
+    dependency proof identity alone, requirements-id string parsing,
+    graph/editor/frontend state, technical-fit previews, reduced execution
+    plans, runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`,
+    or path/model-path fields.
+  - Deferred long-term option: Pumas/package-facts may later become the
+    canonical payload source if it emits the same validated payload contract;
+    producer-side reconstruction and legacy/path adapters remain rejected.
 
 ### Traceability Links
 

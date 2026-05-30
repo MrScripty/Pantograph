@@ -75,8 +75,16 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   backend-owned dependency requirements registry keyed by
   `DependencyRequirementsId`; workflow-service records the validated payload
   once, and embedded-runtime/infrastructure producers resolve ids through a
-  narrow registry trait before probing. The synchronous snapshot provider must
-  remain read-only from the caller's perspective and must not become the
+  narrow registry trait before probing. Registry seeding uses the selected
+  option-1 source from the post-registry re-plan: workflow-service may insert
+  registry payloads only from a `ValidatedDependencyEnvironmentResult` or an
+  equivalent validated `DependencyRequirementsPayload` produced by the
+  canonical dependency-environment boundary. It must not seed the registry from
+  dependency proof identity alone, graph/editor/frontend state, technical-fit
+  previews, reduced execution plans, runtime-host load targets,
+  `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields. The
+  synchronous snapshot provider must remain read-only from the caller's
+  perspective and must not become the
   producer work source by recording provider misses. Active scheduler-state
   scanning may be planned later only as a reconciliation/audit loop; it must
   not be the primary producer input path.
@@ -996,3 +1004,24 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   still needs a standards-compliant source of concrete validated
   requirement/binding payloads to seed the registry before real host probes can
   produce ready evidence.
+- 2026-05-29 registry seeding source re-plan selected. Decision: use the
+  latest option 1, meaning workflow-service seeds the backend
+  `DependencyRequirementsRegistry` from an existing
+  `ValidatedDependencyEnvironmentResult` or equivalent validated
+  `DependencyRequirementsPayload` produced by the canonical
+  dependency-environment boundary. This is not the earlier rejected
+  self-contained work-item-payload option; work items stay small and
+  task-correlated, while the registry remains the reusable producer lookup
+  source. Standards result: the change keeps parse/validate-once semantics,
+  keeps embedded-runtime out of planning policy, keeps graph/frontend/Tauri out
+  of execution readiness ownership, and keeps async host probing in the
+  embedded-runtime/infrastructure shell. Implementation must add a
+  workflow-service storage slice that inserts registry payloads only after
+  validating the result/payload contract, then queues readiness work using the
+  existing requirements id. Missing payload rows, non-current result status,
+  id/identity/binding mismatch, stale validation state, or unavailable
+  dependency-environment output must fail closed with typed diagnostics and
+  must not enqueue a real host probe as if ready. Deferred long-term option:
+  a future Pumas/package-facts producer may become the canonical payload source
+  if it emits the same validated payload contract; that replacement must not
+  require producer-side reconstruction or legacy/path adapters.
