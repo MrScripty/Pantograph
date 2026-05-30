@@ -10,10 +10,17 @@ use crate::result::DependencyPlanningDiagnostic;
 
 const MAX_ENVIRONMENT_ID_LEN: usize = 128;
 
+mod observation;
 mod payload;
 mod scalar;
 mod state;
 
+pub use observation::{
+    dependency_environment_result_from_inventory_observations,
+    DependencyInventoryObservationFreshness, DependencyInventoryObservationProjection,
+    DependencyInventoryObservationRow, DependencyInventoryObservationState,
+    ValidatedDependencyInventoryObservationProjection,
+};
 pub use payload::{
     DependencyBindingStatusRow, DependencyBindingStatusState, DependencyEnvironmentKind,
     DependencyEnvironmentOperation, DependencyEnvironmentOperationState,
@@ -362,27 +369,7 @@ fn validate_environment_identifier(
 fn reject_path_shaped_request_fields(
     value: &serde_json::Value,
 ) -> Result<(), DependencyPlanningContractError> {
-    fn visit(value: &serde_json::Value) -> bool {
-        match value {
-            serde_json::Value::Object(object) => object.iter().any(|(key, child)| {
-                matches!(
-                    key.as_str(),
-                    "model_path"
-                        | "modelPath"
-                        | "entry_path"
-                        | "entryPath"
-                        | "selected_artifact_path"
-                        | "selectedArtifactPath"
-                        | "local_load_path"
-                        | "localLoadPath"
-                ) || visit(child)
-            }),
-            serde_json::Value::Array(items) => items.iter().any(visit),
-            _ => false,
-        }
-    }
-
-    if visit(value) {
+    if contains_path_shaped_fields(value) {
         Err(DependencyPlanningContractError::InvalidField {
             field: "dependency_environment_request",
             reason: "request must not contain path-shaped dependency identity fields",

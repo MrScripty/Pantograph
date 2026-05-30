@@ -17394,6 +17394,34 @@ Worker rules:
     README traceability, and adapt Python plus unsupported/not-implemented
     providers to the projector without changing successful Python readiness.
     Managed-runtime provider implementation comes after that contract slice.
+- 2026-05-30 inventory observation projection contract slice completed:
+  - Slice scope: added typed provider observation rows and a synchronous shared
+    projector in `pantograph-dependency-planning`; added a mixed
+    Python/managed-runtime projection fixture and focused contract tests.
+  - No-fallback result: projection requires exactly one observation for each
+    selected binding, rejects observations for unselected bindings, rejects
+    unknown legacy observation fields, and requires stale observations to carry
+    diagnostics. Providers can no longer rely on missing rows, generic
+    requirement names, graph strings, shell output, or package/runtime display
+    labels to synthesize readiness.
+  - Standards result: provider I/O remains outside the contract crate; the new
+    projector is synchronous domain logic and centralizes readiness,
+    install-state, operation-state, stale, and diagnostic aggregation policy.
+    Path-field rejection was simplified to reuse the existing traversal helper
+    so `environment.rs` stayed below the decomposition target.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-dependency-planning observation_projection`,
+    `cargo test -p pantograph-dependency-planning`, and
+    `cargo check -p pantograph-dependency-planning`.
+  - Line-count review passed for touched Rust files:
+    `environment/observation.rs` 398 lines, `environment.rs` 481 lines,
+    `lib.rs` 78 lines, and `tests/observation_projection_contract.rs` 148
+    lines.
+  - `git diff --check` passed.
+  - Remaining follow-up: adapt embedded-runtime Python and
+    unsupported/not-implemented inventory providers to emit observation rows
+    and call the shared projector before adding real managed-runtime provider
+    facts.
 
 ### Traceability Links
 

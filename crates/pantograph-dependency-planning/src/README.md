@@ -61,6 +61,11 @@ is the only public facade.
 - Dependency-environment result rows use typed requirement kinds, environment
   kinds, binding status states, operation states, validation codes, ids,
   requirement names, validation field paths, and non-zero operation timestamps.
+- Dependency inventory providers publish selected-binding observation rows
+  before result projection. The shared projector builds
+  `DependencyEnvironmentResult` values from those rows so runtime-specific
+  providers do not duplicate readiness, install, operation, stale, or
+  diagnostic mapping policy.
 - Python/package-manager fields are contained in Python-specific detail structs
   so managed-binary, system-package, runtime-feature, device/toolchain, and
   non-Python dependencies can be added without overloading Python rows.
@@ -144,9 +149,16 @@ assert_eq!(task_id.as_str(), "image_generation");
   `WaitingDependencyReadiness` to `Ready`. The proof envelope is the scheduler
   proof payload; provider request payloads remain provider inputs and must not
   be copied into scheduler proof.
+- Dependency inventory providers must use
+  `dependency_environment_result_from_inventory_observations` when converting
+  selected-binding provider evidence into dependency-environment results. They
+  must not hand-build full results or recover provider source identity from
+  generic requirement names.
 
 ## Structured Producer Contract
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
+- Inventory observation projection serde and no-fallback coverage lives in
+  `tests/observation_projection_contract.rs`.
 - Optional scheduler intent, selected bindings, caller context, and diagnostics
   default to empty values.
 - New public DTO fields require fixture updates in the same slice.

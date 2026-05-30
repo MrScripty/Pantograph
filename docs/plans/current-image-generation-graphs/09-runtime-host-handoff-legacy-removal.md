@@ -456,6 +456,16 @@ Implementation progress:
   projection policy in each provider. The default contract home remains
   `pantograph-dependency-planning`; stop and re-plan only if implementation
   proves a real dependency cycle or ownership conflict.
+- 2026-05-30 observation projection contract slice: added typed inventory
+  observation rows plus the shared dependency-environment result projector in
+  `pantograph-dependency-planning`. The contract supports mixed selected
+  bindings, requires explicit provider evidence for every selected binding,
+  rejects unselected/duplicate observation rows, requires stale diagnostics,
+  and keeps provider result-state projection centralized before real
+  managed-runtime, runtime-feature, or device-toolchain providers are added.
+  Verification passed with focused observation projection tests, the full
+  dependency-planning crate test suite, crate check, formatting, and
+  line-count review.
 
 ## Verification Strategy
 

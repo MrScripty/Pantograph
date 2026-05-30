@@ -110,6 +110,11 @@ DTOs.
   scoped to their matching requirement/binding detail structs. Supported
   non-Python requirement kinds must include their typed detail struct before an
   inventory provider may treat the row as source-addressable.
+- Inventory providers report selected-binding evidence as typed observation
+  rows and use the shared projector to build dependency-environment results.
+  Providers must not hand-build result-state policy or recover source identity
+  from generic requirement names, graph strings, package names, shell output,
+  or runtime display labels.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.
 - Missing, stale, invalid, unavailable, ambiguous, needs-detail, and
