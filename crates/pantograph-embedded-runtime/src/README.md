@@ -66,6 +66,7 @@ packages.
 | `node_execution_ledger_tests.rs` | Focused runtime ledger submission tests for context matching, unavailable capability rejection, output-measurement guarantee downgrades, inference lifecycle projection, option-support summary projection, usage/cache summary hygiene, diagnostics-unavailable append-failure behavior, bounded failed-detail projection, path-shaped runtime metadata filtering, and persisted usage submission. |
 | `node_execution_tests.rs` | Focused runtime-created node execution context, managed capability routing, cancellation, progress, output summary, and guarantee classification tests. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
+| `pumas_dispatch_package_facts.rs` | Owns the staged owner-API Pumas package-facts bridge for runtime dispatch. It resolves full Pumas package facts only through owner selector access, projects a path-free subset for future dispatch candidate construction, and returns typed diagnostics for missing access, unsupported local-client/read-only full-fact access, stale contracts, selected-artifact mismatches, and path-carrying model refs. It intentionally does not create scheduler candidates until resource reservation/resource-fit ownership is wired. |
 | `task_executor.rs` | Hosts the Pantograph-specific task executor facade, construction, extension keys, and node-type dispatch while preserving core-node fallthrough. |
 | `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. Puma-Lib execution refreshes selected `model_id` facts and non-empty selected-detail inference settings through the explicit Pumas selector-access role, and only owner access may enrich outputs with full package facts. Direct diffusion execution is retired from the host dispatcher; image generation enters through canonical inference task metadata. |
 | `task_executor_tests.rs` | Shared Pantograph host task-executor test fixtures and behavior-module index. |
@@ -159,6 +160,13 @@ Pumas-specific dependency resolution.
   the explicit workflow-nodes Pumas selector-access role. Raw `PUMAS_API`
   access is reserved for full-detail dependency resolution, optional owner-only
   full package-facts enrichment, and path-only model-ref migration.
+- Runtime dispatch package-facts bridging uses owner selector access only for
+  full Pumas facts. Local-client and read-only access must return typed
+  diagnostics instead of promoting selector summaries or display rows into
+  executable authority. The bridge projects only path-free model/task/family/
+  component/backend-hint facts; scheduler candidates still require separate
+  runtime-registry capability facts and real resource reservation/resource-fit
+  facts before non-empty production candidate sets are allowed.
 - `puma-lib` execution and preload paths may rehydrate selected model details
   through Pumas only when a canonical `model_id`/model ref is present. Display
   names such as `modelName` are not a lookup contract and must not trigger

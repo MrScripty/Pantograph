@@ -18178,6 +18178,47 @@ Worker rules:
     workflow-service/embedded-runtime tests proving unavailable/stale/ambiguous
     or path-carrying facts produce typed diagnostics and no candidates.
     Continue to fail closed until the reservation/resource-fit owner is wired.
+- 2026-05-30 owner-API Pumas package-facts bridge slice:
+  - Slice scope: embedded-runtime Pumas package-facts bridge only. Allowed
+    files: `crates/pantograph-embedded-runtime/src/pumas_dispatch_package_facts.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: added a staged owner-API bridge that resolves full Pumas
+    package facts through `PumasSelectorAccess::Owner`, normalizes Pumas'
+    `model_ref_contract_version` field into Pantograph's dependency-planning
+    `PumasModelRef` contract, projects a path-free subset of model/task/
+    artifact/backend-hint/Diffusers family and component facts, rejects
+    path-carrying input model refs before Pumas lookup, and returns typed
+    diagnostics for missing selector access, unsupported local-client/read-only
+    full-fact access, lookup/decode failures, stale contracts,
+    selected-artifact mismatch, and stripped path facts.
+  - Test coverage: added focused embedded-runtime unit tests proving owner API
+    Diffusers facts project without paths, read-only selector access does not
+    promote summaries, and path-carrying model refs are rejected before lookup.
+  - No-fallback/no-legacy result: the bridge does not create scheduler
+    dispatch candidates, does not call runtime-host load-target resolution,
+    does not read graph paths, does not consume `ModelRefV2`, reduced execution
+    plans, frontend/Tauri state, selector summaries, or display rows as
+    executable authority. Full package facts are owner-API only in this slice.
+  - Standards/deviation note: the module is intentionally staged behind a
+    scoped `#[allow(dead_code)]` because production candidate creation remains
+    blocked on runtime-registry capability plus real reservation/resource-fit
+    ownership. The allowance must be removed when the candidate provider
+    consumes this bridge.
+  - Verification passed: `cargo fmt`, `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime pumas_dispatch_package_facts --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`. The
+    only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: wire the production runtime dispatch candidate
+    provider to combine this path-free package-facts bridge with runtime
+    registry capability facts and real resource-owner reservation/resource-fit
+    facts, then remove the staged dead-code allowance. Durable
+    recovery/replay/cancellation/duplicate-dispatch prevention and reservation
+    release remain open before real multi-run inference workloads depend on
+    this path.
 
 ### Traceability Links
 

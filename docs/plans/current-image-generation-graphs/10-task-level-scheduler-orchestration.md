@@ -2125,6 +2125,25 @@ facts produce typed no-candidate diagnostics and do not fabricate scheduler
 candidates. Do not produce non-empty production dispatch candidates until real
 reservation/resource-fit ownership is implemented.
 
+2026-05-30 owner-API Pumas package-facts bridge slice completed. The
+embedded-runtime composition layer now has a staged Pumas dispatch package-facts
+bridge that resolves full package facts only from owner selector access,
+normalizes Pumas' versioned model-ref field into Pantograph's dependency
+planning contract, rejects path-carrying input model refs, strips path fields
+from projected facts, and returns typed diagnostics for missing access,
+unsupported local-client/read-only full-fact access, lookup/decode failures,
+stale package-facts contracts, selected-artifact mismatches, and stripped path
+facts. Focused tests prove owner API Diffusers facts project into a path-free
+bridge shape, read-only access does not promote summaries, and path-carrying
+model refs fail before Pumas lookup.
+
+This slice intentionally does not create scheduler dispatch candidates. The
+bridge remains staged until the next dispatch-provider slice combines these
+package facts with runtime-registry capability facts and a real
+resource-owner reservation/resource-fit source. The temporary module-level
+dead-code allowance is limited to this staged bridge and must be removed when
+the production candidate provider consumes it.
+
 ## Effects On Existing Systems
 
 ### Scheduler
