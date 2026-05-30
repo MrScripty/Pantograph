@@ -382,6 +382,80 @@ Managed-runtime provider matching contract:
   provider `NotImplemented`. Provider `NotImplemented` is reserved for
   dependency kinds that do not yet have a real provider.
 
+Runtime-feature and device-toolchain provider-source contract:
+
+- Selected re-plan direction: add one shared provider-source contract for
+  `RuntimeFeature` and `DeviceToolchain` before implementing either provider,
+  then implement the providers one at a time in validated slices. This is the
+  standards-aligned option 3 from the re-plan discussion.
+- Contract home: keep the provider-source DTOs in
+  `pantograph-dependency-planning` by default because that crate already owns
+  dependency source ids, requirement/binding details, observation rows, result
+  states, diagnostics, and serde fixtures. The DTOs must not import
+  workflow-service, runtime-registry, or inference policy types. If
+  implementation proves an actual dependency cycle or ownership conflict, stop
+  and re-plan a narrower lower-level inventory contract crate before editing
+  manifests or lockfiles.
+- Runtime-feature id vocabulary: define a bounded, documented set of
+  canonical `RuntimeFeatureSourceId` values before provider implementation.
+  The ids represent dependency-readiness features, not display labels or
+  runtime backend names. Initial ids should be derived from existing typed
+  backend capability concepts such as streaming, device selection, external
+  connection support, KV-cache support, custom-code support, component
+  preprocessing/postprocessing availability, and request-lifecycle semantics
+  only after the contract slice pins their exact wire values and ownership.
+- Device-toolchain id vocabulary: define a bounded, documented set of
+  canonical `DeviceToolchainSourceId` values before provider implementation.
+  The ids represent observable host/runtime toolchain readiness, not shell
+  command names or UI labels. Initial ids should be sourced from existing
+  typed device/runtime observation facts such as CUDA runtime/device support,
+  Metal/MPS availability, llama.cpp device inventory support, and PyTorch
+  device probe support only after the contract slice pins their exact wire
+  values and ownership.
+- Source snapshot DTOs: introduce typed source rows that providers consume
+  instead of raw `WorkflowRuntimeCapability`, runtime-registry candidates,
+  backend display strings, graph-authored strings, shell output, or generic
+  requirement names. Runtime-feature rows must include runtime id, feature id,
+  optional runtime variant id, support/readiness state, freshness/correlation
+  facts, and bounded diagnostics. Device-toolchain rows must include
+  toolchain id, optional runtime id, optional device id/class, readiness state,
+  freshness/correlation facts, bounded diagnostics, and optional bounded
+  alternatives for explicit invalid/unavailable requests.
+- Source ownership: source adapters may project existing typed facts into the
+  shared snapshot DTOs, but the projection must live beside the source owner
+  or embedded-runtime composition boundary. Runtime-feature source projection
+  may consume backend capability facts only as feature evidence; it must not
+  consume scheduler ranking decisions or move runtime/device selection policy
+  out of the scheduler/runtime registry. Device-toolchain source projection
+  may consume inference-owned device probe or managed-runtime device inventory
+  facts; it must not run shell probes or infer toolchain readiness from
+  package names, graph paths, or runtime display text.
+- Provider matching: binding detail ids override requirement ids only when
+  present and equal in meaning; conflicting runtime id, feature id, toolchain
+  id, runtime variant id, or device id constraints produce `Invalid`
+  observation rows. Missing requirement rows, kind mismatches, duplicate
+  provider observations, and ambiguous source matches remain typed diagnostics,
+  not fallback routing.
+- State mapping: a fresh matching supported/ready source row maps to `Ready`.
+  A fresh unsupported row maps to `Unavailable` with an unsupported diagnostic.
+  A fresh source row whose state is unknown, degraded, probing, or otherwise
+  non-terminal maps to `Unavailable` with a source-state diagnostic. A stale
+  source row maps to `Unavailable` with a stale diagnostic. No matching source
+  row for the requested runtime/feature/toolchain/device scope maps to
+  `Missing` with a missing-source diagnostic. Source-reported failures map to
+  `Failed`. Provider `NotImplemented` remains reserved for dependency kinds
+  without a real provider, not for unsupported source states.
+- Alternatives: when an explicit device/toolchain/runtime-feature constraint
+  is unavailable but the source has valid alternatives, diagnostics may include
+  bounded alternative ids for UI recommendations. The provider must not select
+  an alternative or rewrite the requested binding.
+- Verification gate: the shared contract slice must add serde round trips,
+  `serde(deny_unknown_fields)` rejection, invalid id/detail tests,
+  state-mapping tests, stale-source tests, alternatives bounds tests, README
+  traceability, and targeted searches proving provider code does not parse
+  display names, backend aliases, graph strings, shell output, generic
+  requirement names, or scheduler candidate rankings.
+
 Staged implementation:
 
 1. Add a focused dependency inventory contract and provider trait with typed
@@ -418,11 +492,22 @@ Staged implementation:
    contract above. The provider must support mixed Python plus managed-runtime
    payloads without invoking Python for managed-runtime bindings or rebuilding
    final dependency-environment results locally.
-8. Add runtime-feature and device-toolchain providers one at a time from their
-   source-owned facts. Each provider slice must add focused observation
-   fixtures, result-projection tests, README ownership updates, and no-fallback
-   tests.
-9. Plan system-package inventory separately before implementation because it
+8. Add the shared runtime-feature/device-toolchain provider-source contract.
+   This is a contract-first slice: define canonical ids, source snapshot DTOs,
+   freshness/correlation fields, state-to-observation mapping, alternative
+   diagnostic bounds, serde fixtures, invalid-shape tests, README traceability,
+   and no-fallback searches without changing provider behavior.
+9. Add the runtime-feature source projection and provider from source-owned
+   runtime capability facts. This slice must consume only the shared
+   provider-source DTOs, keep scheduler/runtime-registry ranking policy out of
+   dependency inventory, and prove unsupported, stale, missing, and ready
+   feature states through focused provider tests.
+10. Add the device-toolchain source projection and provider from source-owned
+   device/runtime observation facts. This slice must consume only the shared
+   provider-source DTOs, avoid shell probing inside dependency inventory, and
+   prove explicit unavailable constraints surface bounded alternatives without
+   auto-selecting them.
+11. Plan system-package inventory separately before implementation because it
    is platform/package-manager specific and likely needs a host inventory
    source rather than direct probing in embedded-runtime.
 

@@ -17578,6 +17578,25 @@ Worker rules:
     decide how supported/unsupported/unavailable/unknown/stale facts map to
     provider observation states and diagnostics, and state which crate owns
     each mapping before editing provider code.
+- 2026-05-30 selected re-plan for runtime-feature/device-toolchain inventory:
+  - Decision: use the shared provider-source contract path before either
+    provider is implemented. Add canonical runtime-feature ids, canonical
+    device-toolchain ids, typed source snapshot DTOs, freshness/correlation
+    fields, state-to-observation mapping, bounded alternative diagnostics,
+    serde fixtures, invalid-shape tests, stale-source tests, README
+    traceability, and targeted no-fallback searches as a contract-first slice.
+  - Standards result expected: provider behavior remains explicit and
+    contract-driven; embedded-runtime composes source adapters but does not
+    invent scheduler/runtime-registry policy; workflow-service, scheduler,
+    node-engine, graph editor, frontend, and Tauri continue to consume
+    readiness/validation facts only; provider code must not parse display
+    names, backend aliases, graph strings, shell output, generic requirement
+    names, or scheduler ranking candidates.
+  - Next implementation order: shared provider-source contract, then
+    runtime-feature source projection/provider, then device-toolchain source
+    projection/provider. Each provider remains a separate validated slice with
+    focused tests, README ownership updates, line-count review, and
+    no-fallback verification.
 
 ### Traceability Links
 
