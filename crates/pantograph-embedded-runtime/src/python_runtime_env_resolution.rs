@@ -1,0 +1,289 @@
+//! Python executable resolution for default and explicit environment scopes.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+const ENV_DEFAULT_PYTHON_EXECUTABLE: &str = "PANTOGRAPH_PYTHON_EXECUTABLE";
+const ENV_PYTHON_ENV_MAP_JSON: &str = "PANTOGRAPH_PYTHON_ENV_MAP_JSON";
+const ENV_PYTHON_ENV_MAP_FILE: &str = "PANTOGRAPH_PYTHON_ENV_MAP_FILE";
+const ENV_PYO3_PYTHON: &str = "PYO3_PYTHON";
+
+pub(crate) fn resolve_python_executable(env_ids: &[String]) -> Result<PathBuf, String> {
+    let env_map = load_python_env_map()?;
+    for env_id in env_ids {
+        if let Some(path) = env_map.get(env_id) {
+            if let Some(resolved) = resolve_python_candidate(&path.to_string_lossy()) {
+                return Ok(resolved);
+            }
+            return Err(format!(
+                "Configured python executable for env_id '{}' was not found as a path or PATH command: {}",
+                env_id,
+                path.display()
+            ));
+        }
+    }
+
+    if let Ok(default_python) = std::env::var(ENV_DEFAULT_PYTHON_EXECUTABLE) {
+        if let Some(candidate) = resolve_python_candidate(&default_python) {
+            return Ok(candidate);
+        }
+        let trimmed = default_python.trim();
+        if !trimmed.is_empty() {
+            return Err(format!(
+                "{} is set but target was not found as a path or PATH command: {}",
+                ENV_DEFAULT_PYTHON_EXECUTABLE, trimmed
+            ));
+        }
+    }
+
+    if let Ok(pyo3_python) = std::env::var(ENV_PYO3_PYTHON) {
+        if let Some(candidate) = resolve_python_candidate(&pyo3_python) {
+            return Ok(candidate);
+        }
+        let trimmed = pyo3_python.trim();
+        if !trimmed.is_empty() {
+            return Err(format!(
+                "{} is set but target was not found as a path or PATH command: {}",
+                ENV_PYO3_PYTHON, trimmed
+            ));
+        }
+    }
+
+    if let Some(candidate) = resolve_repo_local_venv_python() {
+        return Ok(candidate);
+    }
+
+    for command in ["python3", "python"] {
+        if let Some(candidate) = resolve_python_candidate(command) {
+            return Ok(candidate);
+        }
+    }
+
+    let env_hint = if env_ids.is_empty() {
+        "No env_id was provided for this request.".to_string()
+    } else {
+        format!(
+            "Missing python executable mapping for env_id(s): {}",
+            env_ids.join(", ")
+        )
+    };
+    Err(format!(
+        "Python runtime is not configured. {} Set {} or {} (or {}), or ensure {} or a PATH python command is available.",
+        env_hint,
+        ENV_DEFAULT_PYTHON_EXECUTABLE,
+        ENV_PYTHON_ENV_MAP_JSON,
+        ENV_PYTHON_ENV_MAP_FILE,
+        ENV_PYO3_PYTHON
+    ))
+}
+
+pub(crate) fn resolve_python_executable_for_required_env_id(
+    env_id: &str,
+) -> Result<PathBuf, String> {
+    let trimmed = env_id.trim();
+    if trimmed.is_empty() {
+        return Err("Python env_id is required for this request.".to_string());
+    }
+
+    let env_map = load_python_env_map()?;
+    let Some(path) = env_map.get(trimmed) else {
+        return Err(format!(
+            "Missing python executable mapping for required env_id '{}'. Set {} or {}.",
+            trimmed, ENV_PYTHON_ENV_MAP_JSON, ENV_PYTHON_ENV_MAP_FILE
+        ));
+    };
+    resolve_python_candidate(&path.to_string_lossy()).ok_or_else(|| {
+        format!(
+            "Configured python executable for env_id '{}' was not found as a path or PATH command: {}",
+            trimmed,
+            path.display()
+        )
+    })
+}
+
+fn resolve_python_candidate(raw: &str) -> Option<PathBuf> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.exists() {
+        return Some(candidate);
+    }
+
+    which::which(trimmed).ok()
+}
+
+fn load_python_env_map() -> Result<HashMap<String, PathBuf>, String> {
+    let mut out = HashMap::new();
+
+    if let Ok(path) = std::env::var(ENV_PYTHON_ENV_MAP_FILE) {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            let file_path = PathBuf::from(trimmed);
+            let raw = std::fs::read_to_string(&file_path).map_err(|err| {
+                format!(
+                    "Failed to read {} at '{}': {}",
+                    ENV_PYTHON_ENV_MAP_FILE,
+                    file_path.display(),
+                    err
+                )
+            })?;
+            let parsed = parse_python_env_map_json(&raw).map_err(|err| {
+                format!(
+                    "Invalid {} JSON in '{}': {}",
+                    ENV_PYTHON_ENV_MAP_FILE,
+                    file_path.display(),
+                    err
+                )
+            })?;
+            out.extend(parsed);
+        }
+    }
+
+    if let Ok(raw) = std::env::var(ENV_PYTHON_ENV_MAP_JSON) {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let parsed = parse_python_env_map_json(trimmed)
+                .map_err(|err| format!("Invalid {}: {}", ENV_PYTHON_ENV_MAP_JSON, err))?;
+            out.extend(parsed);
+        }
+    }
+
+    Ok(out)
+}
+
+fn parse_python_env_map_json(raw: &str) -> Result<HashMap<String, PathBuf>, String> {
+    let parsed = serde_json::from_str::<HashMap<String, String>>(raw)
+        .map_err(|err| format!("expected JSON object env_id -> python path: {}", err))?;
+    let mut out = HashMap::new();
+    for (env_id, path) in parsed {
+        let env_id_trimmed = env_id.trim();
+        let path_trimmed = path.trim();
+        if env_id_trimmed.is_empty() || path_trimmed.is_empty() {
+            continue;
+        }
+        out.insert(env_id_trimmed.to_string(), PathBuf::from(path_trimmed));
+    }
+    Ok(out)
+}
+
+fn resolve_repo_local_venv_python() -> Option<PathBuf> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir.parent()?.parent()?;
+
+    [
+        repo_root.join(".venv").join("bin").join("python3"),
+        repo_root.join(".venv").join("bin").join("python"),
+        repo_root.join(".venv").join("Scripts").join("python.exe"),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, OnceLock};
+
+    use super::*;
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvGuard {
+        key: &'static str,
+        original: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: Option<String>) -> Self {
+            let original = std::env::var(key).ok();
+            match value {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+            Self { key, original }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.original.take() {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn parse_python_env_map_json_trims_and_filters_entries() {
+        let raw = r#"{
+            " env-one ": " /tmp/python one ",
+            "": "/tmp/skip-empty-key",
+            "env-two": ""
+        }"#;
+        let parsed = parse_python_env_map_json(raw).expect("parse should succeed");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(
+            parsed.get("env-one"),
+            Some(&PathBuf::from("/tmp/python one"))
+        );
+    }
+
+    #[test]
+    fn resolve_python_executable_from_env_map_file_with_spaces_in_paths() {
+        let _lock = env_lock().lock().expect("env lock");
+        let unique = format!(
+            "pantograph python runtime {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        );
+        let base = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&base).expect("create base dir");
+
+        let python_path = base.join("python executable with spaces");
+        std::fs::write(&python_path, "").expect("write fake python executable");
+
+        let env_map_path = base.join("env map with spaces.json");
+        let env_map_json = serde_json::json!({
+            "venv:space": python_path.to_string_lossy().to_string()
+        });
+        std::fs::write(
+            &env_map_path,
+            serde_json::to_string(&env_map_json).expect("serialize env map"),
+        )
+        .expect("write env map");
+
+        let _map_file_guard = EnvGuard::set(
+            ENV_PYTHON_ENV_MAP_FILE,
+            Some(env_map_path.to_string_lossy().to_string()),
+        );
+        let _map_json_guard = EnvGuard::set(ENV_PYTHON_ENV_MAP_JSON, None);
+        let _default_guard = EnvGuard::set(ENV_DEFAULT_PYTHON_EXECUTABLE, None);
+
+        let resolved = resolve_python_executable(&["venv:space".to_string()])
+            .expect("resolver should use env-map file entry with spaces");
+        assert_eq!(resolved, python_path);
+
+        std::fs::remove_dir_all(base).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn resolve_python_executable_accepts_default_command_name() {
+        let _lock = env_lock().lock().expect("env lock");
+        let _map_file_guard = EnvGuard::set(ENV_PYTHON_ENV_MAP_FILE, None);
+        let _map_json_guard = EnvGuard::set(ENV_PYTHON_ENV_MAP_JSON, None);
+        let _pyo3_guard = EnvGuard::set(ENV_PYO3_PYTHON, None);
+        let _default_guard =
+            EnvGuard::set(ENV_DEFAULT_PYTHON_EXECUTABLE, Some("python3".to_string()));
+
+        let resolved =
+            resolve_python_executable(&[]).expect("resolver should locate python3 from PATH");
+        assert!(resolved.exists());
+    }
+}

@@ -17177,6 +17177,43 @@ Worker rules:
     system-package, runtime-feature, and device-toolchain dependency
     environment probes still require dedicated typed adapters before those
     requirement kinds can publish ready evidence.
+- 2026-05-30 explicit Python package-readiness environment probe slice
+  completed:
+  - Slice scope: `ProcessPythonPackageReadinessProbeRunner` now resolves
+    explicit `PythonEnvironment` probe selectors through the configured Python
+    env map (`PANTOGRAPH_PYTHON_ENV_MAP_JSON` /
+    `PANTOGRAPH_PYTHON_ENV_MAP_FILE`) and runs the same no-shell package probe
+    against that executable. Default-host Python remains available only for
+    `DefaultHostPython` selectors.
+  - No-fallback/no-legacy result: explicit Python environment selectors no
+    longer return blanket `ProbeNotImplemented`, and they also do not fall back
+    to the default host Python executable when the requested environment id is
+    unmapped. Missing or invalid explicit env mappings publish typed
+    `PythonUnavailable` diagnostics.
+  - Standards result: Python executable/env-map resolution moved out of the
+    process runtime adapter into `python_runtime_env_resolution.rs`, keeping
+    executable lookup separate from bridge process execution while preserving
+    the existing public adapter boundary. Package-readiness probing remains the
+    only caller for package probe execution. No scheduler policy, graph state,
+    Pumas path lookup, worker launch metadata, or dependency preflight behavior
+    moved into the probe runner.
+  - Verification passed: `cargo fmt -- --check`; `cargo test -p
+    pantograph-embedded-runtime python_package_readiness_probe`; `cargo test
+    -p pantograph-embedded-runtime python_runtime_env_resolution::tests`;
+    `cargo test -p pantograph-embedded-runtime python_runtime::tests`;
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`;
+    `cargo check -p pantograph-embedded-runtime`; line-count check for touched
+    Rust files.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning in focused test/check commands. A
+    broad exploratory `cargo test -p pantograph-embedded-runtime
+    python_runtime` filter also matched unrelated task-executor recorder tests
+    that failed on the existing missing `pumas_model_ref` precondition; exact
+    changed-module filters passed.
+  - Remaining follow-up: add production configuration/documentation for the
+    explicit Python env map used by managed/runtime-owned dependency
+    environments, then add runtime-managed binary, system-package,
+    runtime-feature, and device-toolchain typed probe adapters.
 
 ### Traceability Links
 

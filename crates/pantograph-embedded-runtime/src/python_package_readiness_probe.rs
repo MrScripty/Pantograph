@@ -5,7 +5,7 @@
 //! graph data, import worker modules, or run dependency-environment preflight.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -65,18 +65,19 @@ impl ProcessPythonPackageReadinessProbeRunner {
 #[async_trait]
 impl PackageReadinessProbeRunner for ProcessPythonPackageReadinessProbeRunner {
     async fn probe(&self, request: PackageReadinessProbeRequest) -> PackageReadinessProbeOutcome {
-        if matches!(
-            request.environment,
-            PackageReadinessEnvironmentSelector::PythonEnvironment { .. }
-        ) {
-            return PackageReadinessProbeOutcome::Failed(vec![probe_failure(
-                PackageReadinessProviderDiagnosticCode::ProbeNotImplemented,
-                None,
-                "Explicit Python package-readiness environments are not implemented.",
-            )]);
-        }
-
         if request.dependency_ids.is_empty() {
+            if let PackageReadinessEnvironmentSelector::PythonEnvironment { .. } =
+                &request.environment
+            {
+                if let Err(error) = python_executable_for_probe_environment(&request.environment) {
+                    return PackageReadinessProbeOutcome::Failed(vec![probe_failure_with_detail(
+                        PackageReadinessProviderDiagnosticCode::PythonUnavailable,
+                        None,
+                        "Python runtime is not available",
+                        &error,
+                    )]);
+                }
+            }
             return PackageReadinessProbeOutcome::Snapshot(
                 PythonPackageReadinessSnapshot::available(BTreeSet::new()),
             );
@@ -86,24 +87,39 @@ impl PackageReadinessProbeRunner for ProcessPythonPackageReadinessProbeRunner {
             return PackageReadinessProbeOutcome::Failed(vec![failure]);
         }
 
-        let python_executable =
-            match crate::python_runtime::resolve_python_executable_for_env_ids(&[]) {
-                Ok(path) => path,
-                Err(error) => {
-                    return PackageReadinessProbeOutcome::Failed(vec![probe_failure_with_detail(
-                        PackageReadinessProviderDiagnosticCode::PythonUnavailable,
-                        None,
-                        "Python runtime is not available",
-                        &error,
-                    )]);
-                }
-            };
+        let python_executable = match python_executable_for_probe_environment(&request.environment)
+        {
+            Ok(path) => path,
+            Err(error) => {
+                return PackageReadinessProbeOutcome::Failed(vec![probe_failure_with_detail(
+                    PackageReadinessProviderDiagnosticCode::PythonUnavailable,
+                    None,
+                    "Python runtime is not available",
+                    &error,
+                )]);
+            }
+        };
 
         match run_probe_process(&python_executable, &request.dependency_ids, self.timeout).await {
             Ok(installed_package_ids) => PackageReadinessProbeOutcome::Snapshot(
                 PythonPackageReadinessSnapshot::available(installed_package_ids),
             ),
             Err(failure) => PackageReadinessProbeOutcome::Failed(vec![failure]),
+        }
+    }
+}
+
+fn python_executable_for_probe_environment(
+    environment: &PackageReadinessEnvironmentSelector,
+) -> Result<PathBuf, String> {
+    match environment {
+        PackageReadinessEnvironmentSelector::DefaultHostPython => {
+            crate::python_runtime::resolve_python_executable_for_env_ids(&[])
+        }
+        PackageReadinessEnvironmentSelector::PythonEnvironment { environment_id } => {
+            crate::python_runtime::resolve_python_executable_for_required_env_id(
+                environment_id.as_str(),
+            )
         }
     }
 }
@@ -348,12 +364,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_runner_rejects_explicit_python_environment_without_process() {
+    async fn process_runner_requires_configured_explicit_python_environment() {
         let runner = ProcessPythonPackageReadinessProbeRunner::default();
         let outcome = runner
             .probe(probe_request(
                 PackageReadinessEnvironmentSelector::PythonEnvironment {
-                    environment_id: availability_id("managed_python"),
+                    environment_id: availability_id("pantograph-test-missing-env"),
                 },
                 vec![availability_id("diffusers")],
             ))
@@ -364,8 +380,12 @@ mod tests {
         };
         assert_eq!(
             failures[0].code,
-            PackageReadinessProviderDiagnosticCode::ProbeNotImplemented
+            PackageReadinessProviderDiagnosticCode::PythonUnavailable
         );
+        assert!(failures[0]
+            .reason
+            .as_str()
+            .contains("pantograph-test-missing-env"));
     }
 
     #[tokio::test]

@@ -64,6 +64,7 @@ packages.
 | `technical_fit_execution_evidence.rs` | Owns the execution-evidence to technical-fit adapter contract, mapping inference-owned evidence reports plus supplied dependency-readiness facts into runtime-registry candidates and typed diagnostics without old package-hint fallback behavior. |
 | `technical_fit_package_readiness.rs` | Owns technical-fit package-readiness request collection, mapping validated PyTorch/Diffusers execution evidence candidates into runtime-scoped provider requests and returning dependency-readiness facts without probing per candidate or selecting runtimes. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
+| `python_runtime_env_resolution.rs` | Owns Python executable resolution from explicit env-map ids, default host configuration, `PYO3_PYTHON`, repo-local virtualenvs, and PATH commands without mixing executable lookup into bridge process execution. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
 | `python_package_readiness_probe.rs` | Owns the no-shell default-host Python package-readiness probe runner used by the runtime-scoped package-readiness provider, including bounded timeout/output handling and typed provider diagnostics. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
@@ -124,11 +125,12 @@ Pumas-specific dependency resolution.
   payloads are checked through the embedded-runtime Python package probe
   boundary and projected into dependency-environment snapshots. Explicit
   request environment refs or selected binding profiles must be preserved on
-  probe requests; default-host Python is only valid when the canonical payload
-  has no explicit environment/profile identity. Unsupported requirement or
-  binding kinds and unsupported explicit probe environments publish typed
-  diagnostics instead of falling back to graph data, paths, inferred package
-  names, or host Python.
+  probe requests. Explicit Python probe environments resolve only through the
+  configured Python env map, while default-host Python is valid only when the
+  canonical payload has no explicit environment/profile identity. Unsupported
+  requirement or binding kinds and unmapped explicit probe environments publish
+  typed diagnostics instead of falling back to graph data, paths, inferred
+  package names, or host Python.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

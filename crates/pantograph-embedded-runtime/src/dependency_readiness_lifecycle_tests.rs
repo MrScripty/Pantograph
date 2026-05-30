@@ -148,7 +148,7 @@ async fn producer_reports_missing_snapshot_when_selected_package_is_absent() {
 }
 
 #[tokio::test]
-async fn producer_preserves_explicit_python_environment_and_fails_closed_when_unimplemented() {
+async fn producer_preserves_explicit_python_environment_and_fails_closed_on_probe_failure() {
     let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
     let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
     let request = validated_request();

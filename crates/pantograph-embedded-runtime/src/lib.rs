@@ -35,6 +35,7 @@ pub mod package_readiness_provider;
 mod planned_inference_host;
 pub mod python_package_readiness_probe;
 pub mod python_runtime;
+mod python_runtime_env_resolution;
 mod python_runtime_execution;
 pub mod rag;
 pub mod runtime_capabilities;
