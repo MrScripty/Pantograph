@@ -16,8 +16,10 @@ mod dependency_inventory;
 mod dependency_inventory_device_toolchain;
 #[cfg(any(test, feature = "standalone"))]
 mod dependency_inventory_device_toolchain_source;
+mod dependency_inventory_dispatch;
 #[cfg(any(test, feature = "standalone"))]
 mod dependency_inventory_managed_runtime;
+mod dependency_inventory_python;
 #[cfg(any(test, feature = "standalone"))]
 mod dependency_inventory_runtime_feature;
 #[cfg(any(test, feature = "standalone"))]

@@ -598,8 +598,8 @@ Staged implementation:
      production composition, proving mixed payloads remain isolated and
      fail-closed.
    - Host/system inventory source in platform-specific modules. Only this
-     source may know package-manager commands or platform probing mechanics, and
-     it must publish typed source rows rather than shell output.
+     source may know package-manager commands or platform probing mechanics,
+     and it must publish typed source rows rather than shell output.
 
 Standards gates:
 
@@ -881,6 +881,18 @@ Implementation progress:
   dispatcher. Split provider registration/composition or selected-binding
   routing only where the new boundary lets maintainers ignore unrelated
   provider-source details safely; do not split solely because of line count.
+- 2026-05-30 inventory dispatch/Python-provider decomposition slice:
+  `dependency_inventory.rs` now remains the crate-local inventory facade and
+  shared observation-to-result projection; `dependency_inventory_dispatch.rs`
+  owns provider registration, selected-binding routing, scoped payloads,
+  feature-gated dispatch target selection, and provider-owned fail-closed
+  not-implemented observations; and `dependency_inventory_python.rs` owns the
+  Python package provider adapter. This slice was organization-only: no
+  system-package readiness behavior, package-manager probing, shell parsing,
+  scheduler policy, graph/path/Pumas-name inference, compatibility shim, or
+  legacy preflight behavior was added. Verification passed with the focused
+  embedded-runtime inventory/readiness tests and standalone checks; the known
+  workflow-service `set_active_run_execution_plan` warning remains.
 
 ## Verification Strategy
 

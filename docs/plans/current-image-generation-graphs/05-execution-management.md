@@ -17850,6 +17850,40 @@ Worker rules:
     inference from shell output parsing, generic requirement names, graph
     strings, paths, Pumas package names, Python probes for non-Python
     requirements, scheduler policy, or old dependency preflight.
+- 2026-05-30 inventory dispatch/Python-provider decomposition slice:
+  - Slice scope: facade-preserving decomposition only. Allowed files:
+    `crates/pantograph-embedded-runtime/src/dependency_inventory.rs`,
+    `crates/pantograph-embedded-runtime/src/dependency_inventory_dispatch.rs`,
+    `crates/pantograph-embedded-runtime/src/dependency_inventory_python.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan file.
+  - Implementation: kept `dependency_inventory.rs` as the crate-local facade
+    and shared observation-to-result projection, moved provider registration,
+    selected-binding dispatch planning, scoped payload routing, feature-gated
+    dispatch target selection, and provider-owned not-implemented observations
+    into `dependency_inventory_dispatch.rs`, and moved the Python package
+    provider adapter into `dependency_inventory_python.rs`.
+  - Standards/no-fallback result: this slice changed organization only. It did
+    not add system-package readiness behavior, package-manager probing, shell
+    parsing, scheduler policy, graph/path/Pumas-name inference, compatibility
+    shims, or legacy preflight behavior. Concrete provider modules remain
+    source-owned and cohesive.
+  - Complection result: `dependency_inventory.rs` is now 263 lines and owns one
+    facade/projection concern; `dependency_inventory_dispatch.rs` is 377 lines
+    and owns routing/registration/fail-closed dispatch; and
+    `dependency_inventory_python.rs` is 50 lines and owns Python probe adapter
+    behavior.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --features standalone`, and
+    `git diff --check`. The only warning observed remains the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: add the shared system-package requirement and
+    provider-source contracts with fixtures before adding any concrete
+    system-package provider behavior.
 
 ### Traceability Links
 
