@@ -8,6 +8,7 @@ trait, not-implemented provider, and typed service errors.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Public facade, provider trait, no-I/O provider, and error type. |
+| `snapshot.rs` | Synchronous path-free readiness snapshot provider. |
 
 ## Problem
 Workflow-service needs a backend-owned service contract that can be wired to
@@ -22,13 +23,21 @@ resolvers.
   infrastructure here.
 
 ## Decision
-Keep the first slice in one small `lib.rs` module. Split modules only when a
-production provider or scheduler-readiness adapter adds enough behavior to make
-separate ownership clearer.
+Keep the facade and simple no-I/O provider in `lib.rs`. Put the readiness
+snapshot provider in `snapshot.rs` because it is the first production-oriented
+provider contract and owns separate matching/fail-closed behavior.
+
+The snapshot provider keys readiness by canonical stable request identity:
+action, path-free dependency identity key, dependency requirements id, and
+request environment ref. It validates the producer planning request before
+insertion, but it does not key on caller context such as workflow run id because
+that context can legitimately change between scheduling runs without changing
+the dependency environment requirements.
 
 ## Alternatives Rejected
-- Add provider modules now: rejected because the current slice has only a
-  no-I/O provider and extra files would create empty abstraction.
+- Key snapshots by full planning request: rejected because caller context is
+  diagnostic/provenance data and would make precomputed readiness unusable for
+  new workflow runs with identical dependency requirements.
 - Make the facade async now: rejected because the current implementation has no
   awaited I/O.
 
@@ -36,6 +45,10 @@ separate ownership clearer.
 - Service methods validate provider output before returning.
 - The not-implemented provider never calls legacy resolvers.
 - Provider wiring is supplied by the caller.
+- Snapshot provider misses, stale snapshots, and identity/detail mismatches
+  return validated non-ready results with typed diagnostics.
+- Snapshot provider never probes filesystem, package managers, Pumas, runtime
+  hosts, or executable load targets.
 
 ## Revisit Triggers
 - Production Pumas provider implementation is added.
@@ -62,11 +75,24 @@ let _service = DependencyEnvironmentService::new(
 );
 ```
 
+Snapshot-backed readiness providers are built and populated by the backend
+composition owner:
+
+```rust
+use pantograph_dependency_environment_service::DependencyEnvironmentReadinessSnapshotProvider;
+use pantograph_dependency_environment_service::DependencyEnvironmentService;
+
+let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+let _service = DependencyEnvironmentService::new(provider);
+```
+
 ## API Consumer Contract
 - Inputs are validated dependency-environment requests.
 - Outputs are validated dependency-environment results.
 - Provider failures and invalid provider output are typed service errors.
 - The facade does not own background tasks, retries, or shutdown.
+- Snapshot insertion is synchronous and deterministic; async producers must own
+  their task lifecycle outside this crate and only publish validated snapshots.
 
 ## Structured Producer Contract
 - The facade produces shared dependency-environment result contracts.

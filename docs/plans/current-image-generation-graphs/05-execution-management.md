@@ -16652,6 +16652,49 @@ Worker rules:
     only then use real package/runtime probes. The current injected-ready
     provider remains test/dev scaffolding and must not become production
     readiness authority.
+- 2026-05-29 Milestone 5b snapshot-backed dependency-readiness provider slice
+  completed:
+  - Slice scope: dependency-environment service snapshot provider source,
+    service contract tests, dependency-environment service READMEs, focused
+    workflow session acceptance test, and plan records.
+  - Implementation: `pantograph-dependency-environment-service` now exposes
+    `DependencyEnvironmentReadinessSnapshotProvider` plus validated snapshot
+    DTOs and typed snapshot insertion errors. The provider remains
+    synchronous, reads only backend-owned in-memory snapshots, and returns
+    canonical `DependencyEnvironmentResult` through the existing service
+    facade.
+  - Keying decision: snapshots match by action, path-free
+    `DependencyPlanningIdentityKey`, dependency requirements id, and request
+    environment ref. Inserted snapshots still validate their producer
+    `DependencyPlanningRequest`, but caller context such as workflow run id is
+    not part of the readiness identity.
+  - No-fallback/no-legacy gate: missing, stale, or mismatched snapshots return
+    typed non-ready diagnostics. The provider does not use
+    `ModelDependencyRequest`, `ModelRefV2`, graph paths, frontend/Tauri
+    payloads, technical-fit previews, reduced execution plans, runtime-host
+    handoff data, executable load targets, Pumas probes, package-manager
+    probes, filesystem checks, or runtime creation.
+  - Verification passed: `cargo test -p
+    pantograph-dependency-environment-service`; `cargo test -p
+    pantograph-workflow-service
+    workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary
+    -- --nocapture`; `cargo check -p
+    pantograph-dependency-environment-service`; `cargo check -p
+    pantograph-workflow-service`; `cargo fmt -p
+    pantograph-dependency-environment-service -p pantograph-workflow-service
+    -- --check`; targeted retired-path search over touched files; and `git
+    diff --check`.
+  - Verification caveat: one attempted `cargo test` command used two
+    positional test filters and failed with Cargo usage before running tests;
+    both filters were rerun separately and passed. `cargo check -p
+    pantograph-workflow-service` still emits the known unused
+    `set_active_run_execution_plan` warning.
+  - Remaining follow-up: implement the async backend snapshot producer with
+    tracked handles, cancellation, shutdown, retry policy, tracing, and
+    production source wiring before real package/runtime probes feed the
+    snapshot provider.
 
 ### Traceability Links
 

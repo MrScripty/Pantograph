@@ -13,7 +13,7 @@ legacy path-shaped model dependency resolvers.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `Cargo.toml` | Crate manifest and direct dependency ownership. |
-| `src/` | Public service facade, provider trait, typed errors, and source README. |
+| `src/` | Public service facade, provider trait, snapshot provider, typed errors, and source README. |
 | `tests/` | Public API contract tests for the no-I/O service boundary. |
 
 ## Problem
@@ -37,9 +37,16 @@ Tauri layers as intent transport.
 ## Decision
 Expose a small service facade over provider traits. The facade accepts
 `ValidatedDependencyEnvironmentRequest`, calls the selected provider, and
-returns `ValidatedDependencyEnvironmentResult`. The initial provider is a
-no-I/O not-implemented provider used to prove contract shape before production
-Pumas/install behavior is added.
+returns `ValidatedDependencyEnvironmentResult`. The no-I/O not-implemented
+provider proves contract shape when production readiness is unavailable.
+
+The first production-oriented provider is
+`DependencyEnvironmentReadinessSnapshotProvider`. It reads backend-owned
+readiness snapshots keyed by action, path-free dependency identity key,
+dependency requirements id, and request environment ref. The snapshot validates
+its producer planning request before insertion, but caller context such as a
+workflow run id is not part of the readiness key because it does not change the
+dependency environment requirements.
 
 ## Alternatives Rejected
 - Reuse node-engine `ModelDependencyRequest`: rejected because it preserves
@@ -47,6 +54,9 @@ Pumas/install behavior is added.
 - Put dependency policy in Tauri: rejected because Tauri is transport-only.
 - Let workflow-service build raw results directly: rejected because result
   validation and provider lifecycle need one backend service boundary.
+- Key readiness snapshots by full planning request: rejected because caller
+  context is provenance data and would prevent one validated readiness snapshot
+  from serving later runs with identical dependency requirements.
 
 ## Invariants
 - All public service inputs are validated dependency-planning contracts.
@@ -55,6 +65,10 @@ Pumas/install behavior is added.
 - No provider is self-created by graph, frontend, Tauri, node-engine, or
   embedded-runtime code.
 - Not-implemented behavior is explicit diagnostic output, not fallback logic.
+- Snapshot provider misses, stale snapshots, and request-detail mismatches
+  produce validated non-ready diagnostic results.
+- Snapshot provider does not probe Pumas, package managers, filesystems,
+  runtimes, or executable load targets.
 
 ## Revisit Triggers
 - Pumas exposes concrete dependency-environment resolve/check/install APIs.
@@ -87,11 +101,23 @@ let service = DependencyEnvironmentService::new(
 );
 ```
 
+```rust
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentReadinessSnapshotProvider, DependencyEnvironmentService,
+};
+
+let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+let service = DependencyEnvironmentService::new(provider);
+```
+
 ## API Consumer Contract
 - Inputs: validated dependency-environment requests from workflow-service.
 - Outputs: validated dependency-environment results with typed diagnostics.
 - Lifecycle: callers own service construction and provider selection at the
   backend composition boundary.
+- Snapshot lifecycle: producers outside this crate own async probing,
+  cancellation, retries, tracing, and shutdown. This crate accepts only
+  already-validated synchronous snapshots.
 - Error behavior: invalid provider output is returned as a typed service error;
   missing provider behavior is represented as a validated not-implemented
   result.

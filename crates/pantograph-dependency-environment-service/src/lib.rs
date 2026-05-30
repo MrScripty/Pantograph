@@ -7,6 +7,8 @@
 
 use std::sync::Arc;
 
+mod snapshot;
+
 use pantograph_dependency_planning::{
     DependencyEnvironmentAction, DependencyEnvironmentFailureState,
     DependencyEnvironmentInstallState, DependencyEnvironmentOperation,
@@ -15,6 +17,10 @@ use pantograph_dependency_planning::{
     DependencyPlanningContractError, DependencyPlanningDiagnostic,
     DependencyPlanningDiagnosticCode, DependencyPlanningSeverity,
     ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
+};
+pub use snapshot::{
+    DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
+    DependencyEnvironmentReadinessSnapshotStatus, DependencyEnvironmentSnapshotStoreError,
 };
 
 /// Fallible dependency-environment service errors.

@@ -1,12 +1,15 @@
 use pantograph_dependency_environment_service::{
-    DependencyEnvironmentProvider, DependencyEnvironmentService, DependencyEnvironmentServiceError,
+    DependencyEnvironmentProvider, DependencyEnvironmentReadinessSnapshot,
+    DependencyEnvironmentReadinessSnapshotProvider, DependencyEnvironmentReadinessSnapshotStatus,
+    DependencyEnvironmentService, DependencyEnvironmentServiceError,
     NotImplementedDependencyEnvironmentProvider,
 };
 use pantograph_dependency_planning::{
     DependencyEnvironmentFailureState, DependencyEnvironmentInstallState,
-    DependencyEnvironmentReadinessState, DependencyEnvironmentResult,
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRequest, DependencyEnvironmentResult,
     DependencyEnvironmentValidationState, DependencyPlanningContractError,
-    DependencyPlanningDiagnosticCode, ValidatedDependencyEnvironmentRequest,
+    DependencyPlanningDiagnosticCode, DependencyRequirementsId,
+    ValidatedDependencyEnvironmentRequest,
 };
 
 const RESOLVE_REQUEST: &str = include_str!(
@@ -96,10 +99,159 @@ fn validated_result_boundary_rejects_path_shaped_json_fields() {
     );
 }
 
+#[test]
+fn snapshot_provider_returns_fresh_matching_snapshot() {
+    let request = validated_request_with_requirements();
+    let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &request,
+                ready_result_for_request(&request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("snapshot should validate"),
+        )
+        .expect("insert snapshot");
+    let service = DependencyEnvironmentService::new(provider);
+
+    let result = service.handle(&request).expect("snapshot should resolve");
+
+    assert_eq!(
+        result.as_result().readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(
+        result.as_result().dependency_requirements_id,
+        request.as_request().dependency_requirements_id
+    );
+}
+
+#[test]
+fn snapshot_provider_fails_closed_when_snapshot_is_missing() {
+    let request = validated_request_with_requirements();
+    let service =
+        DependencyEnvironmentService::new(DependencyEnvironmentReadinessSnapshotProvider::new());
+
+    let result = service
+        .handle(&request)
+        .expect("missing snapshot should still produce a valid result");
+
+    assert_eq!(
+        result.as_result().readiness_state,
+        DependencyEnvironmentReadinessState::Missing
+    );
+    assert_eq!(
+        result.as_result().validation_state,
+        DependencyEnvironmentValidationState::Unavailable
+    );
+    assert_eq!(
+        result.as_result().failure_state,
+        Some(DependencyEnvironmentFailureState::RequirementsUnavailable)
+    );
+}
+
+#[test]
+fn snapshot_provider_fails_closed_when_snapshot_is_stale() {
+    let request = validated_request_with_requirements();
+    let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &request,
+                ready_result_for_request(&request),
+                DependencyEnvironmentReadinessSnapshotStatus::Stale,
+            )
+            .expect("snapshot should validate"),
+        )
+        .expect("insert snapshot");
+    let service = DependencyEnvironmentService::new(provider);
+
+    let result = service
+        .handle(&request)
+        .expect("stale snapshot should still produce a valid result");
+
+    assert_eq!(
+        result.as_result().readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    assert_eq!(
+        result.as_result().validation_state,
+        DependencyEnvironmentValidationState::Stale
+    );
+    assert_eq!(
+        result.as_result().failure_state,
+        Some(DependencyEnvironmentFailureState::RequirementsUnavailable)
+    );
+}
+
+#[test]
+fn snapshot_provider_fails_closed_when_snapshot_key_is_mismatched() {
+    let request = validated_request_with_requirements();
+    let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &request,
+                ready_result_for_request(&request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("snapshot should validate"),
+        )
+        .expect("insert snapshot");
+    let mut mismatched_request = request.as_request().clone();
+    mismatched_request.dependency_requirements_id =
+        Some(DependencyRequirementsId::parse("tiny-sd:pytorch:alternate").expect("valid id"));
+    let mismatched_request = ValidatedDependencyEnvironmentRequest::try_from(mismatched_request)
+        .expect("mismatched request should still validate");
+    let service = DependencyEnvironmentService::new(provider);
+
+    let result = service
+        .handle(&mismatched_request)
+        .expect("mismatch should still produce a valid result");
+
+    assert_eq!(
+        result.as_result().readiness_state,
+        DependencyEnvironmentReadinessState::Invalid
+    );
+    assert_eq!(
+        result.as_result().validation_state,
+        DependencyEnvironmentValidationState::Invalid
+    );
+    assert_eq!(
+        result.as_result().failure_state,
+        Some(DependencyEnvironmentFailureState::InvalidRequest)
+    );
+}
+
 fn validated_request(fixture: &str) -> ValidatedDependencyEnvironmentRequest {
     let value: serde_json::Value =
         serde_json::from_str(fixture).expect("request fixture should parse");
     ValidatedDependencyEnvironmentRequest::try_from(value).expect("request fixture should validate")
+}
+
+fn validated_request_with_requirements() -> ValidatedDependencyEnvironmentRequest {
+    let mut request: DependencyEnvironmentRequest =
+        serde_json::from_str(RESOLVE_REQUEST).expect("request fixture should decode");
+    request.dependency_requirements_id =
+        Some(DependencyRequirementsId::parse("tiny-sd:pytorch:linux-x86-64").expect("valid id"));
+    ValidatedDependencyEnvironmentRequest::try_from(request).expect("request should validate")
+}
+
+fn ready_result_for_request(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentResult {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(READY_RESULT).expect("ready fixture should decode");
+    result.action = request.as_request().action;
+    result.identity_key = request.as_request().identity_key.clone();
+    result.dependency_requirements_id = request.as_request().dependency_requirements_id.clone();
+    result.selected_binding_ids = request
+        .as_request()
+        .identity_key
+        .selected_binding_ids
+        .clone();
+    result
 }
 
 #[derive(Debug, Clone, Copy)]

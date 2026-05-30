@@ -592,3 +592,55 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   retries, and tracing before using real host package/runtime probes. Guardrail:
   the injected-ready provider remains test/dev scaffolding only and must not
   become production readiness authority.
+- 2026-05-29 snapshot-backed dependency-readiness provider slice completed.
+  Added `DependencyEnvironmentReadinessSnapshotProvider`,
+  `DependencyEnvironmentReadinessSnapshot`, typed freshness state, and typed
+  snapshot insertion errors in `pantograph-dependency-environment-service`.
+  The provider is synchronous, path-free, and returns canonical validated
+  `DependencyEnvironmentResult` values through the existing
+  `DependencyEnvironmentService` facade. Fresh matching snapshots return their
+  validated result. Missing snapshots, stale snapshots, and identity/detail
+  mismatches fail closed with non-ready typed diagnostics instead of probing
+  Pumas, package managers, filesystems, runtime hosts, technical-fit previews,
+  graph node data, runtime handoff load targets, `ModelDependencyRequest`,
+  `ModelRefV2`, graph `model_path`/`modelPath`, or legacy execution-plan
+  payloads.
+  - Keying decision: readiness snapshots match by action, path-free
+    `DependencyPlanningIdentityKey`, dependency requirements id, and request
+    environment ref. The inserted snapshot also validates its producer
+    `DependencyPlanningRequest` against the identity key, but caller context
+    such as workflow run id is intentionally not part of the readiness key
+    because it is provenance, not dependency-environment identity. This avoids
+    rejecting a fresh backend-owned snapshot for a later run with identical
+    dependency requirements while still preventing mismatched requirement ids
+    from admitting dispatch.
+  - Workflow acceptance: replaced the local injected-ready test provider with
+    the snapshot provider and proved a fresh matching readiness snapshot admits
+    the runtime inference task only as far as the current dispatch-not-wired
+    boundary. The no-snapshot path still fails before dispatch admission and
+    neither path calls runtime load or legacy whole-run execution.
+  - Documentation: updated dependency-environment service READMEs to record the
+    snapshot provider, keying decision, fail-closed behavior, and lifecycle
+    split that keeps future async producers outside this synchronous contract
+    crate.
+  - Verification: `cargo test -p pantograph-dependency-environment-service`;
+    `cargo test -p pantograph-workflow-service
+    workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary
+    -- --nocapture`; `cargo check -p
+    pantograph-dependency-environment-service`; `cargo check -p
+    pantograph-workflow-service`; `cargo fmt -p
+    pantograph-dependency-environment-service -p pantograph-workflow-service
+    -- --check`; `git diff --check`; targeted retired-path search over touched
+    service/workflow files. Verification caveat: one attempted `cargo test`
+    command used two positional test filters and failed with Cargo usage before
+    running tests; both filters were rerun as separate passing commands.
+    Workflow-service still emits the known unused `set_active_run_execution_plan`
+    warning.
+  - Remaining follow-up: implement the async backend snapshot producer with
+    tracked handles, cancellation, shutdown, retry policy, tracing, and
+    production source wiring before real host package/runtime probes can feed
+    this provider. Scheduler dispatch selection/runtime-host request
+    construction from the dispatch-selected `SchedulerRuntimeHandoff` remains a
+    later slice.

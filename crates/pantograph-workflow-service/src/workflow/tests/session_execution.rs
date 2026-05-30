@@ -1,11 +1,14 @@
-use pantograph_dependency_environment_service::DependencyEnvironmentProvider;
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
+    DependencyEnvironmentReadinessSnapshotStatus,
+};
 use pantograph_dependency_planning::{
-    produce_dependency_requirements_proof, DependencyEnvironmentId,
+    produce_dependency_requirements_proof, DependencyEnvironmentAction, DependencyEnvironmentId,
     DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
-    DependencyEnvironmentRef, DependencyEnvironmentResult, DependencyEnvironmentValidationState,
-    DependencyNodeTypeId, DependencyPlanningCallerContext, DependencyPlanningRequest,
-    PumasModelRef, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyPlanningRequest,
+    DependencyEnvironmentRef, DependencyEnvironmentRequest, DependencyEnvironmentResult,
+    DependencyEnvironmentValidationState, DependencyNodeTypeId, DependencyPlanningCallerContext,
+    DependencyPlanningIdentityKey, DependencyPlanningRequest, PumasModelRef, SchedulerIntent,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
@@ -276,12 +279,14 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
 }
 
 #[tokio::test]
-async fn workflow_execution_session_ready_dependency_readiness_stops_at_dispatch_boundary() {
+async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary()
+{
     let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
         .with_dependency_environment_provider(std::sync::Arc::new(
-            ReadyDependencyEnvironmentProvider,
+            dependency_readiness_provider.clone(),
         ));
     let workflow_id = "wf-runtime-ready-dispatch-boundary";
     let workflow_semantic_version = "1.2.3";
@@ -294,6 +299,17 @@ async fn workflow_execution_session_ready_dependency_readiness_stops_at_dispatch
             &version, &graph,
         ))
         .expect("store executable validation snapshot");
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
 
     let created = service
         .create_workflow_execution_session(
@@ -344,32 +360,6 @@ async fn workflow_execution_session_ready_dependency_readiness_stops_at_dispatch
     assert!(queue.items.is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ReadyDependencyEnvironmentProvider;
-
-impl DependencyEnvironmentProvider for ReadyDependencyEnvironmentProvider {
-    fn resolve(
-        &self,
-        request: &ValidatedDependencyEnvironmentRequest,
-    ) -> DependencyEnvironmentResult {
-        ready_dependency_environment_result(request)
-    }
-
-    fn check(
-        &self,
-        request: &ValidatedDependencyEnvironmentRequest,
-    ) -> DependencyEnvironmentResult {
-        ready_dependency_environment_result(request)
-    }
-
-    fn install(
-        &self,
-        request: &ValidatedDependencyEnvironmentRequest,
-    ) -> DependencyEnvironmentResult {
-        ready_dependency_environment_result(request)
-    }
 }
 
 fn ready_dependency_environment_result(
@@ -2577,7 +2567,53 @@ fn runtime_dependency_requirements_proof(
     model_ref: &PumasModelRef,
     selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
 ) -> pantograph_dependency_planning::DependencyRequirementsProof {
-    let request = DependencyPlanningRequest {
+    let request = runtime_dependency_planning_request(version, model_ref, selected_binding_ids);
+    let validated_request =
+        ValidatedDependencyPlanningRequest::try_from(request).expect("valid planning request");
+    produce_dependency_requirements_proof(&validated_request, None)
+        .expect("dependency requirements proof")
+}
+
+fn runtime_dependency_environment_request(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+) -> ValidatedDependencyEnvironmentRequest {
+    let model_ref = PumasModelRef {
+        model_id: "image/example/tiny-diffusion".to_string(),
+        revision: Some("main".to_string()),
+        selected_artifact_id: Some("diffusers-bundle".to_string()),
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    };
+    let selected_binding_ids =
+        vec![
+            pantograph_dependency_planning::DependencyBindingId::parse("torch-diffusers")
+                .expect("valid binding id"),
+        ];
+    let planning_request =
+        runtime_dependency_planning_request(version, &model_ref, selected_binding_ids);
+    let identity_key = DependencyPlanningIdentityKey::from_planning_request(&planning_request)
+        .expect("dependency identity key");
+    let validated_request = ValidatedDependencyPlanningRequest::try_from(planning_request.clone())
+        .expect("valid planning request");
+    let dependency_proof = produce_dependency_requirements_proof(&validated_request, None)
+        .expect("dependency requirements proof");
+    ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+        contract_version: 1,
+        action: DependencyEnvironmentAction::Resolve,
+        identity_key,
+        planning_request,
+        dependency_requirements_id: Some(dependency_proof.dependency_requirements_id),
+        environment_ref: None,
+    })
+    .expect("valid dependency environment request")
+}
+
+fn runtime_dependency_planning_request(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+    model_ref: &PumasModelRef,
+    selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
+) -> DependencyPlanningRequest {
+    DependencyPlanningRequest {
         model_ref: model_ref.clone(),
         task_id: pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
             .expect("valid task id"),
@@ -2603,11 +2639,7 @@ fn runtime_dependency_requirements_proof(
             port_id: None,
             run_id: None,
         },
-    };
-    let validated_request =
-        ValidatedDependencyPlanningRequest::try_from(request).expect("valid planning request");
-    produce_dependency_requirements_proof(&validated_request, None)
-        .expect("dependency requirements proof")
+    }
 }
 
 fn retained_io_test_artifact_policy() -> ArtifactPolicy {
