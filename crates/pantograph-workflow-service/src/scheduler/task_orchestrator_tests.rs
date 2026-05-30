@@ -1013,6 +1013,71 @@ fn orchestrator_marks_runtime_tasks_terminal_when_dispatch_is_not_wired() {
         .is_empty());
 }
 
+#[test]
+fn orchestrator_persists_started_runtime_task_result() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(ready_readiness_proof()),
+        )
+        .expect("admit runtime task readiness");
+
+    let started = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+
+    assert_eq!(started.task.task_id.as_str(), task_id);
+    assert!(started.materialized_results.is_empty());
+    let (_stored_graph, running_records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    assert_eq!(
+        running_records[0].state.kind(),
+        SchedulerTaskStateKind::Running
+    );
+
+    let completed = orchestrator
+        .complete_started_runtime_task(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &started,
+            runtime_task_result_fixture(&task_graph.tasks[0]),
+        )
+        .expect("complete runtime task");
+
+    assert_eq!(completed.state.kind(), SchedulerTaskStateKind::Completed);
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].task_id, task_id);
+    assert_eq!(
+        results[0].status,
+        WorkflowSchedulerTaskResultStatus::Completed
+    );
+}
+
 #[tokio::test]
 async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result() {
     let orchestrator = orchestrator_without_runtime_host_response();
@@ -1382,6 +1447,23 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
         diagnostics: Vec::new(),
+    }
+}
+
+fn runtime_task_result_fixture(task: &WorkflowSchedulerTask) -> WorkflowSchedulerTaskResult {
+    WorkflowSchedulerTaskResult {
+        schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+        workflow_id: task.workflow_id.as_str().to_string(),
+        workflow_run_id: task.workflow_run_id.as_str().to_string(),
+        node_id: task.node_id.as_str().to_string(),
+        task_id: task.task_id.as_str().to_string(),
+        status: WorkflowSchedulerTaskResultStatus::Completed,
+        outputs: vec![WorkflowSchedulerTaskResultOutput {
+            port_id: "image".to_string(),
+            value: WorkflowSchedulerTaskResultValue::DiagnosticOnly,
+        }],
+        diagnostics: Vec::new(),
+        terminal_metadata: None,
     }
 }
 

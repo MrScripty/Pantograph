@@ -2028,6 +2028,17 @@ Remaining production runtime dispatch work after this slice:
   handoff, runtime-host response mapping, and scheduler task-result persistence
   are one validated vertical slice.
 
+2026-05-30 runtime task persistence helper slice completed. The
+workflow-service scheduler task orchestrator now has focused helpers to move a
+ready runtime inference task to `Running` and to atomically persist a terminal
+runtime-host task result with the `Completed` task-state transition. This
+keeps runtime task state/result persistence in the same backend-owned store
+path used by non-runtime tasks and avoids making session execution or
+runtime-host adapters mutate scheduler state directly. The helpers are not yet
+used by session execution for successful runtime dispatch; that remains
+blocked until production candidate collection, dispatch-selected handoff
+execution, and result persistence are wired in one validated slice.
+
 ## Effects On Existing Systems
 
 ### Scheduler

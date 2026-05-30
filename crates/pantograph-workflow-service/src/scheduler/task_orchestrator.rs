@@ -52,6 +52,15 @@ pub(crate) struct StartedNonRuntimeTaskExecution {
     running_record: SchedulerTaskStateRecord,
 }
 
+#[derive(Debug, Clone)]
+#[must_use]
+#[allow(dead_code)]
+pub(crate) struct StartedRuntimeTaskExecution {
+    pub(crate) task: WorkflowSchedulerTask,
+    pub(crate) materialized_results: Vec<WorkflowSchedulerTaskResult>,
+    running_record: SchedulerTaskStateRecord,
+}
+
 impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) fn new(runtime_host_dispatcher: SchedulerRuntimeHostDispatcher) -> Self {
         Self {
@@ -315,6 +324,100 @@ impl WorkflowSchedulerTaskOrchestrator {
                 session_id,
                 workflow_run_id,
                 failure_transition,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn start_ready_runtime_task(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> Result<StartedRuntimeTaskExecution, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    )),
+                )
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a runtime inference task",
+                    task_id
+                )),
+            ));
+        }
+
+        let ready_record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime task '{}' has no active task-state record",
+                        task_id
+                    )),
+                )
+            })?;
+        let ready_execution_intent = ready_runtime_execution_intent(ready_record)?;
+        let running_transition =
+            running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
+        let running_record = store
+            .apply_active_run_scheduler_task_transition(
+                session_id,
+                workflow_run_id,
+                running_transition,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)?;
+
+        let materialized_results = store
+            .active_run_scheduler_task_results(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        Ok(StartedRuntimeTaskExecution {
+            task: task.clone(),
+            materialized_results,
+            running_record,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn complete_started_runtime_task(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        result: WorkflowSchedulerTaskResult,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let completion_transition = completion_transition_from_running(&started.running_record)?;
+        store
+            .complete_active_run_scheduler_task(
+                session_id,
+                workflow_run_id,
+                completion_transition,
+                result,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
             .and_then(applied_task_state_record)
@@ -917,6 +1020,29 @@ fn ready_non_runtime_execution_intent(
         return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
             WorkflowServiceError::InvalidRequest(format!(
                 "scheduler task '{}' ready state is not non-runtime",
+                record.task_id.as_str()
+            )),
+        ));
+    }
+    Ok(execution_intent.clone())
+}
+
+#[allow(dead_code)]
+fn ready_runtime_execution_intent(
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
+    let SchedulerTaskState::Ready { execution_intent } = &record.state else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be ready before runtime execution",
+                record.task_id.as_str()
+            )),
+        ));
+    };
+    if execution_intent.runtime_task_intent().is_none() {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' ready state is not runtime",
                 record.task_id.as_str()
             )),
         ));

@@ -109,6 +109,12 @@ build a dispatch-selected `SchedulerRuntimeHandoff`, and dispatch through the
 shared runtime-host port. It does not create dispatch candidates, rank runtime
 policy, inspect model paths, or call Pumas; candidate assembly remains a
 separate provider/session concern.
+It also owns the first runtime task persistence helpers: ready runtime tasks
+can be moved to `Running`, and terminal runtime-host results can be atomically
+stored with the `Completed` transition through the same task-result store used
+by non-runtime tasks. Session execution must not use these helpers for
+successful runtime dispatch until candidate collection, selected handoff
+dispatch, and result persistence are wired as one vertical slice.
 Session execution now reaches that dispatch-selection boundary for admitted
 runtime tasks. Workflow-service carries the readiness proof produced during
 admission into dispatch-selection request assembly and asks the configured

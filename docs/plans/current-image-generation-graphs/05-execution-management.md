@@ -18025,6 +18025,33 @@ Worker rules:
   - Remaining follow-up: implement the production candidate provider and the
     runtime task running/completion persistence path as separate validated
     slices before allowing successful runtime-host dispatch from session runs.
+- 2026-05-30 runtime task persistence helper slice:
+  - Slice scope: workflow-service scheduler orchestrator runtime task
+    state/result persistence only. Allowed files:
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/README.md`, and this
+    plan record.
+  - Implementation: added `StartedRuntimeTaskExecution`,
+    `start_ready_runtime_task`, and `complete_started_runtime_task` so a ready
+    runtime task can transition through `Running` and then atomically store a
+    terminal scheduler task result with the `Completed` transition.
+  - No-fallback/no-legacy result: the helpers do not call node-engine, whole-run
+    host execution, reduced execution plans, graph paths, `ModelRefV2`, or
+    dependency preflight. They only persist scheduler task state/results after
+    a caller already has a scheduler-managed ready runtime task.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service orchestrator_persists_started_runtime_task_result --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-workflow-service --all-features`,
+    `cargo check -p pantograph-workflow-service --no-default-features`,
+    `git diff --check`, and targeted legacy-path searches against the touched
+    orchestrator files. The only warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: wire session execution to use these helpers only after
+    production dispatch candidates and selected runtime-host dispatch are
+    available in the same validated vertical slice.
 
 ### Traceability Links
 
