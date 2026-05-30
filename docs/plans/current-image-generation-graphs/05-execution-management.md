@@ -18341,6 +18341,42 @@ Worker rules:
     no candidates plus typed source diagnostics. Do not synthesize CPU/auto
     fallbacks, placeholder leases, generic runtime candidates, graph-path
     candidates, or summary-derived execution authority.
+- 2026-05-30 candidate-fact bundle contract slice:
+  - Slice scope: workflow-service runtime dispatch-selection contract only.
+    Allowed files:
+    `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: added the staged async source-provider trait, source-kind
+    enum, validated path-free candidate-fact bundle DTO, candidate-fact row
+    DTO, validation errors, and a diagnostic-only conversion into the existing
+    `WorkflowRuntimeDispatchCandidateSet`. The conversion intentionally emits
+    no `SchedulerDispatchCandidate` values until Pumas, runtime capability,
+    and real resource reservation/resource-fit sources are wired.
+  - Test coverage: added focused unit tests proving path-free facts validate,
+    path-carrying model refs are rejected, duplicate candidate ids are
+    rejected, and a validated bundle does not emit candidates before the
+    production mapping slice.
+  - No-fallback/no-legacy result: the slice adds no production candidates,
+    does not query Pumas/runtime/resource owners, does not block inside
+    scheduler policy, and does not accept executable load targets, local
+    paths, selector summaries, display rows, graph fallback values,
+    `ModelRefV2`, reduced execution plans, frontend/Tauri state, or arbitrary
+    JSON as dispatch authority.
+  - Standards/deviation note: the source-provider trait/source-kind enum are
+    staged behind scoped `dead_code` allowances because the next slices will
+    add the concrete Pumas, runtime capability, and resource source adapters.
+    The allowances must be removed when those adapters are wired.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+    `cargo check -p pantograph-workflow-service`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: adapt the staged Pumas owner-API bridge into the
+    Pumas source provider, then add runtime-registry capability and real
+    resource-owner reservation/resource-fit sources before enabling bundle to
+    candidate mapping.
 
 ### Traceability Links
 

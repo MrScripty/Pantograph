@@ -2188,6 +2188,12 @@ Implementation order:
 
 1. Define async source-provider traits and the validated candidate-fact bundle
    without emitting non-empty production candidates.
+   2026-05-30 slice completed: workflow-service now has the staged async
+   source-provider trait/source-kind enum and validated path-free
+   candidate-fact bundle. The bundle validates typed facts and rejects
+   path-carrying model refs or duplicate candidate ids, but its only current
+   conversion into the dispatch candidate set preserves diagnostics and emits
+   zero candidates until all required source adapters are wired.
 2. Adapt the staged Pumas owner-API package-facts bridge into the Pumas source
    provider and preserve missing/unsupported/stale facts as source diagnostics.
 3. Add runtime-registry capability source projection.
