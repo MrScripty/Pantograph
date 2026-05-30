@@ -18519,6 +18519,49 @@ Worker rules:
     and then implement the final embedded-runtime provider that joins Pumas,
     runtime capability, and resource facts into the validated workflow-service
     candidate-fact bundle.
+- 2026-05-30 resource reservation/resource-fit source re-plan boundary:
+  - Trigger: after the Pumas and runtime-registry source slices, the next
+    planned source is real resource-owner reservation/resource-fit projection.
+    The scheduler dispatch candidate contract requires a
+    `SchedulerResourceReservation` with reservation lease id, workflow run id,
+    task id, selected device id, scheduler resource kind, and reserved bytes,
+    plus a `SchedulerResourceFitAssessment`. The existing runtime-registry
+    `RuntimeReservationLease` exposes runtime-level reservation identity and
+    lifecycle metadata, while reservation claim bytes remain in registry
+    accounting/snapshots and no source currently owns the selected scheduler
+    device id or exact dispatch resource claim for candidate assembly.
+  - Standards concern: deriving scheduler reservations from runtime-registry
+    leases alone would fabricate device/resource facts and violate the
+    no-fallback/no-legacy rule. Calling `can_acquire_reservation` without a
+    real lease would also create a dry-run candidate that can race resource
+    state. Moving this decision into workflow-service would complect resource
+    lifecycle ownership with orchestration.
+  - Required re-plan: choose the resource-owner boundary before implementing
+    the source. Standards-aligned options:
+    1. Keep failing closed and add only diagnostics until a real
+       resource-owner contract is designed. Lowest risk, but it cannot advance
+       to successful runtime dispatch.
+    2. Use runtime-registry as the immediate resource owner, but extend the
+       embedded-runtime source contract to accept explicit selected runtime,
+       selected scheduler device id, and typed resource requirements from the
+       final-provider assembly step. The source acquires or reuses a real
+       runtime-registry reservation, maps the owned request claims into
+       scheduler reservation rows, returns fit diagnostics on admission
+       failure, and owns release/retention follow-up with the session runner.
+       This requires a clear lifecycle owner for reservation release before
+       candidates are emitted.
+    3. Introduce a dedicated scheduler resource-reservation service that owns
+       scheduler device resources and fit assessment directly, while
+       runtime-registry remains runtime residency/admission state. This is the
+       cleanest long-term boundary, but it is a larger design and migration.
+    4. Rejected: create placeholder scheduler reservations from
+       runtime-registry `can_acquire_reservation` or snapshots without a real
+       lease. This would be a compatibility/fallback-shaped race and must not
+       be implemented.
+  - Guardrail: do not map Pumas and runtime capability facts into
+    `SchedulerDispatchCandidate` values until the chosen resource source can
+    provide real reservation and fit facts, or typed diagnostics explaining why
+    no candidate can be emitted.
 
 ### Traceability Links
 

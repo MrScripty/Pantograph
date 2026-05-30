@@ -2217,6 +2217,16 @@ Implementation order:
    registry into path-free source facts and typed diagnostics. It does not
    join with Pumas facts or create final dispatch candidates.
 4. Add real resource-owner reservation/resource-fit source projection.
+   2026-05-30 re-plan boundary: this cannot be implemented as a truthful
+   candidate source until the resource-owner contract is selected. Scheduler
+   dispatch candidates require real scheduler-shaped reservation and fit facts,
+   while the current runtime-registry lease alone does not expose selected
+   scheduler device id, resource kind, and reserved bytes in a way the final
+   provider can safely project without a lifecycle/release owner. Choose
+   between fail-closed diagnostics, a runtime-registry-owned reservation source
+   with explicit selected device/resource requirements and release ownership,
+   or a dedicated scheduler resource-reservation service. Do not emit
+   placeholder reservations from dry-run checks or snapshots.
 5. Map the validated bundle into `SchedulerDispatchCandidate` values only when
    every required source fact is present and valid.
 
