@@ -17560,6 +17560,24 @@ Worker rules:
     at a time from source-owned facts, or stop and re-plan if their source
     ownership cannot be expressed without moving scheduler/runtime-registry
     policy into dependency inventory.
+- 2026-05-30 re-plan boundary after managed-runtime provider:
+  - Boundary: do not start the runtime-feature or device-toolchain provider
+    slices yet. The codebase has typed dependency detail structs for
+    `RuntimeFeature` and `DeviceToolchain`, and it has runtime capability and
+    device observation facts, but the plan does not yet define the canonical
+    source-id vocabulary, injected snapshot/source boundary, or exact
+    source-state-to-dependency-readiness mapping for those providers.
+  - Standards concern: implementing either provider now would require
+    embedded-runtime inventory code to invent policy from
+    `WorkflowRuntimeCapability`, runtime-registry candidate facts, device probe
+    facts, or display-shaped capability fields. That would blur scheduler,
+    runtime-registry, inference, and dependency-inventory ownership and would
+    risk stringly fallback behavior.
+  - Required re-plan decisions: define canonical runtime-feature ids and
+    device-toolchain ids, name the source-owned snapshot APIs to inject,
+    decide how supported/unsupported/unavailable/unknown/stale facts map to
+    provider observation states and diagnostics, and state which crate owns
+    each mapping before editing provider code.
 
 ### Traceability Links
 

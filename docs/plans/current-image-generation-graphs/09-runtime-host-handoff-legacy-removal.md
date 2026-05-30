@@ -627,6 +627,15 @@ Implementation progress:
   review, README traceability update, and `git diff --check`. The only warning
   observed remains the pre-existing `set_active_run_execution_plan` dead-code
   warning in `pantograph-workflow-service`.
+- 2026-05-30 runtime-feature/device-toolchain provider re-plan boundary:
+  runtime-feature and device-toolchain providers must not be implemented until
+  their source-owned contracts are planned. The next plan update must define
+  the canonical feature/toolchain id vocabulary, the injected source snapshot
+  APIs, the owner of each source-to-observation mapping, and the exact
+  readiness/diagnostic projection for supported, unsupported, unavailable,
+  unknown, and stale states. Do not derive provider evidence from runtime
+  display names, backend aliases, generic requirement names, scheduler ranking
+  candidates, graph strings, shell output, or ad hoc capability field parsing.
 
 ## Verification Strategy
 
