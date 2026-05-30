@@ -597,9 +597,31 @@ Staged implementation:
      snapshots and initially receives a not-implemented/empty host source in
      production composition, proving mixed payloads remain isolated and
      fail-closed.
-   - Host/system inventory source in platform-specific modules. Only this
-     source may know package-manager commands or platform probing mechanics,
-     and it must publish typed source rows rather than shell output.
+   - Host/system inventory source in platform-specific modules is deferred
+     future work, not required before returning to scheduler/runtime-host
+     execution slices. Only this future source may know package-manager
+     commands or platform probing mechanics, and it must publish typed source
+     rows rather than shell output.
+21. Post-provider re-plan decision: use option 1 for the immediate milestone
+   path. System-package readiness remains fail-closed through the typed
+   provider and default not-implemented source while the plan returns to the
+   scheduler/runtime-host execution path needed for complete inference-run
+   testing. Do not add a narrow package-manager probe just because the typed
+   provider now exists; that would introduce platform side effects before the
+   host/system inventory owner is designed.
+22. Documented future option 4: a full host/system package inventory subsystem
+   remains required for production-grade system-package readiness. It must be
+   planned as its own standards-gated milestone before implementation. The
+   future design must cover platform-specific package-manager source modules,
+   injected command/probe runners with bounded timeout and output capture,
+   no shell interpolation, cache/freshness lifecycle ownership,
+   stale/unsupported diagnostics, package-manager/platform support matrix,
+   source-owned alternatives, production configuration, and focused fake-runner
+   tests. It must preserve the current clean split: host source owns probing,
+   caching, freshness, and platform/package-manager semantics; dependency
+   inventory owns typed requirement-to-observation matching; shared
+   dependency-planning owns result projection; scheduler, graph editor,
+   frontend, Tauri, and node-engine consume validated readiness facts only.
 
 Standards gates:
 

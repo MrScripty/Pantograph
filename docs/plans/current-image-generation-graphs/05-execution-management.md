@@ -17964,9 +17964,32 @@ Worker rules:
     `git diff --check`. The only warning observed remains the pre-existing
     `set_active_run_execution_plan` dead-code warning in
     `pantograph-workflow-service`.
-  - Remaining follow-up: decide whether the next milestone step is a real host
-    system-package source design or returning to scheduler/runtime-host
-    execution slices.
+- 2026-05-30 post system-package-provider re-plan decision:
+  - Decision selected: use option 1 for the immediate path. Return to
+    scheduler/runtime-host execution slices needed for complete inference-run
+    testing while system-package readiness remains fail-closed through the
+    typed provider and default not-implemented source.
+  - Future work recorded: option 4 remains the eventual required production
+    direction for real system-package readiness. It must be planned as its own
+    standards-gated host/system package inventory subsystem covering
+    platform-specific package-manager source modules, injected bounded probe
+    runners, no shell interpolation, cache/freshness lifecycle ownership,
+    stale/unsupported diagnostics, package-manager/platform support matrix,
+    source-owned alternatives, production configuration, and focused
+    fake-runner tests.
+  - Standards alignment: this keeps the current clean split from the coding
+    standards' simplicity/complection rule. Host source work owns probing,
+    caching, platform/package-manager semantics, and freshness. Dependency
+    inventory owns typed requirement-to-observation matching. Shared
+    dependency-planning owns result projection. Scheduler, graph editor,
+    frontend, Tauri, and node-engine consume validated readiness facts only.
+  - No-fallback/no-legacy result: no package-manager probe, shell parser,
+    graph/path/package-name inference, compatibility shim, or scheduler policy
+    is added in the immediate path.
+  - Verification: plan-only update; no code verification required beyond
+    `git diff --check`.
+  - Remaining follow-up: resume implementation from the next scheduler/
+    runtime-host execution slice in the milestone checklist.
 
 ### Traceability Links
 
