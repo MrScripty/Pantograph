@@ -17,11 +17,13 @@ use pantograph_dependency_planning::{
     DependencyEnvironmentReadinessState, DependencyEnvironmentRequest,
     DependencyPlanningDiagnosticCode, DependencyProviderSourceState, DependencyRequirement,
     DependencyRequirementBinding, DependencyRequirementKind, DependencyRequirementsId,
+    DeviceToolchainProviderSourceRow, DeviceToolchainProviderSourceSnapshot,
     RuntimeFeatureProviderSourceRow, RuntimeFeatureProviderSourceSnapshot,
     ValidatedDependencyEnvironmentRequest,
 };
 
 use crate::dependency_inventory::DependencyInventoryService;
+use crate::dependency_inventory_device_toolchain_source::DeviceToolchainProviderSource;
 use crate::dependency_inventory_managed_runtime::ManagedRuntimeSnapshotSource;
 use crate::dependency_inventory_runtime_feature_source::RuntimeFeatureProviderSource;
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
@@ -273,6 +275,63 @@ async fn inventory_service_routes_runtime_feature_payloads_through_source_snapsh
     );
 }
 
+#[tokio::test]
+async fn inventory_service_routes_device_toolchain_payloads_with_alternatives() {
+    let device_toolchain_binding_id =
+        DependencyBindingId::parse("pytorch.mps_runtime").expect("device toolchain binding id");
+    let request = validated_request_with_selected_binding_id(device_toolchain_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(device_toolchain_binding_id.clone());
+    payload
+        .requirements
+        .push(device_toolchain_requirement_row());
+    payload.bindings.push(device_toolchain_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory = DependencyInventoryService::from_package_probe_runner_and_managed_runtime_and_runtime_feature_and_device_toolchain_sources(
+        probe_runner.clone(),
+        Arc::new(FakeManagedRuntimeSnapshotSource::ready()),
+        Arc::new(FakeRuntimeFeatureProviderSource::ready()),
+        Arc::new(FakeDeviceToolchainProviderSource::with_unavailable_mps_alternative()),
+    );
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot.result.readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    assert_eq!(probe_runner.requests().len(), 1);
+    let device_toolchain_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == device_toolchain_binding_id)
+        .expect("device toolchain binding status");
+    assert_eq!(
+        device_toolchain_status.state,
+        DependencyBindingStatusState::Unavailable
+    );
+    assert_eq!(device_toolchain_status.alternatives.len(), 1);
+    assert_eq!(
+        device_toolchain_status.alternatives[0]
+            .toolchain_id
+            .as_ref()
+            .map(|toolchain_id| toolchain_id.as_str()),
+        Some("cuda_runtime")
+    );
+}
+
 fn work_item(request: ValidatedDependencyEnvironmentRequest) -> DependencyReadinessWorkItem {
     DependencyReadinessWorkItem::new(
         DependencyReadinessWorkItemProvenance::new(
@@ -413,6 +472,31 @@ fn runtime_feature_binding_row() -> DependencyRequirementBinding {
     .expect("runtime feature binding row")
 }
 
+fn device_toolchain_requirement_row() -> DependencyRequirement {
+    serde_json::from_value(serde_json::json!({
+        "name": "pytorch_mps_runtime",
+        "kind": "device_toolchain",
+        "device_toolchain": {
+            "runtime_id": "pytorch",
+            "toolchain_id": "mps_runtime"
+        }
+    }))
+    .expect("device toolchain requirement row")
+}
+
+fn device_toolchain_binding_row() -> DependencyRequirementBinding {
+    serde_json::from_value(serde_json::json!({
+        "binding_id": "pytorch.mps_runtime",
+        "requirement_name": "pytorch_mps_runtime",
+        "environment_kind": "device_toolchain",
+        "device_toolchain": {
+            "runtime_id": "pytorch",
+            "toolchain_id": "mps_runtime"
+        }
+    }))
+    .expect("device toolchain binding row")
+}
+
 #[derive(Debug)]
 struct FakePackageProbeRunner {
     outcome: PackageReadinessProbeOutcome,
@@ -427,6 +511,11 @@ struct FakeManagedRuntimeSnapshotSource {
 #[derive(Debug)]
 struct FakeRuntimeFeatureProviderSource {
     snapshot: RuntimeFeatureProviderSourceSnapshot,
+}
+
+#[derive(Debug)]
+struct FakeDeviceToolchainProviderSource {
+    snapshot: DeviceToolchainProviderSourceSnapshot,
 }
 
 impl FakeRuntimeFeatureProviderSource {
@@ -448,6 +537,88 @@ impl FakeRuntimeFeatureProviderSource {
                     diagnostics: Vec::new(),
                     alternatives: Vec::new(),
                 }],
+                diagnostics: Vec::new(),
+            },
+        }
+    }
+}
+
+impl FakeDeviceToolchainProviderSource {
+    fn with_unavailable_mps_alternative() -> Self {
+        Self {
+            snapshot: DeviceToolchainProviderSourceSnapshot {
+                contract_version: 1,
+                rows: vec![
+                    DeviceToolchainProviderSourceRow {
+                        toolchain_id:
+                            pantograph_dependency_planning::DeviceToolchainSourceId::parse(
+                                "cuda_runtime",
+                            )
+                            .expect("toolchain id"),
+                        runtime_id: Some(
+                            pantograph_dependency_planning::RuntimeSourceId::parse("pytorch")
+                                .expect("runtime id"),
+                        ),
+                        device_class: Some(
+                            pantograph_dependency_planning::DeviceClassSourceId::parse("cuda")
+                                .expect("device class"),
+                        ),
+                        device_id: None,
+                        state: DependencyProviderSourceState::Ready,
+                        freshness: pantograph_dependency_planning::DependencyInventoryObservationFreshness::Fresh,
+                        checked_at_ms: None,
+                        diagnostics: Vec::new(),
+                        alternatives: Vec::new(),
+                    },
+                    DeviceToolchainProviderSourceRow {
+                        toolchain_id:
+                            pantograph_dependency_planning::DeviceToolchainSourceId::parse(
+                                "mps_runtime",
+                            )
+                            .expect("toolchain id"),
+                        runtime_id: Some(
+                            pantograph_dependency_planning::RuntimeSourceId::parse("pytorch")
+                                .expect("runtime id"),
+                        ),
+                        device_class: Some(
+                            pantograph_dependency_planning::DeviceClassSourceId::parse("mps")
+                                .expect("device class"),
+                        ),
+                        device_id: None,
+                        state: DependencyProviderSourceState::Unavailable,
+                        freshness: pantograph_dependency_planning::DependencyInventoryObservationFreshness::Fresh,
+                        checked_at_ms: None,
+                        diagnostics: Vec::new(),
+                        alternatives: vec![
+                            pantograph_dependency_planning::DependencyProviderSourceAlternative {
+                                runtime_id: Some(
+                                    pantograph_dependency_planning::RuntimeSourceId::parse(
+                                        "pytorch",
+                                    )
+                                    .expect("runtime id"),
+                                ),
+                                runtime_variant_id: None,
+                                feature_id: None,
+                                toolchain_id: Some(
+                                    pantograph_dependency_planning::DeviceToolchainSourceId::parse(
+                                        "cuda_runtime",
+                                    )
+                                    .expect("toolchain id"),
+                                ),
+                                device_class: Some(
+                                    pantograph_dependency_planning::DeviceClassSourceId::parse(
+                                        "cuda",
+                                    )
+                                    .expect("device class"),
+                                ),
+                                device_id: None,
+                                reason: Some(
+                                    "CUDA runtime is available on this host.".to_string(),
+                                ),
+                            },
+                        ],
+                    },
+                ],
                 diagnostics: Vec::new(),
             },
         }
@@ -502,6 +673,13 @@ impl ManagedRuntimeSnapshotSource for FakeManagedRuntimeSnapshotSource {
 #[async_trait]
 impl RuntimeFeatureProviderSource for FakeRuntimeFeatureProviderSource {
     async fn snapshot(&self) -> Result<RuntimeFeatureProviderSourceSnapshot, String> {
+        Ok(self.snapshot.clone())
+    }
+}
+
+#[async_trait]
+impl DeviceToolchainProviderSource for FakeDeviceToolchainProviderSource {
+    async fn snapshot(&self) -> Result<DeviceToolchainProviderSourceSnapshot, String> {
         Ok(self.snapshot.clone())
     }
 }

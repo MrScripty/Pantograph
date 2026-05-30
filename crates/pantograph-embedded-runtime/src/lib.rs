@@ -13,6 +13,10 @@ mod dependency_environment_probe_selector;
 mod dependency_environment_probe_snapshot;
 mod dependency_inventory;
 #[cfg(any(test, feature = "standalone"))]
+mod dependency_inventory_device_toolchain;
+#[cfg(any(test, feature = "standalone"))]
+mod dependency_inventory_device_toolchain_source;
+#[cfg(any(test, feature = "standalone"))]
 mod dependency_inventory_managed_runtime;
 #[cfg(any(test, feature = "standalone"))]
 mod dependency_inventory_runtime_feature;

@@ -17711,6 +17711,45 @@ Worker rules:
     projection/provider against this alternatives contract from source-owned
     device/runtime observation facts. System-package inventory remains
     separately planned.
+- 2026-05-30 device-toolchain inventory provider slice:
+  - Slice scope: added a device-toolchain dependency inventory provider in
+    embedded-runtime. Source projection and observation mapping are split into
+    separate internal modules: the source adapter projects inference
+    backend-owned runtime-variant device-class facts into
+    `DeviceToolchainProviderSourceSnapshot`, while the inventory provider
+    consumes that contract and matches typed toolchain id plus optional runtime
+    id and device id constraints before observing device-toolchain bindings.
+  - No-fallback result: device-toolchain inventory does not shell-probe
+    drivers/toolchains, consume scheduler/runtime-registry ranking decisions,
+    parse graph strings, display names, backend aliases, generic requirement
+    names, package names, or paths, and does not auto-select alternatives.
+    Ready rows satisfy broad typed toolchain constraints; unavailable, stale,
+    failed, missing, invalid, or unsupported rows return typed observations and
+    diagnostics. Concrete `device_id` constraints fail closed unless a
+    source-owned row includes that device id.
+  - Focused tests: added source-projection coverage proving backend
+    runtime-variant device facts produce ready/unavailable toolchain rows with
+    bounded alternatives, plus a mixed Python plus device-toolchain inventory
+    test proving unavailable toolchain alternatives survive through
+    dependency-environment binding statuses.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`, and
+    `cargo check -p pantograph-embedded-runtime --features standalone`. The
+    only warning observed remains the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Discovered issue: `dependency_inventory.rs` is now above the practical
+    decomposition target because it still owns service composition and
+    per-provider dispatch. Do not expand it further for system-package
+    inventory; split dispatch/composition into a dedicated module before the
+    next provider if more wiring is required.
+  - Remaining follow-up: concrete device-id readiness requires a future
+    source-owned device inventory snapshot that emits canonical device ids
+    rather than deriving them from runtime variants. System-package inventory
+    remains separately planned and must not be implemented by direct
+    embedded-runtime package-manager probing.
 
 ### Traceability Links
 

@@ -773,6 +773,19 @@ Implementation progress:
   prerequisite for the device-toolchain provider slice; the next slice must
   consume source-owned device/runtime facts and must not introduce shell
   probing or scheduler auto-selection in dependency inventory.
+- 2026-05-30 device-toolchain inventory provider slice: added device-toolchain
+  source projection and provider modules in embedded-runtime. The source
+  adapter projects inference backend-owned runtime-variant device-class facts
+  into `DeviceToolchainProviderSourceSnapshot` rows; the provider consumes
+  that contract, matches typed toolchain/runtime/device constraints, and
+  carries bounded alternatives into per-binding statuses without selecting
+  them. Concrete `device_id` requests fail closed unless source-owned rows
+  include concrete device ids. The slice does not shell-probe drivers or
+  toolchains and does not consume scheduler/runtime-registry ranking facts,
+  graph strings, display names, backend aliases, package names, paths, or
+  generic requirement names. Follow-up: split the central inventory
+  dispatch/composition module before adding another provider because it now
+  exceeds the practical decomposition target.
 
 ## Verification Strategy
 
