@@ -17799,6 +17799,57 @@ Worker rules:
     output parsing, generic requirement names, graph strings, paths, Pumas
     package names, Python probes for non-Python requirements, or scheduler
     policy.
+- 2026-05-30 system-package inventory complection planning slice:
+  - Slice scope: plan-only. Allowed files:
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`
+    and
+    `docs/plans/current-image-generation-graphs/09-runtime-host-handoff-legacy-removal.md`.
+  - Codebase review: `dependency_inventory.rs` currently owns the crate-local
+    inventory facade, service constructors, provider registration,
+    selected-binding dispatch planning, scoped payload creation,
+    feature-gated dispatch target selection, Python provider adapter,
+    fail-closed not-implemented provider, and shared observation-to-result
+    projection. The module is not a single simple idea anymore because adding a
+    system-package provider would require reasoning about source-specific
+    provider details, dispatch routing, feature-gated composition, and
+    fail-closed policy together.
+  - Decomposition decision: before system-package provider implementation,
+    perform a facade-preserving decomposition that extracts only boundaries
+    justified by the coding standards' complection test. Keep
+    `dependency_inventory.rs` as the crate-local facade containing request,
+    observation, provider trait, service facade, and shared projection. Extract
+    provider registration, dispatch plan/target selection, scoped-payload
+    routing, and not-implemented observations into
+    `dependency_inventory_dispatch.rs`. Extract the Python package provider
+    adapter into `dependency_inventory_python.rs`. Keep managed-runtime,
+    runtime-feature, device-toolchain, and future system-package providers
+    cohesive in their source-owned modules.
+  - System-package requirement contract decision: shared dependency-planning
+    must add explicit typed system-package details before provider behavior.
+    Required fields: typed `package_id`, typed `package_manager_id`, optional
+    `platform_id`, optional architecture/profile facts if source rows need
+    them, and any package-manager-specific version constraint that cannot use
+    the existing requirement-level `version_constraint`. Missing
+    system-package details must become a typed validation diagnostic before
+    execution rather than falling back to `DependencyRequirementName`.
+  - System-package source contract decision: add
+    `SystemPackageProviderSourceSnapshot` and source rows with typed package,
+    package-manager, platform, optional architecture/version facts,
+    source-owned state, freshness, `checked_at_ms`, bounded diagnostics, and
+    bounded alternatives. Validation must reject duplicate source rows, stale
+    rows without diagnostics, oversized alternatives, invalid ids, invalid
+    source states, and unknown serialized fields.
+  - Implementation order: decomposition-only slice with unchanged behavior;
+    shared system-package contract/fixtures/tests; typed fail-closed provider
+    using validated source snapshots; then real host/system inventory source in
+    platform-specific modules. Package-manager probing, command execution, and
+    host cache policy belong only to the host/system inventory source and must
+    not move into graph editor, scheduler, shared projector, provider dispatch,
+    or concrete dependency inventory matching.
+  - No-fallback/no-legacy result: the plan continues to forbid readiness
+    inference from shell output parsing, generic requirement names, graph
+    strings, paths, Pumas package names, Python probes for non-Python
+    requirements, scheduler policy, or old dependency preflight.
 
 ### Traceability Links
 

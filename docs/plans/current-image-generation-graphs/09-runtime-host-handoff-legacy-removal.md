@@ -547,6 +547,59 @@ Staged implementation:
    host inventory source in platform-specific modules owned by the host/system
    inventory boundary. Real package-manager probing must stay out of graph
    editor, scheduler, shared projector, and provider dispatch code.
+17. Selected inventory complection outcome: perform a facade-preserving
+   decomposition before system-package provider implementation because the
+   current inventory module now couples independent reasoning axes. Keep
+   `dependency_inventory.rs` as the public crate-local facade containing
+   `DependencyInventoryRequest`, `DependencyInventoryObservation`, the
+   `DependencyInventoryProvider` trait, `DependencyInventoryService`, and the
+   shared observation-to-result projection. Extract only boundaries that reduce
+   reasoning load:
+   - `dependency_inventory_dispatch.rs`: provider registration, selected-binding
+     dispatch planning, scoped-payload creation, feature-gated dispatch target
+     selection, and provider-owned fail-closed not-implemented observations.
+   - `dependency_inventory_python.rs`: the Python package provider adapter that
+     owns Python probe request selection and projection from Python probe
+     outcomes.
+   Concrete managed-runtime, runtime-feature, device-toolchain, and future
+   system-package providers stay cohesive in their source-owned modules.
+   Preserve the existing `DependencyInventoryService` facade and constructor
+   behavior; this is a decomposition slice, not an API rewrite.
+18. Selected system-package source contract shape: add shared typed contract
+   fields before provider implementation. `DependencyRequirementKind::
+   SystemPackage` must gain explicit system-package requirement details rather
+   than relying on `DependencyRequirementName`. The shared contract should add
+   typed `SystemPackageSourceId`, `SystemPackageManagerSourceId`, and
+   `HostPlatformSourceId` scalars, plus `SystemPackageRequirementDetails`
+   containing at least `package_id`, `package_manager_id`, optional
+   `platform_id`, optional architecture/profile fields if source facts require
+   them, and any version constraint that cannot be represented by the existing
+   requirement-level `version_constraint`. Missing details must validate as a
+   typed contract error before execution instead of falling back to generic
+   names.
+19. Selected system-package provider-source contract shape: add
+   `SystemPackageProviderSourceSnapshot` and `SystemPackageProviderSourceRow`
+   alongside the existing runtime-feature and device-toolchain provider-source
+   contracts. Rows must carry `package_id`, `package_manager_id`,
+   `platform_id`, optional architecture/version facts, source-owned state,
+   freshness, `checked_at_ms`, bounded diagnostics, and bounded alternatives
+   when an explicit package-manager/platform constraint is unavailable but a
+   valid alternative is known. Validation must reject duplicate source rows,
+   stale rows without diagnostics, invalid source states, oversized
+   alternatives, and unknown serialized fields.
+20. Selected implementation order after the planning slice:
+   - Decomposition-only dispatch/Python-provider extraction with unchanged
+     behavior and existing inventory tests.
+   - Shared system-package requirement and provider-source contract with serde
+     fixtures, invalid-shape tests, README traceability, and no provider
+     behavior change.
+   - Typed system-package inventory provider that consumes only validated source
+     snapshots and initially receives a not-implemented/empty host source in
+     production composition, proving mixed payloads remain isolated and
+     fail-closed.
+   - Host/system inventory source in platform-specific modules. Only this
+     source may know package-manager commands or platform probing mechanics, and
+     it must publish typed source rows rather than shell output.
 
 Standards gates:
 
