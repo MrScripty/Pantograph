@@ -21,6 +21,7 @@ packages.
 | `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
 | `dependency_readiness.rs` | Owns embedded-runtime projection from inference-owned dependency requirement declarations plus host-observed Python package snapshots into typed dependency-readiness facts without probing environments, ranking candidates, or selecting runtimes. |
 | `dependency_environment_probe_snapshot.rs` | Owns dependency-environment snapshot projection from seeded requirements payloads and host package probe outcomes into fresh ready, missing, unavailable, or invalid dependency-environment results without graph/path fallback. |
+| `dependency_environment_probe_selector.rs` | Owns dependency-environment package probe request selection, including explicit environment/profile preservation, runtime attribution, and typed invalid-shape diagnostics before snapshot projection. |
 | `dependency_readiness_lifecycle.rs` | Owns the tracked dependency-readiness snapshot producer lifecycle, including startup validation, task handle ownership, cancellation, shutdown, heartbeat tracing, requirements-registry lookup, and delegation to the dependency-environment probe snapshot projector. |
 | `dependency_readiness_lifecycle_tests.rs` | Focused lifecycle tests for producer shutdown, registry-miss diagnostics, fake package-probe ready/missing/unavailable snapshots, and poll-interval validation. |
 | `package_readiness_provider.rs` | Owns the runtime-scoped package-readiness provider contract that shapes typed environment probe requests, deduplicates probe work within one technical-fit request, and projects probe outcomes into inference-owned dependency-readiness facts without selecting runtimes or calling legacy dependency preflight. |
@@ -121,9 +122,13 @@ Pumas-specific dependency resolution.
   `DependencyRequirementsId` through the backend registry; missing or stale
   registry payloads publish typed non-ready diagnostics. Fresh registry
   payloads are checked through the embedded-runtime Python package probe
-  boundary and projected into dependency-environment snapshots. Unsupported
-  requirement or binding kinds publish typed invalid diagnostics instead of
-  falling back to graph data, paths, or inferred package names.
+  boundary and projected into dependency-environment snapshots. Explicit
+  request environment refs or selected binding profiles must be preserved on
+  probe requests; default-host Python is only valid when the canonical payload
+  has no explicit environment/profile identity. Unsupported requirement or
+  binding kinds and unsupported explicit probe environments publish typed
+  diagnostics instead of falling back to graph data, paths, inferred package
+  names, or host Python.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

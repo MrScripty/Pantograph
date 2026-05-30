@@ -17144,6 +17144,39 @@ Worker rules:
     require dedicated typed probe adapters before those requirement kinds can
     publish ready evidence; they currently fail closed as typed invalid
     producer diagnostics.
+- 2026-05-30 dependency-readiness explicit environment selector correction
+  slice completed:
+  - Slice scope: embedded-runtime package probe request construction now
+    preserves explicit dependency-environment identity from the validated
+    request `environment_ref` or the single selected binding `profile_id`.
+    Default-host Python is selected only when the canonical requirements payload
+    has no explicit request environment and no selected profile. Probe runtime
+    attribution now comes from the scheduler intent runtime id instead of a
+    hardcoded runtime id.
+  - No-fallback/no-legacy result: the producer no longer probes default host
+    Python when a canonical payload names an explicit Python environment/profile.
+    Unsupported explicit Python package-readiness environments fail closed
+    through the typed `ProbeNotImplemented` path until an environment-specific
+    probe adapter exists. Multiple selected profiles, invalid environment ids,
+    missing runtime ids, unsupported binding kinds, and unsupported requirement
+    kinds produce typed invalid diagnostics instead of recovering from graph
+    data, paths, package names, or legacy dependency preflight.
+  - Standards result: dependency probe selection moved into
+    `dependency_environment_probe_selector.rs` so snapshot projection owns only
+    result shaping, lifecycle owns only async task/queue/publication behavior,
+    and all touched embedded-runtime files remain within the standards
+    decomposition target.
+  - Verification passed: `cargo fmt -- --check`; `cargo test -p
+    pantograph-embedded-runtime dependency_readiness_lifecycle`; `cargo check
+    -p pantograph-embedded-runtime`; line-count check for touched Rust files.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning in focused test/check commands.
+  - Remaining follow-up: implement explicit Python environment/profile package
+    probe adapters so explicit dependency environments can publish ready/missing
+    evidence without using default-host Python. Runtime-managed binary,
+    system-package, runtime-feature, and device-toolchain dependency
+    environment probes still require dedicated typed adapters before those
+    requirement kinds can publish ready evidence.
 
 ### Traceability Links
 

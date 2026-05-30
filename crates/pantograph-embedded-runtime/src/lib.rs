@@ -9,6 +9,7 @@ use pantograph_workflow_service::{
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
     WorkflowSchedulerRuntimeRegistryDiagnostics,
 };
+mod dependency_environment_probe_selector;
 mod dependency_environment_probe_snapshot;
 pub mod dependency_readiness;
 mod dependency_readiness_lifecycle;

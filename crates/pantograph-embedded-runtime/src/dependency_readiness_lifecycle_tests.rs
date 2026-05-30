@@ -23,8 +23,9 @@ use crate::dependency_readiness_lifecycle::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
 };
 use crate::package_readiness_provider::{
-    PackageReadinessProbeFailure, PackageReadinessProbeOutcome, PackageReadinessProbeRequest,
-    PackageReadinessProbeRunner, PackageReadinessProviderDiagnosticCode,
+    PackageReadinessEnvironmentSelector, PackageReadinessProbeFailure,
+    PackageReadinessProbeOutcome, PackageReadinessProbeRequest, PackageReadinessProbeRunner,
+    PackageReadinessProviderDiagnosticCode,
 };
 
 #[tokio::test]
@@ -59,7 +60,7 @@ async fn producer_drains_work_queue_into_ready_snapshots_from_package_probe() {
     let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
     let request = validated_request();
     let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
-    requirements_registry.insert_payload(requirements_payload(&request));
+    requirements_registry.insert_payload(default_host_requirements_payload(&request));
     work_queue.enqueue(work_item(request.clone()));
     let package_probe_runner = Arc::new(FakePackageProbeRunner::new(
         PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
@@ -98,6 +99,10 @@ async fn producer_drains_work_queue_into_ready_snapshots_from_package_probe() {
             .collect::<Vec<_>>(),
         vec!["diffusers"]
     );
+    assert_eq!(
+        probe_requests[0].environment,
+        PackageReadinessEnvironmentSelector::DefaultHostPython
+    );
     handle.shutdown().await;
 }
 
@@ -107,7 +112,7 @@ async fn producer_reports_missing_snapshot_when_selected_package_is_absent() {
     let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
     let request = validated_request();
     let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
-    requirements_registry.insert_payload(requirements_payload(&request));
+    requirements_registry.insert_payload(default_host_requirements_payload(&request));
     work_queue.enqueue(work_item(request.clone()));
     let package_probe_runner = Arc::new(FakePackageProbeRunner::new(
         PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
@@ -138,6 +143,63 @@ async fn producer_reports_missing_snapshot_when_selected_package_is_absent() {
     assert_eq!(
         result.binding_statuses.first().map(|status| status.state),
         Some(DependencyBindingStatusState::Missing)
+    );
+    handle.shutdown().await;
+}
+
+#[tokio::test]
+async fn producer_preserves_explicit_python_environment_and_fails_closed_when_unimplemented() {
+    let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
+    let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+    let request = validated_request();
+    let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
+    requirements_registry.insert_payload(requirements_payload(&request));
+    work_queue.enqueue(work_item(request.clone()));
+    let package_probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Failed(vec![PackageReadinessProbeFailure::new(
+            PackageReadinessProviderDiagnosticCode::ProbeNotImplemented,
+            None,
+            CapabilityAvailabilityReason::parse(
+                "Explicit Python package-readiness environments are not implemented.",
+            )
+            .expect("reason"),
+        )]),
+    ));
+    let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+        snapshot_provider.clone(),
+        work_queue.clone(),
+        requirements_registry,
+    )
+    .with_package_probe_runner(package_probe_runner.clone())
+    .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+        poll_interval: Duration::from_millis(5),
+    });
+    let handle = producer
+        .spawn(tokio::runtime::Handle::current())
+        .expect("producer should spawn");
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    let result = snapshot_provider.resolve(&request);
+    assert!(work_queue.is_empty());
+    assert_eq!(
+        result.readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    assert_eq!(
+        result
+            .diagnostics
+            .first()
+            .map(|diagnostic| diagnostic.code.clone()),
+        Some(DependencyPlanningDiagnosticCode::NotImplemented)
+    );
+    let probe_requests = package_probe_runner.requests();
+    assert_eq!(
+        probe_requests[0].environment,
+        PackageReadinessEnvironmentSelector::PythonEnvironment {
+            environment_id: CapabilityAvailabilityId::parse("python:pytorch:cu124")
+                .expect("environment id")
+        }
     );
     handle.shutdown().await;
 }
@@ -290,6 +352,19 @@ fn requirements_payload(
         pantograph_dependency_planning::ValidatedDependencyEnvironmentResult::try_from(result)
             .expect("ready result should validate");
     DependencyRequirementsPayload::from_result(&result).expect("requirements payload")
+}
+
+fn default_host_requirements_payload(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyRequirementsPayload {
+    let mut result = snapshot_provider_ready_result(request);
+    for binding in &mut result.bindings {
+        binding.profile_id = None;
+    }
+    let result =
+        pantograph_dependency_planning::ValidatedDependencyEnvironmentResult::try_from(result)
+            .expect("default-host ready result should validate");
+    DependencyRequirementsPayload::from_result(&result).expect("default-host requirements payload")
 }
 
 fn snapshot_provider_ready_result(

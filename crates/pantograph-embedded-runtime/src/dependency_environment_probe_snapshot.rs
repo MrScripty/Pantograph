@@ -1,24 +1,25 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use inference::{BackendId, CapabilityAvailabilityId};
+use inference::CapabilityAvailabilityId;
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotStatus,
     DependencyReadinessWorkItem, DependencyRequirementsPayload,
 };
 use pantograph_dependency_planning::{
     DependencyBindingStatusRow, DependencyBindingStatusState, DependencyEnvironmentFailureState,
-    DependencyEnvironmentId, DependencyEnvironmentInstallState, DependencyEnvironmentKind,
-    DependencyEnvironmentOperation, DependencyEnvironmentOperationState,
-    DependencyEnvironmentReadinessState, DependencyEnvironmentRef, DependencyEnvironmentResult,
-    DependencyEnvironmentValidationState, DependencyPlanningDiagnostic,
-    DependencyPlanningDiagnosticCode, DependencyPlanningSeverity, DependencyRequirement,
-    DependencyRequirementBinding, DependencyRequirementKind,
+    DependencyEnvironmentId, DependencyEnvironmentInstallState, DependencyEnvironmentOperation,
+    DependencyEnvironmentOperationState, DependencyEnvironmentReadinessState,
+    DependencyEnvironmentRef, DependencyEnvironmentResult, DependencyEnvironmentValidationState,
+    DependencyPlanningDiagnostic, DependencyPlanningDiagnosticCode, DependencyPlanningSeverity,
+    DependencyRequirement, DependencyRequirementBinding,
 };
 
+use crate::dependency_environment_probe_selector::{
+    python_probe_request_for_payload, ProbeShapeError,
+};
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
 use crate::package_readiness_provider::{
-    PackageReadinessEnvironmentSelector, PackageReadinessProbeFailure,
-    PackageReadinessProbeOutcome, PackageReadinessProbeRequest, PackageReadinessProbeRunner,
+    PackageReadinessProbeFailure, PackageReadinessProbeOutcome, PackageReadinessProbeRunner,
     PackageReadinessProviderDiagnosticCode,
 };
 
@@ -32,7 +33,7 @@ pub(crate) async fn probe_dependency_readiness_snapshot(
     DependencyEnvironmentReadinessSnapshot,
     pantograph_dependency_environment_service::DependencyEnvironmentSnapshotStoreError,
 > {
-    let result = match python_probe_request_for_payload(&payload) {
+    let result = match python_probe_request_for_payload(&item.request, &payload) {
         Ok(probe_request) => {
             let outcome = package_probe_runner.probe(probe_request).await;
             dependency_environment_result_from_probe_outcome(item, payload, outcome)
@@ -45,95 +46,7 @@ pub(crate) async fn probe_dependency_readiness_snapshot(
         DependencyEnvironmentReadinessSnapshotStatus::Fresh,
     )
 }
-fn python_probe_request_for_payload(
-    payload: &DependencyRequirementsPayload,
-) -> Result<PackageReadinessProbeRequest, ProbeShapeError> {
-    let selected_bindings = selected_bindings(payload);
-    let requirement_by_name = payload
-        .requirements
-        .iter()
-        .map(|requirement| (requirement.name.clone(), requirement))
-        .collect::<BTreeMap<_, _>>();
-    let mut dependency_ids = BTreeSet::new();
 
-    for binding in &selected_bindings {
-        if binding.environment_kind != DependencyEnvironmentKind::Python {
-            return Err(ProbeShapeError::new(
-                "dependency_environment.bindings.environment_kind",
-                "Dependency readiness probes currently support only Python package bindings.",
-            ));
-        }
-        let Some(requirement) = requirement_by_name.get(&binding.requirement_name) else {
-            return Err(ProbeShapeError::new(
-                "dependency_environment.bindings.requirement_name",
-                "Selected dependency binding references an unknown requirement.",
-            ));
-        };
-        if requirement.kind != DependencyRequirementKind::PythonPackage {
-            return Err(ProbeShapeError::new(
-                "dependency_environment.requirements.kind",
-                "Dependency readiness probes currently support only Python package requirements.",
-            ));
-        }
-        let dependency_id = match CapabilityAvailabilityId::parse(requirement.name.as_str()) {
-            Ok(dependency_id) => dependency_id,
-            Err(_) => {
-                return Err(ProbeShapeError::new(
-                    "dependency_environment.requirements.name",
-                    "Python package requirement name is not a valid probe id.",
-                ));
-            }
-        };
-        dependency_ids.insert(dependency_id);
-    }
-
-    let Some(runtime_id) = payload
-        .identity_key
-        .scheduler_intent
-        .requested_runtime_id
-        .as_ref()
-    else {
-        return Err(ProbeShapeError::new(
-            "dependency_environment.identity_key.scheduler_intent.requested_runtime_id",
-            "Dependency readiness package probes require an explicit scheduler runtime id.",
-        ));
-    };
-    let executable_backend_key = BackendId::parse(runtime_id.as_str()).map_err(|_| {
-        ProbeShapeError::new(
-            "dependency_environment.identity_key.scheduler_intent.requested_runtime_id",
-            "Scheduler runtime id is not a valid executable backend id.",
-        )
-    })?;
-    let scheduler_runtime_id =
-        CapabilityAvailabilityId::parse(runtime_id.as_str()).map_err(|_| {
-            ProbeShapeError::new(
-                "dependency_environment.identity_key.scheduler_intent.requested_runtime_id",
-                "Scheduler runtime id is not a valid package probe attribution id.",
-            )
-        })?;
-
-    Ok(PackageReadinessProbeRequest {
-        executable_backend_key,
-        scheduler_runtime_id,
-        runtime_variant_id: None,
-        environment: PackageReadinessEnvironmentSelector::DefaultHostPython,
-        dependency_ids: dependency_ids.into_iter().collect(),
-    })
-}
-#[derive(Debug, Clone, Copy)]
-struct ProbeShapeError {
-    field_path: &'static str,
-    message: &'static str,
-}
-
-impl ProbeShapeError {
-    fn new(field_path: &'static str, message: &'static str) -> Self {
-        Self {
-            field_path,
-            message,
-        }
-    }
-}
 fn dependency_environment_result_from_probe_outcome(
     item: &DependencyReadinessWorkItem,
     payload: DependencyRequirementsPayload,
