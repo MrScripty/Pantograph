@@ -17597,6 +17597,31 @@ Worker rules:
     projection/provider. Each provider remains a separate validated slice with
     focused tests, README ownership updates, line-count review, and
     no-fallback verification.
+- 2026-05-30 shared provider-source contract slice:
+  - Slice scope: added contract-only runtime-feature and device-toolchain
+    provider-source snapshots to `pantograph-dependency-planning`. The slice
+    pins canonical runtime-feature ids, canonical device-toolchain ids,
+    canonical device-class ids, source-owned state, freshness/correlation
+    timestamps, bounded diagnostics, bounded alternatives, and validated
+    wrappers without changing embedded-runtime provider behavior.
+  - No-fallback result: source snapshots reject unknown ids and unknown
+    display-shaped fields, require stale rows to carry diagnostics, and do not
+    import workflow-service capability DTOs, runtime-registry candidate rows,
+    inference policy types, graph strings, shell output, generic requirement
+    names, or scheduler ranking facts.
+  - Focused tests: added `provider_source_contract.rs` and
+    `dependency_provider_source_snapshots.json` to prove serde decoding,
+    canonical vocabularies, unknown-field rejection, unknown id rejection,
+    stale-source diagnostics, and alternative bounds.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-dependency-planning --test provider_source_contract`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning`, targeted no-fallback
+    search, line-count review, README traceability updates, and `git diff
+    --check`.
+  - Remaining follow-up: implement runtime-feature source projection/provider
+    first from the shared provider-source DTOs, then implement
+    device-toolchain source projection/provider in a separate slice.
 
 ### Traceability Links
 

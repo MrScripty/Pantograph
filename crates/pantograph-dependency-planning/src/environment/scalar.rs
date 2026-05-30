@@ -88,6 +88,7 @@ dependency_source_id!(RuntimeFeatureSourceId, "runtime_feature.source_id");
 dependency_source_id!(RuntimeSourceId, "runtime.source_id");
 dependency_source_id!(RuntimeVariantSourceId, "runtime_variant.source_id");
 dependency_source_id!(DeviceToolchainSourceId, "device_toolchain.source_id");
+dependency_source_id!(DeviceClassSourceId, "device_class.source_id");
 dependency_source_id!(DeviceObservationId, "device_observation_id");
 
 /// Dependency binding profile id.

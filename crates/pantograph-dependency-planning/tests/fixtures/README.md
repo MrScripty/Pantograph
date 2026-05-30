@@ -15,6 +15,7 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 | `dependency_environment_ready_result.json` | Ready dependency-environment check result with typed readiness/install/validation states and environment ref. |
 | `dependency_environment_resolve_request.json` | Typed dependency-environment resolve request that carries planning facts without path identity. |
 | `dependency_environment_unavailable_result.json` | Unavailable dependency-environment resolve result with typed failure state and diagnostic. |
+| `dependency_provider_source_snapshots.json` | Runtime-feature and device-toolchain provider-source snapshots with canonical source ids, state, freshness, diagnostics, and bounded alternatives. |
 | `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, scheduler intent, platform, and selected bindings. |
 | `dependency_readiness_request.json` | Path-free host readiness input with typed policy and no readiness proof or executable handoff facts. |
 | `dependency_readiness_request_envelope.json` | Path-free readiness request plus active-run freshness identity for provider invocation. |
@@ -49,6 +50,10 @@ shape reviewable and testable.
 - Load paths may appear only in ready result fixtures as Pumas-approved handoff
   targets.
 - Diagnostics must use typed codes and severities.
+- Provider-source fixtures must use canonical feature, toolchain, and
+  device-class ids. They must not carry display labels, graph strings, shell
+  output, scheduler ranking candidates, or generic requirement names as
+  evidence.
 
 ## Decision
 Keep fixtures small and scenario-focused so they can be reused by later
@@ -88,6 +93,9 @@ cross-layer tests without importing unrelated runtime behavior.
   raw readiness request or dependency override patch values in scheduler proof.
 - Preflight request/result fixtures reject legacy selected runtime/device
   fields; runtime/device values in these fixtures are scheduler intent only.
+- Provider-source snapshots are source facts for future inventory providers,
+  not provider results. They do not select alternatives or authorize fallback
+  readiness.
 
 ## Revisit Triggers
 - The frontend or worker starts consuming generated fixture copies.
@@ -119,6 +127,8 @@ cargo test -p pantograph-dependency-planning dependency_planning_request_fixture
 - Optional fields may be omitted only when the DTO default has explicit
   semantics.
 - New enum values require fixture and consumer updates in the same slice.
+- New provider-source ids require fixture and source-vocabulary updates in the
+  same slice.
 - Path-shaped fields such as `model_path`, `modelPath`, `entry_path`,
   `selected_artifact_path`, or `local_load_path` are rejected in
   dependency-environment request fixtures.

@@ -10,6 +10,8 @@ consumers depend on stale fields.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contract.rs` | Public serde and validation tests for request/result DTOs and Pumas entry paths. |
+| `observation_projection_contract.rs` | Public serde and validation tests for selected-binding inventory observation projection. |
+| `provider_source_contract.rs` | Public serde and validation tests for runtime-feature and device-toolchain provider-source snapshots. |
 | `readiness_execution_contract.rs` | Public serde and validation tests for execution freshness request/proof envelopes. |
 | `readiness_contract.rs` | Public serde and validation tests for the host readiness input contract. |
 | `fixtures/` | Versioned JSON examples for ready and unavailable planning states. |
@@ -49,6 +51,9 @@ migrate to the shared contract.
 - Readiness execution envelopes bind readiness input and preflight proof to
   active-run freshness identity without carrying paths, load targets, or raw
   provider request payloads into scheduler proof.
+- Provider-source snapshots use canonical feature/toolchain/device-class ids
+  and reject display-shaped, graph-shaped, shell-derived, or scheduler-ranking
+  evidence fields.
 
 ## Revisit Triggers
 - Host-language generated schemas are added.
@@ -83,3 +88,7 @@ cargo test -p pantograph-dependency-planning
   fixtures cover readiness proof after host processing.
 - Readiness execution envelope fixtures cover scheduler-admission freshness and
   proof retention identity. They are not runtime-host handoff fixtures.
+- Provider-source fixtures cover source facts consumed by future inventory
+  providers. They are not provider behavior fixtures and do not authorize
+  embedded-runtime to infer readiness from workflow-service, runtime-registry,
+  graph, or shell-shaped fields.

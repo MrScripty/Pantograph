@@ -721,6 +721,16 @@ Implementation progress:
   unknown, and stale states. Do not derive provider evidence from runtime
   display names, backend aliases, generic requirement names, scheduler ranking
   candidates, graph strings, shell output, or ad hoc capability field parsing.
+- 2026-05-30 shared runtime-feature/device-toolchain provider-source contract
+  slice: added contract-only source snapshot DTOs, canonical feature/toolchain
+  and device-class vocabularies, source state/freshness fields, bounded
+  alternatives, and validated wrappers in `pantograph-dependency-planning`.
+  The slice adds fixture and public API tests for serde, unknown-field
+  rejection, unknown id rejection, stale diagnostics, and alternative bounds.
+  It intentionally does not implement provider behavior, source projection, or
+  embedded-runtime dispatch changes. Runtime-feature provider implementation
+  remains the next slice and must consume these DTOs rather than raw
+  workflow-service capability DTOs or runtime-registry candidate facts.
 
 ## Verification Strategy
 

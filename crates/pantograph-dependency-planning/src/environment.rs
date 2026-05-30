@@ -12,6 +12,7 @@ const MAX_ENVIRONMENT_ID_LEN: usize = 128;
 
 mod observation;
 mod payload;
+mod provider_source;
 mod scalar;
 mod state;
 
@@ -30,11 +31,26 @@ pub use payload::{
     ManagedRuntimeRequirementDetails, PythonBindingDetails, PythonPackageManagerKind,
     PythonRequirementDetails, RuntimeFeatureBindingDetails, RuntimeFeatureRequirementDetails,
 };
+pub use provider_source::{
+    known_device_classes, known_device_toolchain_ids, known_runtime_feature_ids,
+    DependencyProviderSourceAlternative, DependencyProviderSourceState,
+    DeviceToolchainProviderSourceRow, DeviceToolchainProviderSourceSnapshot,
+    RuntimeFeatureProviderSourceRow, RuntimeFeatureProviderSourceSnapshot,
+    ValidatedDeviceToolchainProviderSourceSnapshot, ValidatedRuntimeFeatureProviderSourceSnapshot,
+    DEVICE_CLASS_CPU, DEVICE_CLASS_CUDA, DEVICE_CLASS_METAL, DEVICE_CLASS_MPS,
+    DEVICE_TOOLCHAIN_CUDA_RUNTIME, DEVICE_TOOLCHAIN_LLAMACPP_DEVICE_INVENTORY,
+    DEVICE_TOOLCHAIN_METAL_RUNTIME, DEVICE_TOOLCHAIN_MPS_RUNTIME,
+    DEVICE_TOOLCHAIN_PYTORCH_DEVICE_PROBE, RUNTIME_FEATURE_CUSTOM_CODE,
+    RUNTIME_FEATURE_DEVICE_SELECTION, RUNTIME_FEATURE_EXTERNAL_CONNECTION,
+    RUNTIME_FEATURE_KV_CACHE, RUNTIME_FEATURE_POSTPROCESSING, RUNTIME_FEATURE_PREPROCESSING,
+    RUNTIME_FEATURE_REQUEST_LIFECYCLE, RUNTIME_FEATURE_STREAMING,
+};
 use scalar::{validate_diagnostics, validate_unique_binding_ids};
 pub use scalar::{
     DependencyBindingProfileId, DependencyOperationTimestampMs, DependencyRequirementName,
-    DependencyValidationFieldPath, DeviceObservationId, DeviceToolchainSourceId,
-    ManagedRuntimeSourceId, RuntimeFeatureSourceId, RuntimeSourceId, RuntimeVariantSourceId,
+    DependencyValidationFieldPath, DeviceClassSourceId, DeviceObservationId,
+    DeviceToolchainSourceId, ManagedRuntimeSourceId, RuntimeFeatureSourceId, RuntimeSourceId,
+    RuntimeVariantSourceId,
 };
 pub use state::{
     DependencyEnvironmentAction, DependencyEnvironmentFailureState,

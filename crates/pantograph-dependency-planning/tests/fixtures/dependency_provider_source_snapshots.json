@@ -1,0 +1,81 @@
+{
+  "runtime_feature": {
+    "contract_version": 1,
+    "rows": [
+      {
+        "runtime_id": "pytorch",
+        "feature_id": "streaming",
+        "runtime_variant_id": "pytorch.cuda",
+        "state": "ready",
+        "freshness": "fresh",
+        "checked_at_ms": 1710000000000
+      },
+      {
+        "runtime_id": "vllm",
+        "feature_id": "kv_cache",
+        "runtime_variant_id": "vllm.cuda",
+        "state": "unsupported",
+        "freshness": "fresh",
+        "checked_at_ms": 1710000000000,
+        "diagnostics": [
+          {
+            "code": "runtime_unavailable",
+            "severity": "error",
+            "message": "vLLM KV-cache execution is not implemented in this build.",
+            "runtime_id": "vllm",
+            "field_path": "runtime_feature.kv_cache"
+          }
+        ],
+        "alternatives": [
+          {
+            "runtime_id": "pytorch",
+            "runtime_variant_id": "pytorch.cuda",
+            "feature_id": "streaming",
+            "reason": "PyTorch CUDA runtime feature facts are available."
+          }
+        ]
+      }
+    ]
+  },
+  "device_toolchain": {
+    "contract_version": 1,
+    "rows": [
+      {
+        "toolchain_id": "cuda_runtime",
+        "runtime_id": "pytorch",
+        "device_class": "cuda",
+        "device_id": "cuda:0",
+        "state": "ready",
+        "freshness": "fresh",
+        "checked_at_ms": 1710000000000
+      },
+      {
+        "toolchain_id": "mps_runtime",
+        "runtime_id": "pytorch",
+        "device_class": "mps",
+        "state": "unavailable",
+        "freshness": "fresh",
+        "checked_at_ms": 1710000000000,
+        "diagnostics": [
+          {
+            "code": "device_unavailable",
+            "severity": "error",
+            "message": "MPS is not available on this host.",
+            "runtime_id": "pytorch",
+            "device_id": "mps",
+            "field_path": "device_toolchain.mps_runtime"
+          }
+        ],
+        "alternatives": [
+          {
+            "runtime_id": "pytorch",
+            "toolchain_id": "cuda_runtime",
+            "device_class": "cuda",
+            "device_id": "cuda:0",
+            "reason": "CUDA runtime is available on this host."
+          }
+        ]
+      }
+    ]
+  }
+}

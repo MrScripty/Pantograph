@@ -11,7 +11,7 @@ frontend state, and scheduler policy.
 | ----------- | ----------- |
 | `lib.rs` | Public re-export surface for contract consumers. |
 | `environment.rs` | Dependency-environment request/result DTOs, typed requirement and binding rows, status rows, operation timestamps, validation errors, environment refs, and validation helpers. |
-| `environment/` | Child modules for dependency-environment result payload rows that would otherwise make the envelope module too broad. |
+| `environment/` | Child modules for dependency-environment payload rows, inventory observations, and provider-source contracts that would otherwise make the envelope module too broad. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `execution.rs` | Path-free execution freshness envelope DTOs that correlate readiness requests and preflight proof with active scheduler task identity. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
@@ -66,6 +66,11 @@ is the only public facade.
   `DependencyEnvironmentResult` values from those rows so runtime-specific
   providers do not duplicate readiness, install, operation, stale, or
   diagnostic mapping policy.
+- Runtime-feature and device-toolchain inventory providers consume typed
+  provider-source snapshots with canonical source id vocabularies. They do not
+  consume workflow-service capability DTOs, runtime-registry candidate rows,
+  display labels, graph strings, shell output, or generic requirement names as
+  provider evidence.
 - Python/package-manager fields are contained in Python-specific detail structs
   so managed-binary, system-package, runtime-feature, device/toolchain, and
   non-Python dependencies can be added without overloading Python rows.
@@ -159,6 +164,8 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
 - Inventory observation projection serde and no-fallback coverage lives in
   `tests/observation_projection_contract.rs`.
+- Runtime-feature and device-toolchain provider-source serde and vocabulary
+  coverage lives in `tests/provider_source_contract.rs`.
 - Optional scheduler intent, selected bindings, caller context, and diagnostics
   default to empty values.
 - New public DTO fields require fixture updates in the same slice.
