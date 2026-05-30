@@ -731,6 +731,16 @@ Implementation progress:
   embedded-runtime dispatch changes. Runtime-feature provider implementation
   remains the next slice and must consume these DTOs rather than raw
   workflow-service capability DTOs or runtime-registry candidate facts.
+- 2026-05-30 runtime-feature inventory provider slice: added runtime-feature
+  dependency inventory observation from the shared provider-source snapshot
+  contract. Source projection and observation mapping live in separate
+  internal modules: standalone composition projects inference backend
+  capability facts into `RuntimeFeatureProviderSourceSnapshot` rows, then the
+  inventory provider consumes those rows. Runtime-feature provider matching
+  uses typed runtime id, feature id, and optional variant id constraints, maps
+  source states to typed observation rows and diagnostics, and does not consume
+  workflow-service capability DTOs, runtime-registry scheduler candidates,
+  graph strings, display names, shell output, or generic requirement names.
 
 ## Verification Strategy
 

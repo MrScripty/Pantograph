@@ -17622,6 +17622,36 @@ Worker rules:
   - Remaining follow-up: implement runtime-feature source projection/provider
     first from the shared provider-source DTOs, then implement
     device-toolchain source projection/provider in a separate slice.
+- 2026-05-30 runtime-feature inventory provider slice:
+  - Slice scope: added a runtime-feature dependency inventory provider in
+    embedded-runtime. The slice keeps source projection and observation
+    mapping in separate internal modules: the source adapter projects inference
+    backend capability facts into the shared
+    `RuntimeFeatureProviderSourceSnapshot` contract, while the inventory
+    provider consumes that contract and matches typed runtime id, feature id,
+    and optional runtime variant constraints before observing runtime-feature
+    bindings.
+  - No-fallback result: runtime-feature inventory does not consume
+    workflow-service capability DTOs, runtime-registry candidate ranking,
+    graph strings, display names, shell output, generic requirement names, or
+    scheduler policy. Unsupported, unknown, unavailable, stale, failed,
+    missing, and invalid source states map to typed observations and
+    diagnostics without selecting alternatives.
+  - Focused tests: added source-projection coverage from backend capability
+    facts and a mixed Python plus runtime-feature payload test proving runtime
+    feature bindings route through the source snapshot while Python bindings
+    still route through the Python package provider.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`, and
+    `cargo check -p pantograph-embedded-runtime --features standalone`. The
+    only warning observed remains the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: implement the device-toolchain source projection and
+    provider in a separate slice from source-owned device/runtime observation
+    facts. System-package inventory remains separately planned.
 
 ### Traceability Links
 

@@ -135,6 +135,7 @@ impl EmbeddedRuntime {
             )
             .with_dependency_inventory(Arc::new(DependencyInventoryService::from_app_data_dir(
                 config.app_data_dir.clone(),
+                gateway.clone(),
             )))
             .spawn(tokio::runtime::Handle::current())
             .map_err(|error| EmbeddedRuntimeError::Initialization {

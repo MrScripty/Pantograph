@@ -14,6 +14,10 @@ mod dependency_environment_probe_snapshot;
 mod dependency_inventory;
 #[cfg(any(test, feature = "standalone"))]
 mod dependency_inventory_managed_runtime;
+#[cfg(any(test, feature = "standalone"))]
+mod dependency_inventory_runtime_feature;
+#[cfg(any(test, feature = "standalone"))]
+mod dependency_inventory_runtime_feature_source;
 #[cfg(test)]
 mod dependency_inventory_tests;
 pub mod dependency_readiness;

@@ -15,12 +15,15 @@ use pantograph_dependency_environment_service::{
 use pantograph_dependency_planning::{
     DependencyBindingId, DependencyBindingStatusState, DependencyEnvironmentKind,
     DependencyEnvironmentReadinessState, DependencyEnvironmentRequest,
-    DependencyPlanningDiagnosticCode, DependencyRequirement, DependencyRequirementBinding,
-    DependencyRequirementKind, DependencyRequirementsId, ValidatedDependencyEnvironmentRequest,
+    DependencyPlanningDiagnosticCode, DependencyProviderSourceState, DependencyRequirement,
+    DependencyRequirementBinding, DependencyRequirementKind, DependencyRequirementsId,
+    RuntimeFeatureProviderSourceRow, RuntimeFeatureProviderSourceSnapshot,
+    ValidatedDependencyEnvironmentRequest,
 };
 
 use crate::dependency_inventory::DependencyInventoryService;
 use crate::dependency_inventory_managed_runtime::ManagedRuntimeSnapshotSource;
+use crate::dependency_inventory_runtime_feature_source::RuntimeFeatureProviderSource;
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
 use crate::package_readiness_provider::{
     PackageReadinessEnvironmentSelector, PackageReadinessProbeFailure,
@@ -224,6 +227,52 @@ async fn inventory_service_reports_missing_for_unmatched_managed_runtime_version
     );
 }
 
+#[tokio::test]
+async fn inventory_service_routes_runtime_feature_payloads_through_source_snapshot() {
+    let runtime_feature_binding_id =
+        DependencyBindingId::parse("pytorch.streaming").expect("runtime feature binding id");
+    let request = validated_request_with_selected_binding_id(runtime_feature_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(runtime_feature_binding_id.clone());
+    payload.requirements.push(runtime_feature_requirement_row());
+    payload.bindings.push(runtime_feature_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory = DependencyInventoryService::from_package_probe_runner_and_managed_runtime_and_runtime_feature_sources(
+        probe_runner.clone(),
+        Arc::new(FakeManagedRuntimeSnapshotSource::ready()),
+        Arc::new(FakeRuntimeFeatureProviderSource::ready()),
+    );
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot.result.readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(probe_runner.requests().len(), 1);
+    let runtime_feature_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == runtime_feature_binding_id)
+        .expect("runtime feature binding status");
+    assert_eq!(
+        runtime_feature_status.state,
+        DependencyBindingStatusState::Ready
+    );
+}
+
 fn work_item(request: ValidatedDependencyEnvironmentRequest) -> DependencyReadinessWorkItem {
     DependencyReadinessWorkItem::new(
         DependencyReadinessWorkItemProvenance::new(
@@ -339,6 +388,31 @@ fn managed_runtime_binding_row() -> DependencyRequirementBinding {
     .expect("managed runtime binding row")
 }
 
+fn runtime_feature_requirement_row() -> DependencyRequirement {
+    serde_json::from_value(serde_json::json!({
+        "name": "pytorch_streaming",
+        "kind": "runtime_feature",
+        "runtime_feature": {
+            "runtime_id": "pytorch",
+            "feature_id": "streaming"
+        }
+    }))
+    .expect("runtime feature requirement row")
+}
+
+fn runtime_feature_binding_row() -> DependencyRequirementBinding {
+    serde_json::from_value(serde_json::json!({
+        "binding_id": "pytorch.streaming",
+        "requirement_name": "pytorch_streaming",
+        "environment_kind": "runtime_feature",
+        "runtime_feature": {
+            "runtime_id": "pytorch",
+            "feature_id": "streaming"
+        }
+    }))
+    .expect("runtime feature binding row")
+}
+
 #[derive(Debug)]
 struct FakePackageProbeRunner {
     outcome: PackageReadinessProbeOutcome,
@@ -348,6 +422,36 @@ struct FakePackageProbeRunner {
 #[derive(Debug)]
 struct FakeManagedRuntimeSnapshotSource {
     snapshots: Vec<ManagedRuntimeSnapshot>,
+}
+
+#[derive(Debug)]
+struct FakeRuntimeFeatureProviderSource {
+    snapshot: RuntimeFeatureProviderSourceSnapshot,
+}
+
+impl FakeRuntimeFeatureProviderSource {
+    fn ready() -> Self {
+        Self {
+            snapshot: RuntimeFeatureProviderSourceSnapshot {
+                contract_version: 1,
+                rows: vec![RuntimeFeatureProviderSourceRow {
+                    runtime_id: pantograph_dependency_planning::RuntimeSourceId::parse("pytorch")
+                        .expect("runtime id"),
+                    feature_id: pantograph_dependency_planning::RuntimeFeatureSourceId::parse(
+                        "streaming",
+                    )
+                    .expect("runtime feature id"),
+                    runtime_variant_id: None,
+                    state: DependencyProviderSourceState::Ready,
+                    freshness: pantograph_dependency_planning::DependencyInventoryObservationFreshness::Fresh,
+                    checked_at_ms: None,
+                    diagnostics: Vec::new(),
+                    alternatives: Vec::new(),
+                }],
+                diagnostics: Vec::new(),
+            },
+        }
+    }
 }
 
 impl FakeManagedRuntimeSnapshotSource {
@@ -392,6 +496,13 @@ impl FakeManagedRuntimeSnapshotSource {
 impl ManagedRuntimeSnapshotSource for FakeManagedRuntimeSnapshotSource {
     async fn list_snapshots(&self) -> Result<Vec<ManagedRuntimeSnapshot>, String> {
         Ok(self.snapshots.clone())
+    }
+}
+
+#[async_trait]
+impl RuntimeFeatureProviderSource for FakeRuntimeFeatureProviderSource {
+    async fn snapshot(&self) -> Result<RuntimeFeatureProviderSourceSnapshot, String> {
+        Ok(self.snapshot.clone())
     }
 }
 
