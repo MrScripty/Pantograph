@@ -55,6 +55,20 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   and bounded diagnostics without graph-visible paths, executable load targets,
   scheduler policy in Tauri/frontend code, or a second adapter-local readiness
   proof type.
+- [ ] Add the production dependency-readiness snapshot composition and producer
+  lifecycle before runtime-host dispatch wiring. The application composition
+  root must create a single
+  `DependencyEnvironmentReadinessSnapshotProvider`, inject it into
+  `WorkflowService` before the service is shared behind `Arc`, and pass the
+  same backend-owned snapshot writer to an embedded-runtime or infrastructure
+  lifecycle owner. The producer must own async host package/runtime probes,
+  publish only validated path-free snapshots, track all spawned tasks, support
+  cancellation/shutdown/retry/tracing, and fail closed through existing
+  dependency-environment diagnostics when no fresh matching snapshot exists.
+  Workflow-service, scheduler, node-engine, Tauri, frontend, and runtime-host
+  adapters must consume the resulting typed readiness state; they must not own
+  package probing, install policy, filesystem/process checks, or readiness
+  fallback synthesis.
 - [x] Add the host-owned Pumas load-target resolution service. It must resolve
   executable load targets only from scheduler-selected Pumas refs/artifact
   identity at runtime dispatch, and return typed unavailable/stale/invalid
@@ -142,6 +156,12 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   stale descriptor fingerprint, missing dependency availability, invalid
   explicit runtime/device constraint, unavailable environment, and selected
   environment identity.
+- Composition/lifecycle tests proving every production `WorkflowService`
+  construction path receives the shared snapshot provider before use, the async
+  producer writes validated path-free snapshots through a tracked lifecycle
+  owner, cancellation and shutdown drain or abort spawned tasks deliberately,
+  probe failures/stale snapshots remain non-ready, and no execution path reads
+  technical-fit preview facts as runtime dispatch authority.
 - Boundary tests proving graph, node-engine, saved-workflow, scheduler hint,
   and scheduler handoff payloads reject executable path fields.
 - Runtime-host tests proving Pumas load targets are resolved only at the host
@@ -199,6 +219,17 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   choose scheduler runtime/device/dependency policy.
 - Do not expose executable Pumas load targets outside the runtime host
   boundary.
+- Do not install or replace the dependency-readiness provider after
+  `WorkflowService` has started accepting runs unless a separate re-plan proves
+  an initialization-only API with explicit lifecycle state, race-free tests, and
+  no active-run provider swapping.
+- Do not move host package/runtime probing, async task ownership, or snapshot
+  production into `pantograph-workflow-service`; keep it in a composition-owned
+  infrastructure lifecycle.
+- Do not derive execution readiness snapshots from technical-fit preview facts,
+  graph node data, Tauri/frontend payloads, reduced execution plans, runtime
+  handoff load targets, `ModelDependencyRequest`, `ModelRefV2`, or
+  `model_path`/`modelPath`.
 
 **Status:**
 
@@ -644,3 +675,24 @@ this transition only in workflow-service; the legal lifecycle belongs in the
     this provider. Scheduler dispatch selection/runtime-host request
     construction from the dispatch-selected `SchedulerRuntimeHandoff` remains a
     later slice.
+- 2026-05-29 production dependency-readiness snapshot producer re-plan
+  decision: use the standards-aligned composition-owned provider and producer
+  lifecycle path. The next implementation must add a backend composition bundle
+  that creates the shared `DependencyEnvironmentReadinessSnapshotProvider`
+  before `WorkflowService` is wrapped in `Arc`, wires that provider through all
+  production service construction paths, and hands the same snapshot writer to
+  an embedded-runtime or infrastructure lifecycle owner for async probing.
+  This follows the architecture standards by keeping concrete infrastructure
+  selection in the composition root, keeping workflow-service on the sync
+  consumer side of the contract, and keeping background probes under one
+  startup/shutdown owner with tracked tasks. Rejected alternatives:
+  initialization-time provider replacement may only be reconsidered if a later
+  re-plan proves explicit lifecycle state and no active-run races; moving
+  probing into workflow-service violates sync-core/async-shell and crate-role
+  boundaries; and reusing technical-fit preview facts as execution readiness
+  authority violates the no-fallback/no-legacy rule. Smallest next slice:
+  define the composition bundle/factory and wire construction paths with a
+  no-probe producer stub that still fails closed unless a validated snapshot is
+  present. The following slice must add the tracked async producer lifecycle
+  with cancellation, shutdown, retry, tracing, and focused tests before real
+  host package/runtime probes are allowed to publish production snapshots.
