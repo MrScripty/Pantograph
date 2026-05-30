@@ -2,7 +2,11 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use inference::{CapabilityAvailabilityId, CapabilityAvailabilityReason};
+use inference::{
+    CapabilityAvailabilityId, CapabilityAvailabilityReason, ManagedBinaryId,
+    ManagedBinaryInstallState, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
+    ManagedRuntimeSnapshot, RuntimeVariantId,
+};
 use pantograph_dependency_environment_service::{
     DependencyReadinessTaskId, DependencyReadinessWorkItem, DependencyReadinessWorkItemProvenance,
     DependencyReadinessWorkflowRunId, DependencyReadinessWorkflowSessionId,
@@ -16,6 +20,7 @@ use pantograph_dependency_planning::{
 };
 
 use crate::dependency_inventory::DependencyInventoryService;
+use crate::dependency_inventory_managed_runtime::ManagedRuntimeSnapshotSource;
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
 use crate::package_readiness_provider::{
     PackageReadinessEnvironmentSelector, PackageReadinessProbeFailure,
@@ -128,7 +133,12 @@ async fn inventory_service_routes_mixed_payloads_per_selected_binding() {
             installed_package_ids(&["diffusers"]),
         )),
     ));
-    let inventory = DependencyInventoryService::from_package_probe_runner(probe_runner.clone());
+    let managed_runtime_source = Arc::new(FakeManagedRuntimeSnapshotSource::ready());
+    let inventory =
+        DependencyInventoryService::from_package_probe_runner_and_managed_runtime_source(
+            probe_runner.clone(),
+            managed_runtime_source,
+        );
 
     let snapshot = inventory
         .snapshot_for_work_item(&item, payload)
@@ -137,7 +147,7 @@ async fn inventory_service_routes_mixed_payloads_per_selected_binding() {
 
     assert_eq!(
         snapshot.result.readiness_state,
-        DependencyEnvironmentReadinessState::NotImplemented
+        DependencyEnvironmentReadinessState::Ready
     );
     let probe_requests = probe_runner.requests();
     assert_eq!(probe_requests.len(), 1);
@@ -162,9 +172,55 @@ async fn inventory_service_routes_mixed_payloads_per_selected_binding() {
         .iter()
         .find(|status| status.binding_id == managed_binding_id)
         .expect("managed binding status");
+    assert_eq!(managed_status.state, DependencyBindingStatusState::Ready);
+}
+
+#[tokio::test]
+async fn inventory_service_reports_missing_for_unmatched_managed_runtime_version() {
+    let managed_binding_id =
+        DependencyBindingId::parse("llama_cpp.binary").expect("managed binding id");
+    let request = validated_request_with_selected_binding_id(managed_binding_id.clone());
+    let item = work_item(request.clone());
+    let mut payload = default_host_requirements_payload(&validated_request());
+    payload.identity_key = request.as_request().identity_key.clone();
+    payload
+        .selected_binding_ids
+        .push(managed_binding_id.clone());
+    payload
+        .requirements
+        .push(managed_runtime_requirement_row_with_version(
+            "missing-version",
+        ));
+    payload.bindings.push(managed_runtime_binding_row());
+    let probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+            installed_package_ids(&["diffusers"]),
+        )),
+    ));
+    let inventory =
+        DependencyInventoryService::from_package_probe_runner_and_managed_runtime_source(
+            probe_runner,
+            Arc::new(FakeManagedRuntimeSnapshotSource::ready()),
+        );
+
+    let snapshot = inventory
+        .snapshot_for_work_item(&item, payload)
+        .await
+        .expect("snapshot");
+
+    let managed_status = snapshot
+        .result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id == managed_binding_id)
+        .expect("managed binding status");
+    assert_eq!(managed_status.state, DependencyBindingStatusState::Missing);
     assert_eq!(
-        managed_status.state,
-        DependencyBindingStatusState::NotImplemented
+        managed_status
+            .diagnostics
+            .first()
+            .map(|diagnostic| diagnostic.code.clone()),
+        Some(DependencyPlanningDiagnosticCode::ArtifactMissing)
     );
 }
 
@@ -248,14 +304,27 @@ fn installed_package_ids(values: &[&str]) -> BTreeSet<CapabilityAvailabilityId> 
 }
 
 fn managed_runtime_requirement_row() -> DependencyRequirement {
-    serde_json::from_value(serde_json::json!({
+    managed_runtime_requirement_row_with_version_value(None)
+}
+
+fn managed_runtime_requirement_row_with_version(version: &str) -> DependencyRequirement {
+    managed_runtime_requirement_row_with_version_value(Some(version))
+}
+
+fn managed_runtime_requirement_row_with_version_value(
+    version: Option<&str>,
+) -> DependencyRequirement {
+    let mut value = serde_json::json!({
         "name": "llama_cpp",
         "kind": "runtime_managed_binary",
         "managed_runtime": {
             "managed_binary_id": "llama_cpp"
         }
-    }))
-    .expect("managed runtime requirement row")
+    });
+    if let Some(version) = version {
+        value["managed_runtime"]["version"] = serde_json::Value::String(version.to_string());
+    }
+    serde_json::from_value(value).expect("managed runtime requirement row")
 }
 
 fn managed_runtime_binding_row() -> DependencyRequirementBinding {
@@ -274,6 +343,56 @@ fn managed_runtime_binding_row() -> DependencyRequirementBinding {
 struct FakePackageProbeRunner {
     outcome: PackageReadinessProbeOutcome,
     requests: std::sync::Mutex<Vec<PackageReadinessProbeRequest>>,
+}
+
+#[derive(Debug)]
+struct FakeManagedRuntimeSnapshotSource {
+    snapshots: Vec<ManagedRuntimeSnapshot>,
+}
+
+impl FakeManagedRuntimeSnapshotSource {
+    fn ready() -> Self {
+        Self {
+            snapshots: vec![ManagedRuntimeSnapshot {
+                id: ManagedBinaryId::LlamaCpp,
+                display_name: "llama.cpp".to_string(),
+                install_state: ManagedBinaryInstallState::Installed,
+                readiness_state: ManagedRuntimeReadinessState::Ready,
+                available: true,
+                can_install: true,
+                can_remove: true,
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+                versions: vec![inference::ManagedRuntimeVersionStatus {
+                    version: Some("b8248".to_string()),
+                    display_label: "b8248".to_string(),
+                    runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+                    runtime_variant_id: RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("runtime variant id"),
+                    platform_key: "linux-x86_64".to_string(),
+                    install_root: Some("/tmp/pantograph-test-runtime".to_string()),
+                    executable_name: "llama-server".to_string(),
+                    executable_ready: true,
+                    install_state: ManagedBinaryInstallState::Installed,
+                    readiness_state: ManagedRuntimeReadinessState::Ready,
+                    catalog_available: true,
+                    installable: true,
+                    selected: true,
+                    active: false,
+                }],
+                selection: ManagedRuntimeSelectionState::default(),
+                active_job: None,
+                job_artifact: None,
+            }],
+        }
+    }
+}
+
+#[async_trait]
+impl ManagedRuntimeSnapshotSource for FakeManagedRuntimeSnapshotSource {
+    async fn list_snapshots(&self) -> Result<Vec<ManagedRuntimeSnapshot>, String> {
+        Ok(self.snapshots.clone())
+    }
 }
 
 impl FakePackageProbeRunner {

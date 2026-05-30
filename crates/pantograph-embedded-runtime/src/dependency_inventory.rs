@@ -29,6 +29,12 @@ use crate::dependency_environment_probe_snapshot::{
     dependency_inventory_observations_from_probe_outcome, environment_ref_for_request,
     invalid_probe_shape_observations, observations_from_probe_failures,
 };
+#[cfg(feature = "standalone")]
+use crate::dependency_inventory_managed_runtime::BlockingManagedRuntimeSnapshotSource;
+#[cfg(any(test, feature = "standalone"))]
+use crate::dependency_inventory_managed_runtime::{
+    ManagedRuntimeDependencyInventoryProvider, ManagedRuntimeSnapshotSource,
+};
 use crate::package_readiness_provider::{
     PackageReadinessProbeFailure, PackageReadinessProbeRunner,
     PackageReadinessProviderDiagnosticCode,
@@ -114,6 +120,35 @@ impl DependencyInventoryService {
         )))
     }
 
+    #[must_use]
+    #[cfg(feature = "standalone")]
+    pub fn from_app_data_dir(app_data_dir: std::path::PathBuf) -> Self {
+        Self::from_package_probe_runner_and_managed_runtime_source(
+            Arc::new(ProcessPythonPackageReadinessProbeRunner::default()),
+            Arc::new(BlockingManagedRuntimeSnapshotSource::new(app_data_dir)),
+        )
+    }
+
+    #[must_use]
+    #[cfg(any(test, feature = "standalone"))]
+    pub(crate) fn from_package_probe_runner_and_managed_runtime_source(
+        package_probe_runner: Arc<dyn PackageReadinessProbeRunner>,
+        managed_runtime_source: Arc<dyn ManagedRuntimeSnapshotSource>,
+    ) -> Self {
+        let python_provider = Arc::new(PythonPackageDependencyInventoryProvider::new(
+            package_probe_runner,
+        ));
+        let managed_runtime_provider = Arc::new(ManagedRuntimeDependencyInventoryProvider::new(
+            managed_runtime_source,
+        ));
+        Self::new(Arc::new(
+            DependencyInventoryDispatchProvider::new_with_managed_runtime(
+                python_provider,
+                managed_runtime_provider,
+            ),
+        ))
+    }
+
     pub async fn snapshot_for_work_item(
         &self,
         item: &DependencyReadinessWorkItem,
@@ -141,6 +176,8 @@ impl DependencyInventoryService {
 
 struct DependencyInventoryDispatchProvider {
     python_provider: Arc<dyn DependencyInventoryProvider>,
+    #[cfg(any(test, feature = "standalone"))]
+    managed_runtime_provider: Arc<dyn DependencyInventoryProvider>,
     not_implemented_provider: NotImplementedDependencyInventoryProvider,
 }
 
@@ -148,6 +185,20 @@ impl DependencyInventoryDispatchProvider {
     fn new(python_provider: Arc<dyn DependencyInventoryProvider>) -> Self {
         Self {
             python_provider,
+            #[cfg(any(test, feature = "standalone"))]
+            managed_runtime_provider: Arc::new(NotImplementedDependencyInventoryProvider),
+            not_implemented_provider: NotImplementedDependencyInventoryProvider,
+        }
+    }
+
+    #[cfg(any(test, feature = "standalone"))]
+    fn new_with_managed_runtime(
+        python_provider: Arc<dyn DependencyInventoryProvider>,
+        managed_runtime_provider: Arc<dyn DependencyInventoryProvider>,
+    ) -> Self {
+        Self {
+            python_provider,
+            managed_runtime_provider,
             not_implemented_provider: NotImplementedDependencyInventoryProvider,
         }
     }
@@ -184,7 +235,31 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
-        for binding_id in &dispatch_plan.not_implemented_binding_ids {
+        #[cfg(any(test, feature = "standalone"))]
+        if !dispatch_plan.managed_runtime_binding_ids.is_empty() {
+            let payload =
+                scoped_payload(&request.payload, &dispatch_plan.managed_runtime_binding_ids);
+            let observation = self
+                .managed_runtime_provider
+                .observe(request.with_payload(payload))
+                .await;
+            rows.extend(observation.rows);
+            diagnostics.extend(observation.diagnostics);
+        }
+
+        #[cfg(not(any(test, feature = "standalone")))]
+        let not_implemented_binding_ids = dispatch_plan
+            .not_implemented_binding_ids
+            .iter()
+            .chain(dispatch_plan.managed_runtime_binding_ids.iter())
+            .collect::<Vec<_>>();
+        #[cfg(any(test, feature = "standalone"))]
+        let not_implemented_binding_ids = dispatch_plan
+            .not_implemented_binding_ids
+            .iter()
+            .collect::<Vec<_>>();
+
+        for binding_id in not_implemented_binding_ids {
             let payload = scoped_payload(&request.payload, std::slice::from_ref(binding_id));
             let observation = self
                 .not_implemented_provider
@@ -201,6 +276,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct DependencyInventoryDispatchPlan {
     python_binding_ids: Vec<DependencyBindingId>,
+    managed_runtime_binding_ids: Vec<DependencyBindingId>,
     not_implemented_binding_ids: Vec<DependencyBindingId>,
     invalid_binding_ids: Vec<DependencyBindingId>,
 }
@@ -223,6 +299,10 @@ impl DependencyInventoryDispatchPlan {
                 Some(DependencyInventoryDispatchTarget::PythonPackage) => {
                     plan.python_binding_ids.push(binding.binding_id);
                 }
+                #[cfg(any(test, feature = "standalone"))]
+                Some(DependencyInventoryDispatchTarget::ManagedRuntime) => {
+                    plan.managed_runtime_binding_ids.push(binding.binding_id);
+                }
                 Some(DependencyInventoryDispatchTarget::NotImplemented) => {
                     plan.not_implemented_binding_ids.push(binding.binding_id);
                 }
@@ -236,6 +316,8 @@ impl DependencyInventoryDispatchPlan {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DependencyInventoryDispatchTarget {
     PythonPackage,
+    #[cfg(any(test, feature = "standalone"))]
+    ManagedRuntime,
     NotImplemented,
 }
 
@@ -250,8 +332,8 @@ fn dispatch_target(
         (
             DependencyEnvironmentKind::ManagedBinary,
             DependencyRequirementKind::RuntimeManagedBinary,
-        )
-        | (DependencyEnvironmentKind::RuntimeFeature, DependencyRequirementKind::RuntimeFeature)
+        ) => Some(managed_runtime_dispatch_target()),
+        (DependencyEnvironmentKind::RuntimeFeature, DependencyRequirementKind::RuntimeFeature)
         | (
             DependencyEnvironmentKind::DeviceToolchain,
             DependencyRequirementKind::DeviceToolchain,
@@ -261,6 +343,16 @@ fn dispatch_target(
         }
         _ => None,
     }
+}
+
+#[cfg(any(test, feature = "standalone"))]
+fn managed_runtime_dispatch_target() -> DependencyInventoryDispatchTarget {
+    DependencyInventoryDispatchTarget::ManagedRuntime
+}
+
+#[cfg(not(any(test, feature = "standalone")))]
+fn managed_runtime_dispatch_target() -> DependencyInventoryDispatchTarget {
+    DependencyInventoryDispatchTarget::NotImplemented
 }
 
 /// Python package inventory provider backed by the existing no-shell probe.
@@ -381,40 +473,8 @@ fn scoped_payload(
 }
 
 fn not_implemented_reason(payload: &DependencyRequirementsPayload) -> String {
-    let kind = payload
-        .requirements
-        .iter()
-        .find(|requirement| requirement.kind != DependencyRequirementKind::PythonPackage)
-        .map(|requirement| requirement_kind_label(requirement.kind))
-        .or_else(|| {
-            payload
-                .bindings
-                .iter()
-                .find(|binding| binding.environment_kind != DependencyEnvironmentKind::Python)
-                .map(|binding| environment_kind_label(binding.environment_kind))
-        })
-        .unwrap_or("unknown");
-    format!("Dependency inventory provider for {kind} requirements is not implemented.")
-}
-
-fn requirement_kind_label(kind: DependencyRequirementKind) -> &'static str {
-    match kind {
-        DependencyRequirementKind::PythonPackage => "python_package",
-        DependencyRequirementKind::RuntimeManagedBinary => "runtime_managed_binary",
-        DependencyRequirementKind::SystemPackage => "system_package",
-        DependencyRequirementKind::RuntimeFeature => "runtime_feature",
-        DependencyRequirementKind::DeviceToolchain => "device_toolchain",
-        _ => "unknown",
-    }
-}
-
-fn environment_kind_label(kind: DependencyEnvironmentKind) -> &'static str {
-    match kind {
-        DependencyEnvironmentKind::Python => "python",
-        DependencyEnvironmentKind::ManagedBinary => "managed_binary",
-        DependencyEnvironmentKind::SystemPackage => "system_package",
-        DependencyEnvironmentKind::RuntimeFeature => "runtime_feature",
-        DependencyEnvironmentKind::DeviceToolchain => "device_toolchain",
-        _ => "unknown",
-    }
+    let selected_count = payload.selected_binding_ids.len();
+    format!(
+        "Dependency inventory provider is not implemented for {selected_count} selected binding(s)."
+    )
 }

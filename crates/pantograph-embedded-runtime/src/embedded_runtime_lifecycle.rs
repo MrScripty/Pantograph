@@ -10,6 +10,8 @@ use pantograph_workflow_service::WorkflowRuntimeCapability;
 #[cfg(feature = "standalone")]
 use tokio::sync::RwLock;
 
+#[cfg(feature = "standalone")]
+use crate::dependency_inventory::DependencyInventoryService;
 use crate::{
     runtime_capabilities, runtime_registry, workflow_execution_session_execution, EmbeddedRuntime,
     EmbeddedRuntimeConfig, EmbeddedWorkflowHost, EmbeddedWorkflowSchedulerDiagnosticsProvider,
@@ -131,6 +133,9 @@ impl EmbeddedRuntime {
                 dependency_readiness.work_queue(),
                 dependency_readiness.requirements_registry(),
             )
+            .with_dependency_inventory(Arc::new(DependencyInventoryService::from_app_data_dir(
+                config.app_data_dir.clone(),
+            )))
             .spawn(tokio::runtime::Handle::current())
             .map_err(|error| EmbeddedRuntimeError::Initialization {
                 message: error.to_string(),

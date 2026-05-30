@@ -23,6 +23,7 @@ packages.
 | `dependency_environment_probe_snapshot.rs` | Owns dependency inventory observation-row projection from seeded requirements payloads and host package probe outcomes into ready, missing, unavailable, not-implemented, or invalid provider observations without graph/path fallback. |
 | `dependency_environment_probe_selector.rs` | Owns dependency-environment package probe request selection, including explicit environment/profile preservation, runtime attribution, and typed invalid-shape diagnostics before snapshot projection. |
 | `dependency_inventory.rs` | Owns the dependency inventory service boundary used by readiness snapshot production, including concrete per-selected-binding provider dispatch, provider-owned observations, shared dependency-planning observation-result projection, and the Python package provider adapter that keeps package probing behind the inventory boundary. |
+| `dependency_inventory_managed_runtime.rs` | Owns managed-runtime dependency inventory observation from inference-owned managed-runtime snapshots, exact managed binary id matching, version/variant/platform narrowing, and readiness-state projection without graph/path/display-name fallback. |
 | `dependency_inventory_tests.rs` | Focused tests for per-selected-binding inventory dispatch through the Python provider, explicit not-implemented rows for selected non-Python bindings, mixed provider payload projection, and shared observation projection into readiness snapshots. |
 | `dependency_readiness_lifecycle.rs` | Owns the tracked dependency-readiness snapshot producer lifecycle, including startup validation, task handle ownership, cancellation, shutdown, heartbeat tracing, requirements-registry lookup, and delegation to the dependency-environment probe snapshot projector. |
 | `dependency_readiness_lifecycle_tests.rs` | Focused lifecycle tests for producer shutdown, registry-miss diagnostics, fake package-probe ready/missing/unavailable snapshots, and poll-interval validation. |
@@ -135,9 +136,13 @@ Pumas-specific dependency resolution.
   non-Python requirement or binding kinds are routed per selected binding and
   publish provider-owned not-implemented observation rows through the shared
   dependency-planning projector without invoking Python probes for non-Python
-  bindings or treating the entire payload as one provider domain. Unmapped explicit probe
-  environments publish typed diagnostics instead of falling back to graph data,
-  paths, inferred package names, or host Python.
+  bindings or treating the entire payload as one provider domain. In
+  standalone composition, managed-runtime binary bindings are checked through
+  inference-owned `ManagedRuntimeSnapshot` facts with exact managed binary key
+  matching and typed version/variant/platform narrowing; default non-standalone
+  composition keeps those bindings not implemented unless a source is injected.
+  Unmapped explicit probe environments publish typed diagnostics instead of
+  falling back to graph data, paths, inferred package names, or host Python.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

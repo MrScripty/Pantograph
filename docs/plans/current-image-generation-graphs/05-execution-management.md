@@ -17524,6 +17524,42 @@ Worker rules:
     provider from `ManagedRuntimeSnapshot` facts using the exact id matching
     and state-mapping contract in milestone 9 before runtime-feature or
     device-toolchain provider slices.
+- 2026-05-30 managed-runtime inventory provider slice:
+  - Slice scope: added a managed-runtime dependency inventory provider in
+    embedded-runtime backed by an injected `ManagedRuntimeSnapshot` source.
+    Standalone composition now wires the source from `app_data_dir` behind a
+    blocking-isolated provider boundary; default non-standalone composition
+    continues to fail closed with not-implemented managed-runtime observations
+    unless a source is injected.
+  - No-fallback result: managed-runtime provider matching uses exact
+    `ManagedBinaryId::key()` equality from typed `managed_binary_id` fields,
+    rejects binding/requirement id conflicts as invalid, narrows optional
+    version/variant/platform constraints against source-owned version rows, and
+    does not inspect graph paths, display labels, backend aliases, package
+    names, shell output, or generic requirement names for readiness proof.
+  - Focused tests: extended inventory tests to prove mixed Python plus
+    managed-runtime payloads can become ready through combined provider
+    observations and that an unmatched managed-runtime version projects a
+    missing binding status with an `ArtifactMissing` diagnostic.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --features standalone`,
+    targeted no-display/path/backend parsing search, line-count review, and
+    `git diff --check`.
+  - Standards result: managed-runtime source I/O is isolated behind a
+    source-owned provider boundary, provider composition remains in
+    embedded-runtime, result projection remains in
+    `pantograph-dependency-planning`, and all touched Rust modules remain under
+    the current decomposition target.
+  - Known issue observed: `cargo check` still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: add runtime-feature and device-toolchain providers one
+    at a time from source-owned facts, or stop and re-plan if their source
+    ownership cannot be expressed without moving scheduler/runtime-registry
+    policy into dependency inventory.
 
 ### Traceability Links
 

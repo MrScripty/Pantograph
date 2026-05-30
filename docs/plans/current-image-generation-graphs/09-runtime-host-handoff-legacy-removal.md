@@ -612,6 +612,21 @@ Implementation progress:
   README traceability update, and `git diff --check`. The only warning
   observed remains the pre-existing `set_active_run_execution_plan` dead-code
   warning in `pantograph-workflow-service`.
+- 2026-05-30 managed-runtime inventory provider slice: added a source-owned
+  managed-runtime inventory provider for `RuntimeManagedBinary` bindings. The
+  provider consumes injected `ManagedRuntimeSnapshot` facts, maps typed
+  `managed_binary_id` values by exact `ManagedBinaryId::key()` equality,
+  rejects binding/requirement id or constraint conflicts as invalid, projects
+  missing version/variant/platform matches as `ArtifactMissing`, and maps ready
+  source facts to ready inventory observations. Standalone composition wires
+  the snapshot source from `app_data_dir` behind a blocking-isolated provider
+  boundary; default non-standalone composition keeps managed-runtime bindings
+  fail-closed as not implemented unless a source is injected. Verification
+  passed with formatting, focused inventory tests, lifecycle tests, default and
+  standalone crate checks, no-display/path/backend parsing search, line-count
+  review, README traceability update, and `git diff --check`. The only warning
+  observed remains the pre-existing `set_active_run_execution_plan` dead-code
+  warning in `pantograph-workflow-service`.
 
 ## Verification Strategy
 

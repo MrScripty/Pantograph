@@ -12,6 +12,8 @@ use pantograph_workflow_service::{
 mod dependency_environment_probe_selector;
 mod dependency_environment_probe_snapshot;
 mod dependency_inventory;
+#[cfg(any(test, feature = "standalone"))]
+mod dependency_inventory_managed_runtime;
 #[cfg(test)]
 mod dependency_inventory_tests;
 pub mod dependency_readiness;
