@@ -568,3 +568,27 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   production dependency-environment provider/fact source and then wire
   scheduler dispatch selection/runtime-host request construction from the
   actual dispatch-selected `SchedulerRuntimeHandoff`.
+- 2026-05-29 production dependency-readiness source re-plan selected. Decision:
+  implement a snapshot-backed production dependency-environment provider first,
+  with embedded-runtime or another infrastructure owner as the later snapshot
+  producer. The provider must read validated backend-owned readiness snapshots
+  and return canonical `DependencyEnvironmentResult` values through the
+  existing `DependencyEnvironmentService` facade. It must remain path-free,
+  synchronous at the provider/session-runner boundary, and fail closed when no
+  fresh matching snapshot exists. It must not block on filesystem/process/
+  package probes, create runtimes, spawn untracked tasks, or derive readiness
+  from `ModelDependencyRequest`, `ModelRefV2`, technical-fit preview facts,
+  reduced execution plans, graph node data, Tauri/frontend payloads, graph
+  `model_path`/`modelPath`, runtime-host handoff, or executable load targets.
+  Standards alignment: this keeps backend-owned data as the source of truth,
+  preserves validated contract DTOs across crate boundaries, keeps scheduler
+  policy synchronous, places future async probing in an owned infrastructure
+  lifecycle, and supports deterministic tests. Next thin slice: define the
+  snapshot DTO/store/provider contract in the smallest backend-owned module,
+  add focused provider tests for ready/missing/stale/mismatched snapshots, and
+  add a session acceptance test proving only a fresh matching snapshot admits a
+  runtime task to the dispatch boundary. Deferred follow-up: implement the
+  async snapshot producer with tracked handles, cancellation, shutdown,
+  retries, and tracing before using real host package/runtime probes. Guardrail:
+  the injected-ready provider remains test/dev scaffolding only and must not
+  become production readiness authority.

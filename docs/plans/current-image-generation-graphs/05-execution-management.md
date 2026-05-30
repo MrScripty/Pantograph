@@ -16620,6 +16620,38 @@ Worker rules:
   - Remaining follow-up: production dependency-environment provider/fact source
     wiring, then scheduler dispatch selection and runtime-host request
     construction from actual dispatch-selected handoff.
+- 2026-05-29 production dependency-readiness source re-plan selected:
+  - Boundary: the session runner can consume a configured
+    `DependencyEnvironmentProvider`, but production readiness evidence is not
+    yet owned. Continuing directly to real inference dispatch without this
+    source would require fabricated readiness or legacy fact adaptation.
+  - Decision: implement a snapshot-backed production dependency-environment
+    provider first. It reads validated backend-owned readiness snapshots and
+    returns canonical `DependencyEnvironmentResult` values through the existing
+    `DependencyEnvironmentService` facade. Embedded-runtime or another
+    infrastructure owner may later populate those snapshots through an owned
+    async lifecycle.
+  - Standards alignment: provider/session-runner consumption stays
+    synchronous and path-free; async probing is deferred to an explicit
+    lifecycle owner with tracked handles, cancellation, shutdown, retry, and
+    tracing; backend-owned snapshots are the source of truth; shared DTOs stay
+    validated contracts; scheduler policy remains synchronous; tests can be
+    deterministic and isolated.
+  - No-fallback/no-legacy gate: do not derive readiness from
+    `ModelDependencyRequest`, `ModelRefV2`, technical-fit previews, reduced
+    execution plans, graph node data, Tauri/frontend payloads, graph
+    `model_path`/`modelPath`, runtime-host handoff, local paths, or executable
+    load targets. Missing, stale, or mismatched snapshots must produce typed
+    diagnostics and fail closed.
+  - Next thin slice: add the smallest backend-owned snapshot DTO/store/provider
+    contract plus focused tests for ready, missing, stale, and mismatched
+    snapshots, then add one session acceptance path proving a fresh matching
+    snapshot admits the runtime task to the dispatch boundary while stale or
+    missing snapshots do not.
+  - Deferred follow-up: implement the infrastructure snapshot producer and
+    only then use real package/runtime probes. The current injected-ready
+    provider remains test/dev scaffolding and must not become production
+    readiness authority.
 
 ### Traceability Links
 

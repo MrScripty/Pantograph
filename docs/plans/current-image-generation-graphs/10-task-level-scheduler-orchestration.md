@@ -1982,6 +1982,23 @@ a production dependency resolver and does not introduce legacy preflight,
 runtime path, or readiness-proof injection surfaces; it only gives the backend
 composition root a typed provider seam for the next production provider slice.
 
+2026-05-29 production dependency-readiness source re-plan selected. The next
+implementation direction is a snapshot-backed dependency-environment provider
+owned by backend composition. The provider reads validated, path-free,
+backend-owned readiness snapshots and returns canonical
+`DependencyEnvironmentResult` values to the existing workflow-service
+readiness lifecycle. It must not perform blocking package/runtime probes in the
+session runner path, create a Tokio runtime, spawn untracked tasks, or derive
+readiness from `ModelDependencyRequest`, `ModelRefV2`, technical-fit previews,
+reduced execution plans, graph node data, Tauri/frontend payloads, or local
+paths. Embedded-runtime or another infrastructure owner may later populate the
+snapshots through an async lifecycle with tracked tasks, cancellation,
+shutdown, retries, and tracing; that producer is a separate slice and must not
+move scheduler policy or readiness proof authority into runtime adapters. The
+current injected-ready provider remains test/dev scaffolding only and must not
+be treated as production readiness authority while dispatch selection and
+runtime-host request construction are wired.
+
 ## Effects On Existing Systems
 
 ### Scheduler
