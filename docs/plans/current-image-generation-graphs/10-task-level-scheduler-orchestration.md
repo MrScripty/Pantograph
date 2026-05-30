@@ -2155,6 +2155,17 @@ next production provider report missing Pumas package facts, runtime capability
 facts, reservation facts, or resource-fit facts without fabricating a scheduler
 candidate or hiding the reason behind a generic no-candidates result.
 
+Re-plan boundary: production candidate fact collection cannot be wired directly
+through the current synchronous workflow-service provider without deciding async
+ownership. Owner-API Pumas package-fact resolution is async, and real
+reservation/resource-fit facts must come from backend resource owners rather
+than scheduler policy or workflow-service inference. Before implementing the
+provider, choose whether fact collection becomes an async provider boundary, a
+precomputed validated candidate-fact snapshot, or an async source-provider
+composition that hands a validated path-free bundle to the existing synchronous
+scheduler selector. Do not create candidates from summaries, cached display
+rows, graph paths, or blocking ad hoc Pumas calls while this boundary is open.
+
 ## Effects On Existing Systems
 
 ### Scheduler

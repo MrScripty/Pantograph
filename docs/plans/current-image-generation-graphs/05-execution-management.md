@@ -18256,6 +18256,35 @@ Worker rules:
     into the production candidate provider. Provider source diagnostics should
     report whichever canonical fact source is unavailable instead of falling
     back to summaries or synthetic candidates.
+- 2026-05-30 re-plan boundary before production dispatch candidate provider:
+  - Trigger: after source-diagnostics propagation, the next planned slice is
+    the first production candidate provider that combines Pumas package facts,
+    runtime-registry capability facts, and real reservation/resource-fit facts.
+    The existing `WorkflowRuntimeDispatchCandidateProvider` boundary is
+    synchronous, while owner-API Pumas package-fact resolution is async and
+    resource reservation/resource-fit facts are lifecycle-owned backend facts.
+  - Standards concern: forcing async Pumas or resource-owner work through the
+    synchronous workflow-service provider would either block inside policy
+    assembly, require hidden caches with unclear freshness ownership, or move
+    infrastructure/lifecycle concerns into workflow-service. That would
+    complect provider composition, scheduler selection, resource ownership,
+    and external Pumas access, violating the simplicity/complection and
+    single-owner rules.
+  - Required re-plan: decide the production candidate fact-collection boundary
+    before editing runtime/provider code. Options to evaluate:
+    1. Make the workflow-service runtime dispatch candidate provider async and
+       keep fact collection at the session-runner composition boundary.
+    2. Keep the provider synchronous but require a precomputed, validated
+       candidate-fact snapshot produced by an async backend worker before
+       dispatch selection.
+    3. Split collection into explicit async source providers owned by
+       embedded-runtime/resource owners, then pass only a validated path-free
+       candidate-fact bundle into the synchronous scheduler selector.
+  - Guardrail: do not connect the staged Pumas bridge to candidate creation
+    until this boundary is resolved. Continue to fail closed with typed
+    source diagnostics rather than fabricating candidates, blocking on async
+    work inside scheduler policy, or treating summaries/cache rows as
+    executable authority.
 
 ### Traceability Links
 
