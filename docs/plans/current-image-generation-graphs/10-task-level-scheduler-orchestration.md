@@ -2194,6 +2194,11 @@ Implementation order:
    path-carrying model refs or duplicate candidate ids, but its only current
    conversion into the dispatch candidate set preserves diagnostics and emits
    zero candidates until all required source adapters are wired.
+   2026-05-30 API boundary follow-up completed: these source/bundle/provider
+   contracts and the runtime dispatch candidate-provider injection point are
+   now public workflow-service API so embedded-runtime composition can
+   implement concrete Pumas/resource source adapters without moving
+   infrastructure access into workflow-service.
 2. Adapt the staged Pumas owner-API package-facts bridge into the Pumas source
    provider and preserve missing/unsupported/stale facts as source diagnostics.
 3. Add runtime-registry capability source projection.

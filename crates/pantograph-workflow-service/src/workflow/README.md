@@ -116,6 +116,10 @@ mapping. Source providers own Pumas, runtime capability, and resource
 reservation/fitting facts; the bundle currently forwards diagnostics only and
 does not emit production candidates until every required canonical fact source
 is wired.
+These contracts and the runtime dispatch candidate-provider injection point are
+public workflow-service API so embedded-runtime composition can provide
+concrete source/provider implementations without moving Pumas or resource-owner
+logic into workflow-service.
 When an explicit canonical dispatch candidate provider and runtime-host port
 are configured, session execution may run a ready runtime task through
 `pantograph-scheduler` dispatch selection, dispatch the selected handoff

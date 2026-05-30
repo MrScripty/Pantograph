@@ -18377,6 +18377,42 @@ Worker rules:
     Pumas source provider, then add runtime-registry capability and real
     resource-owner reservation/resource-fit sources before enabling bundle to
     candidate mapping.
+- 2026-05-30 candidate-fact API boundary slice:
+  - Trigger: while preparing the Pumas source-provider slice, the staged
+    source-provider and bundle contracts were found to be crate-private inside
+    workflow-service. That would prevent embedded-runtime composition from
+    implementing/injecting the concrete Pumas source without moving Pumas
+    access into workflow-service.
+  - Slice scope: expose only the already-defined workflow-service runtime
+    dispatch source/bundle/provider contracts and provider injection point.
+    Allowed files:
+    `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`, and this
+    execution log.
+  - Implementation: made the candidate-fact bundle contract, validated
+    wrapper, source-provider trait, source-kind enum, source/provider errors,
+    candidate set, candidate provider trait, bundle contract version, and
+    `WorkflowService::with_runtime_dispatch_candidate_provider` public API.
+  - No-fallback/no-legacy result: this exposes contracts only. It does not add
+    production candidates, source adapters, Pumas calls, runtime-registry
+    queries, resource reservations, load targets, graph paths, `ModelRefV2`,
+    reduced execution plans, frontend/Tauri state, or summary-derived
+    execution authority.
+  - Standards result: embedded-runtime can now own concrete Pumas/resource
+    composition through injected contracts while workflow-service remains
+    host-agnostic orchestration. This resolves the ownership conflict without
+    adding a compatibility shim.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: implement the embedded-runtime Pumas source provider
+    against the now-public source/bundle contracts.
 
 ### Traceability Links
 

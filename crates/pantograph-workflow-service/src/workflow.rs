@@ -141,7 +141,14 @@ pub(crate) use self::non_runtime_task_adapter::{
 };
 pub(crate) use self::runtime_dispatch_selection::{
     runtime_dispatch_selection_request, NoRuntimeDispatchCandidatesProvider,
-    WorkflowRuntimeDispatchCandidateProvider,
+};
+pub use self::runtime_dispatch_selection::{
+    ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
+    WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
+    WorkflowRuntimeDispatchCandidateFactSource, WorkflowRuntimeDispatchCandidateFactSourceError,
+    WorkflowRuntimeDispatchCandidateFactSourceKind, WorkflowRuntimeDispatchCandidateProvider,
+    WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+    WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 pub(crate) use self::runtime_host_task_input_mapping::{
     materialize_runtime_host_inputs, WorkflowRuntimeHostTaskInputMappingError,

@@ -80,8 +80,7 @@ impl WorkflowService {
     }
 
     #[must_use]
-    #[allow(dead_code)]
-    pub(crate) fn with_runtime_dispatch_candidate_provider(
+    pub fn with_runtime_dispatch_candidate_provider(
         mut self,
         provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     ) -> Self {

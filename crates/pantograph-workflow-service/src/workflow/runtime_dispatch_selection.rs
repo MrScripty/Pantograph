@@ -14,13 +14,13 @@ use thiserror::Error;
 
 use super::{WorkflowSchedulerTask, WorkflowServiceError};
 
-const WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION: u16 = 1;
+pub const WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION: u16 = 1;
 
 /// Workflow-service provider boundary for runtime dispatch candidates.
 ///
 /// Implementations gather already-canonical runtime, resource, and model facts.
 /// Scheduler policy still owns selection and ranking.
-pub(crate) trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
+pub trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
     fn runtime_dispatch_candidates(
         &self,
         task: &WorkflowSchedulerTask,
@@ -30,14 +30,13 @@ pub(crate) trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct WorkflowRuntimeDispatchCandidateSet {
+pub struct WorkflowRuntimeDispatchCandidateSet {
     pub candidates: Vec<SchedulerDispatchCandidate>,
     pub diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
 }
 
 impl WorkflowRuntimeDispatchCandidateSet {
-    #[allow(dead_code)]
-    pub(crate) fn from_candidate_fact_bundle(
+    pub fn from_candidate_fact_bundle(
         bundle: ValidatedWorkflowRuntimeDispatchCandidateFactBundle,
     ) -> Self {
         let bundle = bundle.into_inner();
@@ -49,14 +48,14 @@ impl WorkflowRuntimeDispatchCandidateSet {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowRuntimeDispatchCandidateFactBundle {
+pub struct WorkflowRuntimeDispatchCandidateFactBundle {
     pub contract_version: u16,
     pub facts: Vec<WorkflowRuntimeDispatchCandidateFact>,
     pub diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowRuntimeDispatchCandidateFact {
+pub struct WorkflowRuntimeDispatchCandidateFact {
     pub candidate_id: SchedulerDispatchCandidateId,
     pub selected_runtime_id: RuntimeIntentId,
     pub selected_runtime_variant_id: Option<SchedulerRuntimeVariantId>,
@@ -71,12 +70,12 @@ pub(crate) struct WorkflowRuntimeDispatchCandidateFact {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub(crate) struct ValidatedWorkflowRuntimeDispatchCandidateFactBundle(
+pub struct ValidatedWorkflowRuntimeDispatchCandidateFactBundle(
     WorkflowRuntimeDispatchCandidateFactBundle,
 );
 
 impl ValidatedWorkflowRuntimeDispatchCandidateFactBundle {
-    pub(crate) fn into_inner(self) -> WorkflowRuntimeDispatchCandidateFactBundle {
+    pub fn into_inner(self) -> WorkflowRuntimeDispatchCandidateFactBundle {
         self.0
     }
 }
@@ -92,17 +91,15 @@ impl TryFrom<WorkflowRuntimeDispatchCandidateFactBundle>
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkflowRuntimeDispatchCandidateFactSourceKind {
+pub enum WorkflowRuntimeDispatchCandidateFactSourceKind {
     PumasPackageFacts,
     RuntimeCapabilityFacts,
     ResourceReservationFacts,
 }
 
-#[allow(dead_code)]
 #[async_trait]
-pub(crate) trait WorkflowRuntimeDispatchCandidateFactSource: Send + Sync {
+pub trait WorkflowRuntimeDispatchCandidateFactSource: Send + Sync {
     fn source_kind(&self) -> WorkflowRuntimeDispatchCandidateFactSourceKind;
 
     async fn collect_candidate_facts(
@@ -166,17 +163,15 @@ pub(crate) fn runtime_dispatch_selection_request(
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub(crate) enum WorkflowRuntimeDispatchCandidateProviderError {
+pub enum WorkflowRuntimeDispatchCandidateProviderError {
     #[error("runtime dispatch candidate provider failed: {message}")]
-    #[allow(dead_code)]
     Failed { message: String },
 }
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub(crate) enum WorkflowRuntimeDispatchCandidateFactSourceError {
+pub enum WorkflowRuntimeDispatchCandidateFactSourceError {
     #[error("runtime dispatch candidate fact source failed: {message}")]
-    #[allow(dead_code)]
     Failed { message: String },
     #[error("runtime dispatch candidate fact source returned invalid facts")]
     Contract(#[from] WorkflowRuntimeDispatchCandidateFactBundleError),
@@ -184,7 +179,7 @@ pub(crate) enum WorkflowRuntimeDispatchCandidateFactSourceError {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum WorkflowRuntimeDispatchCandidateFactBundleError {
+pub enum WorkflowRuntimeDispatchCandidateFactBundleError {
     #[error("unsupported runtime dispatch candidate fact bundle contract version {0}")]
     UnsupportedContractVersion(u16),
     #[error("runtime dispatch candidate fact bundle contains duplicate candidate id '{0}'")]
