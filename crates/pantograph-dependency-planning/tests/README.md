@@ -10,7 +10,7 @@ consumers depend on stale fields.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contract.rs` | Public serde and validation tests for request/result DTOs and Pumas entry paths. |
-| `observation_projection_contract.rs` | Public serde and validation tests for selected-binding inventory observation projection. |
+| `observation_projection_contract.rs` | Public serde and validation tests for selected-binding inventory observation projection, including bounded provider alternatives. |
 | `provider_source_contract.rs` | Public serde and validation tests for runtime-feature and device-toolchain provider-source snapshots. |
 | `readiness_execution_contract.rs` | Public serde and validation tests for execution freshness request/proof envelopes. |
 | `readiness_contract.rs` | Public serde and validation tests for the host readiness input contract. |
@@ -54,6 +54,9 @@ migrate to the shared contract.
 - Provider-source snapshots use canonical feature/toolchain/device-class ids
   and reject display-shaped, graph-shaped, shell-derived, or scheduler-ranking
   evidence fields.
+- Inventory observation projections preserve bounded provider alternatives as
+  typed per-binding status evidence without changing readiness state or
+  selecting alternatives.
 
 ## Revisit Triggers
 - Host-language generated schemas are added.
@@ -92,3 +95,6 @@ cargo test -p pantograph-dependency-planning
   providers. They are not provider behavior fixtures and do not authorize
   embedded-runtime to infer readiness from workflow-service, runtime-registry,
   graph, or shell-shaped fields.
+- Inventory observation projection fixtures may carry bounded provider
+  alternatives, but those alternatives are evidence only and must not change
+  readiness state or trigger scheduler auto-selection.

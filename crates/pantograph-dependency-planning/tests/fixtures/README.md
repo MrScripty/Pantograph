@@ -15,6 +15,8 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 | `dependency_environment_ready_result.json` | Ready dependency-environment check result with typed readiness/install/validation states and environment ref. |
 | `dependency_environment_resolve_request.json` | Typed dependency-environment resolve request that carries planning facts without path identity. |
 | `dependency_environment_unavailable_result.json` | Unavailable dependency-environment resolve result with typed failure state and diagnostic. |
+| `dependency_inventory_observation_projection_mixed_ready.json` | Mixed Python plus managed-runtime inventory observations that project to a ready dependency-environment result. |
+| `dependency_inventory_observation_projection_unavailable_alternative.json` | Mixed inventory observations that project an unavailable binding with bounded typed provider alternatives. |
 | `dependency_provider_source_snapshots.json` | Runtime-feature and device-toolchain provider-source snapshots with canonical source ids, state, freshness, diagnostics, and bounded alternatives. |
 | `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, scheduler intent, platform, and selected bindings. |
 | `dependency_readiness_request.json` | Path-free host readiness input with typed policy and no readiness proof or executable handoff facts. |
@@ -96,6 +98,9 @@ cross-layer tests without importing unrelated runtime behavior.
 - Provider-source snapshots are source facts for future inventory providers,
   not provider results. They do not select alternatives or authorize fallback
   readiness.
+- Inventory observation projection fixtures may carry bounded provider
+  alternatives, but those alternatives are evidence only and must not change
+  readiness state or trigger scheduler auto-selection.
 
 ## Revisit Triggers
 - The frontend or worker starts consuming generated fixture copies.

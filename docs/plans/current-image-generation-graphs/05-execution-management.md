@@ -17678,6 +17678,39 @@ Worker rules:
   - Next implementation order: dependency-planning alternatives propagation
     contract, then device-toolchain source projection/provider, then
     separately planned system-package inventory.
+- 2026-05-30 dependency-planning alternatives propagation slice:
+  - Slice scope: extended the shared dependency-planning observation/status
+    contract so bounded `DependencyProviderSourceAlternative` rows can move
+    from provider-owned observations into per-binding
+    `DependencyBindingStatusRow` projector output. Existing embedded-runtime
+    providers now emit empty alternatives explicitly while future
+    device-toolchain providers can pass source-owned alternatives without
+    hand-building dependency-environment results.
+  - No-fallback result: alternatives remain typed evidence only. The shared
+    projector preserves them without changing readiness, install, operation,
+    validation, scheduler policy, or auto-selection behavior, and no
+    alternatives are encoded into diagnostic text, graph strings, generic
+    requirement names, display fields, shell output, or runtime-registry
+    ranking facts.
+  - Focused tests/fixtures: added
+    `dependency_inventory_observation_projection_unavailable_alternative.json`
+    and observation-projection tests proving alternatives survive unavailable
+    observation projection and reject unbounded alternative lists.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-dependency-planning --test observation_projection_contract`,
+    `cargo test -p pantograph-dependency-planning --test provider_source_contract`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`, and
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`.
+    The only warning observed remains the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: implement the device-toolchain source
+    projection/provider against this alternatives contract from source-owned
+    device/runtime observation facts. System-package inventory remains
+    separately planned.
 
 ### Traceability Links
 

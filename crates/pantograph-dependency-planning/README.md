@@ -114,7 +114,9 @@ DTOs.
   rows and use the shared projector to build dependency-environment results.
   Providers must not hand-build result-state policy or recover source identity
   from generic requirement names, graph strings, package names, shell output,
-  or runtime display labels.
+  or runtime display labels. Bounded provider alternatives are carried as
+  structured per-binding evidence and must not be converted into fallback
+  selection policy.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.
 - Missing, stale, invalid, unavailable, ambiguous, needs-detail, and

@@ -4,6 +4,9 @@ use crate::error::DependencyPlanningContractError;
 use crate::request::DependencyBindingId;
 use crate::result::DependencyPlanningDiagnostic;
 
+use super::provider_source::{
+    validate_provider_source_alternatives, DependencyProviderSourceAlternative,
+};
 use super::scalar::{
     validate_dependency_name, validate_dependency_text, validate_diagnostics,
     validate_optional_dependency_text, validate_validation_field_path, DependencyBindingProfileId,
@@ -458,11 +461,14 @@ pub struct DependencyBindingStatusRow {
     pub installed_at_ms: Option<DependencyOperationTimestampMs>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DependencyPlanningDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<DependencyProviderSourceAlternative>,
 }
 
 impl DependencyBindingStatusRow {
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
-        validate_diagnostics(&self.diagnostics)
+        validate_diagnostics(&self.diagnostics)?;
+        validate_provider_source_alternatives(&self.alternatives)
     }
 }
 

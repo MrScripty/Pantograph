@@ -1,0 +1,117 @@
+{
+  "action": "check",
+  "identity_key": {
+    "model_ref": {
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "revision": "main",
+      "selected_artifact_id": "artifact-diffusers"
+    },
+    "task_id": "image_generation",
+    "task_type": "text_to_image",
+    "expected_artifact_kind": "diffusers_bundle",
+    "scheduler_intent": {
+      "requested_runtime_id": "pytorch",
+      "requested_device_id": "mps"
+    },
+    "platform_context": {
+      "platform_key": "linux-x86_64"
+    },
+    "selected_binding_ids": [
+      "diffusers.scheduler",
+      "llama_cpp.binary"
+    ]
+  },
+  "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64:toolchain-alternative",
+  "environment_ref": {
+    "environment_id": "python:pytorch:cu124",
+    "manifest_id": "manifest:tiny-sd:pytorch:linux-x86_64"
+  },
+  "requirements": [
+    {
+      "name": "diffusers",
+      "kind": "python_package",
+      "version_constraint": ">=0.29",
+      "python": {
+        "import_name": "diffusers",
+        "python_requires": ">=3.10",
+        "package_manager": "pip"
+      }
+    },
+    {
+      "name": "llama_cpp",
+      "kind": "runtime_managed_binary",
+      "managed_runtime": {
+        "managed_binary_id": "llama_cpp",
+        "runtime_variant_id": "llama_cpp:cpu",
+        "version": "b8248",
+        "platform_key": "linux-x86_64"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "binding_id": "diffusers.scheduler",
+      "requirement_name": "diffusers",
+      "environment_kind": "python",
+      "profile_id": "python:pytorch:cu124",
+      "python": {
+        "index_url": "https://download.pytorch.org/whl/cu124",
+        "extra_index_urls": [
+          "https://pypi.org/simple"
+        ],
+        "marker": "platform_system == 'Linux'"
+      }
+    },
+    {
+      "binding_id": "llama_cpp.binary",
+      "requirement_name": "llama_cpp",
+      "environment_kind": "managed_binary",
+      "managed_runtime": {
+        "managed_binary_id": "llama_cpp",
+        "runtime_variant_id": "llama_cpp:cpu",
+        "selected_version": "b8248",
+        "platform_key": "linux-x86_64"
+      }
+    }
+  ],
+  "selected_binding_ids": [
+    "diffusers.scheduler",
+    "llama_cpp.binary"
+  ],
+  "observations": [
+    {
+      "binding_id": "diffusers.scheduler",
+      "state": "ready",
+      "validation_state": "valid",
+      "freshness": "fresh",
+      "checked_at_ms": 1779398400000,
+      "installed_at_ms": 1779398300000
+    },
+    {
+      "binding_id": "llama_cpp.binary",
+      "state": "unavailable",
+      "validation_state": "unavailable",
+      "freshness": "fresh",
+      "checked_at_ms": 1779398400000,
+      "diagnostics": [
+        {
+          "code": "runtime_unavailable",
+          "severity": "error",
+          "message": "Requested device toolchain is unavailable.",
+          "runtime_id": "pytorch",
+          "device_id": "mps",
+          "field_path": "dependency_inventory.device_toolchain"
+        }
+      ],
+      "alternatives": [
+        {
+          "runtime_id": "pytorch",
+          "toolchain_id": "cuda_runtime",
+          "device_class": "cuda",
+          "device_id": "cuda:0",
+          "reason": "CUDA runtime is available on this host."
+        }
+      ]
+    }
+  ]
+}

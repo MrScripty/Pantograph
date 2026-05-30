@@ -65,7 +65,9 @@ is the only public facade.
   before result projection. The shared projector builds
   `DependencyEnvironmentResult` values from those rows so runtime-specific
   providers do not duplicate readiness, install, operation, stale, or
-  diagnostic mapping policy.
+  diagnostic mapping policy. Provider alternatives remain bounded typed
+  evidence on observation/status rows and never change readiness state or
+  select an alternative.
 - Runtime-feature and device-toolchain inventory providers consume typed
   provider-source snapshots with canonical source id vocabularies. They do not
   consume workflow-service capability DTOs, runtime-registry candidate rows,

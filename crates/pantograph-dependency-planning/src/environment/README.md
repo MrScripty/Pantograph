@@ -7,8 +7,8 @@ would make `environment.rs` too broad if kept inline.
 ## Contents
 | File | Description |
 | ---- | ----------- |
-| `observation.rs` | Provider-owned dependency inventory observation rows and the shared synchronous projector that builds dependency-environment results from selected-binding evidence. |
-| `payload.rs` | Shared dependency-environment result payload rows, typed ids, operation timestamps, validation errors, and row-level validation helpers. |
+| `observation.rs` | Provider-owned dependency inventory observation rows, bounded alternative evidence, and the shared synchronous projector that builds dependency-environment results from selected-binding evidence. |
+| `payload.rs` | Shared dependency-environment result payload rows, typed ids, operation timestamps, validation errors, bounded status alternatives, and row-level validation helpers. |
 | `scalar.rs` | Validated scalar values and helpers for profile ids, requirement names, validation field paths, operation timestamps, diagnostics, and selected binding uniqueness. |
 | `state.rs` | Dependency-environment action, readiness, install, validation, and failure enums. |
 
@@ -34,6 +34,9 @@ providers do not duplicate dependency-environment state policy.
 - Inventory observation rows must stay provider-evidence contracts. They must
   not perform I/O, inspect host state, choose runtimes, or infer source ids
   from requirement names.
+- Provider alternatives are typed evidence only. The projector preserves them
+  on per-binding statuses, but it must not change readiness state, select an
+  alternative, or encode alternatives as diagnostic text.
 
 ## Decision
 Place result payload rows in `payload.rs` and provider evidence rows plus the
@@ -58,6 +61,9 @@ dependency-environment request/result envelope and action/state enums.
   decisions.
 - Stale observations must carry diagnostics so graph/editor, scheduler, and
   ledger consumers can explain why the provider evidence is stale.
+- Bounded provider alternatives must stay structured on observation/status
+  rows so graph/editor and API consumers can render alternatives without
+  parsing diagnostic messages.
 
 ## Revisit Triggers
 - Dependency planning grows a full dependency-domain model separate from

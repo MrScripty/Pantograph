@@ -11,6 +11,9 @@ use super::payload::{
     DependencyBindingStatusRow, DependencyBindingStatusState, DependencyEnvironmentOperation,
     DependencyEnvironmentOperationState, DependencyRequirement, DependencyRequirementBinding,
 };
+use super::provider_source::{
+    validate_provider_source_alternatives, DependencyProviderSourceAlternative,
+};
 use super::scalar::{
     validate_diagnostics, validate_unique_binding_ids, DependencyOperationTimestampMs,
 };
@@ -59,6 +62,8 @@ pub struct DependencyInventoryObservationRow {
     pub installed_at_ms: Option<DependencyOperationTimestampMs>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DependencyPlanningDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<DependencyProviderSourceAlternative>,
 }
 
 impl DependencyInventoryObservationRow {
@@ -70,7 +75,8 @@ impl DependencyInventoryObservationRow {
                 field: "dependency_inventory_observation.diagnostics",
             });
         }
-        validate_diagnostics(&self.diagnostics)
+        validate_diagnostics(&self.diagnostics)?;
+        validate_provider_source_alternatives(&self.alternatives)
     }
 }
 
@@ -372,6 +378,7 @@ fn binding_statuses_from_observations(
             checked_at_ms: observation.checked_at_ms,
             installed_at_ms: observation.installed_at_ms,
             diagnostics: observation.diagnostics.clone(),
+            alternatives: observation.alternatives.clone(),
         })
         .collect()
 }

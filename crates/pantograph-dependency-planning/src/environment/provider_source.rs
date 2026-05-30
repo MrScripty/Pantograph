@@ -127,7 +127,7 @@ impl RuntimeFeatureProviderSourceRow {
             self.freshness,
             &self.diagnostics,
         )?;
-        validate_alternatives(&self.alternatives)
+        validate_provider_source_alternatives(&self.alternatives)
     }
 
     fn key(&self) -> (String, String, Option<String>) {
@@ -204,7 +204,7 @@ impl DeviceToolchainProviderSourceRow {
             self.freshness,
             &self.diagnostics,
         )?;
-        validate_alternatives(&self.alternatives)
+        validate_provider_source_alternatives(&self.alternatives)
     }
 
     fn key(&self) -> (String, Option<String>, Option<String>, Option<String>) {
@@ -364,7 +364,7 @@ fn validate_source_row_state(
     validate_diagnostics(diagnostics)
 }
 
-fn validate_alternatives(
+pub(super) fn validate_provider_source_alternatives(
     alternatives: &[DependencyProviderSourceAlternative],
 ) -> Result<(), DependencyPlanningContractError> {
     if alternatives.len() > MAX_PROVIDER_ALTERNATIVES {

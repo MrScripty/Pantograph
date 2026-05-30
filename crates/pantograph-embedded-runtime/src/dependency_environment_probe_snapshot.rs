@@ -113,6 +113,7 @@ pub(crate) fn observations_from_probe_failures(
             checked_at_ms: None,
             installed_at_ms: None,
             diagnostics: vec![diagnostic.clone()],
+            alternatives: Vec::new(),
         })
         .collect();
     (rows, vec![diagnostic])
@@ -142,6 +143,7 @@ fn observation_from_python_snapshot(
         checked_at_ms: None,
         installed_at_ms: None,
         diagnostics: Vec::new(),
+        alternatives: Vec::new(),
     }
 }
 pub(crate) fn invalid_probe_shape_observations(
@@ -216,6 +218,7 @@ fn observations_from_row_state(
             checked_at_ms: None,
             installed_at_ms: None,
             diagnostics: vec![diagnostic.clone()],
+            alternatives: Vec::new(),
         })
         .collect();
     (rows, vec![diagnostic])

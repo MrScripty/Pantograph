@@ -448,6 +448,7 @@ fn row(
         checked_at_ms: None,
         installed_at_ms: None,
         diagnostics,
+        alternatives: Vec::new(),
     }
 }
 

@@ -4,11 +4,15 @@ use pantograph_dependency_planning::{
     DependencyEnvironmentValidationState, DependencyInventoryObservationProjection,
     DependencyInventoryObservationState, DependencyPlanningContractError,
     DependencyPlanningDiagnostic, DependencyPlanningDiagnosticCode, DependencyPlanningSeverity,
-    ValidatedDependencyInventoryObservationProjection,
+    DependencyProviderSourceAlternative, DeviceClassSourceId, DeviceObservationId,
+    DeviceToolchainSourceId, RuntimeSourceId, ValidatedDependencyInventoryObservationProjection,
 };
 
 const MIXED_READY_PROJECTION: &str =
     include_str!("fixtures/dependency_inventory_observation_projection_mixed_ready.json");
+const UNAVAILABLE_ALTERNATIVE_PROJECTION: &str = include_str!(
+    "fixtures/dependency_inventory_observation_projection_unavailable_alternative.json"
+);
 
 #[test]
 fn observation_projection_fixture_decodes_and_projects_mixed_ready_result() {
@@ -30,6 +34,75 @@ fn observation_projection_fixture_decodes_and_projects_mixed_ready_result() {
         .binding_statuses
         .iter()
         .all(|status| status.state == DependencyBindingStatusState::Ready));
+}
+
+#[test]
+fn observation_projection_preserves_bounded_provider_alternatives() {
+    let projection: DependencyInventoryObservationProjection =
+        serde_json::from_str(UNAVAILABLE_ALTERNATIVE_PROJECTION)
+            .expect("alternative projection fixture should decode");
+    let projection = ValidatedDependencyInventoryObservationProjection::try_from(projection)
+        .expect("alternative projection fixture should validate");
+
+    let result = dependency_environment_result_from_inventory_observations(&projection)
+        .expect("projection should build a validated unavailable result")
+        .into_inner();
+
+    assert_eq!(
+        result.readiness_state,
+        DependencyEnvironmentReadinessState::Unavailable
+    );
+    let status = result
+        .binding_statuses
+        .iter()
+        .find(|status| status.binding_id.as_str() == "llama_cpp.binary")
+        .expect("managed runtime binding status");
+    assert_eq!(status.state, DependencyBindingStatusState::Unavailable);
+    assert_eq!(status.alternatives.len(), 1);
+    assert_eq!(
+        status.alternatives[0]
+            .toolchain_id
+            .as_ref()
+            .map(|toolchain_id| toolchain_id.as_str()),
+        Some("cuda_runtime")
+    );
+    assert_eq!(
+        status.alternatives[0]
+            .device_id
+            .as_ref()
+            .map(|device_id| device_id.as_str()),
+        Some("cuda:0")
+    );
+}
+
+#[test]
+fn observation_projection_rejects_unbounded_provider_alternatives() {
+    let mut projection: DependencyInventoryObservationProjection =
+        serde_json::from_str(MIXED_READY_PROJECTION).expect("projection fixture should decode");
+    projection.observations[0].alternatives = (0..9)
+        .map(|index| DependencyProviderSourceAlternative {
+            runtime_id: Some(RuntimeSourceId::parse("pytorch").expect("runtime id")),
+            runtime_variant_id: None,
+            feature_id: None,
+            toolchain_id: Some(
+                DeviceToolchainSourceId::parse("cuda_runtime").expect("toolchain id"),
+            ),
+            device_class: Some(DeviceClassSourceId::parse("cuda").expect("device class")),
+            device_id: Some(
+                DeviceObservationId::parse(format!("cuda:{index}")).expect("device id"),
+            ),
+            reason: Some("CUDA runtime is available on this host.".to_string()),
+        })
+        .collect();
+
+    assert_eq!(
+        ValidatedDependencyInventoryObservationProjection::try_from(projection)
+            .expect_err("unbounded alternatives should fail validation"),
+        DependencyPlanningContractError::FieldTooLong {
+            field: "dependency_provider_source_alternatives",
+            max_len: 8
+        }
+    );
 }
 
 #[test]

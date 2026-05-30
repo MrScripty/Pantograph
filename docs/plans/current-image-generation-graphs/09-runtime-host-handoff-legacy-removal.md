@@ -762,6 +762,17 @@ Implementation progress:
   must then consume source-owned device/runtime facts only, avoid shell probing
   inside dependency inventory, and surface alternatives as diagnostics/evidence
   without scheduler auto-selection.
+- 2026-05-30 dependency-planning alternatives propagation slice: extended
+  `DependencyInventoryObservationRow` and `DependencyBindingStatusRow` with
+  bounded `DependencyProviderSourceAlternative` evidence, reused the shared
+  provider-source alternative validator, and updated the shared projector to
+  copy alternatives through without changing result-state mapping. Added a
+  fixture and tests proving unavailable observations preserve alternatives and
+  unbounded alternatives fail validation. Existing embedded-runtime providers
+  now emit empty alternatives explicitly. This completes the contract
+  prerequisite for the device-toolchain provider slice; the next slice must
+  consume source-owned device/runtime facts and must not introduce shell
+  probing or scheduler auto-selection in dependency inventory.
 
 ## Verification Strategy
 
