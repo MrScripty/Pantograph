@@ -1,6 +1,11 @@
 use std::time::Instant;
 
+use pantograph_dependency_planning::DependencyReadinessPolicy;
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
+
+use crate::scheduler::{
+    WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
+};
 
 use super::io_contract::validate_workflow_io;
 use super::validation::{
@@ -80,7 +85,8 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
         self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
         self.run_progress_loop(session_id, workflow_run_id).await?;
-        self.ensure_runtime_dispatch_boundary_reached(session_id, workflow_run_id)?;
+        self.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
+        self.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
         self.fail_runtime_dispatch_not_wired(session_id, workflow_run_id, summary)
     }
 
@@ -263,7 +269,53 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         Ok(progressed)
     }
 
-    fn ensure_runtime_dispatch_boundary_reached(
+    fn admit_runtime_dependency_readiness(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let runtime_task_ids =
+            runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
+                kind == SchedulerTaskStateKind::WaitingDependencyReadiness
+            })?;
+        let lifecycle = WorkflowDependencyReadinessLifecycle::new(
+            self.service.scheduler_task_orchestrator.clone(),
+        );
+        for task_id in runtime_task_ids {
+            let request = {
+                let store = self.service.session_store_guard()?;
+                lifecycle
+                    .readiness_request_for_active_runtime_task(
+                        &store,
+                        session_id,
+                        workflow_run_id,
+                        &task_id,
+                        DependencyReadinessPolicy::CheckOnly,
+                    )
+                    .map_err(dependency_readiness_error)?
+            };
+            let readiness_proof = lifecycle
+                .resolve_dependency_readiness_proof(
+                    self.service.dependency_readiness_provider.as_ref(),
+                    &request,
+                )
+                .map_err(dependency_readiness_error)?;
+            let mut store = self.service.session_store_guard()?;
+            lifecycle
+                .admit_active_runtime_task(
+                    &mut store,
+                    session_id,
+                    workflow_run_id,
+                    &task_id,
+                    DependencyReadinessPolicy::CheckOnly,
+                    readiness_proof,
+                )
+                .map_err(dependency_readiness_error)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_runtime_tasks_ready_for_dispatch(
         &self,
         session_id: &str,
         workflow_run_id: &str,
@@ -282,9 +334,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 })?;
             match task.execution_class {
                 WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
-                    if record.state.kind() != SchedulerTaskStateKind::WaitingDependencyReadiness {
-                        return Err(WorkflowServiceError::InvalidRequest(format!(
-                            "runtime scheduler task '{}' did not reach dispatch boundary; final state was {:?}",
+                    if record.state.kind() != SchedulerTaskStateKind::Ready {
+                        return Err(WorkflowServiceError::CapabilityViolation(format!(
+                            "runtime scheduler task '{}' was not admitted for dispatch; final state was {:?}",
                             record.task_id.as_str(),
                             record.state.kind()
                         )));
@@ -324,6 +376,43 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             count = summary.runtime_inference_tasks
         )))
     }
+}
+
+fn runtime_task_ids_in_state(
+    service: &WorkflowService,
+    session_id: &str,
+    workflow_run_id: &str,
+    is_state: impl Fn(SchedulerTaskStateKind) -> bool,
+) -> Result<Vec<String>, WorkflowServiceError> {
+    let (task_graph, records) =
+        active_run_scheduler_task_state_required(service, session_id, workflow_run_id)?;
+    let mut task_ids = Vec::new();
+    for task in &task_graph.tasks {
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            continue;
+        }
+        let record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task.task_id.as_str())
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no active task-state record",
+                    task.task_id.as_str()
+                ))
+            })?;
+        if is_state(record.state.kind()) {
+            task_ids.push(task.task_id.as_str().to_string());
+        }
+    }
+    Ok(task_ids)
+}
+
+fn dependency_readiness_error(
+    error: WorkflowDependencyReadinessLifecycleError,
+) -> WorkflowServiceError {
+    WorkflowServiceError::InvalidRequest(format!(
+        "scheduler dependency readiness admission failed: {error}"
+    ))
 }
 
 fn ensure_all_scheduler_tasks_completed(

@@ -32,8 +32,7 @@ use super::{
 /// Implementations may call Pumas/package-manager/runtime-environment services,
 /// but they must return the path-free dependency preflight proof owned by
 /// `pantograph-dependency-planning`.
-#[allow(dead_code)]
-pub(crate) trait WorkflowDependencyReadinessProvider {
+pub(crate) trait WorkflowDependencyReadinessProvider: Send + Sync {
     fn resolve_dependency_readiness(
         &self,
         request: &ValidatedDependencyReadinessRequestEnvelope,
@@ -71,12 +70,10 @@ where
 /// but spawned work must stay owned by this lifecycle.
 #[derive(Clone)]
 #[must_use]
-#[allow(dead_code)]
 pub(crate) struct WorkflowDependencyReadinessLifecycle {
     orchestrator: WorkflowSchedulerTaskOrchestrator,
 }
 
-#[allow(dead_code)]
 impl WorkflowDependencyReadinessLifecycle {
     pub(crate) fn new(orchestrator: WorkflowSchedulerTaskOrchestrator) -> Self {
         Self { orchestrator }
@@ -112,33 +109,33 @@ impl WorkflowDependencyReadinessLifecycle {
             .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
     }
 
-    pub(crate) fn resolve_and_admit_active_runtime_task<P>(
+    pub(crate) fn resolve_dependency_readiness_proof<P>(
+        &self,
+        provider: &P,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<Option<DependencyReadinessProofEnvelope>, WorkflowDependencyReadinessLifecycleError>
+    where
+        P: WorkflowDependencyReadinessProvider + ?Sized,
+    {
+        let preflight_result = provider
+            .resolve_dependency_readiness(request)
+            .map_err(WorkflowDependencyReadinessLifecycleError::Provider)?;
+        preflight_result
+            .map(|preflight_result| {
+                dependency_readiness_proof_from_preflight_result(request, preflight_result)
+            })
+            .transpose()
+    }
+
+    pub(crate) fn admit_active_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
-        provider: &P,
         session_id: &str,
         workflow_run_id: &str,
         task_id: &str,
         policy: DependencyReadinessPolicy,
-    ) -> Result<SchedulerTaskStateRecord, WorkflowDependencyReadinessLifecycleError>
-    where
-        P: WorkflowDependencyReadinessProvider,
-    {
-        let request = self.readiness_request_for_active_runtime_task(
-            store,
-            session_id,
-            workflow_run_id,
-            task_id,
-            policy.clone(),
-        )?;
-        let preflight_result = provider
-            .resolve_dependency_readiness(&request)
-            .map_err(WorkflowDependencyReadinessLifecycleError::Provider)?;
-        let readiness_proof = preflight_result
-            .map(|preflight_result| {
-                dependency_readiness_proof_from_preflight_result(&request, preflight_result)
-            })
-            .transpose()?;
+        readiness_proof: Option<DependencyReadinessProofEnvelope>,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowDependencyReadinessLifecycleError> {
         self.orchestrator
             .apply_runtime_dependency_readiness_admission(
                 store,
@@ -149,6 +146,37 @@ impl WorkflowDependencyReadinessLifecycle {
                 readiness_proof,
             )
             .map_err(WorkflowDependencyReadinessLifecycleError::Orchestrator)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resolve_and_admit_active_runtime_task<P>(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        provider: &P,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+        policy: DependencyReadinessPolicy,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowDependencyReadinessLifecycleError>
+    where
+        P: WorkflowDependencyReadinessProvider + ?Sized,
+    {
+        let request = self.readiness_request_for_active_runtime_task(
+            store,
+            session_id,
+            workflow_run_id,
+            task_id,
+            policy.clone(),
+        )?;
+        let readiness_proof = self.resolve_dependency_readiness_proof(provider, &request)?;
+        self.admit_active_runtime_task(
+            store,
+            session_id,
+            workflow_run_id,
+            task_id,
+            policy,
+            readiness_proof,
+        )
     }
 }
 
@@ -197,7 +225,6 @@ pub(crate) enum WorkflowDependencyReadinessLifecycleError {
     Orchestrator(WorkflowSchedulerTaskOrchestratorError),
 }
 
-#[allow(dead_code)]
 struct RuntimeTaskContext<'a> {
     task_graph: &'a WorkflowSchedulerTaskGraph,
     task: &'a crate::workflow::WorkflowSchedulerTask,
@@ -206,7 +233,6 @@ struct RuntimeTaskContext<'a> {
     record: &'a SchedulerTaskStateRecord,
 }
 
-#[allow(dead_code)]
 fn active_scheduler_task_state(
     store: &WorkflowExecutionSessionStore,
     session_id: &str,
@@ -228,7 +254,6 @@ fn active_scheduler_task_state(
         })
 }
 
-#[allow(dead_code)]
 fn runtime_task_context<'a>(
     task_graph: &'a WorkflowSchedulerTaskGraph,
     records: &'a [SchedulerTaskStateRecord],
@@ -275,7 +300,6 @@ fn runtime_task_context<'a>(
     })
 }
 
-#[allow(dead_code)]
 fn dependency_planning_request_from_task_context(
     context: &RuntimeTaskContext<'_>,
 ) -> Result<DependencyPlanningRequest, WorkflowDependencyReadinessLifecycleError> {
@@ -330,7 +354,6 @@ fn dependency_planning_request_from_task_context(
     Ok(request)
 }
 
-#[allow(dead_code)]
 fn dependency_readiness_source<'a>(
     context: &'a RuntimeTaskContext<'a>,
 ) -> Result<
@@ -346,7 +369,6 @@ fn dependency_readiness_source<'a>(
     Ok(&template.dependency_readiness_source)
 }
 
-#[allow(dead_code)]
 fn validate_dependency_requirements_source_matches_planning_request(
     context: &RuntimeTaskContext<'_>,
     request: &ValidatedDependencyPlanningRequest,
@@ -369,7 +391,6 @@ fn validate_dependency_requirements_source_matches_planning_request(
     Ok(())
 }
 
-#[allow(dead_code)]
 fn dependency_readiness_execution_context_from_task_context(
     context: &RuntimeTaskContext<'_>,
 ) -> Result<DependencyReadinessExecutionContext, WorkflowDependencyReadinessLifecycleError> {
@@ -401,7 +422,6 @@ fn dependency_readiness_execution_context_from_task_context(
     .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)
 }
 
-#[allow(dead_code)]
 fn dependency_readiness_proof_from_preflight_result(
     request: &ValidatedDependencyReadinessRequestEnvelope,
     result: DependencyPreflightResult,
@@ -426,7 +446,6 @@ fn dependency_readiness_proof_from_preflight_result(
     Ok(proof.into_inner())
 }
 
-#[allow(dead_code)]
 fn dependency_trait_intent_from_scheduler_trait(
     setting: &pantograph_scheduler::SchedulerTraitSetting,
 ) -> Result<DependencyTraitIntent, WorkflowDependencyReadinessLifecycleError> {
@@ -437,7 +456,6 @@ fn dependency_trait_intent_from_scheduler_trait(
     })
 }
 
-#[allow(dead_code)]
 fn dependency_trait_value_from_scheduler_value(
     value: &SchedulerTraitValue,
 ) -> Result<DependencyTraitIntentValue, WorkflowDependencyReadinessLifecycleError> {

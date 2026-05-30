@@ -1,5 +1,6 @@
 use pantograph_dependency_planning::{
-    DependencyBindingId, DependencyOverrideFingerprint, DependencyRequirementsId, PumasModelRef,
+    produce_dependency_requirements_proof, DependencyNodeTypeId, DependencyPlanningCallerContext,
+    DependencyPlanningRequest, PumasModelRef, SchedulerIntent, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, DraftGraphValidationSummary,
@@ -203,7 +204,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
 }
 
 #[tokio::test]
-async fn workflow_execution_session_runtime_run_advances_to_dispatch_boundary_before_fail_closed() {
+async fn workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch() {
     let host = RuntimeInferenceSessionHost::new();
     let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
     let workflow_id = "wf-runtime-dispatch-boundary";
@@ -249,13 +250,13 @@ async fn workflow_execution_session_runtime_run_advances_to_dispatch_boundary_be
             },
         )
         .await
-        .expect_err("runtime-containing scheduler run should fail closed at dispatch boundary");
+        .expect_err("runtime-containing scheduler run should fail closed at readiness admission");
 
     assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
     assert!(
         error
             .message()
-            .contains("runtime scheduler dispatch is not wired"),
+            .contains("runtime scheduler task 'infer' was not admitted for dispatch"),
         "unexpected error: {error}"
     );
     let queue = service
@@ -2381,6 +2382,20 @@ fn runtime_executable_validation_snapshot(
     version: &pantograph_runtime_attribution::WorkflowVersionRecord,
     graph: &WorkflowGraph,
 ) -> WorkflowExecutableValidationSnapshotRecord {
+    let model_ref = PumasModelRef {
+        model_id: "image/example/tiny-diffusion".to_string(),
+        revision: Some("main".to_string()),
+        selected_artifact_id: Some("diffusers-bundle".to_string()),
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    };
+    let selected_binding_ids =
+        vec![
+            pantograph_dependency_planning::DependencyBindingId::parse("torch-diffusers")
+                .expect("valid binding id"),
+        ];
+    let dependency_proof =
+        runtime_dependency_requirements_proof(version, &model_ref, selected_binding_ids);
     WorkflowExecutableValidationSnapshotRecord {
         schema_version: WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION,
         validation_snapshot_id: WorkflowExecutableValidationSnapshotId::parse(
@@ -2410,30 +2425,56 @@ fn runtime_executable_validation_snapshot(
             )
             .expect("valid descriptor fingerprint"),
             task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
-            model_ref: PumasModelRef {
-                model_id: "image/example/tiny-diffusion".to_string(),
-                revision: Some("main".to_string()),
-                selected_artifact_id: Some("diffusers-bundle".to_string()),
-                selected_artifact_path: None,
-                migration_diagnostics: Vec::new(),
-            },
+            model_ref,
             constraints: Default::default(),
             availability_status: InferenceAvailabilityStatus::Available,
             validation_status: DraftGraphValidationStatus::Executable,
             trait_settings: Vec::new(),
             estimate_hints: Vec::new(),
-            dependency_requirements_id: DependencyRequirementsId::parse(
-                "requirements.image_generation.cuda0",
-            )
-            .expect("valid requirements id"),
-            selected_binding_ids: vec![
-                DependencyBindingId::parse("torch-diffusers").expect("valid binding id")
-            ],
-            dependency_override_fingerprint: DependencyOverrideFingerprint::parse("override.none")
-                .expect("valid override fingerprint"),
+            dependency_requirements_id: dependency_proof.dependency_requirements_id,
+            selected_binding_ids: dependency_proof.identity_key.selected_binding_ids,
+            dependency_override_fingerprint: dependency_proof.dependency_override_fingerprint,
             blocking_diagnostics: Vec::new(),
         }],
     }
+}
+
+fn runtime_dependency_requirements_proof(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+    model_ref: &PumasModelRef,
+    selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
+) -> pantograph_dependency_planning::DependencyRequirementsProof {
+    let request = DependencyPlanningRequest {
+        model_ref: model_ref.clone(),
+        task_id: pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
+            .expect("valid task id"),
+        task_type: Some(
+            pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
+                .expect("valid task type"),
+        ),
+        expected_artifact_kind: None,
+        scheduler_intent: SchedulerIntent {
+            requested_runtime_id: None,
+            requested_device_id: None,
+        },
+        platform_context: None,
+        selected_binding_ids,
+        dependency_override_patches: Vec::new(),
+        trait_intents: Vec::new(),
+        caller_context: DependencyPlanningCallerContext {
+            source_node_type: Some(
+                DependencyNodeTypeId::parse("llm-inference").expect("valid node type"),
+            ),
+            workflow_id: Some(version.workflow_id.as_str().to_string()),
+            node_id: Some("infer".to_string()),
+            port_id: None,
+            run_id: None,
+        },
+    };
+    let validated_request =
+        ValidatedDependencyPlanningRequest::try_from(request).expect("valid planning request");
+    produce_dependency_requirements_proof(&validated_request, None)
+        .expect("dependency requirements proof")
 }
 
 fn retained_io_test_artifact_policy() -> ArtifactPolicy {

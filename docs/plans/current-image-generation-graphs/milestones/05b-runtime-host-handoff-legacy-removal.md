@@ -492,3 +492,46 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   wire dependency readiness admission, scheduler dispatch selection, and
   runtime-host request construction from the actual dispatch-selected
   `SchedulerRuntimeHandoff`.
+- 2026-05-29 session runner dependency-readiness admission slice completed.
+  Smallest useful vertical slice: wire `WorkflowSchedulerSessionRunner` to
+  build canonical dependency-readiness requests for runtime tasks after input
+  materialization, resolve the configured provider outside the session-store
+  lock, apply scheduler dependency-readiness admission, and stop before
+  runtime-host dispatch unless the task becomes dispatch-ready. Allowed write
+  set: workflow-service scheduler readiness lifecycle exports, workflow service
+  configuration/default provider, session runner, focused session execution
+  tests, scheduler/workflow README notes, this milestone file,
+  `10-task-level-scheduler-orchestration.md`, and execution notes.
+  No-fallback confirmation: the default provider is the no-I/O
+  not-implemented dependency-environment service, so runtime runs fail closed
+  through scheduler readiness admission before dispatch. The slice does not
+  call runtime-host execution, does not load runtime sessions, does not call
+  node-engine whole-run output demand, does not route runtime tasks through a
+  compatibility `Ready` detour before admission, does not synthesize handoff
+  from reduced execution-plan projections, and does not adapt readiness into
+  `ModelRefV2`, `ModelDependencyRequest`, graph paths, or executable load
+  targets. Focused coverage proves the host runtime load and whole-run
+  execution attempts remain zero while the runtime task is rejected as not
+  admitted for dispatch.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  scheduler::readiness_lifecycle --lib -- --nocapture`; `cargo test -p
+  pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+  --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`; and
+  `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+  pantograph-workflow-service --all-features`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; targeted retired
+  path/model-ref source search over touched source/README/test files; and
+  `git diff --check`. Search caveat: allowed pre-existing hits remain in
+  documentation negative-path text and an unrelated legacy runtime state
+  fixture in `session_execution.rs`. Verification caveat: `cargo check -p
+  pantograph-workflow-service` still emits the known unused
+  `set_active_run_execution_plan` warning. Remaining follow-up: replace the
+  default not-implemented readiness provider with production readiness
+  evidence, then wire scheduler dispatch selection and runtime-host request
+  construction from the actual dispatch-selected `SchedulerRuntimeHandoff`.

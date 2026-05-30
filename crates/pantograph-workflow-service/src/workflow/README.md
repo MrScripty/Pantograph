@@ -207,9 +207,12 @@ readiness proof.
 - Session scheduler runner progression owns only active scheduler task
   materialization/progression. Runtime-containing runs may advance runtime
   tasks from `AwaitingInputs` to `WaitingDependencyReadiness` after upstream
-  results materialize, but they must fail closed before runtime-host dispatch
-  until dependency readiness admission, dispatch selection, and runtime-host
-  request construction consume the actual scheduler-selected handoff.
+  results materialize, then invoke dependency readiness admission through the
+  configured workflow-service provider before any dispatch boundary. The
+  default provider is the no-I/O not-implemented dependency-environment
+  service, so runtime tasks fail closed before runtime-host dispatch until a
+  production readiness provider, dispatch selection, and runtime-host request
+  construction consume the actual scheduler-selected handoff.
 - Session run submission generates the backend workflow run id before enqueue
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node

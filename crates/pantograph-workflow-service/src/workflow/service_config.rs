@@ -2,13 +2,19 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentService, NotImplementedDependencyEnvironmentProvider,
+};
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
     RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
 };
 
 use crate::graph::GraphSessionStore;
-use crate::scheduler::{WorkflowExecutionSessionStore, WorkflowSchedulerTaskOrchestrator};
+use crate::scheduler::{
+    WorkflowDependencyReadinessProvider, WorkflowExecutionSessionStore,
+    WorkflowSchedulerTaskOrchestrator,
+};
 
 use super::{
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
@@ -51,6 +57,7 @@ impl WorkflowService {
             diagnostics_projection_refresh_sink: Arc::new(Mutex::new(None)),
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
             scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
+            dependency_readiness_provider: default_dependency_readiness_provider(),
         }
     }
 
@@ -266,6 +273,12 @@ fn default_scheduler_task_orchestrator() -> WorkflowSchedulerTaskOrchestrator {
     WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(Arc::new(
         RuntimeHostExecutionUnavailablePort,
     )))
+}
+
+fn default_dependency_readiness_provider() -> Arc<dyn WorkflowDependencyReadinessProvider> {
+    Arc::new(DependencyEnvironmentService::new(
+        NotImplementedDependencyEnvironmentProvider,
+    ))
 }
 
 fn load_artifact_format_settings(

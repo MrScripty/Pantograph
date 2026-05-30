@@ -16547,6 +16547,48 @@ Worker rules:
   - Remaining follow-up: wire dependency readiness admission, scheduler
     dispatch selection, and runtime-host request construction from the actual
     dispatch-selected `SchedulerRuntimeHandoff`.
+- 2026-05-29 Milestone 5b session runner dependency-readiness admission slice
+  completed:
+  - Slice scope: scheduler readiness lifecycle exports, workflow service
+    default dependency-readiness provider, session scheduler runner, focused
+    session execution tests, scheduler/workflow README notes, and plan
+    records.
+  - Implementation: runtime-containing session runs now build a validated
+    dependency readiness request for each runtime task in
+    `WaitingDependencyReadiness`, resolve the configured provider outside the
+    session-store lock, apply scheduler readiness admission, and only then
+    check whether the task is ready for dispatch.
+  - No-fallback/no-legacy gate: the default provider is the no-I/O
+    not-implemented dependency-environment service, so this remains a
+    fail-closed slice before runtime-host dispatch. It does not call
+    runtime-host execution, does not load runtime sessions, does not call
+    node-engine whole-run output demand, does not synthesize reduced-plan
+    handoff, and does not adapt readiness into `ModelRefV2`,
+    `ModelDependencyRequest`, graph paths, or executable load targets.
+  - Verification passed: `cargo fmt -p
+    pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    scheduler::readiness_lifecycle --lib -- --nocapture`; `cargo test -p
+    pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`; and
+    `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; targeted retired
+    path/model-ref source search over touched source/README/test files; and
+    `git diff --check`.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
+  - Search caveat: allowed pre-existing retired-path hits remain in workflow
+    and scheduler README negative-path text and an unrelated legacy runtime
+    state fixture in `session_execution.rs`.
+  - Remaining follow-up: replace the default not-implemented provider with
+    production dependency readiness evidence, then wire scheduler dispatch
+    selection and runtime-host request construction from the actual
+    dispatch-selected `SchedulerRuntimeHandoff`.
 
 ### Traceability Links
 

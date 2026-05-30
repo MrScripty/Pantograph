@@ -1957,6 +1957,20 @@ schedulable intent. This keeps runtime dispatch behind scheduler-owned
 input-readiness materialization and prevents inference nodes from running
 before connected upstream task results are available.
 
+2026-05-29 session runner dependency-readiness admission wiring completed.
+The workflow-service session runner now builds validated dependency readiness
+requests for runtime tasks that reached `WaitingDependencyReadiness`, resolves
+the configured readiness provider outside the session-store lock, applies
+scheduler readiness admission, and only then checks for dispatch readiness. The
+default provider is the no-I/O not-implemented dependency-environment service,
+so runtime-containing session runs still fail closed before runtime-host
+dispatch rather than using old runtime load, node-engine output demand, reduced
+execution-plan handoff synthesis, or path-shaped dependency preflight. The
+remaining production orchestration work is to provide real dependency
+readiness evidence, collect canonical dispatch candidates, call scheduler
+dispatch selection, and construct runtime-host requests from the
+dispatch-selected `SchedulerRuntimeHandoff`.
+
 ## Effects On Existing Systems
 
 ### Scheduler

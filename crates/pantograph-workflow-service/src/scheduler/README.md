@@ -222,6 +222,14 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   `dependency_readiness_source`, but it must not become a Pumas load-target
   resolver, dependency installer, runtime-host dispatcher, or graph-validation
   preview producer.
+- Dependency readiness provider resolution must run outside session-store
+  locks. The lifecycle builds a validated request from active scheduler state,
+  releases store ownership while the configured provider resolves path-free
+  readiness evidence, then reacquires the store only to apply
+  scheduler-validated admission. The default provider is the no-I/O
+  not-implemented dependency-environment service, which keeps session runner
+  runtime tasks fail-closed before dispatch until production readiness evidence
+  is wired.
 - Active-run scheduler task results must validate through
   `WorkflowSchedulerTaskResult` before storage. The store may index staged
   results by task id for the active run, but it must not store executable
