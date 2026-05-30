@@ -322,8 +322,20 @@ mod tests {
         let mut payload = default_host_requirements_payload(&request);
         payload.requirements[0].kind = DependencyRequirementKind::RuntimeManagedBinary;
         payload.requirements[0].python = None;
+        payload.requirements[0].managed_runtime = Some(
+            serde_json::from_value(serde_json::json!({
+                "managed_binary_id": "llama_cpp"
+            }))
+            .expect("managed runtime requirement details"),
+        );
         payload.bindings[0].environment_kind = DependencyEnvironmentKind::ManagedBinary;
         payload.bindings[0].python = None;
+        payload.bindings[0].managed_runtime = Some(
+            serde_json::from_value(serde_json::json!({
+                "managed_binary_id": "llama_cpp"
+            }))
+            .expect("managed runtime binding details"),
+        );
         let probe_runner = Arc::new(FakePackageProbeRunner::new(
             PackageReadinessProbeOutcome::Failed(vec![PackageReadinessProbeFailure::new(
                 PackageReadinessProviderDiagnosticCode::ProbeProcessFailed,

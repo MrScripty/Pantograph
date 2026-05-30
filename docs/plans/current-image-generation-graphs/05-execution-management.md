@@ -17356,6 +17356,23 @@ Worker rules:
   - README traceability updated in `crates/pantograph-dependency-planning`.
     `git diff --check` passed; final status review remains the last commit
     gate.
+- 2026-05-30 provider source-detail embedded-runtime fixture follow-up:
+  - Slice scope: updated the embedded-runtime dependency-inventory non-Python
+    dispatch test fixture to include the typed managed-runtime requirement and
+    binding details now required by `pantograph-dependency-planning`.
+  - Deviation discovered after the contract slice: the shared crate tests
+    passed, but the dependent embedded-runtime focused test still synthesized a
+    managed-runtime payload by mutating a Python payload after validation. The
+    fixture now preserves the no-fallback rule by using typed
+    `managed_runtime` detail fields instead of relying on requirement-name
+    interpretation.
+  - Verification passed: `cargo fmt -- --check` and
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`.
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`
+    also passed before the fixture edit and remains unaffected.
+  - Line-count review: `dependency_inventory.rs` is 467 lines after this
+    follow-up, under the current decomposition target. `git diff --check` and
+    final status review remain the last commit gates for this follow-up.
 
 ### Traceability Links
 

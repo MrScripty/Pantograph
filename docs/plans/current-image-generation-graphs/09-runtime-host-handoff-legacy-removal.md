@@ -421,6 +421,10 @@ Implementation progress:
   `environment/scalar.rs` 416 lines), but `tests/contract.rs` remains a broad
   existing contract suite over 1k lines. Keep future dependency-environment
   contract tests in focused files instead of growing that file further.
+- 2026-05-30 follow-up: updated the embedded-runtime dependency-inventory
+  non-Python dispatch fixture to include typed managed-runtime details. This
+  preserves the new source-detail contract in downstream tests and avoids
+  treating generic requirement names as provider source identity.
 
 ## Verification Strategy
 
