@@ -1,6 +1,6 @@
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
-    DependencyEnvironmentReadinessSnapshotStatus,
+    DependencyEnvironmentReadinessSnapshotStatus, DependencyReadinessWorkQueue,
 };
 use pantograph_dependency_planning::{
     produce_dependency_requirements_proof, DependencyEnvironmentAction, DependencyEnvironmentId,
@@ -202,7 +202,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
     );
     let queue = service
         .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
-            session_id,
+            session_id: session_id.clone(),
         })
         .await
         .expect("list queue after rejected runtime inference run");
@@ -214,7 +214,10 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
 #[tokio::test]
 async fn workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch() {
     let host = RuntimeInferenceSessionHost::new();
-    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone());
     let workflow_id = "wf-runtime-dispatch-boundary";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -269,11 +272,28 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
     );
     let queue = service
         .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
-            session_id,
+            session_id: session_id.clone(),
         })
         .await
         .expect("list queue after fail-closed runtime inference run");
     assert!(queue.items.is_empty());
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+    let work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("dependency-readiness work item should be queued");
+    assert_eq!(work_item.provenance.session_id.as_str(), session_id);
+    assert_eq!(work_item.provenance.task_id.as_str(), "infer");
+    assert_eq!(
+        work_item.request.as_request().action,
+        DependencyEnvironmentAction::Resolve
+    );
+    assert_eq!(
+        work_item
+            .diagnostic_context
+            .as_ref()
+            .map(|context| context.as_str()),
+        Some("runtime task entered WaitingDependencyReadiness")
+    );
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }

@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 #[cfg(test)]
 use std::time::Duration;
 
+use pantograph_dependency_environment_service::DependencyReadinessWorkQueue;
+
 #[cfg(test)]
 use crate::capabilities;
 use crate::graph::GraphSessionStore;
@@ -250,6 +252,7 @@ pub struct WorkflowService {
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
     scheduler_task_orchestrator: WorkflowSchedulerTaskOrchestrator,
     dependency_readiness_provider: Arc<dyn WorkflowDependencyReadinessProvider>,
+    dependency_readiness_work_queue: Arc<DependencyReadinessWorkQueue>,
 }
 
 #[cfg(test)]

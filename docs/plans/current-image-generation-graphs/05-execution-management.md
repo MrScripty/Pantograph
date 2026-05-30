@@ -16837,6 +16837,31 @@ Worker rules:
   - Remaining follow-up: workflow-service/session runner must enqueue one typed
     work item at each runtime task transition into
     `WaitingDependencyReadiness` before producer-side host probes are added.
+- 2026-05-29 workflow-service readiness work-item emission slice completed:
+  - Slice scope: `WorkflowService` now owns an injectable shared readiness work
+    queue; dependency-readiness composition injects it; session readiness
+    admission enqueues a typed `DependencyReadinessWorkItem` for runtime tasks
+    in `WaitingDependencyReadiness` before provider resolution; focused
+    session/composition tests, workflow README, and ledgers were updated.
+  - No-fallback/no-legacy result: queued work is reconstructed from the
+    validated readiness request envelope used by the provider boundary and
+    includes task/run/session provenance. It is not sourced from provider
+    misses, frontend/graph/editor state, technical-fit previews, reduced
+    execution plans, runtime-host load targets, `ModelDependencyRequest`,
+    `ModelRefV2`, or path/model-path fields. Dispatch still fails closed; no
+    host probes or snapshot publication were added.
+  - Verification: `cargo test -p pantograph-workflow-service
+    workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+    -- --nocapture`; `cargo test -p pantograph-workflow-service components_ --
+    --nocapture`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-embedded-runtime`; `cargo check -p pantograph-uniffi`; `cargo
+    check -p pantograph_rustler --features frontend-http`; `cargo fmt -p
+    pantograph-workflow-service -- --check`; `git diff --check`.
+  - Caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning.
+  - Remaining follow-up: update the embedded-runtime producer lifecycle to
+    drain queued items and publish typed unavailable snapshots, then replace
+    unavailable snapshot publication with real host package/runtime probes.
 
 ### Traceability Links
 

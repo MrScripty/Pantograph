@@ -839,3 +839,28 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   workflow-service still emits the known unused
   `set_active_run_execution_plan` warning. Remaining follow-up: emit one typed
   work item when each runtime task enters `WaitingDependencyReadiness`.
+- 2026-05-29 workflow-service readiness work-item emission slice completed.
+  Smallest useful vertical slice: give `WorkflowService` the shared readiness
+  work queue and enqueue producer work from the session readiness-admission
+  path before provider resolution for runtime tasks in
+  `WaitingDependencyReadiness`. Allowed write set: workflow-service service
+  config, dependency-readiness composition, session scheduler runner, focused
+  session/composition tests, workflow README, this milestone, and
+  execution-management ledger. No-fallback/no-legacy result: work items are
+  reconstructed from the validated readiness request envelope already consumed
+  by the provider boundary; the queue is not populated from provider misses,
+  graph/editor/frontend state, technical-fit previews, reduced execution plans,
+  runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`, or
+  path/model-path fields. Runtime dispatch remains fail-closed and no host
+  probes or snapshot publication were added. Verification passed: `cargo test
+  -p pantograph-workflow-service
+  workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+  -- --nocapture`; `cargo test -p pantograph-workflow-service components_ --
+  --nocapture`; `cargo check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-embedded-runtime`; `cargo check -p pantograph-uniffi`; `cargo
+  check -p pantograph_rustler --features frontend-http`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`. Verification
+  caveat: workflow-service still emits the known unused
+  `set_active_run_execution_plan` warning. Remaining follow-up: make the
+  embedded-runtime producer drain queued work and publish typed unavailable
+  snapshots before adding real host probes.

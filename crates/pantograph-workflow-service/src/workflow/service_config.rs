@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use pantograph_dependency_environment_service::{
-    DependencyEnvironmentService, NotImplementedDependencyEnvironmentProvider,
-    SharedDependencyEnvironmentProvider,
+    DependencyEnvironmentService, DependencyReadinessWorkQueue,
+    NotImplementedDependencyEnvironmentProvider, SharedDependencyEnvironmentProvider,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
@@ -59,6 +59,7 @@ impl WorkflowService {
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
             scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
             dependency_readiness_provider: default_dependency_readiness_provider(),
+            dependency_readiness_work_queue: Arc::new(DependencyReadinessWorkQueue::new()),
         }
     }
 
@@ -80,6 +81,15 @@ impl WorkflowService {
             GraphSessionStore::with_dependency_environment_provider(provider.clone()),
         );
         self.dependency_readiness_provider = Arc::new(DependencyEnvironmentService::new(provider));
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependency_readiness_work_queue(
+        mut self,
+        work_queue: Arc<DependencyReadinessWorkQueue>,
+    ) -> Self {
+        self.dependency_readiness_work_queue = work_queue;
         self
     }
 

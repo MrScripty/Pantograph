@@ -56,7 +56,9 @@ impl WorkflowDependencyReadinessComponents {
 
     #[must_use]
     pub fn configure_workflow_service(&self, service: WorkflowService) -> WorkflowService {
-        service.with_dependency_environment_provider(self.snapshot_provider.clone())
+        service
+            .with_dependency_environment_provider(self.snapshot_provider.clone())
+            .with_dependency_readiness_work_queue(self.work_queue.clone())
     }
 
     #[must_use]
@@ -86,7 +88,7 @@ mod tests {
         assert_eq!(provider.snapshot_count(), 0);
         assert!(work_queue.is_empty());
         assert_eq!(Arc::strong_count(&provider), 4);
-        assert_eq!(Arc::strong_count(&work_queue), 2);
+        assert_eq!(Arc::strong_count(&work_queue), 3);
         drop(shared);
         assert_eq!(Arc::strong_count(&provider), 2);
         assert_eq!(Arc::strong_count(&work_queue), 2);

@@ -1,6 +1,14 @@
 use std::time::Instant;
 
-use pantograph_dependency_planning::DependencyReadinessPolicy;
+use pantograph_dependency_environment_service::{
+    DependencyReadinessDiagnosticContext, DependencyReadinessTaskId, DependencyReadinessWorkItem,
+    DependencyReadinessWorkItemProvenance, DependencyReadinessWorkQueueError,
+    DependencyReadinessWorkflowRunId, DependencyReadinessWorkflowSessionId,
+};
+use pantograph_dependency_planning::{
+    DependencyEnvironmentAction, DependencyEnvironmentRequest, DependencyReadinessPolicy,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyReadinessRequestEnvelope,
+};
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 
 use crate::scheduler::{
@@ -294,6 +302,17 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )
                     .map_err(dependency_readiness_error)?
             };
+            let work_item = dependency_readiness_work_item(
+                session_id,
+                workflow_run_id,
+                &task_id,
+                dependency_environment_request_from_readiness_envelope(&request)
+                    .map_err(dependency_readiness_work_queue_error)?,
+            )
+            .map_err(dependency_readiness_work_queue_error)?;
+            self.service
+                .dependency_readiness_work_queue
+                .enqueue(work_item);
             let readiness_proof = lifecycle
                 .resolve_dependency_readiness_proof(
                     self.service.dependency_readiness_provider.as_ref(),
@@ -413,6 +432,54 @@ fn dependency_readiness_error(
     WorkflowServiceError::InvalidRequest(format!(
         "scheduler dependency readiness admission failed: {error}"
     ))
+}
+
+fn dependency_readiness_work_queue_error(
+    error: DependencyReadinessWorkQueueError,
+) -> WorkflowServiceError {
+    WorkflowServiceError::InvalidRequest(format!(
+        "scheduler dependency readiness work queue failed: {error}"
+    ))
+}
+
+fn dependency_readiness_work_item(
+    session_id: &str,
+    workflow_run_id: &str,
+    task_id: &str,
+    request: ValidatedDependencyEnvironmentRequest,
+) -> Result<DependencyReadinessWorkItem, DependencyReadinessWorkQueueError> {
+    Ok(DependencyReadinessWorkItem::new(
+        DependencyReadinessWorkItemProvenance::new(
+            DependencyReadinessWorkflowSessionId::parse(session_id)?,
+            DependencyReadinessWorkflowRunId::parse(workflow_run_id)?,
+            DependencyReadinessTaskId::parse(task_id)?,
+        ),
+        request,
+    )
+    .with_diagnostic_context(DependencyReadinessDiagnosticContext::parse(
+        "runtime task entered WaitingDependencyReadiness",
+    )?))
+}
+
+fn dependency_environment_request_from_readiness_envelope(
+    request: &ValidatedDependencyReadinessRequestEnvelope,
+) -> Result<ValidatedDependencyEnvironmentRequest, DependencyReadinessWorkQueueError> {
+    let envelope = request.as_envelope();
+    let readiness_request = &envelope.readiness_request;
+    ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+        contract_version: 1,
+        action: DependencyEnvironmentAction::Resolve,
+        identity_key: readiness_request.identity_key.clone(),
+        planning_request: readiness_request.planning_request.clone(),
+        dependency_requirements_id: Some(
+            envelope
+                .execution_context
+                .dependency_requirements_id
+                .clone(),
+        ),
+        environment_ref: None,
+    })
+    .map_err(DependencyReadinessWorkQueueError::from)
 }
 
 fn ensure_all_scheduler_tasks_completed(

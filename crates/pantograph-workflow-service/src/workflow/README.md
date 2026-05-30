@@ -88,6 +88,11 @@ behind `Arc`. The queue is a producer input contract for later scheduler
 emission and embedded-runtime draining; workflow-service must not use provider
 misses, graph/editor state, technical-fit previews, runtime-host load targets,
 or legacy path data to synthesize producer work.
+Session readiness admission enqueues one typed work item for each runtime task
+observed in `WaitingDependencyReadiness` before resolving the readiness
+provider. The queued request is reconstructed from the same validated readiness
+envelope used by the provider boundary, so producer work remains tied to
+scheduler task/run/session provenance and does not come from provider misses.
 Runtime-host task input materialization is workflow-service owned. It converts
 completed upstream scheduler task results into typed, path-free
 `RuntimeHostExecutionInput` values before runtime-host dispatch. Pumas model
