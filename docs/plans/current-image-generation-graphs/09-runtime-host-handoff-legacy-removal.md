@@ -251,6 +251,15 @@ Required ownership:
   A dedicated lower-level inventory contract crate remains an escape hatch only
   if extending `pantograph-dependency-planning` creates an actual dependency
   cycle or ownership conflict.
+- **Shared inventory observation contract:** before adding real
+  managed-runtime, runtime-feature, or device-toolchain providers, provider
+  evidence must be represented as typed observation rows and projected through
+  one shared dependency-environment result projector. Providers must not each
+  hand-build full `DependencyEnvironmentResult` values or duplicate readiness,
+  install-state, stale, and diagnostic mapping policy. Keep the observation
+  contract in `pantograph-dependency-planning` unless implementation proves an
+  actual dependency cycle or ownership conflict that requires a narrower
+  lower-level contract crate.
 - **Workflow-service/scheduler:** consume dependency-readiness snapshots and
   proofs only. They must not depend on concrete inventory providers, perform
   host probing, infer package names, or interpret dependency requirement names
@@ -305,10 +314,17 @@ Staged implementation:
    `serde(deny_unknown_fields)` fixtures, unknown-field rejection tests,
    invalid-kind/detail tests, and README traceability before any provider reads
    those fields.
-5. Add managed-runtime, runtime-feature, and device-toolchain providers one at
+5. Add the shared inventory observation-row contract and projector before real
+   non-Python providers. This slice must support mixed selected-binding
+   payloads by letting providers emit typed per-binding observations, then
+   merging those observations into one validated `DependencyEnvironmentResult`.
+   Python and unsupported/not-implemented providers should be adapted to the
+   projector first without changing successful Python readiness behavior.
+6. Add managed-runtime, runtime-feature, and device-toolchain providers one at
    a time from their source-owned facts. Each provider slice must add focused
-   serde fixtures, README ownership updates, and no-fallback tests.
-6. Plan system-package inventory separately before implementation because it
+   observation fixtures, result-projection tests, README ownership updates,
+   and no-fallback tests.
+7. Plan system-package inventory separately before implementation because it
    is platform/package-manager specific and likely needs a host inventory
    source rather than direct probing in embedded-runtime.
 
@@ -325,6 +341,11 @@ Standards gates:
   `DependencyRequirementName`, runtime display names, backend aliases, package
   names, or graph-authored strings to recover managed-runtime, feature, or
   toolchain identity.
+- Keep result projection centralized. Concrete providers may return typed
+  observation rows, provider diagnostics, and freshness/correlation facts, but
+  dependency-environment readiness/install/operation/result-state mapping must
+  live in the shared projector so mixed-provider payloads are easy to reason
+  about and later consumers can trust the same evidence.
 - Do not add third-party dependencies for provider dispatch. If a provider
   genuinely needs a new dependency, record dependency ownership, transitive
   cost, feature impact, and verification before editing manifests.
@@ -337,9 +358,9 @@ Standards gates:
 
 Required verification:
 
-- Contract/serde fixtures for inventory requests, observations, stale facts,
-  unsupported provider diagnostics, invalid kind/binding shape, mixed-kind
-  payloads, and unknown-field rejection.
+- Contract/serde fixtures for inventory requests, observation rows,
+  observation-row projection, stale facts, unsupported provider diagnostics,
+  invalid kind/binding shape, mixed-kind payloads, and unknown-field rejection.
 - Focused provider tests proving Python behavior is preserved through the
   inventory boundary and non-Python kinds fail closed until their source-owned
   providers exist.
@@ -425,6 +446,16 @@ Implementation progress:
   non-Python dispatch fixture to include typed managed-runtime details. This
   preserves the new source-detail contract in downstream tests and avoids
   treating generic requirement names as provider source identity.
+- 2026-05-30 provider observation contract re-plan decision: selected the
+  observation-contract path before real managed-runtime provider work. The
+  next implementation slice must add typed inventory observation rows and a
+  single shared projector that builds validated dependency-environment
+  results. This makes mixed Python plus non-Python payloads a first-class
+  contract and keeps provider evidence reusable for scheduler admission, graph
+  validation, diagnostics, and future stale-shape UX without duplicating
+  projection policy in each provider. The default contract home remains
+  `pantograph-dependency-planning`; stop and re-plan only if implementation
+  proves a real dependency cycle or ownership conflict.
 
 ## Verification Strategy
 

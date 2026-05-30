@@ -17372,7 +17372,28 @@ Worker rules:
     also passed before the fixture edit and remains unaffected.
   - Line-count review: `dependency_inventory.rs` is 467 lines after this
     follow-up, under the current decomposition target. `git diff --check` and
-    final status review remain the last commit gates for this follow-up.
+    final status review passed before the follow-up commit.
+- 2026-05-30 provider observation contract re-plan decision:
+  - Decision selected: use the observation-contract path before implementing
+    real managed-runtime, runtime-feature, or device-toolchain providers.
+    Providers must emit typed per-binding observation rows and provider-owned
+    diagnostics/freshness facts; one shared projector must build the
+    dependency-environment result.
+  - Standards result: this keeps provider I/O async and source-owned, keeps
+    projection and validation synchronous, avoids duplicate result-state
+    policy across providers, and makes mixed selected-binding payloads
+    explicit instead of falling back to payload-wide Python/not-implemented
+    dispatch.
+  - Contract home: add the observation rows/projector to
+    `pantograph-dependency-planning` first because it already owns dependency
+    environment rows, source details, diagnostics, validation, and serde
+    fixtures. Stop and re-plan only if implementation proves an actual
+    dependency cycle or ownership conflict that requires a narrower inventory
+    contract crate.
+  - Next thin slice: add observation-row DTOs, projector tests, serde fixtures,
+    README traceability, and adapt Python plus unsupported/not-implemented
+    providers to the projector without changing successful Python readiness.
+    Managed-runtime provider implementation comes after that contract slice.
 
 ### Traceability Links
 
