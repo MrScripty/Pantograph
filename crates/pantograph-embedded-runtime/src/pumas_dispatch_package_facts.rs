@@ -1,5 +1,25 @@
+use std::sync::Arc;
+
 use pantograph_dependency_planning::PumasModelRef;
 use workflow_nodes::setup::PumasSelectorAccess;
+
+#[derive(Clone)]
+pub(crate) struct PumasDispatchPackageFactsSource {
+    selector_access: Option<Arc<PumasSelectorAccess>>,
+}
+
+impl PumasDispatchPackageFactsSource {
+    pub(crate) fn new(selector_access: Option<Arc<PumasSelectorAccess>>) -> Self {
+        Self { selector_access }
+    }
+
+    pub(crate) async fn collect(
+        &self,
+        model_ref: &PumasModelRef,
+    ) -> PumasDispatchPackageFactsBridgeOutcome {
+        resolve_pumas_dispatch_package_facts(self.selector_access.as_deref(), model_ref).await
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PumasDispatchPackageFactsProjection {
@@ -273,8 +293,6 @@ fn diagnostic(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
     #[tokio::test]
@@ -340,6 +358,62 @@ mod tests {
         assert!(diffusers.components.iter().any(|component| {
             component.role == inference::DiffusersComponentRole::Unet
                 && component.class_name.as_deref() == Some("UNet2DConditionModel")
+        }));
+    }
+
+    #[tokio::test]
+    async fn source_preserves_owner_api_projected_facts() {
+        let temp_dir = create_test_env();
+        let model_id = "diffusion/imported/test-bundle";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        write_test_diffusers_bundle(&model_dir);
+        write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
+        let api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        api.rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let source =
+            PumasDispatchPackageFactsSource::new(Some(Arc::new(PumasSelectorAccess::Owner(api))));
+
+        let outcome = source
+            .collect(&model_ref(model_id, Some("diffusers")))
+            .await;
+
+        let PumasDispatchPackageFactsBridgeOutcome::Projected { facts, .. } = outcome else {
+            panic!("owner API source should project package facts");
+        };
+        assert_eq!(facts.model_ref.model_id, model_id);
+        assert_eq!(
+            facts.model_ref.selected_artifact_id.as_deref(),
+            Some("diffusers")
+        );
+        assert_eq!(facts.model_ref.selected_artifact_path, None);
+    }
+
+    #[tokio::test]
+    async fn source_preserves_missing_selector_access_diagnostic() {
+        let source = PumasDispatchPackageFactsSource::new(None);
+
+        let outcome = source
+            .collect(&model_ref("diffusion/imported/test-bundle", None))
+            .await;
+
+        assert!(matches!(
+            outcome,
+            PumasDispatchPackageFactsBridgeOutcome::Unavailable { .. }
+        ));
+        assert!(outcome.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code == PumasDispatchPackageFactsDiagnosticCode::MissingSelectorAccess
         }));
     }
 
@@ -414,6 +488,16 @@ mod tests {
         std::fs::create_dir_all(temp_dir.path().join("launcher-data/logs")).unwrap();
         std::fs::create_dir_all(temp_dir.path().join("shared-resources/models")).unwrap();
         temp_dir
+    }
+
+    fn model_ref(model_id: &str, selected_artifact_id: Option<&str>) -> PumasModelRef {
+        PumasModelRef {
+            model_id: model_id.to_string(),
+            revision: None,
+            selected_artifact_id: selected_artifact_id.map(str::to_string),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        }
     }
 
     fn write_test_diffusers_bundle(root: &std::path::Path) {

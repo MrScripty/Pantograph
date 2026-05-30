@@ -18452,6 +18452,39 @@ Worker rules:
     in embedded-runtime composition, then adapt its source facts plus future
     runtime/resource sources into the final workflow-service candidate-fact
     bundle.
+- 2026-05-30 embedded-runtime Pumas package-facts source slice:
+  - Slice scope: embedded-runtime Pumas dispatch package-facts source only.
+    Allowed files:
+    `crates/pantograph-embedded-runtime/src/pumas_dispatch_package_facts.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: added `PumasDispatchPackageFactsSource`, a small
+    embedded-runtime composition adapter that owns optional Pumas selector
+    access and delegates to the existing owner-API package-facts bridge. The
+    source returns the existing source-specific projection/diagnostic outcome
+    and does not attempt final candidate-fact bundle assembly.
+  - Test coverage: added focused source tests proving owner selector access
+    preserves projected path-free package facts and missing selector access is
+    preserved as a typed diagnostic.
+  - No-fallback/no-legacy result: the source still requires owner selector
+    access for full package facts, rejects path-carrying model refs through the
+    bridge, and creates no scheduler candidates, no workflow-service final
+    bundle rows, no runtime-registry facts, no reservations, no resource-fit
+    facts, no graph paths, and no summary/cache-row execution authority.
+  - Standards result: this keeps Pumas lifecycle/access ownership in
+    embedded-runtime composition and avoids forcing Pumas facts to masquerade
+    as complete dispatch candidates. The source is intentionally narrow so
+    runtime capability and resource sources can compose later without
+    rewriting workflow-service contracts.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime pumas_dispatch_package_facts --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: add runtime-registry capability and resource-owner
+    source adapters, then build the embedded-runtime final provider that joins
+    all source facts into the workflow-service candidate-fact bundle.
 
 ### Traceability Links
 

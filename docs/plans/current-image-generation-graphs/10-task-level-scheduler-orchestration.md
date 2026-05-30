@@ -2206,6 +2206,11 @@ Implementation order:
 2. Adapt the staged Pumas owner-API package-facts bridge into an
    embedded-runtime Pumas source provider and preserve
    missing/unsupported/stale facts as source diagnostics.
+   2026-05-30 slice completed: embedded-runtime now has a narrow
+   `PumasDispatchPackageFactsSource` that owns optional Pumas selector access,
+   delegates to the owner-API bridge, and preserves path-free projected facts
+   or typed source diagnostics. It does not create workflow-service final
+   candidate bundle rows or scheduler candidates.
 3. Add runtime-registry capability source projection.
 4. Add real resource-owner reservation/resource-fit source projection.
 5. Map the validated bundle into `SchedulerDispatchCandidate` values only when
