@@ -521,18 +521,35 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 }
                 Err(error) => {
                     let mut store = self.service.session_store_guard()?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .fail_runtime_dispatch_not_wired_for_active_run(
-                            &mut store,
-                            session_id,
-                            workflow_run_id,
-                        )
-                        .map_err(|error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler runtime dispatch fail-closed transition failed: {error}"
-                            ))
-                        })?;
+                    if let crate::scheduler::WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection) = &error {
+                        self.service
+                            .scheduler_task_orchestrator
+                            .fail_started_runtime_task_dispatch_selection(
+                                &mut store,
+                                session_id,
+                                workflow_run_id,
+                                &started_runtime_task,
+                                selection,
+                            )
+                            .map_err(|error| {
+                                WorkflowServiceError::InvalidRequest(format!(
+                                    "scheduler runtime dispatch no-selection transition failed: {error}"
+                                ))
+                            })?;
+                    } else {
+                        self.service
+                            .scheduler_task_orchestrator
+                            .fail_runtime_dispatch_not_wired_for_active_run(
+                                &mut store,
+                                session_id,
+                                workflow_run_id,
+                            )
+                            .map_err(|error| {
+                                WorkflowServiceError::InvalidRequest(format!(
+                                    "scheduler runtime dispatch fail-closed transition failed: {error}"
+                                ))
+                            })?;
+                    }
                     return Err(WorkflowServiceError::CapabilityViolation(format!(
                         "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
                         count = summary.runtime_inference_tasks

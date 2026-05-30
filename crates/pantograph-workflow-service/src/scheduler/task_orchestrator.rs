@@ -4,7 +4,8 @@ use pantograph_runtime_host_contracts::{
 };
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
-    SchedulerDispatchSelectionDecision, SchedulerDispatchSelectionState,
+    SchedulerDispatchSelectionDecision, SchedulerDispatchSelectionDiagnostic,
+    SchedulerDispatchSelectionDiagnosticSeverity, SchedulerDispatchSelectionState,
     SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
     SchedulerReadinessAdmissionDecision, SchedulerReadinessAdmissionDiagnostic,
     SchedulerReadinessAdmissionDiagnosticCode, SchedulerReadinessAdmissionRequest,
@@ -418,6 +419,28 @@ impl WorkflowSchedulerTaskOrchestrator {
                 workflow_run_id,
                 completion_transition,
                 result,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
+    }
+
+    pub(crate) fn fail_started_runtime_task_dispatch_selection(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        selection: &SchedulerDispatchSelectionDecision,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let failure_transition = terminal_failure_transition_from_running_diagnostics(
+            &started.running_record,
+            runtime_dispatch_selection_task_diagnostics(selection),
+        )?;
+        store
+            .apply_active_run_scheduler_task_transition(
+                session_id,
+                workflow_run_id,
+                failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
             .and_then(applied_task_state_record)
@@ -1101,14 +1124,70 @@ fn terminal_failure_transition_from_running(
     record: &SchedulerTaskStateRecord,
     diagnostic: SchedulerTaskStateDiagnostic,
 ) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    terminal_failure_transition_from_running_diagnostics(record, vec![diagnostic])
+}
+
+fn terminal_failure_transition_from_running_diagnostics(
+    record: &SchedulerTaskStateRecord,
+    diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
     task_state_transition(
         record,
         "terminal-failed",
         SchedulerTaskStateKind::Running,
-        SchedulerTaskState::TerminalFailed {
-            diagnostics: vec![diagnostic],
-        },
+        SchedulerTaskState::TerminalFailed { diagnostics },
     )
+}
+
+fn runtime_dispatch_selection_task_diagnostics(
+    selection: &SchedulerDispatchSelectionDecision,
+) -> Vec<SchedulerTaskStateDiagnostic> {
+    if selection.diagnostics.is_empty() {
+        return vec![SchedulerTaskStateDiagnostic {
+            severity: SchedulerTaskStateDiagnosticSeverity::Error,
+            code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+            message: "runtime scheduler dispatch selection did not select a candidate".to_string(),
+            hint: Some(
+                "Provide canonical runtime, device, model, reservation, and resource-fit candidates before runtime-host dispatch."
+                    .to_string(),
+            ),
+        }];
+    }
+    selection
+        .diagnostics
+        .iter()
+        .map(runtime_dispatch_selection_task_diagnostic)
+        .collect()
+}
+
+fn runtime_dispatch_selection_task_diagnostic(
+    diagnostic: &SchedulerDispatchSelectionDiagnostic,
+) -> SchedulerTaskStateDiagnostic {
+    SchedulerTaskStateDiagnostic {
+        severity: match diagnostic.severity {
+            SchedulerDispatchSelectionDiagnosticSeverity::Info => {
+                SchedulerTaskStateDiagnosticSeverity::Info
+            }
+            SchedulerDispatchSelectionDiagnosticSeverity::Warning => {
+                SchedulerTaskStateDiagnosticSeverity::Warning
+            }
+            SchedulerDispatchSelectionDiagnosticSeverity::Error => {
+                SchedulerTaskStateDiagnosticSeverity::Error
+            }
+            _ => SchedulerTaskStateDiagnosticSeverity::Error,
+        },
+        code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
+        message: format!(
+            "runtime dispatch selection {:?}: {}",
+            diagnostic.code, diagnostic.message
+        ),
+        hint: diagnostic.hint.clone().or_else(|| {
+            Some(
+                "Resolve scheduler dispatch candidate diagnostics before runtime-host dispatch."
+                    .to_string(),
+            )
+        }),
+    }
 }
 
 fn runtime_dispatch_not_wired_transition(

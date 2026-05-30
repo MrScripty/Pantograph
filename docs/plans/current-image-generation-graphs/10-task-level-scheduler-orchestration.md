@@ -2058,9 +2058,25 @@ Remaining production runtime dispatch work after this slice:
 - Add the production provider that gathers canonical runtime/resource/Pumas
   dispatch candidates without ranking them or reading graph paths, frontend
   state, reduced execution plans, `ModelRefV2`, or runtime-host load targets.
-- Replace the temporary fail-closed terminal transition label/message used for
-  scheduler no-selection with task-state diagnostics that preserve the
-  scheduler dispatch-selection diagnostics.
+- Add durable recovery/replay/cancellation/duplicate-dispatch prevention and
+  reservation-release behavior before real multi-run inference workloads rely
+  on this in-memory completion path.
+
+2026-05-30 scheduler no-selection task diagnostics slice completed. When
+scheduler dispatch selection returns no-selection for a started runtime task,
+workflow-service now persists the scheduler dispatch-selection diagnostics on
+the runtime task's terminal failure state instead of using the generic
+runtime-dispatch-not-wired diagnostic. This keeps the default no-candidate
+production path fail-closed before runtime-host dispatch while preserving the
+typed scheduler reason, such as `NoCandidates`, for graph editor/run
+inspection consumers. Non-selection still does not create candidates, choose a
+fallback runtime, call runtime-host execution, or route through node-engine.
+
+Remaining production runtime dispatch work after this slice:
+
+- Add the production provider that gathers canonical runtime/resource/Pumas
+  dispatch candidates without ranking them or reading graph paths, frontend
+  state, reduced execution plans, `ModelRefV2`, or runtime-host load targets.
 - Add durable recovery/replay/cancellation/duplicate-dispatch prevention and
   reservation-release behavior before real multi-run inference workloads rely
   on this in-memory completion path.

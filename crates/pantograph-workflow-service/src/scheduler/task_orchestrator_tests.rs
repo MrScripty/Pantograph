@@ -13,11 +13,11 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
 };
 use pantograph_scheduler::{
-    SchedulableTaskIntent, SchedulerDispatchSelectionRequest, SchedulerDispatchSelectionState,
-    SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerRuntimeHandoffState,
-    SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateDiagnosticCode,
-    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerWorkflowId,
-    SchedulerWorkflowRunId, ValidatedSchedulerDispatchSelectionRequest,
+    select_scheduler_dispatch, SchedulableTaskIntent, SchedulerDispatchSelectionRequest,
+    SchedulerDispatchSelectionState, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
+    SchedulerRuntimeHandoffState, SchedulerTaskId, SchedulerTaskState,
+    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
+    SchedulerWorkflowId, SchedulerWorkflowRunId, ValidatedSchedulerDispatchSelectionRequest,
 };
 use serde_json::json;
 
@@ -1076,6 +1076,62 @@ fn orchestrator_persists_started_runtime_task_result() {
         results[0].status,
         WorkflowSchedulerTaskResultStatus::Completed
     );
+}
+
+#[test]
+fn orchestrator_preserves_dispatch_no_selection_diagnostics_on_started_runtime_task() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let mut selection_request = dispatch_selection_request_fixture();
+    selection_request.candidates.clear();
+    let task_intent = selection_request.task_intent.clone();
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(selection_request.readiness_proof.clone()),
+        )
+        .expect("admit runtime task readiness");
+    let started = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+    let selection = select_scheduler_dispatch(
+        ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
+            .expect("selection request without candidates should validate"),
+    )
+    .expect("dispatch selection should return no-selection decision")
+    .into_inner();
+
+    let failed = orchestrator
+        .fail_started_runtime_task_dispatch_selection(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &started,
+            &selection,
+        )
+        .expect("persist no-selection diagnostics");
+
+    let SchedulerTaskState::TerminalFailed { diagnostics } = failed.state else {
+        panic!("expected terminal failed runtime task");
+    };
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].code,
+        SchedulerTaskStateDiagnosticCode::SchedulerPolicyError
+    );
+    assert!(diagnostics[0].message.contains("NoCandidates"));
+    assert!(diagnostics[0].message.contains("No scheduler dispatch"));
 }
 
 #[tokio::test]

@@ -123,6 +123,10 @@ runtime dispatch candidate provider for canonical candidates. The default
 provider returns an empty candidate list, so the scheduler selector returns a
 typed no-selection diagnostic before runtime-host dispatch instead of using
 legacy graph paths, node-engine launch, or reduced execution-plan handoff.
+The scheduler task orchestrator preserves those dispatch-selection diagnostics
+on the runtime task's terminal failure state when no candidate is selected, so
+run inspection can show scheduler-owned reasons such as missing candidates
+without inventing fallback runtime choices.
 When a canonical provider is configured, runtime tasks can complete through
 the shared runtime-host execution port and persist typed scheduler task
 results, but candidate assembly remains outside the scheduler task

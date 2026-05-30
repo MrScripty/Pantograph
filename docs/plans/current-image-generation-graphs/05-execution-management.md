@@ -18101,6 +18101,41 @@ Worker rules:
     preserve scheduler no-selection diagnostics in task state, and add durable
     recovery/replay/cancellation/duplicate-dispatch prevention plus reservation
     release before real multi-run inference workloads depend on this path.
+- 2026-05-30 scheduler no-selection task diagnostics slice:
+  - Slice scope: workflow-service scheduler no-selection diagnostics only.
+    Allowed files:
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+    the scheduler README, `10-task-level-scheduler-orchestration.md`, and this
+    plan record.
+  - Implementation: added a runtime task terminal-failure path that maps
+    `SchedulerDispatchSelectionDecision` diagnostics into
+    `SchedulerTaskStateDiagnostic` records when dispatch selection returns
+    no-selection. The session runner now uses this path for scheduler
+    no-selection errors and keeps the existing generic fail-closed transition
+    for other dispatch/runtime-host failures.
+  - No-fallback/no-legacy result: no candidate synthesis, fallback runtime,
+    runtime-host call, node-engine output demand, reduced execution plan,
+    `ModelRefV2`, `model_path`, graph path, or frontend/Tauri fact was added.
+    The default no-candidate provider still stops before runtime-host dispatch,
+    but the task state now records the scheduler-owned no-selection reason.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service orchestrator_preserves_dispatch_no_selection_diagnostics_on_started_runtime_task --lib`,
+    and
+    `cargo test -p pantograph-workflow-service workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary --lib`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-workflow-service --all-features`,
+    `cargo check -p pantograph-workflow-service --no-default-features`, and
+    `git diff --check`. The targeted legacy-path search of the touched
+    scheduler/session runner files returned no matches. The only warning
+    observed is the pre-existing `set_active_run_execution_plan` dead-code
+    warning in `pantograph-workflow-service`.
+  - Remaining follow-up: production canonical candidate provider and durable
+    recovery/replay/cancellation/duplicate-dispatch prevention plus reservation
+    release remain open before real multi-run inference workloads depend on
+    this path.
 
 ### Traceability Links
 
