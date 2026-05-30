@@ -382,6 +382,17 @@ implementation can be considered complete:
    scheduler-selected runtime-host handoff or typed fail-closed diagnostics,
    project task results into requested run outputs, and remove the legacy
    whole-run output-demand path instead of preserving it as fallback.
+   Revised replan decision accepted 2026-05-29: implement option 2 first with
+   option 3 discipline. The next source slice must extract the existing
+   non-runtime-only progression loop into a dedicated workflow-service
+   scheduler session runner without changing behavior. The following slice may
+   add runtime-containing progression through the same runner: materialize
+   request source inputs, execute allowlisted non-runtime upstream tasks,
+   record typed task results, call runtime input advancement for dependent
+   runtime tasks, and then fail closed before runtime-host dispatch until the
+   dispatch-selected handoff slice is wired. The full option 3 durable runner
+   remains the target architecture and must not be invalidated by the option 2
+   extraction.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.
@@ -389,6 +400,74 @@ implementation can be considered complete:
    reservation release, and retry/defer idempotency tests.
 14. Add multi-workflow acceptance coverage proving a workflow can pause between
     tasks while another user's compatible task runs or batches.
+
+## Session Scheduler Runner Replan
+
+The current whole-run session API is too broad to absorb runtime input
+progression directly. `session_execution_api.rs` owns admission, queue waiting,
+run started/terminal diagnostics, timeout wrapping, run finalization, legacy
+runtime fail-closed behavior, and non-runtime task execution. Adding runtime
+task progression inline would mix lifecycle handling, persistence, task
+execution, diagnostics, and runtime dispatch policy in one large file.
+
+Selected path: option 2 with option 3 discipline.
+
+- **Option 2 immediate implementation:** add a focused workflow-service
+  scheduler session runner module. `run_workflow_execution_session` remains the
+  admission, timeout, terminal-event, and run-finalization wrapper. The runner
+  owns active-run task progression only: source input materialization,
+  non-runtime upstream execution, typed task-result recording, dependent task
+  unblocking, requested-output projection, and fail-closed runtime diagnostics
+  while runtime dispatch is not wired.
+- **Option 3 target architecture:** evolve the runner into the durable
+  task-level executor with task leases, replay/recovery, batching,
+  retry/defer/cancel policy, bounded queues, worker lifecycle, and
+  multi-workflow scheduling hooks. Option 2 must keep APIs and module
+  boundaries narrow enough that option 3 can replace internals without
+  changing graph, node-engine, scheduler, runtime-host, or Tauri/frontend
+  contracts.
+
+Standards gates for the option 2 runner:
+
+- Extract before extending. The first slice must move the existing
+  non-runtime-only progression loop into the runner and prove behavior is
+  unchanged with focused session tests. Do not add runtime behavior in the
+  extraction slice.
+- Keep responsibility boundaries explicit. The runner must not own queue
+  admission, graph validation, executable validation snapshot lookup, run
+  terminal event recording, runtime/device policy, dependency readiness policy,
+  runtime-host load-target resolution, or frontend/Tauri transport concerns.
+- Preserve async safety. Do not hold the active-run store lock across awaited
+  node-engine or runtime-host work. Use existing start/execute/complete/fail
+  operations so durable result/state updates stay atomic under one store lock.
+  Timeouts and cancellation remain owned by the session API wrapper until the
+  option 3 durable runner introduces explicit lease/cancel records.
+- Preserve no-fallback/no-legacy behavior. Runtime tasks must never route
+  through node-engine output demand, `PlannedInferenceExecutionHost`,
+  `ModelRefV2`, `ModelDependencyRequest`, graph `model_path`, reduced
+  execution-plan handoff synthesis, or a temporary `Ready` detour.
+- Keep runtime dispatch fail-closed until its own slice. Runtime-containing
+  progression may advance a task to `WaitingDependencyReadiness`; it must then
+  return typed diagnostics before runtime-host dispatch unless the task has
+  gone through canonical readiness admission, scheduler dispatch selection, and
+  validated runtime-host request construction.
+
+Required verification for the option 2 runner:
+
+- Focused session tests proving the extracted non-runtime-only runner preserves
+  current output projection, queue/finalization behavior, timeout handling, and
+  no calls to legacy whole-run host execution.
+- Runtime-containing session tests proving source inputs and non-runtime
+  upstream results can materialize, dependent runtime tasks can advance to
+  `WaitingDependencyReadiness`, and execution then fails closed before
+  runtime-host dispatch without legacy planned-inference launch.
+- Targeted searches over touched workflow-service files for
+  `PlannedInferenceExecutionHost`, `ModelDependencyRequest`, `ModelRefV2`,
+  `model_path`, `modelPath`, reduced execution-plan handoff synthesis, and
+  graph path repair helpers.
+- Default, all-features, and no-default-features `cargo check` for
+  `pantograph-workflow-service`, focused session/orchestrator tests, `cargo
+  fmt` checks, and `git diff --check`.
 
 ## Runtime-Host Contract Crate Replan
 

@@ -16435,6 +16435,36 @@ Worker rules:
   - Remaining follow-up: implement the dedicated session/runtime runner slice
     so upstream result recording invokes this advancement path without
     reviving old planned-inference launch behavior.
+- 2026-05-29 session scheduler runner re-plan decision recorded:
+  - Boundary: runtime input advancement is now available in the
+    workflow-service orchestrator, but wiring it inline through
+    `session_execution_api.rs` would further entangle queue admission,
+    source-input materialization, non-runtime execution, runtime fail-closed
+    behavior, diagnostics, timeout handling, and run finalization inside an
+    already-large session API file.
+  - Decision: implement option 2 first with option 3 discipline. Extract the
+    current non-runtime-only progression loop into a dedicated
+    workflow-service scheduler session runner with no behavior change, then
+    add runtime-containing progression through that runner. Runtime tasks may
+    advance to `WaitingDependencyReadiness` after materialized upstream inputs,
+    but must still fail closed before runtime-host dispatch until canonical
+    readiness admission, dispatch selection, and runtime-host request
+    construction are wired.
+  - Option 3 target retained: the runner must be shaped so it can become the
+    durable task executor with leases, replay/recovery, batching,
+    retry/defer/cancellation, bounded queues, and multi-workflow scheduling
+    hooks without changing graph, node-engine, scheduler, runtime-host, or
+    frontend/Tauri contracts.
+  - Standards alignment: extraction before extension satisfies decomposition
+    review for the large session API, keeps lifecycle/request handling
+    separate from task progression, avoids holding active-run store locks
+    across awaited execution, and preserves the no-fallback/no-legacy rule by
+    forbidding node-engine output demand, planned-inference launch,
+    `ModelRefV2`, `ModelDependencyRequest`, graph paths, reduced-plan handoff
+    synthesis, and runtime-task `Ready` detours.
+  - Plan updates: tightened Milestone 5b and
+    `10-task-level-scheduler-orchestration.md` with the runner ownership,
+    staged implementation, no-fallback gates, and verification requirements.
 
 ### Traceability Links
 

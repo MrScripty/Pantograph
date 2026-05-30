@@ -83,12 +83,21 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   include the canonical dependency readiness proof and workflow-service-owned
   materialized runtime inputs derived from validated upstream task results.
 - [ ] Wire the session/runtime runner to call workflow-service runtime input
-  advancement after upstream task results are recorded. This must be a
-  dedicated runner slice, because direct wiring through the existing
-  fail-closed runtime session branch changes legacy/session expectations and
-  risks reintroducing broad compatibility behavior. The runner must keep graph
-  editing, validation, dependency readiness, runtime input materialization, and
-  runtime-host dispatch as separate boundaries.
+  advancement after upstream task results are recorded. Selected re-plan:
+  implement option 2 first with option 3 discipline. First extract the existing
+  non-runtime-only progression loop into a dedicated workflow-service scheduler
+  session runner with no behavior change, then add runtime-containing
+  progression that materializes source inputs, executes allowlisted
+  non-runtime upstream tasks, advances dependent runtime tasks to
+  `WaitingDependencyReadiness`, and fails closed before runtime-host dispatch
+  until the dispatch slice is wired. Option 3 remains the target: a durable
+  task runner with leases, replay, batching, retry/defer, cancellation, and
+  multi-workflow scheduling hooks. Direct wiring through the existing
+  fail-closed runtime session branch is not allowed because it changes
+  legacy/session expectations and risks reintroducing broad compatibility
+  behavior. The runner must keep graph editing, validation, dependency
+  readiness, runtime input materialization, and runtime-host dispatch as
+  separate boundaries.
 - [ ] Retire node-engine planned-inference launch ownership for runtime
   inference nodes. Affected nodes must submit or reference scheduler task
   intent and consume scheduler task state/results; missing scheduler task state
