@@ -17422,6 +17422,34 @@ Worker rules:
     unsupported/not-implemented inventory providers to emit observation rows
     and call the shared projector before adding real managed-runtime provider
     facts.
+- 2026-05-30 embedded-runtime inventory observation projector adoption slice:
+  - Slice scope: changed the embedded-runtime dependency inventory service so
+    Python package probe outcomes and unsupported/not-implemented provider
+    outcomes produce typed `DependencyInventoryObservationRow` values and then
+    call the shared `pantograph-dependency-planning` projector to build the
+    readiness snapshot result.
+  - No-fallback result: successful Python readiness still comes only from the
+    existing no-shell Python probe, non-Python selected bindings still do not
+    invoke Python probes, shell commands, graph paths, Pumas package names, or
+    generic requirement-name parsing, and not-implemented provider rows now
+    aggregate to a typed top-level `NotImplemented` result.
+  - Standards result: provider I/O stays async and source-owned in
+    embedded-runtime, readiness/install/operation-state aggregation is
+    centralized in the shared contract crate, and `dependency_inventory.rs`
+    tests were moved into `dependency_inventory_tests.rs` to keep production
+    modules under the decomposition target.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    and `cargo check -p pantograph-embedded-runtime`.
+  - Line-count review: `dependency_inventory.rs` 301 lines,
+    `dependency_environment_probe_snapshot.rs` 378 lines,
+    `dependency_inventory_tests.rs` 198 lines,
+    `dependency_readiness_lifecycle_tests.rs` 443 lines, and `lib.rs` 160
+    lines.
+  - Remaining follow-up: add the first real source-owned managed-runtime
+    inventory provider from typed managed-runtime facts before runtime-feature
+    or device-toolchain provider slices.
 
 ### Traceability Links
 

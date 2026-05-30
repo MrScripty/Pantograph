@@ -466,6 +466,19 @@ Implementation progress:
   Verification passed with focused observation projection tests, the full
   dependency-planning crate test suite, crate check, formatting, and
   line-count review.
+- 2026-05-30 embedded-runtime observation projector adoption slice: adapted
+  the dependency inventory service so Python package provider output and
+  unsupported/not-implemented provider output are emitted as typed
+  per-binding observation rows, then projected through the shared
+  `pantograph-dependency-planning` projector before readiness snapshots are
+  published. This removes provider-local full-result construction from the
+  successful Python and not-implemented paths while preserving the no-shell
+  Python probe behavior. Provider `ProbeNotImplemented` now aggregates to a
+  top-level `NotImplemented` readiness result instead of an `Unavailable`
+  result with only row-level not-implemented status, so downstream callers see
+  the exact provider contract state. The production inventory module tests
+  were split into `dependency_inventory_tests.rs` to keep module sizes under
+  the decomposition target.
 
 ## Verification Strategy
 

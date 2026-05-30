@@ -191,7 +191,7 @@ async fn producer_preserves_explicit_python_environment_and_fails_closed_on_prob
     assert!(work_queue.is_empty());
     assert_eq!(
         result.readiness_state,
-        DependencyEnvironmentReadinessState::Unavailable
+        DependencyEnvironmentReadinessState::NotImplemented
     );
     assert_eq!(
         result
