@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use pantograph_dependency_environment_service::DependencyEnvironmentReadinessSnapshotProvider;
+use pantograph_dependency_environment_service::{
+    DependencyEnvironmentReadinessSnapshotProvider, DependencyReadinessWorkQueue,
+};
 
 use crate::EmbeddedRuntimeError;
 
@@ -27,14 +29,19 @@ impl Default for EmbeddedDependencyReadinessSnapshotProducerConfig {
 #[derive(Debug, Clone)]
 pub struct EmbeddedDependencyReadinessSnapshotProducer {
     snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
+    work_queue: Arc<DependencyReadinessWorkQueue>,
     config: EmbeddedDependencyReadinessSnapshotProducerConfig,
 }
 
 impl EmbeddedDependencyReadinessSnapshotProducer {
     #[must_use]
-    pub fn new(snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>) -> Self {
+    pub fn new(
+        snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
+        work_queue: Arc<DependencyReadinessWorkQueue>,
+    ) -> Self {
         Self {
             snapshot_provider,
+            work_queue,
             config: EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
         }
     }
@@ -61,6 +68,7 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
         }
 
         let snapshot_provider = self.snapshot_provider;
+        let work_queue = self.work_queue;
         let poll_interval = self.config.poll_interval;
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
         let join_handle = runtime_handle.spawn(async move {
@@ -75,8 +83,9 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
                     }
                     _ = interval.tick() => {
                         log::trace!(
-                            "dependency-readiness snapshot producer heartbeat: {} snapshots available",
-                            snapshot_provider.snapshot_count()
+                            "dependency-readiness snapshot producer heartbeat: {} snapshots available, {} work items queued",
+                            snapshot_provider.snapshot_count(),
+                            work_queue.len()
                         );
                     }
                 }
@@ -133,7 +142,9 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use pantograph_dependency_environment_service::DependencyEnvironmentReadinessSnapshotProvider;
+    use pantograph_dependency_environment_service::{
+        DependencyEnvironmentReadinessSnapshotProvider, DependencyReadinessWorkQueue,
+    };
 
     use super::{
         EmbeddedDependencyReadinessSnapshotProducer,
@@ -143,10 +154,14 @@ mod tests {
     #[tokio::test]
     async fn producer_lifecycle_shutdown_is_idempotent_and_does_not_publish_snapshots() {
         let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
-        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(snapshot_provider.clone())
-            .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
-                poll_interval: Duration::from_millis(5),
-            });
+        let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+            snapshot_provider.clone(),
+            work_queue.clone(),
+        )
+        .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: Duration::from_millis(5),
+        });
         let handle = producer
             .spawn(tokio::runtime::Handle::current())
             .expect("producer should spawn");
@@ -157,15 +172,18 @@ mod tests {
         handle.shutdown().await;
         handle.shutdown().await;
         assert_eq!(snapshot_provider.snapshot_count(), 0);
+        assert!(work_queue.is_empty());
     }
 
     #[test]
     fn producer_rejects_zero_poll_interval() {
         let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
-        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(snapshot_provider)
-            .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
-                poll_interval: Duration::ZERO,
-            });
+        let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+        let producer =
+            EmbeddedDependencyReadinessSnapshotProducer::new(snapshot_provider, work_queue)
+                .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+                    poll_interval: Duration::ZERO,
+                });
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
 
         let error = producer

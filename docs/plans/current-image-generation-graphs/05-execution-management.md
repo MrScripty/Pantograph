@@ -16813,6 +16813,30 @@ Worker rules:
   - Remaining follow-up: wire one shared queue through composition, then emit
     one work item when each runtime task enters `WaitingDependencyReadiness`
     before adding producer-side host probes and snapshot publication.
+- 2026-05-29 dependency-readiness work-queue composition slice completed:
+  - Slice scope: workflow-service dependency-readiness composition now owns a
+    shared readiness work queue beside the shared snapshot provider;
+    embedded-runtime producer lifecycle construction receives that queue; UniFFI
+    runtime construction passes the same queue; READMEs and ledgers were
+    updated.
+  - No-fallback/no-legacy result: the queue is not populated from provider
+    misses and the producer remains no-probe/no-publication. It only observes
+    queue length in heartbeat tracing and does not derive work from
+    frontend/graph/editor state, technical-fit previews, reduced execution
+    plans, runtime-host load targets, `ModelDependencyRequest`, `ModelRefV2`,
+    or path/model-path fields.
+  - Verification: `cargo test -p pantograph-workflow-service components_ --
+    --nocapture`; `cargo test -p pantograph-embedded-runtime
+    dependency_readiness_lifecycle -- --nocapture`; `cargo check -p
+    pantograph-uniffi`; `cargo check -p pantograph-workflow-service`; `cargo
+    check -p pantograph-embedded-runtime`; `cargo fmt -p
+    pantograph-workflow-service -p pantograph-embedded-runtime -p
+    pantograph-uniffi -- --check`; `git diff --check`.
+  - Caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning.
+  - Remaining follow-up: workflow-service/session runner must enqueue one typed
+    work item at each runtime task transition into
+    `WaitingDependencyReadiness` before producer-side host probes are added.
 
 ### Traceability Links
 

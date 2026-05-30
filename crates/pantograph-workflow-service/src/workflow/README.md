@@ -82,6 +82,12 @@ Runtime scheduler task graphs carry a typed `dependency_readiness_source`
 copied from the executable validation snapshot. Queue admission and readiness
 lifecycle code must consume that saved source rather than rereading draft graph
 node data, frontend state, or provider-private dependency payloads.
+Workflow dependency-readiness composition creates the shared snapshot provider
+and the shared readiness work queue before the workflow service is shared
+behind `Arc`. The queue is a producer input contract for later scheduler
+emission and embedded-runtime draining; workflow-service must not use provider
+misses, graph/editor state, technical-fit previews, runtime-host load targets,
+or legacy path data to synthesize producer work.
 Runtime-host task input materialization is workflow-service owned. It converts
 completed upstream scheduler task results into typed, path-free
 `RuntimeHostExecutionInput` values before runtime-host dispatch. Pumas model

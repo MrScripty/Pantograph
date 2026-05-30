@@ -161,6 +161,7 @@ impl FfiPantographRuntime {
         let dependency_readiness_snapshot_producer =
             EmbeddedDependencyReadinessSnapshotProducer::new(
                 dependency_readiness.snapshot_provider(),
+                dependency_readiness.work_queue(),
             )
             .spawn(tokio::runtime::Handle::current())
             .map_err(|error| {

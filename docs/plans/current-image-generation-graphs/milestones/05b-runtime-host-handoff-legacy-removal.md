@@ -818,3 +818,24 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `set_active_run_execution_plan` warning. Remaining follow-up: compose this
   queue through workflow-service/embedded-runtime construction, then emit work
   items exactly when runtime tasks enter `WaitingDependencyReadiness`.
+- 2026-05-29 dependency-readiness work-queue composition slice completed.
+  Smallest useful vertical slice: wire the shared queue through composition
+  roots and the tracked no-probe producer lifecycle without scheduler emission,
+  host probes, or snapshot publication. Allowed write set:
+  workflow-service dependency-readiness composition helper/tests,
+  embedded-runtime producer lifecycle/construction, UniFFI runtime construction,
+  crate READMEs, this milestone, and the execution-management ledger.
+  No-fallback/no-legacy result: one composition-owned queue is now paired with
+  the existing snapshot provider; the producer observes queue length only for
+  heartbeat tracing and still cannot fabricate readiness, drain work, probe
+  hosts, or adapt technical-fit/frontend/graph/runtime-host/legacy path data.
+  Verification passed: `cargo test -p pantograph-workflow-service components_
+  -- --nocapture`; `cargo test -p pantograph-embedded-runtime
+  dependency_readiness_lifecycle -- --nocapture`; `cargo check -p
+  pantograph-uniffi`; `cargo check -p pantograph-workflow-service`; `cargo
+  check -p pantograph-embedded-runtime`; `cargo fmt -p
+  pantograph-workflow-service -p pantograph-embedded-runtime -p
+  pantograph-uniffi -- --check`; `git diff --check`. Verification caveat:
+  workflow-service still emits the known unused
+  `set_active_run_execution_plan` warning. Remaining follow-up: emit one typed
+  work item when each runtime task enters `WaitingDependencyReadiness`.
