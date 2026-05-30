@@ -53,7 +53,13 @@ Generic workflow run execution now lives behind the facade in the workflow run
 API helper.
 Service construction, capacity-limit configuration, diagnostics-provider setup,
 diagnostics-ledger setup, and the session-store guard now live in the workflow
-service configuration helper. The root workflow facade tests now live in
+service configuration helper. `WorkflowDependencyReadinessComponents` is the
+backend composition helper for creating a shared snapshot-backed
+dependency-readiness provider before `WorkflowService` is shared. Configuring a
+dependency-environment provider wires both runtime readiness admission and
+graph-session dependency action resolution to the same provider; async package
+or runtime probing remains outside workflow-service. The root workflow facade
+tests now live in
 `workflow/tests.rs`; shared
 test fixture families now live under `workflow/tests/fixtures/` and are
 re-exported by `workflow/tests/fixtures.rs`. Scheduler snapshot facade coverage

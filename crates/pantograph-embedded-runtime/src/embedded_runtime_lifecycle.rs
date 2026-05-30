@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "standalone")]
 use node_engine::ExecutorExtensions;
 use pantograph_runtime_registry::SharedRuntimeRegistry;
-use pantograph_workflow_service::WorkflowRuntimeCapability;
 #[cfg(feature = "standalone")]
-use pantograph_workflow_service::WorkflowService;
+use pantograph_workflow_service::WorkflowDependencyReadinessComponents;
+use pantograph_workflow_service::WorkflowRuntimeCapability;
 #[cfg(feature = "standalone")]
 use tokio::sync::RwLock;
 
@@ -120,7 +120,8 @@ impl EmbeddedRuntime {
             )))
             .await;
 
-        let workflow_service = Arc::new(WorkflowService::new());
+        let dependency_readiness = WorkflowDependencyReadinessComponents::new();
+        let workflow_service = Arc::new(dependency_readiness.workflow_service());
         workflow_service
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
             .map_err(|error| EmbeddedRuntimeError::Initialization {

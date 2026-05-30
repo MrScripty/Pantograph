@@ -76,6 +76,9 @@ impl WorkflowService {
         mut self,
         provider: SharedDependencyEnvironmentProvider,
     ) -> Self {
+        self.graph_session_store = Arc::new(
+            GraphSessionStore::with_dependency_environment_provider(provider.clone()),
+        );
         self.dependency_readiness_provider = Arc::new(DependencyEnvironmentService::new(provider));
         self
     }

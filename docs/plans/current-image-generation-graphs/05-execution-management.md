@@ -16695,6 +16695,40 @@ Worker rules:
     tracked handles, cancellation, shutdown, retry policy, tracing, and
     production source wiring before real package/runtime probes feed the
     snapshot provider.
+- 2026-05-29 Milestone 5b dependency-readiness composition slice completed:
+  - Slice scope: workflow-service composition helper, dependency provider
+    builder wiring, standalone embedded-runtime construction, UniFFI frontend
+    HTTP/runtime construction, Rustler frontend HTTP construction, focused
+    workflow-service test, README ownership notes, and Milestone 5b records.
+  - Implementation: `WorkflowDependencyReadinessComponents` now creates the
+    shared snapshot-backed provider before `WorkflowService` is shared.
+    `WorkflowService::with_dependency_environment_provider` wires the same
+    provider into runtime readiness admission and graph-session dependency
+    action resolution. The touched production constructors now use the helper
+    instead of creating an unconfigured service.
+  - No-fallback/no-legacy gate: the slice adds no probing, runtime creation,
+    Pumas lookup, technical-fit preview consumption, `ModelDependencyRequest`,
+    `ModelRefV2`, `model_path`/`modelPath`, reduced-plan handoff synthesis, or
+    legacy execution branch. Missing snapshots still fail closed.
+  - Discovered issue fixed: Rustler frontend HTTP still initialized
+    `WorkflowErrorEnvelope` without `diagnostics`; the initializer now matches
+    the current contract.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    components_create_empty_snapshot_provider_before_service_sharing --
+    --nocapture`; `cargo check -p pantograph-workflow-service`; `cargo check
+    -p pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; `cargo check -p
+    pantograph-embedded-runtime --features standalone`; `cargo check -p
+    pantograph-uniffi`; `cargo check -p pantograph-uniffi
+    --no-default-features --features frontend-http`; `cargo check -p
+    pantograph_rustler --features frontend-http`; `cargo fmt -p
+    pantograph-workflow-service -p pantograph-embedded-runtime -p
+    pantograph-uniffi -p pantograph_rustler -- --check`; and `git diff
+    --check`.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning. Remaining follow-up: implement
+    the tracked async readiness snapshot producer lifecycle before real
+    package/runtime probes can publish production snapshots.
 
 ### Traceability Links
 

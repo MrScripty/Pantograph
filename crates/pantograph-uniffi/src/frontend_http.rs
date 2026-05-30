@@ -3,14 +3,16 @@ use std::sync::{Arc, LazyLock};
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
-    ClientSessionResumeRequest, WorkflowCapabilitiesRequest, WorkflowErrorCode,
-    WorkflowErrorEnvelope, WorkflowPreflightRequest, WorkflowService, WorkflowServiceError,
+    ClientSessionResumeRequest, WorkflowCapabilitiesRequest, WorkflowDependencyReadinessComponents,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowPreflightRequest, WorkflowService,
+    WorkflowServiceError,
 };
 
 use super::{FfiError, FfiPumasApi};
 
 static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(|| {
-    WorkflowService::with_ephemeral_attribution_store()
+    WorkflowDependencyReadinessComponents::new()
+        .ephemeral_attribution_workflow_service()
         .expect("frontend HTTP attribution store should initialize")
 });
 

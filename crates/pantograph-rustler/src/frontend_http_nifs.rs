@@ -2,8 +2,8 @@ use std::sync::LazyLock;
 
 use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
-    ClientSessionResumeRequest, WorkflowCapabilitiesRequest, WorkflowPreflightRequest,
-    WorkflowService,
+    ClientSessionResumeRequest, WorkflowCapabilitiesRequest, WorkflowDependencyReadinessComponents,
+    WorkflowPreflightRequest, WorkflowService,
 };
 use rustler::{NifResult, ResourceArc};
 
@@ -14,7 +14,8 @@ use crate::workflow_host_contract::{
 };
 
 static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(|| {
-    WorkflowService::with_ephemeral_attribution_store()
+    WorkflowDependencyReadinessComponents::new()
+        .ephemeral_attribution_workflow_service()
         .expect("frontend HTTP attribution store should initialize")
 });
 

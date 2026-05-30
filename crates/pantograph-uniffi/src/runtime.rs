@@ -9,10 +9,10 @@ use pantograph_workflow_service::{
     ArtifactFormatSettingsUpdateRequest, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
     BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
     ClientSessionResumeRequest, NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest,
-    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowDependencyReadinessComponents, WorkflowErrorCode, WorkflowErrorEnvelope,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueuePushFrontRequest,
     WorkflowExecutionSessionQueueReprioritizeRequest, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStatusRequest, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
@@ -155,8 +155,10 @@ impl FfiPantographRuntime {
                 format!("failed to open workflow artifact store: {error}"),
             )
         })?;
+        let dependency_readiness = WorkflowDependencyReadinessComponents::new();
         let workflow_service = Arc::new(
-            WorkflowService::with_ephemeral_attribution_store()
+            dependency_readiness
+                .ephemeral_attribution_workflow_service()
                 .map_err(map_workflow_service_error)?
                 .with_artifact_format_settings_path(
                     config.app_data_dir.join("artifact-format-settings.json"),

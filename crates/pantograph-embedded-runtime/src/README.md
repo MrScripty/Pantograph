@@ -14,7 +14,7 @@ packages.
 | `embedded_data_graph_execution.rs` | Owns embedded-runtime data-graph execution, terminal-node demand handling, runtime extension injection, and data-graph output collection. |
 | `embedded_edit_session_execution.rs` | Owns embedded-runtime edit-session graph execution, embedding runtime preparation, workflow event emission, runtime trace projection, and inference-runtime restore coordination. |
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
-| `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, registry injection, accessors, and shutdown coordination. |
+| `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, dependency-readiness snapshot provider composition for standalone services, registry injection, accessors, and shutdown coordination. |
 | `embedded_workflow_graph_api.rs` | Owns embedded-runtime public graph persistence, edit-session, graph mutation, connection, and insert-preview facade methods that forward into the workflow service. |
 | `embedded_workflow_host.rs` | Owns the embedded workflow host implementation that adapts host runtime, model metadata, runtime capabilities, session loading, inspection, technical-fit, and workflow runs into workflow-service contracts. |
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |
@@ -109,6 +109,11 @@ Pumas-specific dependency resolution.
 - Runtime diagnostics and metrics fixtures must not report bare `diffusers` as
   an observed executable runtime. Use `pytorch` for the executable runtime and
   `pytorch.diffusers` only where a runtime-variant distinction is needed.
+- Standalone and binding-owned workflow services must be constructed with the
+  shared dependency-readiness snapshot provider before the service is wrapped in
+  `Arc`. The provider is a synchronous no-probe consumer until an
+  embedded-runtime or infrastructure lifecycle owner publishes validated
+  snapshots; missing snapshots must continue to fail closed.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

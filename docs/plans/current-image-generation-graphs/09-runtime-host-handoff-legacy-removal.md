@@ -115,27 +115,33 @@ Use the clean replacement path:
    `SchedulerRuntimeHandoff`, scheduler dispatch decision, dependency
    readiness proof, and workflow-service-owned materialized runtime inputs.
    It must carry no `ModelRefV2` and no reduced execution-plan projection.
-3. Add runtime-host load-target resolution from Pumas refs/artifact identity to
+3. Create the shared dependency-readiness snapshot provider in the backend
+   composition root before `WorkflowService` is shared, wire the same provider
+   into runtime readiness admission and graph-session dependency actions, and
+   keep async host package/runtime probing in an embedded-runtime or
+   infrastructure lifecycle owner. Until that producer publishes validated
+   snapshots, missing readiness must fail closed.
+4. Add runtime-host load-target resolution from Pumas refs/artifact identity to
    executable facts at the host boundary only.
-4. Add a scheduler-owned runtime-host execution port and dispatch orchestrator.
+5. Add a scheduler-owned runtime-host execution port and dispatch orchestrator.
    The orchestrator is the only successful caller of runtime-host execution and
    must pass the actual validated `SchedulerRuntimeHandoff`.
-5. Complete task-level scheduler orchestration from
+6. Complete task-level scheduler orchestration from
    `10-task-level-scheduler-orchestration.md` so production session execution
    has durable task state, task results, and dispatch-selected handoff at the
    task boundary.
-6. Retire planned-inference launch from node-engine. Inference nodes become
+7. Retire planned-inference launch from node-engine. Inference nodes become
    scheduler task-intent producers and consumers of scheduler task state/results
    rather than callers of `PlannedInferenceExecutionHost`.
-7. Replace PyTorch, llama.cpp, and audio node execution so successful execution
+8. Replace PyTorch, llama.cpp, and audio node execution so successful execution
    no longer reads graph `model_path`, reduced execution-plan projections, or
    emits `ModelRefV2`.
-8. Replace node-engine dependency preflight output with typed readiness proof
+9. Replace node-engine dependency preflight output with typed readiness proof
    or scheduler task state consumption. Old preflight APIs must fail closed
    with typed diagnostics until their callers are replaced; they must not
    translate canonical readiness back into `ModelDependencyRequest`,
    `ModelRefV2`, or path-shaped request fields.
-9. Delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+10. Delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
    `build_model_ref_v2`, path repair helpers, direct old runtime task success
    fixtures, and path-shaped tests once their successful production callers are
    gone.

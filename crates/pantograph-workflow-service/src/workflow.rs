@@ -25,6 +25,7 @@ mod artifact_settings_api;
 mod artifact_store;
 mod attribution_api;
 mod contracts;
+mod dependency_readiness_composition;
 #[allow(dead_code)]
 mod diagnostic_errors;
 mod diagnostics_api;
@@ -68,6 +69,7 @@ pub use self::artifact_store::{
     ArtifactWriteRequest,
 };
 pub use self::contracts::*;
+pub use self::dependency_readiness_composition::WorkflowDependencyReadinessComponents;
 pub use self::diagnostics_api::{
     ResolvedNodeIoDirection, ResolvedNodeIoProvenanceKind, ResolvedNodeIoRecord,
     ResolvedNodeIoResolution, WorkflowDiagnosticEventRecordResponse,
