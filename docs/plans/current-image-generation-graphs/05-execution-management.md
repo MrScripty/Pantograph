@@ -16754,6 +16754,22 @@ Worker rules:
     `set_active_run_execution_plan` warning. Remaining follow-up: wire real
     host package/runtime probes behind the lifecycle and publish validated
     readiness snapshots with retry/backoff and typed failure diagnostics.
+- 2026-05-29 re-plan boundary reached before real dependency-readiness snapshot
+  publication:
+  - Finding: the new lifecycle has a tracked producer task and a shared
+    snapshot provider, but no canonical source of validated readiness work.
+    Implementing real probes now would require either hidden provider-side
+    journaling, scheduler-state polling, technical-fit preview reuse, or legacy
+    dependency request adaptation.
+  - No-fallback/no-legacy gate: do not derive producer work from frontend/graph
+    data, technical-fit previews, `ModelDependencyRequest`, `ModelRefV2`,
+    `model_path`/`modelPath`, reduced execution plans, or runtime-host load
+    targets.
+  - Options recorded in Milestone 5b: provider miss journal, scheduler/workflow
+    readiness work-item queue, or producer scan of active scheduler state.
+    Recommended next design is a typed backend-owned readiness work-item queue
+    emitted when scheduler tasks enter `WaitingDependencyReadiness` and drained
+    by the embedded-runtime lifecycle producer.
 
 ### Traceability Links
 

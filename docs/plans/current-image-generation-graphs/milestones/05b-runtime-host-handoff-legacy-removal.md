@@ -749,3 +749,23 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `set_active_run_execution_plan` warning. Remaining follow-up: add the real
   host package/runtime probe producer behind this lifecycle with retry/backoff,
   typed probe failures, and validated snapshot publication.
+- 2026-05-29 re-plan boundary before real dependency-readiness snapshot
+  publication: the lifecycle shell has a provider and tracked task owner, but
+  no standards-compliant source of readiness work. A real producer must know
+  which validated `DependencyEnvironmentRequest` values to probe without
+  blocking the synchronous provider, scanning frontend/graph data, deriving
+  requests from technical-fit preview facts, or adapting legacy
+  `ModelDependencyRequest`/`ModelRefV2`/`model_path` data. Required decision:
+  choose the request-source contract before implementing host probes. Options:
+  (1) record provider misses into an in-memory request journal for the producer
+  to drain; lower integration cost but risks hidden side effects in the
+  synchronous provider and weak scheduler correlation; (2) have workflow-service
+  or scheduler enqueue explicit readiness work items when runtime tasks enter
+  `WaitingDependencyReadiness`; clearer ownership and task correlation, but
+  requires a new shared work-item contract and queue lifecycle; (3) have the
+  producer periodically scan active scheduler task state; avoids a queue but
+  couples producer polling to scheduler internals and is harder to test
+  deterministically. Recommendation for the next re-plan: use option 2 with a
+  typed backend-owned readiness work-item queue, produced when scheduler task
+  state reaches dependency-readiness admission and consumed by the
+  embedded-runtime lifecycle producer.
