@@ -864,3 +864,24 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `set_active_run_execution_plan` warning. Remaining follow-up: make the
   embedded-runtime producer drain queued work and publish typed unavailable
   snapshots before adding real host probes.
+- 2026-05-29 dependency-readiness unavailable snapshot publication slice
+  completed. Smallest useful vertical slice: let the no-probe producer drain
+  queued readiness work and publish explicit non-ready snapshots so the
+  queue-to-provider path is exercised before host package/runtime probes are
+  implemented. Allowed write set: dependency-environment snapshot helper and
+  README, embedded-runtime producer lifecycle/tests/Cargo dev-dependency and
+  README, this milestone, and execution-management ledger. No-fallback/no-legacy
+  result: the producer publishes `Unavailable` readiness diagnostics only; it
+  does not mark dependencies ready, does not probe hosts, and does not derive
+  work or readiness from provider misses, graph/editor/frontend state,
+  technical-fit previews, reduced execution plans, runtime-host load targets,
+  `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields.
+  Verification passed: `cargo test -p pantograph-embedded-runtime
+  dependency_readiness_lifecycle -- --nocapture`; `cargo test -p
+  pantograph-dependency-environment-service -- --nocapture`; `cargo check -p
+  pantograph-embedded-runtime`; `cargo fmt -p
+  pantograph-dependency-environment-service -p pantograph-embedded-runtime --
+  --check`; `git diff --check`. Verification caveat: workflow-service still
+  emits the known unused `set_active_run_execution_plan` warning through
+  embedded-runtime checks. Remaining follow-up: replace unavailable publication
+  with real host package/runtime probes plus retry/backoff/failure diagnostics.

@@ -16862,6 +16862,28 @@ Worker rules:
   - Remaining follow-up: update the embedded-runtime producer lifecycle to
     drain queued items and publish typed unavailable snapshots, then replace
     unavailable snapshot publication with real host package/runtime probes.
+- 2026-05-29 dependency-readiness unavailable snapshot publication slice
+  completed:
+  - Slice scope: dependency-environment service gained a work-item to
+    unavailable-snapshot helper; embedded-runtime producer lifecycle drains
+    queued work into validated unavailable snapshots; focused runtime/service
+    tests, READMEs, and ledgers were updated.
+  - No-fallback/no-legacy result: queued work still comes only from backend
+    validated requests. The producer publishes non-ready `Unavailable`
+    diagnostics only and does not probe hosts, publish ready snapshots, or
+    derive facts from provider misses, frontend/graph/editor state,
+    technical-fit previews, reduced execution plans, runtime-host load targets,
+    `ModelDependencyRequest`, `ModelRefV2`, or path/model-path fields.
+  - Verification: `cargo test -p pantograph-embedded-runtime
+    dependency_readiness_lifecycle -- --nocapture`; `cargo test -p
+    pantograph-dependency-environment-service -- --nocapture`; `cargo check -p
+    pantograph-embedded-runtime`; `cargo fmt -p
+    pantograph-dependency-environment-service -p pantograph-embedded-runtime --
+    --check`; `git diff --check`.
+  - Caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning through embedded-runtime checks.
+  - Remaining follow-up: replace unavailable publication with real host
+    package/runtime probes, retry/backoff, and typed failure diagnostics.
 
 ### Traceability Links
 

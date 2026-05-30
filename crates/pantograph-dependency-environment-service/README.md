@@ -57,6 +57,11 @@ dependency-environment request, bounded diagnostic context, retry/freshness
 policy, and cancellation scope without making the snapshot provider record
 misses.
 
+`DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item` lets a
+producer publish an explicit non-ready snapshot for queued work before real host
+probe evidence exists. This proves the queue-to-provider path without
+fabricating successful readiness.
+
 ## Alternatives Rejected
 - Reuse node-engine `ModelDependencyRequest`: rejected because it preserves
   path-shaped legacy behavior.
@@ -87,6 +92,8 @@ misses.
 - Readiness work queue items are task-correlated producer inputs, not readiness
   proof. They do not publish snapshots, probe hosts, or make dependency
   readiness successful.
+- Work-item unavailable snapshots are fail-closed diagnostics until a real host
+  package/runtime probe replaces them with validated readiness evidence.
 
 ## Revisit Triggers
 - Pumas exposes concrete dependency-environment resolve/check/install APIs.

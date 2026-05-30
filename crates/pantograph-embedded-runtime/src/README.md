@@ -114,9 +114,10 @@ Pumas-specific dependency resolution.
   shared dependency-readiness snapshot provider and readiness work queue before
   the service is wrapped in `Arc`. Embedded runtimes that own the matching
   provider and queue must also own the tracked dependency-readiness snapshot
-  producer lifecycle. The current lifecycle is no-probe, observes queued work
-  only for heartbeat tracing, and publishes no snapshots; missing snapshots
-  must continue to fail closed until real host probes are wired.
+  producer lifecycle. The current lifecycle drains queued work into explicit
+  unavailable snapshots and performs no host package/runtime probes; missing or
+  unavailable snapshots must continue to fail closed until real host probes are
+  wired.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

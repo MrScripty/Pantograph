@@ -66,4 +66,5 @@ tokio-stream = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 
 [dev-dependencies]
+pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
 tempfile.workspace = true

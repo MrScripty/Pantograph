@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use pantograph_dependency_environment_service::{
-    DependencyEnvironmentReadinessSnapshotProvider, DependencyReadinessWorkQueue,
+    DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
+    DependencyReadinessWorkQueue,
 };
 
 use crate::EmbeddedRuntimeError;
@@ -82,6 +83,18 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
                         }
                     }
                     _ = interval.tick() => {
+                        while let Some(item) = work_queue.pop_next() {
+                            match DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item(&item)
+                                .and_then(|snapshot| snapshot_provider.insert_snapshot(snapshot))
+                            {
+                                Ok(()) => {}
+                                Err(error) => {
+                                    log::error!(
+                                        "dependency-readiness snapshot producer failed to publish queued unavailable snapshot: {error}"
+                                    );
+                                }
+                            }
+                        }
                         log::trace!(
                             "dependency-readiness snapshot producer heartbeat: {} snapshots available, {} work items queued",
                             snapshot_provider.snapshot_count(),
@@ -143,7 +156,13 @@ mod tests {
     use std::time::Duration;
 
     use pantograph_dependency_environment_service::{
-        DependencyEnvironmentReadinessSnapshotProvider, DependencyReadinessWorkQueue,
+        DependencyEnvironmentProvider, DependencyEnvironmentReadinessSnapshotProvider,
+        DependencyReadinessTaskId, DependencyReadinessWorkItem,
+        DependencyReadinessWorkItemProvenance, DependencyReadinessWorkQueue,
+        DependencyReadinessWorkflowRunId, DependencyReadinessWorkflowSessionId,
+    };
+    use pantograph_dependency_planning::{
+        DependencyEnvironmentReadinessState, ValidatedDependencyEnvironmentRequest,
     };
 
     use super::{
@@ -175,6 +194,34 @@ mod tests {
         assert!(work_queue.is_empty());
     }
 
+    #[tokio::test]
+    async fn producer_drains_work_queue_into_unavailable_snapshots() {
+        let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
+        let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+        let request = validated_request();
+        work_queue.enqueue(work_item(request.clone()));
+        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+            snapshot_provider.clone(),
+            work_queue.clone(),
+        )
+        .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: Duration::from_millis(5),
+        });
+        let handle = producer
+            .spawn(tokio::runtime::Handle::current())
+            .expect("producer should spawn");
+
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        assert!(work_queue.is_empty());
+        assert_eq!(snapshot_provider.snapshot_count(), 1);
+        assert_eq!(
+            snapshot_provider.resolve(&request).readiness_state,
+            DependencyEnvironmentReadinessState::Unavailable
+        );
+        handle.shutdown().await;
+    }
+
     #[test]
     fn producer_rejects_zero_poll_interval() {
         let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
@@ -191,5 +238,25 @@ mod tests {
             .expect_err("zero interval should be rejected");
 
         assert!(error.to_string().contains("poll interval"));
+    }
+
+    fn work_item(request: ValidatedDependencyEnvironmentRequest) -> DependencyReadinessWorkItem {
+        DependencyReadinessWorkItem::new(
+            DependencyReadinessWorkItemProvenance::new(
+                DependencyReadinessWorkflowSessionId::parse("session.001").expect("session id"),
+                DependencyReadinessWorkflowRunId::parse("run.001").expect("run id"),
+                DependencyReadinessTaskId::parse("infer").expect("task id"),
+            ),
+            request,
+        )
+    }
+
+    fn validated_request() -> ValidatedDependencyEnvironmentRequest {
+        let value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_resolve_request.json"
+        ))
+        .expect("request fixture should parse");
+        ValidatedDependencyEnvironmentRequest::try_from(value)
+            .expect("request fixture should validate")
     }
 }

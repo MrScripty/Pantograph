@@ -11,7 +11,7 @@ use pantograph_dependency_planning::{
     ValidatedDependencyEnvironmentResult,
 };
 
-use crate::DependencyEnvironmentProvider;
+use crate::{DependencyEnvironmentProvider, DependencyReadinessWorkItem};
 
 /// Freshness state for a backend-owned dependency-readiness snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +57,23 @@ impl DependencyEnvironmentReadinessSnapshot {
         };
         snapshot.validate()?;
         Ok(snapshot)
+    }
+
+    /// Creates a fresh non-ready snapshot for queued work that has not yet
+    /// been probed by a host package/runtime producer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the generated snapshot is not internally
+    /// consistent with the queued request.
+    pub fn unavailable_for_work_item(
+        item: &DependencyReadinessWorkItem,
+    ) -> Result<Self, DependencyEnvironmentSnapshotStoreError> {
+        Self::for_request(
+            &item.request,
+            producer_unavailable_result(&item.request),
+            DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+        )
     }
 
     fn validate(&self) -> Result<(), DependencyEnvironmentSnapshotStoreError> {
@@ -269,6 +286,20 @@ fn mismatched_snapshot_result(
         DependencyPlanningDiagnosticCode::InvalidRequest,
         "Dependency readiness snapshot identity matched but request details did not.",
         "dependency_environment.snapshot.key",
+    )
+}
+
+fn producer_unavailable_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentResult {
+    diagnostic_result(
+        request,
+        DependencyEnvironmentReadinessState::Unavailable,
+        DependencyEnvironmentValidationState::Unavailable,
+        DependencyEnvironmentFailureState::RequirementsUnavailable,
+        DependencyPlanningDiagnosticCode::RuntimeUnavailable,
+        "Dependency readiness producer has not published host probe evidence yet.",
+        "dependency_environment.producer",
     )
 }
 

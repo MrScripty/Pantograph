@@ -32,6 +32,8 @@ Put readiness producer work items in `work_queue.rs`. The queue is synchronous
 and in-memory for this slice; it establishes the shared DTO and deterministic
 dedupe/dequeue behavior before workflow-service emits items or embedded-runtime
 drains them.
+Snapshot helpers can convert queued work into explicit unavailable snapshots so
+producers can publish fail-closed diagnostics before real host probes exist.
 
 The snapshot provider keys readiness by canonical stable request identity:
 action, path-free dependency identity key, dependency requirements id, and
@@ -60,6 +62,8 @@ the dependency environment requirements.
 - Readiness work items carry scheduler/task provenance and validated requests;
   they do not represent readiness success and do not invoke probes by
   themselves.
+- Unavailable snapshots created from work items are diagnostics, not fallback
+  success paths.
 
 ## Revisit Triggers
 - Production Pumas provider implementation is added.

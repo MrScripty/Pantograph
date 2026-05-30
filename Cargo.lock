@@ -7397,6 +7397,7 @@ dependencies = [
  "node-engine",
  "once_cell",
  "pantograph-dependency-environment-service",
+ "pantograph-dependency-planning",
  "pantograph-diagnostics-ledger",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
