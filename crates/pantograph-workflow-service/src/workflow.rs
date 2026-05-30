@@ -47,6 +47,7 @@ mod session_io_artifacts;
 mod session_lifecycle_api;
 mod session_queue_api;
 mod session_runtime;
+mod session_scheduler_runner;
 mod task_binding_resolution;
 mod task_execution_classification;
 mod task_graph;

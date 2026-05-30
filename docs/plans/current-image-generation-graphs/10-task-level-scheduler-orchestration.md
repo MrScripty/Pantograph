@@ -392,7 +392,11 @@ implementation can be considered complete:
    runtime tasks, and then fail closed before runtime-host dispatch until the
    dispatch-selected handoff slice is wired. The full option 3 durable runner
    remains the target architecture and must not be invalidated by the option 2
-   extraction.
+   extraction. Extraction-only slice completed 2026-05-29: the existing
+   non-runtime-only progression loop now lives in
+   `workflow/session_scheduler_runner.rs`; `session_execution_api.rs` remains
+   the admission, timeout, terminal-event, and run-finalization wrapper. No
+   runtime-containing progression was added in that slice.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.

@@ -407,3 +407,39 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   Remaining follow-up: implement the dedicated session/runtime runner slice so
   upstream result recording invokes this advancement path without reviving old
   planned-inference launch behavior.
+- 2026-05-29 session scheduler runner extraction slice completed. Smallest
+  useful vertical slice: extract the existing non-runtime-only session
+  progression loop from `session_execution_api.rs` into
+  `workflow/session_scheduler_runner.rs` with no runtime-containing behavior
+  change. Allowed write set: `crates/pantograph-workflow-service/src/workflow.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+  `crates/pantograph-workflow-service/src/workflow/README.md`, this milestone
+  file, `10-task-level-scheduler-orchestration.md`, and execution notes.
+  No-fallback confirmation: the slice only moves existing non-runtime source
+  materialization, non-runtime task execution, task-result projection, and
+  no-legacy whole-run host avoidance into a dedicated runner. It does not add
+  runtime progression, runtime-host dispatch, node-engine output demand,
+  planned-inference launch, reduced-plan handoff synthesis, `ModelRefV2`,
+  `ModelDependencyRequest`, graph paths, or a runtime `Ready` detour.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner
+  --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+  --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`;
+  `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+  pantograph-workflow-service --all-features`; `cargo check -p
+  pantograph-workflow-service --no-default-features`; targeted retired
+  path/model-ref source search over touched session runner/API files; and
+  `git diff --check`. Verification caveat: `cargo check -p
+  pantograph-workflow-service` still emits the known unused
+  `set_active_run_execution_plan` warning. Verification deviation: the broad
+  `cargo test -p pantograph-workflow-service workflow::tests::session_execution
+  --lib -- --nocapture` suite still has legacy expectation failures around old
+  runtime load/whole-run host behavior and missing executable validation
+  snapshots; this extraction slice did not widen scope to rewrite those tests.
+  Remaining follow-up: add runtime-containing progression through the runner
+  in the next slice.

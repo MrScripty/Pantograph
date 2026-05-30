@@ -16465,6 +16465,41 @@ Worker rules:
   - Plan updates: tightened Milestone 5b and
     `10-task-level-scheduler-orchestration.md` with the runner ownership,
     staged implementation, no-fallback gates, and verification requirements.
+- 2026-05-29 Milestone 5b session scheduler runner extraction slice
+  completed:
+  - Slice scope: workflow-service session execution facade, new
+    `session_scheduler_runner.rs` module, workflow README, and plan records.
+  - Implementation: moved the existing non-runtime-only active-run progression
+    loop out of `session_execution_api.rs` into a dedicated
+    `WorkflowSchedulerSessionRunner`. The session API still owns queue
+    admission, timeout wrapping, terminal-event recording, and run
+    finalization. No runtime-containing progression was added in this slice.
+  - No-fallback/no-legacy gate: this is extraction-only. It does not route
+    runtime inference through node-engine output demand, planned-inference
+    launch, reduced execution-plan handoff synthesis, `ModelRefV2`,
+    `ModelDependencyRequest`, graph paths, or a runtime `Ready` detour.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_lifecycle_create_run_close
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner
+    --lib -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch
+    --lib -- --nocapture`; `cargo check -p pantograph-workflow-service`;
+    `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+    pantograph-workflow-service --all-features`; `cargo check -p
+    pantograph-workflow-service --no-default-features`; targeted retired
+    path/model-ref source search over touched session runner/API files; and
+    `git diff --check`.
+  - Verification caveat: `cargo check -p pantograph-workflow-service` still
+    emits the known unused `set_active_run_execution_plan` warning.
+  - Verification deviation: the broad `cargo test -p pantograph-workflow-service
+    workflow::tests::session_execution --lib -- --nocapture` suite still has
+    legacy expectation failures around old runtime load/whole-run host
+    behavior and missing executable validation snapshots. This slice did not
+    rewrite those tests because its approved scope was extraction-only.
+  - Remaining follow-up: add runtime-containing progression through
+    `WorkflowSchedulerSessionRunner` in the next slice.
 
 ### Traceability Links
 
