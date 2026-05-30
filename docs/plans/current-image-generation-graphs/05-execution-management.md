@@ -17286,6 +17286,19 @@ Worker rules:
     line-count review, and `git diff --check`. `cargo check` still reports the
     pre-existing `set_active_run_execution_plan` dead-code warning in
     `pantograph-workflow-service`.
+- 2026-05-30 dependency inventory non-Python dispatch slice:
+  - Slice scope: added explicit inventory dispatch so Python-only payloads
+    still route to the Python provider, while selected non-Python requirement
+    or binding kinds publish provider-owned `NotImplemented` readiness
+    diagnostics and binding statuses without invoking the Python probe.
+  - No-fallback result: non-Python kinds are no longer shaped as Python probe
+    invalid-shape errors and are not checked through Python, shell commands,
+    generic names, graph paths, Pumas package names, or legacy preflight.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`, and
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`.
+    `cargo check -p pantograph-embedded-runtime`, direct-probe search,
+    line-count review, and `git diff --check`.
 
 ### Traceability Links
 

@@ -130,10 +130,11 @@ Pumas-specific dependency resolution.
   request environment refs or selected binding profiles must be preserved on
   probe requests. Explicit Python probe environments resolve only through the
   configured Python env map, while default-host Python is valid only when the
-  canonical payload has no explicit environment/profile identity. Unsupported
-  requirement or binding kinds and unmapped explicit probe environments publish
-  typed diagnostics instead of falling back to graph data, paths, inferred
-  package names, or host Python.
+  canonical payload has no explicit environment/profile identity. Selected
+  non-Python requirement or binding kinds publish provider-owned
+  not-implemented diagnostics without invoking Python probes. Unmapped explicit
+  probe environments publish typed diagnostics instead of falling back to graph
+  data, paths, inferred package names, or host Python.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

@@ -107,7 +107,7 @@ fn result_from_python_snapshot(
         diagnostics: Vec::new(),
     }
 }
-fn result_from_probe_failures(
+pub(crate) fn result_from_probe_failures(
     item: &DependencyReadinessWorkItem,
     payload: DependencyRequirementsPayload,
     failures: Vec<PackageReadinessProbeFailure>,

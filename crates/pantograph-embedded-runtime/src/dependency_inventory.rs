@@ -4,20 +4,28 @@
 //! module owns provider dispatch for host dependency observations so concrete
 //! probes stay behind source-owned infrastructure boundaries.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use inference::{CapabilityAvailabilityId, CapabilityAvailabilityReason};
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotStatus,
     DependencyReadinessWorkItem, DependencyRequirementsPayload,
 };
-use pantograph_dependency_planning::DependencyEnvironmentResult;
+use pantograph_dependency_planning::{
+    DependencyEnvironmentKind, DependencyEnvironmentResult, DependencyRequirementKind,
+};
 
 use crate::dependency_environment_probe_selector::python_probe_request_for_payload;
 use crate::dependency_environment_probe_snapshot::{
     dependency_environment_result_from_probe_outcome, invalid_probe_shape_result,
+    result_from_probe_failures,
 };
-use crate::package_readiness_provider::PackageReadinessProbeRunner;
+use crate::package_readiness_provider::{
+    PackageReadinessProbeFailure, PackageReadinessProbeRunner,
+    PackageReadinessProviderDiagnosticCode,
+};
 use crate::python_package_readiness_probe::ProcessPythonPackageReadinessProbeRunner;
 
 /// Request context passed from the snapshot producer to dependency inventory.
@@ -79,8 +87,11 @@ impl DependencyInventoryService {
     pub fn from_package_probe_runner(
         package_probe_runner: Arc<dyn PackageReadinessProbeRunner>,
     ) -> Self {
-        Self::new(Arc::new(PythonPackageDependencyInventoryProvider::new(
+        let python_provider = Arc::new(PythonPackageDependencyInventoryProvider::new(
             package_probe_runner,
+        ));
+        Self::new(Arc::new(DependencyInventoryDispatchProvider::new(
+            python_provider,
         )))
     }
 
@@ -99,6 +110,31 @@ impl DependencyInventoryService {
             observation.result,
             DependencyEnvironmentReadinessSnapshotStatus::Fresh,
         )
+    }
+}
+
+struct DependencyInventoryDispatchProvider {
+    python_provider: Arc<dyn DependencyInventoryProvider>,
+    not_implemented_provider: NotImplementedDependencyInventoryProvider,
+}
+
+impl DependencyInventoryDispatchProvider {
+    fn new(python_provider: Arc<dyn DependencyInventoryProvider>) -> Self {
+        Self {
+            python_provider,
+            not_implemented_provider: NotImplementedDependencyInventoryProvider,
+        }
+    }
+}
+
+#[async_trait]
+impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
+    async fn observe(&self, request: DependencyInventoryRequest) -> DependencyInventoryObservation {
+        if selected_payload_is_python_only(&request.payload) {
+            self.python_provider.observe(request).await
+        } else {
+            self.not_implemented_provider.observe(request).await
+        }
     }
 }
 
@@ -132,6 +168,95 @@ impl DependencyInventoryProvider for PythonPackageDependencyInventoryProvider {
             Err(error) => invalid_probe_shape_result(&request.item, &request.payload, error),
         };
         DependencyInventoryObservation::new(result)
+    }
+}
+
+struct NotImplementedDependencyInventoryProvider;
+
+#[async_trait]
+impl DependencyInventoryProvider for NotImplementedDependencyInventoryProvider {
+    async fn observe(&self, request: DependencyInventoryRequest) -> DependencyInventoryObservation {
+        let failure = PackageReadinessProbeFailure::new(
+            PackageReadinessProviderDiagnosticCode::ProbeNotImplemented,
+            non_python_dependency_id(&request.payload),
+            CapabilityAvailabilityReason::parse(&not_implemented_reason(&request.payload))
+                .expect("inventory provider not implemented reason is valid"),
+        );
+        DependencyInventoryObservation::new(result_from_probe_failures(
+            &request.item,
+            request.payload,
+            vec![failure],
+        ))
+    }
+}
+
+fn selected_payload_is_python_only(payload: &DependencyRequirementsPayload) -> bool {
+    let requirement_by_name = payload
+        .requirements
+        .iter()
+        .map(|requirement| (requirement.name.clone(), requirement))
+        .collect::<BTreeMap<_, _>>();
+    let selected_ids = payload.selected_binding_ids.iter().collect::<BTreeSet<_>>();
+
+    payload.bindings.iter().all(|binding| {
+        if !selected_ids.contains(&binding.binding_id) {
+            return true;
+        }
+        binding.environment_kind == DependencyEnvironmentKind::Python
+            && requirement_by_name
+                .get(&binding.requirement_name)
+                .is_some_and(|requirement| {
+                    requirement.kind == DependencyRequirementKind::PythonPackage
+                })
+    })
+}
+
+fn non_python_dependency_id(
+    payload: &DependencyRequirementsPayload,
+) -> Option<CapabilityAvailabilityId> {
+    payload
+        .requirements
+        .iter()
+        .find(|requirement| requirement.kind != DependencyRequirementKind::PythonPackage)
+        .and_then(|requirement| CapabilityAvailabilityId::parse(requirement.name.as_str()).ok())
+}
+
+fn not_implemented_reason(payload: &DependencyRequirementsPayload) -> String {
+    let kind = payload
+        .requirements
+        .iter()
+        .find(|requirement| requirement.kind != DependencyRequirementKind::PythonPackage)
+        .map(|requirement| requirement_kind_label(requirement.kind))
+        .or_else(|| {
+            payload
+                .bindings
+                .iter()
+                .find(|binding| binding.environment_kind != DependencyEnvironmentKind::Python)
+                .map(|binding| environment_kind_label(binding.environment_kind))
+        })
+        .unwrap_or("unknown");
+    format!("Dependency inventory provider for {kind} requirements is not implemented.")
+}
+
+fn requirement_kind_label(kind: DependencyRequirementKind) -> &'static str {
+    match kind {
+        DependencyRequirementKind::PythonPackage => "python_package",
+        DependencyRequirementKind::RuntimeManagedBinary => "runtime_managed_binary",
+        DependencyRequirementKind::SystemPackage => "system_package",
+        DependencyRequirementKind::RuntimeFeature => "runtime_feature",
+        DependencyRequirementKind::DeviceToolchain => "device_toolchain",
+        _ => "unknown",
+    }
+}
+
+fn environment_kind_label(kind: DependencyEnvironmentKind) -> &'static str {
+    match kind {
+        DependencyEnvironmentKind::Python => "python",
+        DependencyEnvironmentKind::ManagedBinary => "managed_binary",
+        DependencyEnvironmentKind::SystemPackage => "system_package",
+        DependencyEnvironmentKind::RuntimeFeature => "runtime_feature",
+        DependencyEnvironmentKind::DeviceToolchain => "device_toolchain",
+        _ => "unknown",
     }
 }
 
@@ -191,7 +316,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn inventory_service_fails_closed_for_non_python_payloads_without_probe() {
+    async fn inventory_service_reports_not_implemented_for_non_python_payloads_without_probe() {
         let request = validated_request();
         let item = work_item(request.clone());
         let mut payload = default_host_requirements_payload(&request);
@@ -215,7 +340,7 @@ mod tests {
 
         assert_eq!(
             snapshot.result.readiness_state,
-            DependencyEnvironmentReadinessState::Invalid
+            DependencyEnvironmentReadinessState::Unavailable
         );
         assert_eq!(
             snapshot
@@ -223,7 +348,15 @@ mod tests {
                 .diagnostics
                 .first()
                 .map(|diagnostic| diagnostic.code.clone()),
-            Some(DependencyPlanningDiagnosticCode::InvalidRequest)
+            Some(DependencyPlanningDiagnosticCode::NotImplemented)
+        );
+        assert_eq!(
+            snapshot
+                .result
+                .binding_statuses
+                .first()
+                .map(|status| status.state),
+            Some(pantograph_dependency_planning::DependencyBindingStatusState::NotImplemented)
         );
         assert!(probe_runner.requests().is_empty());
     }

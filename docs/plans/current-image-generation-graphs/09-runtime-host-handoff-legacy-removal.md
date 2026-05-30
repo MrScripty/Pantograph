@@ -347,12 +347,21 @@ Implementation progress:
   during `cargo check` is the pre-existing
   `set_active_run_execution_plan` dead-code warning in
   `pantograph-workflow-service`.
-- Remaining follow-ups: add typed unsupported/not-implemented inventory
-  providers for non-Python requirement kinds, add serde/fixture coverage when
-  the inventory request/observation contract becomes shared or externally
-  serialized, migrate managed-runtime/runtime-feature/device-toolchain
-  providers from their source-owned facts, and separately plan system-package
-  inventory.
+- 2026-05-30 follow-up slice: added explicit inventory dispatch for selected
+  non-Python requirement or binding kinds. Python-only payloads still route to
+  the Python provider; non-Python payloads now publish provider-owned
+  `NotImplemented` readiness diagnostics and binding statuses without invoking
+  the Python probe or interpreting generic names as readiness evidence.
+- Verification for the follow-up slice: `cargo fmt -- --check`,
+  `cargo test -p pantograph-embedded-runtime dependency_inventory`, and
+  `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+  `cargo check -p pantograph-embedded-runtime`, direct-probe search,
+  line-count review, and `git diff --check` passed.
+- Remaining follow-ups: add source-owned managed-runtime, runtime-feature, and
+  device-toolchain inventory providers; add serde/fixture coverage when the
+  inventory request/observation contract becomes shared or externally
+  serialized; and separately plan system-package inventory before
+  implementation.
 
 ## Verification Strategy
 
