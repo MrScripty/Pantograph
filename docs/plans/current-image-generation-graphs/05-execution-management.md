@@ -17214,6 +17214,28 @@ Worker rules:
     explicit Python env map used by managed/runtime-owned dependency
     environments, then add runtime-managed binary, system-package,
     runtime-feature, and device-toolchain typed probe adapters.
+- 2026-05-30 re-plan boundary reached before non-Python dependency-environment
+  probe adapters:
+  - Investigation result: the remaining requirement kinds are present in the
+    shared dependency-planning contract, but implementation is not
+    source-ready. `RuntimeManagedBinary`, `SystemPackage`, `RuntimeFeature`,
+    and `DeviceToolchain` do not yet have planned source-of-truth ownership,
+    required detail fields, freshness semantics, or probe/admission boundaries
+    comparable to the Python env-map package probe.
+  - Standards/no-fallback concern: implementing these adapters by interpreting
+    generic requirement names locally would recreate stringly typed dependency
+    policy inside embedded-runtime. System package probing would also require
+    platform/package-manager ownership; runtime feature readiness belongs to
+    runtime capability/registry facts; device toolchain readiness belongs to
+    device/runtime observations; managed binary readiness likely belongs to
+    managed-runtime inventory. None should fall back to graph paths, Pumas
+    package names, Python probes, shell commands, or old dependency preflight.
+  - Required re-plan: decide per-kind source ownership, detail-row contract
+    shape, typed diagnostics, freshness/correlation fields, and verification
+    fixtures before adding adapters. Until then, non-Python requirement kinds
+    must continue to fail closed with typed diagnostics instead of publishing
+    ready evidence.
+  - Verification passed for this boundary record: `git diff --check`.
 
 ### Traceability Links
 
