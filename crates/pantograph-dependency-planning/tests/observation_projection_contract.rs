@@ -91,6 +91,9 @@ fn observation_projection_rejects_unbounded_provider_alternatives() {
             device_id: Some(
                 DeviceObservationId::parse(format!("cuda:{index}")).expect("device id"),
             ),
+            system_package_id: None,
+            package_manager_id: None,
+            platform_id: None,
             reason: Some("CUDA runtime is available on this host.".to_string()),
         })
         .collect();

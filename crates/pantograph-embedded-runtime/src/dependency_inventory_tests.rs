@@ -612,6 +612,9 @@ impl FakeDeviceToolchainProviderSource {
                                     .expect("device class"),
                                 ),
                                 device_id: None,
+                                system_package_id: None,
+                                package_manager_id: None,
+                                platform_id: None,
                                 reason: Some(
                                     "CUDA runtime is available on this host.".to_string(),
                                 ),

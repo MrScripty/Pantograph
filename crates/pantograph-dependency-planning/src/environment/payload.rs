@@ -11,8 +11,9 @@ use super::scalar::{
     validate_dependency_name, validate_dependency_text, validate_diagnostics,
     validate_optional_dependency_text, validate_validation_field_path, DependencyBindingProfileId,
     DependencyOperationTimestampMs, DependencyRequirementName, DependencyValidationFieldPath,
-    DeviceObservationId, DeviceToolchainSourceId, ManagedRuntimeSourceId, RuntimeFeatureSourceId,
-    RuntimeSourceId, RuntimeVariantSourceId,
+    DeviceObservationId, DeviceToolchainSourceId, HostPlatformSourceId, ManagedRuntimeSourceId,
+    RuntimeFeatureSourceId, RuntimeSourceId, RuntimeVariantSourceId, SystemPackageManagerSourceId,
+    SystemPackageSourceId,
 };
 use super::state::DependencyEnvironmentValidationState;
 
@@ -177,6 +178,33 @@ impl DeviceToolchainRequirementDetails {
     }
 }
 
+/// System-package-specific requirement facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SystemPackageRequirementDetails {
+    pub package_id: SystemPackageSourceId,
+    pub package_manager_id: SystemPackageManagerSourceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<HostPlatformSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_manager_version_constraint: Option<String>,
+}
+
+impl SystemPackageRequirementDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_optional_dependency_text(
+            "system_package_requirement.architecture",
+            self.architecture.as_deref(),
+        )?;
+        validate_optional_dependency_text(
+            "system_package_requirement.package_manager_version_constraint",
+            self.package_manager_version_constraint.as_deref(),
+        )
+    }
+}
+
 /// Shared dependency requirement row.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -193,6 +221,8 @@ pub struct DependencyRequirement {
     pub runtime_feature: Option<RuntimeFeatureRequirementDetails>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_toolchain: Option<DeviceToolchainRequirementDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_package: Option<SystemPackageRequirementDetails>,
 }
 
 impl DependencyRequirement {
@@ -239,12 +269,22 @@ impl DependencyRequirement {
             }
             device_toolchain.validate()?;
         }
+        if let Some(system_package) = &self.system_package {
+            if self.kind != DependencyRequirementKind::SystemPackage {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_requirement.system_package",
+                    reason:
+                        "system package details are allowed only for system package requirements",
+                });
+            }
+            system_package.validate()?;
+        }
         match self.kind {
             DependencyRequirementKind::PythonPackage => {}
             DependencyRequirementKind::RuntimeManagedBinary if self.managed_runtime.is_some() => {}
             DependencyRequirementKind::RuntimeFeature if self.runtime_feature.is_some() => {}
             DependencyRequirementKind::DeviceToolchain if self.device_toolchain.is_some() => {}
-            DependencyRequirementKind::SystemPackage => {}
+            DependencyRequirementKind::SystemPackage if self.system_package.is_some() => {}
             DependencyRequirementKind::RuntimeManagedBinary => {
                 return Err(DependencyPlanningContractError::MissingField {
                     field: "dependency_requirement.managed_runtime",
@@ -258,6 +298,11 @@ impl DependencyRequirement {
             DependencyRequirementKind::DeviceToolchain => {
                 return Err(DependencyPlanningContractError::MissingField {
                     field: "dependency_requirement.device_toolchain",
+                });
+            }
+            DependencyRequirementKind::SystemPackage => {
+                return Err(DependencyPlanningContractError::MissingField {
+                    field: "dependency_requirement.system_package",
                 });
             }
         }
@@ -357,6 +402,29 @@ impl DeviceToolchainBindingDetails {
     }
 }
 
+/// System-package-specific binding facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SystemPackageBindingDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_id: Option<SystemPackageSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_manager_id: Option<SystemPackageManagerSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<HostPlatformSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<String>,
+}
+
+impl SystemPackageBindingDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_optional_dependency_text(
+            "system_package_binding.architecture",
+            self.architecture.as_deref(),
+        )
+    }
+}
+
 /// Shared dependency binding row selected or checked by dependency environments.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -374,6 +442,8 @@ pub struct DependencyRequirementBinding {
     pub runtime_feature: Option<RuntimeFeatureBindingDetails>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_toolchain: Option<DeviceToolchainBindingDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_package: Option<SystemPackageBindingDetails>,
 }
 
 impl DependencyRequirementBinding {
@@ -417,6 +487,15 @@ impl DependencyRequirementBinding {
                 });
             }
             device_toolchain.validate()?;
+        }
+        if let Some(system_package) = &self.system_package {
+            if self.environment_kind != DependencyEnvironmentKind::SystemPackage {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_binding.system_package",
+                    reason: "system package details are allowed only for system package bindings",
+                });
+            }
+            system_package.validate()?;
         }
         Ok(())
     }

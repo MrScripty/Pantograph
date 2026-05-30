@@ -935,6 +935,35 @@ fn dependency_environment_result_accepts_typed_non_python_detail_rows() {
     result
         .validate()
         .expect("device toolchain detail rows should validate");
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::SystemPackage;
+    result.requirements[0].python = None;
+    result.requirements[0].system_package = Some(
+        serde_json::from_value(serde_json::json!({
+            "package_id": "libcuda",
+            "package_manager_id": "apt",
+            "platform_id": "linux-x86_64",
+            "architecture": "x86_64"
+        }))
+        .expect("system package details"),
+    );
+    result.bindings[0].environment_kind = DependencyEnvironmentKind::SystemPackage;
+    result.bindings[0].python = None;
+    result.bindings[0].system_package = Some(
+        serde_json::from_value(serde_json::json!({
+            "package_id": "libcuda",
+            "package_manager_id": "apt",
+            "platform_id": "linux-x86_64",
+            "architecture": "x86_64"
+        }))
+        .expect("system package binding details"),
+    );
+
+    result
+        .validate()
+        .expect("system package detail rows should validate");
 }
 
 #[test]
@@ -950,6 +979,20 @@ fn dependency_environment_result_requires_typed_details_for_supported_non_python
             .expect_err("managed runtime requirements need typed details"),
         DependencyPlanningContractError::MissingField {
             field: "dependency_requirement.managed_runtime"
+        }
+    );
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::SystemPackage;
+    result.requirements[0].python = None;
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("system package requirements need typed details"),
+        DependencyPlanningContractError::MissingField {
+            field: "dependency_requirement.system_package"
         }
     );
 }
@@ -978,6 +1021,26 @@ fn dependency_environment_result_rejects_mismatched_non_python_detail_rows() {
 
     let mut result: DependencyEnvironmentResult =
         serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].system_package = Some(
+        serde_json::from_value(serde_json::json!({
+            "package_id": "libcuda",
+            "package_manager_id": "apt"
+        }))
+        .expect("system package details"),
+    );
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("system package details are requirement-kind scoped"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_requirement.system_package",
+            reason: "system package details are allowed only for system package requirements"
+        }
+    );
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
     result.bindings[0].device_toolchain = Some(
         serde_json::from_value(serde_json::json!({
             "toolchain_id": "cuda_toolkit"
@@ -992,6 +1055,26 @@ fn dependency_environment_result_rejects_mismatched_non_python_detail_rows() {
         DependencyPlanningContractError::InvalidField {
             field: "dependency_binding.device_toolchain",
             reason: "device toolchain details are allowed only for device toolchain bindings"
+        }
+    );
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.bindings[0].system_package = Some(
+        serde_json::from_value(serde_json::json!({
+            "package_id": "libcuda",
+            "package_manager_id": "apt"
+        }))
+        .expect("system package binding details"),
+    );
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("system package details are binding-kind scoped"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_binding.system_package",
+            reason: "system package details are allowed only for system package bindings"
         }
     );
 }
@@ -1013,4 +1096,21 @@ fn dependency_environment_result_rejects_unknown_non_python_detail_fields() {
 
     serde_json::from_value::<DependencyEnvironmentResult>(value)
         .expect_err("managed runtime details must reject unknown legacy fields");
+
+    let mut value: serde_json::Value =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should parse");
+    let requirement = value["requirements"][0]
+        .as_object_mut()
+        .expect("requirement should be an object");
+    requirement.insert(
+        "system_package".to_string(),
+        serde_json::json!({
+            "package_id": "libcuda",
+            "package_manager_id": "apt",
+            "package_name": "libcuda1"
+        }),
+    );
+
+    serde_json::from_value::<DependencyEnvironmentResult>(value)
+        .expect_err("system package details must reject package-name legacy fields");
 }

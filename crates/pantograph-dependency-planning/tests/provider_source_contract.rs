@@ -3,15 +3,16 @@ use pantograph_dependency_planning::{
     DependencyInventoryObservationFreshness, DependencyPlanningContractError,
     DependencyProviderSourceAlternative, DependencyProviderSourceState, DeviceClassSourceId,
     DeviceToolchainProviderSourceSnapshot, RuntimeFeatureProviderSourceSnapshot,
-    RuntimeFeatureSourceId, ValidatedDeviceToolchainProviderSourceSnapshot,
-    ValidatedRuntimeFeatureProviderSourceSnapshot,
+    RuntimeFeatureSourceId, SystemPackageProviderSourceSnapshot,
+    ValidatedDeviceToolchainProviderSourceSnapshot, ValidatedRuntimeFeatureProviderSourceSnapshot,
+    ValidatedSystemPackageProviderSourceSnapshot,
 };
 
 const PROVIDER_SOURCE_FIXTURE: &str =
     include_str!("fixtures/dependency_provider_source_snapshots.json");
 
 #[test]
-fn provider_source_fixture_decodes_runtime_feature_and_device_toolchain_snapshots() {
+fn provider_source_fixture_decodes_runtime_feature_device_toolchain_and_system_package_snapshots() {
     let fixture: serde_json::Value =
         serde_json::from_str(PROVIDER_SOURCE_FIXTURE).expect("fixture should decode");
 
@@ -28,8 +29,15 @@ fn provider_source_fixture_decodes_runtime_feature_and_device_toolchain_snapshot
         ValidatedDeviceToolchainProviderSourceSnapshot::try_from(device_toolchain)
             .expect("device toolchain source snapshot should validate");
 
+    let system_package: SystemPackageProviderSourceSnapshot =
+        serde_json::from_value(fixture["system_package"].clone())
+            .expect("system package source snapshot should decode");
+    let system_package = ValidatedSystemPackageProviderSourceSnapshot::try_from(system_package)
+        .expect("system package source snapshot should validate");
+
     assert_eq!(runtime_feature.as_snapshot().rows.len(), 2);
     assert_eq!(device_toolchain.as_snapshot().rows.len(), 2);
+    assert_eq!(system_package.as_snapshot().rows.len(), 2);
 }
 
 #[test]
@@ -153,4 +161,38 @@ fn provider_source_bounds_alternative_count() {
             max_len: 8,
         }
     );
+}
+
+#[test]
+fn system_package_source_rejects_duplicate_rows() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(PROVIDER_SOURCE_FIXTURE).expect("fixture should decode");
+    let mut snapshot: SystemPackageProviderSourceSnapshot =
+        serde_json::from_value(fixture["system_package"].clone())
+            .expect("system package source snapshot should decode");
+    snapshot.rows.push(snapshot.rows[0].clone());
+
+    assert_eq!(
+        ValidatedSystemPackageProviderSourceSnapshot::try_from(snapshot)
+            .expect_err("duplicate source rows should fail validation"),
+        DependencyPlanningContractError::InvalidField {
+            field: "system_package_provider_source.rows",
+            reason:
+                "system package source rows must be unique by package, package manager, platform, and architecture",
+        }
+    );
+}
+
+#[test]
+fn system_package_source_rejects_unknown_legacy_fields() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(PROVIDER_SOURCE_FIXTURE).expect("fixture should decode");
+    let mut system_package = fixture["system_package"].clone();
+    system_package["rows"][0]
+        .as_object_mut()
+        .expect("row should be object")
+        .insert("package_name".to_string(), serde_json::json!("libcuda1"));
+
+    ValidatedSystemPackageProviderSourceSnapshot::try_from(system_package)
+        .expect_err("source contract should reject package-name legacy fields");
 }

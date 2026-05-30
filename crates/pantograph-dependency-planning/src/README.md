@@ -166,8 +166,9 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
 - Inventory observation projection serde and no-fallback coverage lives in
   `tests/observation_projection_contract.rs`.
-- Runtime-feature and device-toolchain provider-source serde and vocabulary
-  coverage lives in `tests/provider_source_contract.rs`.
+- Runtime-feature, device-toolchain, and system-package provider-source serde
+  coverage lives in `tests/provider_source_contract.rs`; runtime-feature and
+  device-toolchain canonical vocabularies are pinned there as well.
 - Optional scheduler intent, selected bindings, caller context, and diagnostics
   default to empty values.
 - New public DTO fields require fixture updates in the same slice.

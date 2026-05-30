@@ -17884,6 +17884,48 @@ Worker rules:
   - Remaining follow-up: add the shared system-package requirement and
     provider-source contracts with fixtures before adding any concrete
     system-package provider behavior.
+- 2026-05-30 shared system-package contract slice:
+  - Slice scope: shared contract and fixture update only. Allowed files:
+    `crates/pantograph-dependency-planning/src/environment/scalar.rs`,
+    `crates/pantograph-dependency-planning/src/environment/payload.rs`,
+    `crates/pantograph-dependency-planning/src/environment/provider_source.rs`,
+    `crates/pantograph-dependency-planning/src/environment.rs`,
+    `crates/pantograph-dependency-planning/src/lib.rs`,
+    dependency-planning README files, dependency-planning contract tests and
+    fixtures, plus embedded-runtime device-toolchain test/source files only for
+    mechanical initialization of newly optional provider-alternative fields.
+  - Implementation: added typed system-package requirement and binding detail
+    DTOs, typed system package/package-manager/platform source ids, typed
+    system-package provider-source snapshot and row DTOs, validated
+    system-package provider-source wrapper, and system-package alternative
+    fields on bounded provider alternatives.
+  - Contract behavior: `DependencyRequirementKind::SystemPackage` now requires
+    explicit `system_package` details instead of relying on
+    `DependencyRequirementName`; mismatched system-package details and
+    package-name-shaped legacy fields fail typed validation. Provider-source
+    validation rejects duplicate system-package rows, stale rows without
+    diagnostics, invalid/unknown serialized fields, and oversized alternatives.
+  - No-fallback/no-legacy result: no provider behavior, host probing,
+    package-manager command execution, scheduler policy, graph/path/Pumas-name
+    inference, Python-probe reuse for system packages, compatibility shim, or
+    old dependency preflight path was added. System-package readiness remains
+    fail-closed until the typed provider slice consumes validated source
+    snapshots.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-dependency-planning --test contract`,
+    `cargo test -p pantograph-dependency-planning --test provider_source_contract`,
+    `cargo check -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`,
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`, and
+    `cargo check -p pantograph-embedded-runtime --features standalone`. The
+    only warning observed remains the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: add the typed system-package inventory provider that
+    consumes only validated source snapshots and initially receives a
+    not-implemented/empty host source in production composition.
 
 ### Traceability Links
 

@@ -893,6 +893,18 @@ Implementation progress:
   legacy preflight behavior was added. Verification passed with the focused
   embedded-runtime inventory/readiness tests and standalone checks; the known
   workflow-service `set_active_run_execution_plan` warning remains.
+- 2026-05-30 shared system-package contract slice: added typed system-package
+  requirement/binding details, typed system package/package-manager/platform
+  source ids, system-package provider-source snapshot/row DTOs, a validated
+  provider-source wrapper, fixture coverage, and validation tests before any
+  provider behavior. `DependencyRequirementKind::SystemPackage` now requires
+  explicit system-package details and rejects package-name-shaped legacy fields
+  rather than relying on generic requirement names. Provider-source validation
+  rejects duplicate system-package rows, stale rows without diagnostics,
+  unknown serialized fields, and oversized alternatives. The slice does not add
+  package-manager probing, scheduler policy, graph/path/Pumas-name inference,
+  compatibility shims, or legacy preflight behavior. Follow-up: add the typed
+  system-package provider against validated source snapshots.
 
 ## Verification Strategy
 

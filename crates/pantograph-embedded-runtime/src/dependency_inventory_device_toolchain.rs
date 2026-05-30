@@ -288,6 +288,9 @@ fn ready_alternatives(
                 toolchain_id: Some(row.toolchain_id.clone()),
                 device_class: row.device_class.clone(),
                 device_id: row.device_id.clone(),
+                system_package_id: None,
+                package_manager_id: None,
+                platform_id: None,
                 reason: Some("Device toolchain is available on this runtime.".to_string()),
             },
         )

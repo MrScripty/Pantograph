@@ -77,5 +77,45 @@
         ]
       }
     ]
+  },
+  "system_package": {
+    "contract_version": 1,
+    "rows": [
+      {
+        "package_id": "libcuda",
+        "package_manager_id": "apt",
+        "platform_id": "linux-x86_64",
+        "architecture": "x86_64",
+        "installed_version": "550.54",
+        "state": "ready",
+        "freshness": "fresh",
+        "checked_at_ms": 1710000000000
+      },
+      {
+        "package_id": "metal_framework",
+        "package_manager_id": "system_framework",
+        "platform_id": "macos-arm64",
+        "architecture": "arm64",
+        "state": "unavailable",
+        "freshness": "fresh",
+        "checked_at_ms": 1710000000000,
+        "diagnostics": [
+          {
+            "code": "runtime_unavailable",
+            "severity": "error",
+            "message": "Metal framework is unavailable on this host platform.",
+            "field_path": "system_package.metal_framework"
+          }
+        ],
+        "alternatives": [
+          {
+            "system_package_id": "libcuda",
+            "package_manager_id": "apt",
+            "platform_id": "linux-x86_64",
+            "reason": "CUDA driver package facts are ready on Linux."
+          }
+        ]
+      }
+    ]
   }
 }

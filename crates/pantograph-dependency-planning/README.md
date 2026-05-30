@@ -46,10 +46,11 @@ one neutral contract boundary before runtime behavior is migrated.
   detail structs instead of becoming generic dependency fields.
 - Non-Python dependency-environment requirement rows carry provider source
   identity through typed detail structs, not through `DependencyRequirementName`
-  parsing. Managed-runtime, runtime-feature, and device-toolchain details are
-  validated contract facts for inventory providers; this crate still does not
-  inspect managed-runtime state, runtime registry facts, devices, files, shell
-  output, or scheduler decisions.
+  parsing. Managed-runtime, runtime-feature, device-toolchain, and
+  system-package details are validated contract facts for inventory providers;
+  this crate still does not inspect managed-runtime state, runtime registry
+  facts, devices, files, package-manager state, shell output, or scheduler
+  decisions.
 
 ## Decision
 Create a small workspace crate with validated request/result DTOs and

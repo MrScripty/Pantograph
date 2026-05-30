@@ -90,6 +90,12 @@ dependency_source_id!(RuntimeVariantSourceId, "runtime_variant.source_id");
 dependency_source_id!(DeviceToolchainSourceId, "device_toolchain.source_id");
 dependency_source_id!(DeviceClassSourceId, "device_class.source_id");
 dependency_source_id!(DeviceObservationId, "device_observation_id");
+dependency_source_id!(SystemPackageSourceId, "system_package.source_id");
+dependency_source_id!(
+    SystemPackageManagerSourceId,
+    "system_package_manager.source_id"
+);
+dependency_source_id!(HostPlatformSourceId, "host_platform.source_id");
 
 /// Dependency binding profile id.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

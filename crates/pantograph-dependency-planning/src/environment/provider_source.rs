@@ -8,8 +8,9 @@ use crate::result::DependencyPlanningDiagnostic;
 use super::observation::DependencyInventoryObservationFreshness;
 use super::scalar::{
     validate_diagnostics, validate_optional_dependency_text, DependencyOperationTimestampMs,
-    DeviceClassSourceId, DeviceObservationId, DeviceToolchainSourceId, RuntimeFeatureSourceId,
-    RuntimeSourceId, RuntimeVariantSourceId,
+    DeviceClassSourceId, DeviceObservationId, DeviceToolchainSourceId, HostPlatformSourceId,
+    RuntimeFeatureSourceId, RuntimeSourceId, RuntimeVariantSourceId, SystemPackageManagerSourceId,
+    SystemPackageSourceId,
 };
 
 const PROVIDER_SOURCE_CONTRACT_VERSION: u32 = 1;
@@ -68,6 +69,12 @@ pub struct DependencyProviderSourceAlternative {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<DeviceObservationId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_package_id: Option<SystemPackageSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_manager_id: Option<SystemPackageManagerSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<HostPlatformSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
@@ -79,6 +86,9 @@ impl DependencyProviderSourceAlternative {
             && self.toolchain_id.is_none()
             && self.device_class.is_none()
             && self.device_id.is_none()
+            && self.system_package_id.is_none()
+            && self.package_manager_id.is_none()
+            && self.platform_id.is_none()
         {
             return Err(DependencyPlanningContractError::MissingField {
                 field: "dependency_provider_source_alternative",
@@ -235,6 +245,87 @@ pub struct DeviceToolchainProviderSourceSnapshot {
     pub diagnostics: Vec<DependencyPlanningDiagnostic>,
 }
 
+/// One source-owned system-package fact row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SystemPackageProviderSourceRow {
+    pub package_id: SystemPackageSourceId,
+    pub package_manager_id: SystemPackageManagerSourceId,
+    pub platform_id: HostPlatformSourceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    pub state: DependencyProviderSourceState,
+    pub freshness: DependencyInventoryObservationFreshness,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_at_ms: Option<DependencyOperationTimestampMs>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DependencyPlanningDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<DependencyProviderSourceAlternative>,
+}
+
+impl SystemPackageProviderSourceRow {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_optional_dependency_text(
+            "system_package_provider_source.architecture",
+            self.architecture.as_deref(),
+        )?;
+        validate_optional_dependency_text(
+            "system_package_provider_source.installed_version",
+            self.installed_version.as_deref(),
+        )?;
+        validate_source_row_state(
+            "system_package_provider_source.diagnostics",
+            self.state,
+            self.freshness,
+            &self.diagnostics,
+        )?;
+        validate_provider_source_alternatives(&self.alternatives)
+    }
+
+    fn key(&self) -> (String, String, String, Option<String>) {
+        (
+            self.package_id.as_str().to_string(),
+            self.package_manager_id.as_str().to_string(),
+            self.platform_id.as_str().to_string(),
+            self.architecture.clone(),
+        )
+    }
+}
+
+/// System-package provider source snapshot consumed by inventory providers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct SystemPackageProviderSourceSnapshot {
+    #[serde(default = "default_provider_source_contract_version")]
+    pub contract_version: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<SystemPackageProviderSourceRow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DependencyPlanningDiagnostic>,
+}
+
+impl SystemPackageProviderSourceSnapshot {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_contract_version(self.contract_version, "system_package_provider_source")?;
+        validate_diagnostics(&self.diagnostics)?;
+        let mut keys = BTreeSet::new();
+        for row in &self.rows {
+            row.validate()?;
+            if !keys.insert(row.key()) {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "system_package_provider_source.rows",
+                    reason:
+                        "system package source rows must be unique by package, package manager, platform, and architecture",
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
 impl DeviceToolchainProviderSourceSnapshot {
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         validate_contract_version(self.contract_version, "device_toolchain_provider_source")?;
@@ -303,6 +394,44 @@ impl ValidatedDeviceToolchainProviderSourceSnapshot {
 
     pub fn as_snapshot(&self) -> &DeviceToolchainProviderSourceSnapshot {
         &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub struct ValidatedSystemPackageProviderSourceSnapshot(SystemPackageProviderSourceSnapshot);
+
+impl ValidatedSystemPackageProviderSourceSnapshot {
+    pub fn into_inner(self) -> SystemPackageProviderSourceSnapshot {
+        self.0
+    }
+
+    pub fn as_snapshot(&self) -> &SystemPackageProviderSourceSnapshot {
+        &self.0
+    }
+}
+
+impl TryFrom<SystemPackageProviderSourceSnapshot> for ValidatedSystemPackageProviderSourceSnapshot {
+    type Error = DependencyPlanningContractError;
+
+    fn try_from(value: SystemPackageProviderSourceSnapshot) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
+impl TryFrom<serde_json::Value> for ValidatedSystemPackageProviderSourceSnapshot {
+    type Error = DependencyPlanningContractError;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        let snapshot: SystemPackageProviderSourceSnapshot =
+            serde_json::from_value(value).map_err(|_| {
+                DependencyPlanningContractError::InvalidField {
+                    field: "system_package_provider_source",
+                    reason: "source JSON did not match system package provider source contract",
+                }
+            })?;
+        Self::try_from(snapshot)
     }
 }
 
