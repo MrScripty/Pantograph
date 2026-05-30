@@ -17264,6 +17264,28 @@ Worker rules:
     dependency inventory service re-plan, staged implementation, standards
     gates, and verification requirements.
   - Verification passed for this plan update: `git diff --check`.
+- 2026-05-30 dependency inventory service slice:
+  - Slice scope: added `dependency_inventory.rs`, wired
+    `EmbeddedDependencyReadinessSnapshotProducer` to call
+    `DependencyInventoryService`, and moved the existing Python package probe
+    behind a provider adapter. The producer no longer owns or directly invokes
+    a package probe runner.
+  - No-fallback result: successful Python readiness behavior is preserved
+    through the provider boundary; non-Python or invalid payload shapes still
+    fail closed with typed diagnostics instead of using graph paths, generic
+    names, shell commands, Python package probes for other kinds, or legacy
+    preflight.
+  - Focused tests: added direct dependency-inventory tests for Python provider
+    routing and non-Python fail-closed behavior, while retaining lifecycle
+    coverage for ready, missing, unavailable, explicit-environment, registry
+    miss, and shutdown cases.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_inventory`, and
+    `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+    `cargo check -p pantograph-embedded-runtime`, direct-probe search,
+    line-count review, and `git diff --check`. `cargo check` still reports the
+    pre-existing `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
 
 ### Traceability Links
 

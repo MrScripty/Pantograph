@@ -330,6 +330,30 @@ Required verification:
   crates, line-count review, README traceability updates, and `git diff
   --check`.
 
+Implementation progress:
+
+- 2026-05-30 slice: added the embedded-runtime dependency inventory service
+  boundary and Python package provider adapter. The readiness snapshot producer
+  now depends on `DependencyInventoryService` for fresh payload checks instead
+  of carrying or invoking a package probe runner directly. The Python provider
+  still uses the existing no-shell package probe internally, preserving
+  explicit Python environment/profile behavior and default-host selection only
+  when the canonical payload has no explicit environment/profile identity.
+- Verification for the slice: `cargo fmt -- --check`,
+  `cargo test -p pantograph-embedded-runtime dependency_inventory`, and
+  `cargo test -p pantograph-embedded-runtime dependency_readiness_lifecycle`,
+  `cargo check -p pantograph-embedded-runtime`, direct-probe search,
+  line-count review, and `git diff --check` passed. The only warning observed
+  during `cargo check` is the pre-existing
+  `set_active_run_execution_plan` dead-code warning in
+  `pantograph-workflow-service`.
+- Remaining follow-ups: add typed unsupported/not-implemented inventory
+  providers for non-Python requirement kinds, add serde/fixture coverage when
+  the inventory request/observation contract becomes shared or externally
+  serialized, migrate managed-runtime/runtime-feature/device-toolchain
+  providers from their source-owned facts, and separately plan system-package
+  inventory.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

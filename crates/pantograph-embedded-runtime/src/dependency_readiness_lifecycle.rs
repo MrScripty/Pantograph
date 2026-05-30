@@ -7,9 +7,7 @@ use pantograph_dependency_environment_service::{
     DependencyRequirementsRegistry,
 };
 
-use crate::dependency_environment_probe_snapshot::probe_dependency_readiness_snapshot;
-use crate::package_readiness_provider::PackageReadinessProbeRunner;
-use crate::python_package_readiness_probe::ProcessPythonPackageReadinessProbeRunner;
+use crate::dependency_inventory::DependencyInventoryService;
 use crate::EmbeddedRuntimeError;
 
 /// Configuration for the embedded dependency-readiness snapshot producer loop.
@@ -32,7 +30,7 @@ pub struct EmbeddedDependencyReadinessSnapshotProducer {
     snapshot_provider: Arc<DependencyEnvironmentReadinessSnapshotProvider>,
     work_queue: Arc<DependencyReadinessWorkQueue>,
     requirements_registry: Arc<dyn DependencyRequirementsRegistry>,
-    package_probe_runner: Arc<dyn PackageReadinessProbeRunner>,
+    dependency_inventory: Arc<DependencyInventoryService>,
     config: EmbeddedDependencyReadinessSnapshotProducerConfig,
 }
 
@@ -47,7 +45,7 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
             snapshot_provider,
             work_queue,
             requirements_registry,
-            package_probe_runner: Arc::new(ProcessPythonPackageReadinessProbeRunner::default()),
+            dependency_inventory: Arc::new(DependencyInventoryService::default()),
             config: EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
         }
     }
@@ -62,11 +60,12 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
     }
 
     #[must_use]
-    pub fn with_package_probe_runner(
+    #[cfg(test)]
+    pub(crate) fn with_dependency_inventory(
         mut self,
-        package_probe_runner: Arc<dyn PackageReadinessProbeRunner>,
+        dependency_inventory: Arc<DependencyInventoryService>,
     ) -> Self {
-        self.package_probe_runner = package_probe_runner;
+        self.dependency_inventory = dependency_inventory;
         self
     }
 
@@ -85,7 +84,7 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
         let snapshot_provider = self.snapshot_provider;
         let work_queue = self.work_queue;
         let requirements_registry = self.requirements_registry;
-        let package_probe_runner = self.package_probe_runner;
+        let dependency_inventory = self.dependency_inventory;
         let poll_interval = self.config.poll_interval;
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
         let join_handle = runtime_handle.spawn(async move {
@@ -105,11 +104,8 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
                                 &item.request,
                             ) {
                                 Ok(payload) => {
-                                    probe_dependency_readiness_snapshot(
-                                        &item,
-                                        payload,
-                                        package_probe_runner.as_ref(),
-                                    )
+                                    dependency_inventory
+                                        .snapshot_for_work_item(&item, payload)
                                     .await
                                 }
                                 Err(error) => {

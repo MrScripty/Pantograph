@@ -11,6 +11,7 @@ use pantograph_workflow_service::{
 };
 mod dependency_environment_probe_selector;
 mod dependency_environment_probe_snapshot;
+mod dependency_inventory;
 pub mod dependency_readiness;
 mod dependency_readiness_lifecycle;
 #[cfg(test)]

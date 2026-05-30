@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use inference::CapabilityAvailabilityId;
 use pantograph_dependency_environment_service::{
-    DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotStatus,
     DependencyReadinessWorkItem, DependencyRequirementsPayload,
 };
 use pantograph_dependency_planning::{
@@ -14,40 +13,16 @@ use pantograph_dependency_planning::{
     DependencyRequirement, DependencyRequirementBinding,
 };
 
-use crate::dependency_environment_probe_selector::{
-    python_probe_request_for_payload, ProbeShapeError,
-};
+use crate::dependency_environment_probe_selector::ProbeShapeError;
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
 use crate::package_readiness_provider::{
-    PackageReadinessProbeFailure, PackageReadinessProbeOutcome, PackageReadinessProbeRunner,
+    PackageReadinessProbeFailure, PackageReadinessProbeOutcome,
     PackageReadinessProviderDiagnosticCode,
 };
 
 const DEFAULT_PYTHON_ENVIRONMENT_ID: &str = "python:default-host";
 
-pub(crate) async fn probe_dependency_readiness_snapshot(
-    item: &DependencyReadinessWorkItem,
-    payload: DependencyRequirementsPayload,
-    package_probe_runner: &dyn PackageReadinessProbeRunner,
-) -> Result<
-    DependencyEnvironmentReadinessSnapshot,
-    pantograph_dependency_environment_service::DependencyEnvironmentSnapshotStoreError,
-> {
-    let result = match python_probe_request_for_payload(&item.request, &payload) {
-        Ok(probe_request) => {
-            let outcome = package_probe_runner.probe(probe_request).await;
-            dependency_environment_result_from_probe_outcome(item, payload, outcome)
-        }
-        Err(error) => invalid_probe_shape_result(item, &payload, error),
-    };
-    DependencyEnvironmentReadinessSnapshot::for_request(
-        &item.request,
-        result,
-        DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-    )
-}
-
-fn dependency_environment_result_from_probe_outcome(
+pub(crate) fn dependency_environment_result_from_probe_outcome(
     item: &DependencyReadinessWorkItem,
     payload: DependencyRequirementsPayload,
     outcome: PackageReadinessProbeOutcome,
@@ -191,7 +166,7 @@ fn binding_status_from_python_snapshot(
         diagnostics: Vec::new(),
     }
 }
-fn invalid_probe_shape_result(
+pub(crate) fn invalid_probe_shape_result(
     item: &DependencyReadinessWorkItem,
     payload: &DependencyRequirementsPayload,
     error: ProbeShapeError,

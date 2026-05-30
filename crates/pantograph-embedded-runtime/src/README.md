@@ -22,6 +22,7 @@ packages.
 | `dependency_readiness.rs` | Owns embedded-runtime projection from inference-owned dependency requirement declarations plus host-observed Python package snapshots into typed dependency-readiness facts without probing environments, ranking candidates, or selecting runtimes. |
 | `dependency_environment_probe_snapshot.rs` | Owns dependency-environment snapshot projection from seeded requirements payloads and host package probe outcomes into fresh ready, missing, unavailable, or invalid dependency-environment results without graph/path fallback. |
 | `dependency_environment_probe_selector.rs` | Owns dependency-environment package probe request selection, including explicit environment/profile preservation, runtime attribution, and typed invalid-shape diagnostics before snapshot projection. |
+| `dependency_inventory.rs` | Owns the dependency inventory service boundary used by readiness snapshot production, including provider dispatch, provider-owned observations, and the Python package provider adapter that keeps package probing behind the inventory boundary. |
 | `dependency_readiness_lifecycle.rs` | Owns the tracked dependency-readiness snapshot producer lifecycle, including startup validation, task handle ownership, cancellation, shutdown, heartbeat tracing, requirements-registry lookup, and delegation to the dependency-environment probe snapshot projector. |
 | `dependency_readiness_lifecycle_tests.rs` | Focused lifecycle tests for producer shutdown, registry-miss diagnostics, fake package-probe ready/missing/unavailable snapshots, and poll-interval validation. |
 | `package_readiness_provider.rs` | Owns the runtime-scoped package-readiness provider contract that shapes typed environment probe requests, deduplicates probe work within one technical-fit request, and projects probe outcomes into inference-owned dependency-readiness facts without selecting runtimes or calling legacy dependency preflight. |
@@ -122,8 +123,10 @@ Pumas-specific dependency resolution.
   lifecycle drains queued work only after resolving the work item's
   `DependencyRequirementsId` through the backend registry; missing or stale
   registry payloads publish typed non-ready diagnostics. Fresh registry
-  payloads are checked through the embedded-runtime Python package probe
-  boundary and projected into dependency-environment snapshots. Explicit
+  payloads are checked through the embedded-runtime dependency inventory
+  boundary and projected into dependency-environment snapshots. The first
+  inventory provider wraps the existing no-shell Python package probe; the
+  producer does not call concrete probes directly. Explicit
   request environment refs or selected binding profiles must be preserved on
   probe requests. Explicit Python probe environments resolve only through the
   configured Python env map, while default-host Python is valid only when the

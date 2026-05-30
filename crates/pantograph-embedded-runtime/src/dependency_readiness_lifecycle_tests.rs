@@ -18,6 +18,7 @@ use pantograph_dependency_planning::{
     ValidatedDependencyEnvironmentRequest,
 };
 
+use crate::dependency_inventory::DependencyInventoryService;
 use crate::dependency_readiness::PythonPackageReadinessSnapshot;
 use crate::dependency_readiness_lifecycle::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
@@ -72,7 +73,9 @@ async fn producer_drains_work_queue_into_ready_snapshots_from_package_probe() {
         work_queue.clone(),
         requirements_registry,
     )
-    .with_package_probe_runner(package_probe_runner.clone())
+    .with_dependency_inventory(Arc::new(
+        DependencyInventoryService::from_package_probe_runner(package_probe_runner.clone()),
+    ))
     .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
         poll_interval: Duration::from_millis(5),
     });
@@ -124,7 +127,9 @@ async fn producer_reports_missing_snapshot_when_selected_package_is_absent() {
         work_queue.clone(),
         requirements_registry,
     )
-    .with_package_probe_runner(package_probe_runner)
+    .with_dependency_inventory(Arc::new(
+        DependencyInventoryService::from_package_probe_runner(package_probe_runner),
+    ))
     .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
         poll_interval: Duration::from_millis(5),
     });
@@ -170,7 +175,9 @@ async fn producer_preserves_explicit_python_environment_and_fails_closed_on_prob
         work_queue.clone(),
         requirements_registry,
     )
-    .with_package_probe_runner(package_probe_runner.clone())
+    .with_dependency_inventory(Arc::new(
+        DependencyInventoryService::from_package_probe_runner(package_probe_runner.clone()),
+    ))
     .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
         poll_interval: Duration::from_millis(5),
     });
@@ -224,7 +231,9 @@ async fn producer_reports_unavailable_snapshot_when_probe_fails() {
         work_queue.clone(),
         requirements_registry,
     )
-    .with_package_probe_runner(package_probe_runner)
+    .with_dependency_inventory(Arc::new(
+        DependencyInventoryService::from_package_probe_runner(package_probe_runner),
+    ))
     .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
         poll_interval: Duration::from_millis(5),
     });
