@@ -16901,6 +16901,35 @@ Worker rules:
     is rejected. The next design choice is between self-contained queue items
     and a backend registry, with registry favored if requirements are reused
     across concurrent tasks/runs.
+- 2026-05-29 dependency requirements registry re-plan selected:
+  - Decision: implement the backend-owned dependency requirements registry
+    keyed by `DependencyRequirementsId` as the source of concrete
+    requirement/binding payloads for real host package/runtime probes.
+    Workflow-service stores the validated payload once when dependency
+    readiness source data is produced or consumed; readiness work items keep
+    the stable id and task/run/session provenance; embedded-runtime or an
+    infrastructure producer resolves the id through a narrow registry trait
+    before probing.
+  - Standards result: the queue remains small and task-correlated, shared DTOs
+    and the registry trait remain serial integration-owner work, concrete
+    registry storage/lifecycle is selected at a backend composition boundary,
+    and async probes remain in the embedded-runtime/infrastructure shell with
+    tracked task ownership.
+  - Required planning details before implementation: define the validated
+    requirements payload DTO or proof snapshot shape; define the registry trait
+    and crate owner; decide in-memory versus durable storage for the first
+    slice; define expiry/eviction and missing/stale/mismatched diagnostics;
+    wire workflow-service storage at the dependency-readiness source boundary;
+    wire producer lookup before unavailable/ready snapshot publication; add
+    deterministic tests for lookup success, missing payload, stale payload,
+    mismatched requirements id, and no fallback to preview/legacy/path data.
+  - Rejected paths: self-contained production queue payloads because they
+    duplicate large payloads across concurrent runs; producer reconstruction
+    because it duplicates planning policy in embedded-runtime; requirement-id
+    string parsing, frontend/graph/editor reads, technical-fit preview reuse,
+    reduced execution plan inference, runtime-host load-target inference,
+    `ModelDependencyRequest`, `ModelRefV2`, or path/model-path adaptation
+    because they violate the no-fallback/no-legacy rule.
 
 ### Traceability Links
 

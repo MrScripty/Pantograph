@@ -70,8 +70,13 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   enters `WaitingDependencyReadiness`. Work items must carry task/run/session
   provenance, the validated `DependencyEnvironmentRequest` or stable validated
   request identity plus required request payload, freshness/retry/cancellation
-  policy, and bounded diagnostic context. The synchronous snapshot provider
-  must remain read-only from the caller's perspective and must not become the
+  policy, and bounded diagnostic context. Concrete requirement and binding
+  payloads needed for host package/runtime probes must come from a
+  backend-owned dependency requirements registry keyed by
+  `DependencyRequirementsId`; workflow-service records the validated payload
+  once, and embedded-runtime/infrastructure producers resolve ids through a
+  narrow registry trait before probing. The synchronous snapshot provider must
+  remain read-only from the caller's perspective and must not become the
   producer work source by recording provider misses. Active scheduler-state
   scanning may be planned later only as a reconciliation/audit loop; it must
   not be the primary producer input path.
@@ -919,3 +924,29 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   embedded-runtime/infrastructure async shell with tracked lifecycle ownership,
   typed unavailable/failed diagnostics, bounded retry/backoff, and no graph,
   frontend, Tauri, runtime-host, or legacy path-derived probe inputs.
+- 2026-05-29 dependency requirements registry re-plan selected. Decision:
+  implement option 2 as the real-probe source contract. Add a backend-owned
+  dependency requirements registry keyed by `DependencyRequirementsId`.
+  Workflow-service must store the validated requirement/binding payload when it
+  builds or consumes the dependency readiness source for a runtime task, and
+  readiness work items must continue to carry only task/run/session provenance,
+  validated request identity, freshness/retry/cancellation policy, diagnostic
+  context, and the requirements id. Embedded-runtime or an infrastructure
+  lifecycle producer must resolve the requirements id through a narrow registry
+  trait before running host package/runtime probes. Missing, stale, mismatched,
+  or unavailable registry payloads must publish typed non-ready diagnostics and
+  must not fall back to requirement-id string parsing, frontend/graph/editor
+  state, technical-fit preview facts, reduced execution plans, runtime-host
+  load targets, `ModelDependencyRequest`, `ModelRefV2`, or path/model-path
+  fields. Registry ownership and lifecycle constraints: the shared payload
+  contract and registry trait are serial integration-owner work; core/shared
+  crates may define DTOs and traits but must not depend on app, transport,
+  binding, or runtime lifecycle crates; concrete storage, expiry, eviction, and
+  shutdown wiring belong in workflow-service composition or another backend
+  composition owner; producer probing remains in the embedded-runtime/
+  infrastructure async shell with tracked task handles, bounded retry/backoff,
+  cancellation, and deterministic tests. Rejected alternatives: self-contained
+  queue payloads for production because they duplicate large payloads across
+  concurrent tasks/runs; producer-side reconstruction because it duplicates
+  planning policy in embedded-runtime; legacy/preview-fact reuse because it
+  preserves retired behavior.
