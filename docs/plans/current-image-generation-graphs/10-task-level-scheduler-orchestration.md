@@ -1999,6 +1999,35 @@ current injected-ready provider remains test/dev scaffolding only and must not
 be treated as production readiness authority while dispatch selection and
 runtime-host request construction are wired.
 
+2026-05-30 runtime dispatch-selection boundary slice completed. Workflow-service
+now has a focused runtime dispatch candidate provider seam and a path-free
+request assembly helper that combines an admitted runtime task, the readiness
+proof produced during admission, and provider-supplied scheduler dispatch
+candidates into a validated `SchedulerDispatchSelectionRequest`. Session
+execution now reaches scheduler dispatch selection for runtime tasks that pass
+input readiness and dependency readiness. The default provider intentionally
+returns no candidates, so the scheduler selector returns typed no-selection
+diagnostics and workflow-service fails closed before runtime-host dispatch
+instead of reporting a generic "dispatch not wired" branch or using legacy
+graph/node-engine/reduced-plan execution. The slice also records the important
+state-lifecycle invariant discovered during implementation: readiness proof
+must be carried forward from the admission step because a task in `Ready` state
+no longer has the `WaitingDependencyReadiness` context needed to rebuild the
+readiness request safely.
+
+Remaining production runtime dispatch work after this slice:
+
+- Add the production provider that gathers canonical runtime/resource/Pumas
+  dispatch candidates without ranking them.
+- Add the runtime-task running/completion state transitions and result
+  persistence path before allowing non-empty candidate sets to reach
+  runtime-host dispatch from session execution.
+- Replace the temporary fail-closed terminal transition label/message used for
+  no-selection with scheduler dispatch-selection diagnostics in task state.
+- Keep the successful runtime-host execution path blocked until the selected
+  handoff, runtime-host response mapping, and scheduler task-result persistence
+  are one validated vertical slice.
+
 ## Effects On Existing Systems
 
 ### Scheduler

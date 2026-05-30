@@ -29,6 +29,7 @@ public exports out of the service crate.
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `execution_plan_model_ref.rs` | Parse-once selected Pumas model-ref value object for run execution plans, including raw model-id normalization and local-path/unsupported-URI rejection. |
 | `execution_plan_selected_facts.rs` | Workflow-owned selected backend/runtime/device fact value objects for run execution plans. |
+| `runtime_dispatch_selection.rs` | Workflow-service assembly boundary for runtime dispatch-selection requests from admitted readiness proof plus canonical dispatch candidates; it provides an empty default source so scheduler selection fails closed until production candidate facts are wired. |
 | `runtime_host_task_result_mapping.rs` | Focused mapping from validated runtime-host terminal responses into typed scheduler task results without exposing executable load targets. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |
@@ -99,6 +100,11 @@ completed upstream scheduler task results into typed, path-free
 reference results are not materialized as runtime-host inputs on model-ref
 binding ports because model identity is carried by scheduler handoff and
 readiness proof.
+Runtime dispatch-selection request assembly is also workflow-service owned,
+but runtime/device/model ranking remains in `pantograph-scheduler`. The
+default runtime dispatch candidate provider returns no candidates, causing a
+typed scheduler no-selection before any runtime-host dispatch rather than
+falling back to graph paths, node-engine launch, or reduced execution plans.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and

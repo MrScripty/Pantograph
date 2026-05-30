@@ -21,7 +21,8 @@ use crate::scheduler::{
 
 use super::{
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
-    SqliteAttributionStore, SqliteDiagnosticsLedger, WorkflowDiagnosticsProjectionRefreshSink,
+    NoRuntimeDispatchCandidatesProvider, SqliteAttributionStore, SqliteDiagnosticsLedger,
+    WorkflowDiagnosticsProjectionRefreshSink, WorkflowRuntimeDispatchCandidateProvider,
     WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError,
 };
 
@@ -61,6 +62,7 @@ impl WorkflowService {
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
             scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
             dependency_readiness_provider: default_dependency_readiness_provider(),
+            runtime_dispatch_candidate_provider: default_runtime_dispatch_candidate_provider(),
             dependency_readiness_work_queue: Arc::new(DependencyReadinessWorkQueue::new()),
             dependency_requirements_registry: Arc::new(
                 InMemoryDependencyRequirementsRegistry::new(),
@@ -74,6 +76,16 @@ impl WorkflowService {
     ) -> Self {
         self.scheduler_task_orchestrator =
             WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port));
+        self
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub(crate) fn with_runtime_dispatch_candidate_provider(
+        mut self,
+        provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
+    ) -> Self {
+        self.runtime_dispatch_candidate_provider = provider;
         self
     }
 
@@ -327,6 +339,11 @@ fn default_dependency_readiness_provider() -> Arc<dyn WorkflowDependencyReadines
     Arc::new(DependencyEnvironmentService::new(
         NotImplementedDependencyEnvironmentProvider,
     ))
+}
+
+fn default_runtime_dispatch_candidate_provider() -> Arc<dyn WorkflowRuntimeDispatchCandidateProvider>
+{
+    Arc::new(NoRuntimeDispatchCandidatesProvider)
 }
 
 fn dependency_requirements_registry_error(

@@ -356,7 +356,7 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
     assert!(
         error
             .message()
-            .contains("runtime scheduler dispatch is not wired"),
+            .contains("runtime scheduler dispatch selection failed closed"),
         "unexpected error: {error}"
     );
     let queue = service
@@ -428,6 +428,10 @@ fn dependency_requirements() -> Vec<DependencyRequirement> {
             python_requires: Some(">=3.10".to_string()),
             package_manager: Some(PythonPackageManagerKind::Pip),
         }),
+        managed_runtime: None,
+        runtime_feature: None,
+        device_toolchain: None,
+        system_package: None,
     }]
 }
 
@@ -443,6 +447,10 @@ fn dependency_bindings(
             environment_kind: DependencyEnvironmentKind::Python,
             profile_id: None,
             python: None,
+            managed_runtime: None,
+            runtime_feature: None,
+            device_toolchain: None,
+            system_package: None,
         })
         .collect()
 }

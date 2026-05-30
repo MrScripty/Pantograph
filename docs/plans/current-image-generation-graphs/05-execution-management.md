@@ -17990,6 +17990,41 @@ Worker rules:
     `git diff --check`.
   - Remaining follow-up: resume implementation from the next scheduler/
     runtime-host execution slice in the milestone checklist.
+- 2026-05-30 runtime dispatch-selection boundary slice:
+  - Slice scope: workflow-service session runtime dispatch boundary only.
+    Allowed files: `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+    `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    the workflow/scheduler READMEs, and this plan record.
+  - Implementation: added a focused runtime dispatch candidate provider seam
+    with an empty default provider, added validated dispatch-selection request
+    assembly from admitted readiness proof plus provider candidates, and changed
+    runtime-containing session execution to reach scheduler dispatch selection
+    after input/dependency readiness. Empty default candidates now fail closed
+    through scheduler no-selection before runtime-host dispatch.
+  - No-fallback/no-legacy result: the slice does not synthesize handoff from
+    reduced execution plans, graph paths, node-engine demand, `ModelRefV2`, or
+    frontend/Tauri facts. Non-empty candidate sets are still blocked in session
+    execution until the next slice adds runtime task running/completion state
+    and scheduler task-result persistence.
+  - Discovered invariant: dependency readiness proof must be carried forward
+    from admission into dispatch selection. Rebuilding the readiness request
+    after the task moves to `Ready` loses the `WaitingDependencyReadiness`
+    context and correctly fails closed.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-workflow-service --all-features`,
+    `cargo check -p pantograph-workflow-service --no-default-features`,
+    `git diff --check`, and targeted legacy-path searches against the touched
+    workflow-service dispatch files. The only warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: implement the production candidate provider and the
+    runtime task running/completion persistence path as separate validated
+    slices before allowing successful runtime-host dispatch from session runs.
 
 ### Traceability Links
 

@@ -109,6 +109,13 @@ build a dispatch-selected `SchedulerRuntimeHandoff`, and dispatch through the
 shared runtime-host port. It does not create dispatch candidates, rank runtime
 policy, inspect model paths, or call Pumas; candidate assembly remains a
 separate provider/session concern.
+Session execution now reaches that dispatch-selection boundary for admitted
+runtime tasks. Workflow-service carries the readiness proof produced during
+admission into dispatch-selection request assembly and asks the configured
+runtime dispatch candidate provider for canonical candidates. The default
+provider returns an empty candidate list, so the scheduler selector returns a
+typed no-selection diagnostic before runtime-host dispatch instead of using
+legacy graph paths, node-engine launch, or reduced execution-plan handoff.
 The scheduler task orchestrator also owns the workflow-service bridge from
 `WaitingDependencyReadiness` into scheduler readiness admission. It consumes
 only a path-free `DependencyPreflightResult`, applies
