@@ -8,6 +8,8 @@ use super::scalar::{
     validate_dependency_name, validate_dependency_text, validate_diagnostics,
     validate_optional_dependency_text, validate_validation_field_path, DependencyBindingProfileId,
     DependencyOperationTimestampMs, DependencyRequirementName, DependencyValidationFieldPath,
+    DeviceObservationId, DeviceToolchainSourceId, ManagedRuntimeSourceId, RuntimeFeatureSourceId,
+    RuntimeSourceId, RuntimeVariantSourceId,
 };
 use super::state::DependencyEnvironmentValidationState;
 
@@ -113,6 +115,65 @@ pub enum PythonPackageManagerKind {
     Conda,
 }
 
+/// Managed-runtime-specific requirement facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct ManagedRuntimeRequirementDetails {
+    pub managed_binary_id: ManagedRuntimeSourceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<RuntimeVariantSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_key: Option<String>,
+}
+
+impl ManagedRuntimeRequirementDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_optional_dependency_text(
+            "managed_runtime_requirement.version",
+            self.version.as_deref(),
+        )?;
+        validate_optional_dependency_text(
+            "managed_runtime_requirement.platform_key",
+            self.platform_key.as_deref(),
+        )
+    }
+}
+
+/// Runtime-feature-specific requirement facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeFeatureRequirementDetails {
+    pub runtime_id: RuntimeSourceId,
+    pub feature_id: RuntimeFeatureSourceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<RuntimeVariantSourceId>,
+}
+
+impl RuntimeFeatureRequirementDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        Ok(())
+    }
+}
+
+/// Device-toolchain-specific requirement facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct DeviceToolchainRequirementDetails {
+    pub toolchain_id: DeviceToolchainSourceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<DeviceObservationId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<RuntimeSourceId>,
+}
+
+impl DeviceToolchainRequirementDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        Ok(())
+    }
+}
+
 /// Shared dependency requirement row.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -123,6 +184,12 @@ pub struct DependencyRequirement {
     pub version_constraint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python: Option<PythonRequirementDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_runtime: Option<ManagedRuntimeRequirementDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_feature: Option<RuntimeFeatureRequirementDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_toolchain: Option<DeviceToolchainRequirementDetails>,
 }
 
 impl DependencyRequirement {
@@ -140,6 +207,56 @@ impl DependencyRequirement {
                 });
             }
             python.validate()?;
+        }
+        if let Some(managed_runtime) = &self.managed_runtime {
+            if self.kind != DependencyRequirementKind::RuntimeManagedBinary {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_requirement.managed_runtime",
+                    reason: "managed runtime details are allowed only for runtime managed binary requirements",
+                });
+            }
+            managed_runtime.validate()?;
+        }
+        if let Some(runtime_feature) = &self.runtime_feature {
+            if self.kind != DependencyRequirementKind::RuntimeFeature {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_requirement.runtime_feature",
+                    reason:
+                        "runtime feature details are allowed only for runtime feature requirements",
+                });
+            }
+            runtime_feature.validate()?;
+        }
+        if let Some(device_toolchain) = &self.device_toolchain {
+            if self.kind != DependencyRequirementKind::DeviceToolchain {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_requirement.device_toolchain",
+                    reason: "device toolchain details are allowed only for device toolchain requirements",
+                });
+            }
+            device_toolchain.validate()?;
+        }
+        match self.kind {
+            DependencyRequirementKind::PythonPackage => {}
+            DependencyRequirementKind::RuntimeManagedBinary if self.managed_runtime.is_some() => {}
+            DependencyRequirementKind::RuntimeFeature if self.runtime_feature.is_some() => {}
+            DependencyRequirementKind::DeviceToolchain if self.device_toolchain.is_some() => {}
+            DependencyRequirementKind::SystemPackage => {}
+            DependencyRequirementKind::RuntimeManagedBinary => {
+                return Err(DependencyPlanningContractError::MissingField {
+                    field: "dependency_requirement.managed_runtime",
+                });
+            }
+            DependencyRequirementKind::RuntimeFeature => {
+                return Err(DependencyPlanningContractError::MissingField {
+                    field: "dependency_requirement.runtime_feature",
+                });
+            }
+            DependencyRequirementKind::DeviceToolchain => {
+                return Err(DependencyPlanningContractError::MissingField {
+                    field: "dependency_requirement.device_toolchain",
+                });
+            }
         }
         Ok(())
     }
@@ -174,6 +291,69 @@ impl PythonBindingDetails {
     }
 }
 
+/// Managed-runtime-specific binding facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct ManagedRuntimeBindingDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_binary_id: Option<ManagedRuntimeSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<RuntimeVariantSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_key: Option<String>,
+}
+
+impl ManagedRuntimeBindingDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_optional_dependency_text(
+            "managed_runtime_binding.selected_version",
+            self.selected_version.as_deref(),
+        )?;
+        validate_optional_dependency_text(
+            "managed_runtime_binding.platform_key",
+            self.platform_key.as_deref(),
+        )
+    }
+}
+
+/// Runtime-feature-specific binding facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeFeatureBindingDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<RuntimeSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature_id: Option<RuntimeFeatureSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<RuntimeVariantSourceId>,
+}
+
+impl RuntimeFeatureBindingDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        Ok(())
+    }
+}
+
+/// Device-toolchain-specific binding facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct DeviceToolchainBindingDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toolchain_id: Option<DeviceToolchainSourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<DeviceObservationId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<RuntimeSourceId>,
+}
+
+impl DeviceToolchainBindingDetails {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        Ok(())
+    }
+}
+
 /// Shared dependency binding row selected or checked by dependency environments.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -185,6 +365,12 @@ pub struct DependencyRequirementBinding {
     pub profile_id: Option<DependencyBindingProfileId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python: Option<PythonBindingDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_runtime: Option<ManagedRuntimeBindingDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_feature: Option<RuntimeFeatureBindingDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_toolchain: Option<DeviceToolchainBindingDetails>,
 }
 
 impl DependencyRequirementBinding {
@@ -200,6 +386,34 @@ impl DependencyRequirementBinding {
                 });
             }
             python.validate()?;
+        }
+        if let Some(managed_runtime) = &self.managed_runtime {
+            if self.environment_kind != DependencyEnvironmentKind::ManagedBinary {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_binding.managed_runtime",
+                    reason: "managed runtime details are allowed only for managed binary bindings",
+                });
+            }
+            managed_runtime.validate()?;
+        }
+        if let Some(runtime_feature) = &self.runtime_feature {
+            if self.environment_kind != DependencyEnvironmentKind::RuntimeFeature {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_binding.runtime_feature",
+                    reason: "runtime feature details are allowed only for runtime feature bindings",
+                });
+            }
+            runtime_feature.validate()?;
+        }
+        if let Some(device_toolchain) = &self.device_toolchain {
+            if self.environment_kind != DependencyEnvironmentKind::DeviceToolchain {
+                return Err(DependencyPlanningContractError::InvalidField {
+                    field: "dependency_binding.device_toolchain",
+                    reason:
+                        "device toolchain details are allowed only for device toolchain bindings",
+                });
+            }
+            device_toolchain.validate()?;
         }
         Ok(())
     }

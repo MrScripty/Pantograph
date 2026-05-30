@@ -25,7 +25,11 @@ pub use environment::{
     DependencyEnvironmentValidationError, DependencyEnvironmentValidationState,
     DependencyOperationTimestampMs, DependencyRequirement, DependencyRequirementBinding,
     DependencyRequirementKind, DependencyRequirementName, DependencyValidationFieldPath,
-    PythonBindingDetails, PythonPackageManagerKind, PythonRequirementDetails,
+    DeviceObservationId, DeviceToolchainBindingDetails, DeviceToolchainRequirementDetails,
+    DeviceToolchainSourceId, ManagedRuntimeBindingDetails, ManagedRuntimeRequirementDetails,
+    ManagedRuntimeSourceId, PythonBindingDetails, PythonPackageManagerKind,
+    PythonRequirementDetails, RuntimeFeatureBindingDetails, RuntimeFeatureRequirementDetails,
+    RuntimeFeatureSourceId, RuntimeSourceId, RuntimeVariantSourceId,
     ValidatedDependencyEnvironmentRequest, ValidatedDependencyEnvironmentResult,
 };
 pub use error::{DependencyPlanningContractError, PumasArtifactEntryPathError};

@@ -19,12 +19,15 @@ pub use payload::{
     DependencyEnvironmentOperation, DependencyEnvironmentOperationState,
     DependencyEnvironmentValidationCode, DependencyEnvironmentValidationError,
     DependencyRequirement, DependencyRequirementBinding, DependencyRequirementKind,
-    PythonBindingDetails, PythonPackageManagerKind, PythonRequirementDetails,
+    DeviceToolchainBindingDetails, DeviceToolchainRequirementDetails, ManagedRuntimeBindingDetails,
+    ManagedRuntimeRequirementDetails, PythonBindingDetails, PythonPackageManagerKind,
+    PythonRequirementDetails, RuntimeFeatureBindingDetails, RuntimeFeatureRequirementDetails,
 };
 use scalar::{validate_diagnostics, validate_unique_binding_ids};
 pub use scalar::{
     DependencyBindingProfileId, DependencyOperationTimestampMs, DependencyRequirementName,
-    DependencyValidationFieldPath,
+    DependencyValidationFieldPath, DeviceObservationId, DeviceToolchainSourceId,
+    ManagedRuntimeSourceId, RuntimeFeatureSourceId, RuntimeSourceId, RuntimeVariantSourceId,
 };
 pub use state::{
     DependencyEnvironmentAction, DependencyEnvironmentFailureState,

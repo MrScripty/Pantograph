@@ -850,3 +850,167 @@ fn dependency_environment_result_rejects_python_details_on_non_python_rows() {
         }
     );
 }
+
+#[test]
+fn dependency_environment_result_accepts_typed_non_python_detail_rows() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::RuntimeManagedBinary;
+    result.requirements[0].python = None;
+    result.requirements[0].managed_runtime = Some(
+        serde_json::from_value(serde_json::json!({
+            "managed_binary_id": "llama_cpp",
+            "runtime_variant_id": "llama_cpp:cpu",
+            "version": "b8248",
+            "platform_key": "linux-x86_64"
+        }))
+        .expect("managed runtime details"),
+    );
+    result.bindings[0].environment_kind = DependencyEnvironmentKind::ManagedBinary;
+    result.bindings[0].python = None;
+    result.bindings[0].managed_runtime = Some(
+        serde_json::from_value(serde_json::json!({
+            "managed_binary_id": "llama_cpp",
+            "runtime_variant_id": "llama_cpp:cpu",
+            "selected_version": "b8248",
+            "platform_key": "linux-x86_64"
+        }))
+        .expect("managed runtime binding details"),
+    );
+
+    result
+        .validate()
+        .expect("managed runtime detail rows should validate");
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::RuntimeFeature;
+    result.requirements[0].python = None;
+    result.requirements[0].runtime_feature = Some(
+        serde_json::from_value(serde_json::json!({
+            "runtime_id": "pytorch",
+            "feature_id": "attention_slicing",
+            "runtime_variant_id": "pytorch:cuda"
+        }))
+        .expect("runtime feature details"),
+    );
+    result.bindings[0].environment_kind = DependencyEnvironmentKind::RuntimeFeature;
+    result.bindings[0].python = None;
+    result.bindings[0].runtime_feature = Some(
+        serde_json::from_value(serde_json::json!({
+            "runtime_id": "pytorch",
+            "feature_id": "attention_slicing",
+            "runtime_variant_id": "pytorch:cuda"
+        }))
+        .expect("runtime feature binding details"),
+    );
+
+    result
+        .validate()
+        .expect("runtime feature detail rows should validate");
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::DeviceToolchain;
+    result.requirements[0].python = None;
+    result.requirements[0].device_toolchain = Some(
+        serde_json::from_value(serde_json::json!({
+            "toolchain_id": "cuda_toolkit",
+            "device_id": "cuda:0",
+            "runtime_id": "pytorch"
+        }))
+        .expect("device toolchain details"),
+    );
+    result.bindings[0].environment_kind = DependencyEnvironmentKind::DeviceToolchain;
+    result.bindings[0].python = None;
+    result.bindings[0].device_toolchain = Some(
+        serde_json::from_value(serde_json::json!({
+            "toolchain_id": "cuda_toolkit",
+            "device_id": "cuda:0",
+            "runtime_id": "pytorch"
+        }))
+        .expect("device toolchain binding details"),
+    );
+
+    result
+        .validate()
+        .expect("device toolchain detail rows should validate");
+}
+
+#[test]
+fn dependency_environment_result_requires_typed_details_for_supported_non_python_rows() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::RuntimeManagedBinary;
+    result.requirements[0].python = None;
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("managed runtime requirements need typed details"),
+        DependencyPlanningContractError::MissingField {
+            field: "dependency_requirement.managed_runtime"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_result_rejects_mismatched_non_python_detail_rows() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].managed_runtime = Some(
+        serde_json::from_value(serde_json::json!({
+            "managed_binary_id": "llama_cpp"
+        }))
+        .expect("managed runtime details"),
+    );
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("managed runtime details are requirement-kind scoped"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_requirement.managed_runtime",
+            reason:
+                "managed runtime details are allowed only for runtime managed binary requirements"
+        }
+    );
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.bindings[0].device_toolchain = Some(
+        serde_json::from_value(serde_json::json!({
+            "toolchain_id": "cuda_toolkit"
+        }))
+        .expect("device toolchain binding details"),
+    );
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("device toolchain details are binding-kind scoped"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_binding.device_toolchain",
+            reason: "device toolchain details are allowed only for device toolchain bindings"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_result_rejects_unknown_non_python_detail_fields() {
+    let mut value: serde_json::Value =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should parse");
+    let requirement = value["requirements"][0]
+        .as_object_mut()
+        .expect("requirement should be an object");
+    requirement.insert(
+        "managed_runtime".to_string(),
+        serde_json::json!({
+            "managed_binary_id": "llama_cpp",
+            "legacy_path": "/usr/bin/llama.cpp"
+        }),
+    );
+
+    serde_json::from_value::<DependencyEnvironmentResult>(value)
+        .expect_err("managed runtime details must reject unknown legacy fields");
+}

@@ -44,6 +44,12 @@ one neutral contract boundary before runtime behavior is migrated.
   status, operation, validation-error, and environment-ref facts as typed rows.
   Runtime-specific and package-manager-specific facts stay behind optional
   detail structs instead of becoming generic dependency fields.
+- Non-Python dependency-environment requirement rows carry provider source
+  identity through typed detail structs, not through `DependencyRequirementName`
+  parsing. Managed-runtime, runtime-feature, and device-toolchain details are
+  validated contract facts for inventory providers; this crate still does not
+  inspect managed-runtime state, runtime registry facts, devices, files, shell
+  output, or scheduler decisions.
 
 ## Decision
 Create a small workspace crate with validated request/result DTOs and
@@ -100,6 +106,10 @@ DTOs.
 - Python/package-manager facts are scoped to `PythonRequirementDetails` and
   `PythonBindingDetails`; non-Python dependency classes must not reuse those
   fields.
+- Managed-runtime, runtime-feature, and device-toolchain source facts are
+  scoped to their matching requirement/binding detail structs. Supported
+  non-Python requirement kinds must include their typed detail struct before an
+  inventory provider may treat the row as source-addressable.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.
 - Missing, stale, invalid, unavailable, ambiguous, needs-detail, and

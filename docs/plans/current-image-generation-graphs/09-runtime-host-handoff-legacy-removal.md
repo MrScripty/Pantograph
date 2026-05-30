@@ -405,6 +405,22 @@ Implementation progress:
   validation with async provider I/O, and no fallback behavior. Revisit a
   dedicated inventory contract crate only if implementation proves a dependency
   cycle or ownership conflict.
+- 2026-05-30 contract slice: extended `pantograph-dependency-planning` with
+  typed non-Python requirement and binding detail structs for managed-runtime,
+  runtime-feature, and device-toolchain source identity. The slice is
+  contract-only: inventory providers still return typed not-implemented
+  diagnostics until they are implemented against source-owned facts. Validation
+  requires typed details for supported non-Python requirement kinds, rejects
+  mismatched detail/kind combinations, and rejects unknown legacy detail fields.
+- Verification for the contract slice: `cargo fmt -- --check`,
+  `cargo test -p pantograph-dependency-planning dependency_environment_result`,
+  `cargo test -p pantograph-dependency-planning`, and
+  `cargo check -p pantograph-dependency-planning` passed. `git diff --check`
+  also passed. Line-count review found production modules under the
+  decomposition target (`environment/payload.rs` 486 lines,
+  `environment/scalar.rs` 416 lines), but `tests/contract.rs` remains a broad
+  existing contract suite over 1k lines. Keep future dependency-environment
+  contract tests in focused files instead of growing that file further.
 
 ## Verification Strategy
 

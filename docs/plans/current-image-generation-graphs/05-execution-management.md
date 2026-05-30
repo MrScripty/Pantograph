@@ -17331,6 +17331,31 @@ Worker rules:
   - Plan updates: `09-runtime-host-handoff-legacy-removal.md` now records the
     typed per-kind details ownership, updated staged sequence, standards
     gates, and crate-boundary escape hatch if a real dependency cycle appears.
+- 2026-05-30 provider source-detail contract slice:
+  - Slice scope: extended `pantograph-dependency-planning` with typed
+    managed-runtime, runtime-feature, and device-toolchain requirement/binding
+    detail structs plus validated source-id wrappers. The slice does not wire
+    providers yet; non-Python inventory readiness still fails closed until
+    source-owned providers are implemented.
+  - No-fallback result: provider source identity is now represented by typed
+    detail fields rather than parsed requirement names, display labels, graph
+    strings, shell output, Pumas package names, or scheduler runtime selection.
+  - Focused tests: dependency-environment result contract tests now cover
+    valid non-Python detail rows, required detail rows for supported
+    non-Python requirement kinds, mismatched detail/kind rejection, and
+    unknown nested legacy-field rejection.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-dependency-planning dependency_environment_result`,
+    `cargo test -p pantograph-dependency-planning`, and
+    `cargo check -p pantograph-dependency-planning`.
+  - Line-count review found production modules under the decomposition target
+    (`environment/payload.rs` 486 lines, `environment/scalar.rs` 416 lines).
+    `tests/contract.rs` remains a broad existing public contract suite over
+    1k lines; future dependency-environment contract slices should add focused
+    test files or modules instead of growing that file further.
+  - README traceability updated in `crates/pantograph-dependency-planning`.
+    `git diff --check` passed; final status review remains the last commit
+    gate.
 
 ### Traceability Links
 

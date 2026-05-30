@@ -12,6 +12,84 @@ const MAX_REQUIREMENT_NAME_LEN: usize = 128;
 const MAX_FIELD_PATH_LEN: usize = 256;
 const MAX_DEPENDENCY_TEXT_LEN: usize = 256;
 
+macro_rules! dependency_source_id {
+    ($name:ident, $field:literal) => {
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[must_use]
+        pub struct $name(String);
+
+        impl $name {
+            pub fn parse(value: impl AsRef<str>) -> Result<Self, DependencyPlanningContractError> {
+                validate_dependency_name($field, value.as_ref()).map(Self)
+            }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_tuple(stringify!($name)).field(&self.0).finish()
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = DependencyPlanningContractError;
+
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                Self::parse(value)
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = DependencyPlanningContractError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::parse(value)
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let value = String::deserialize(deserializer)?;
+                Self::parse(value).map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
+dependency_source_id!(ManagedRuntimeSourceId, "managed_runtime.source_id");
+dependency_source_id!(RuntimeFeatureSourceId, "runtime_feature.source_id");
+dependency_source_id!(RuntimeSourceId, "runtime.source_id");
+dependency_source_id!(RuntimeVariantSourceId, "runtime_variant.source_id");
+dependency_source_id!(DeviceToolchainSourceId, "device_toolchain.source_id");
+dependency_source_id!(DeviceObservationId, "device_observation_id");
+
 /// Dependency binding profile id.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[must_use]
