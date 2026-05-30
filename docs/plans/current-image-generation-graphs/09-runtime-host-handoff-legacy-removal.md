@@ -502,12 +502,22 @@ Staged implementation:
    provider-source DTOs, keep scheduler/runtime-registry ranking policy out of
    dependency inventory, and prove unsupported, stale, missing, and ready
    feature states through focused provider tests.
-10. Add the device-toolchain source projection and provider from source-owned
+10. Add a dependency-inventory alternative propagation contract before the
+   device-toolchain provider. Extend the shared dependency-planning
+   observation/status contract so provider-source alternatives can be retained
+   on per-binding inventory observations and projected into
+   `DependencyBindingStatusRow` results without changing scheduler policy or
+   auto-selecting alternatives. This slice must add serde fixtures, validated
+   wrappers or `TryFrom` validation, unknown-field rejection, bounds tests,
+   README traceability, and focused projector tests proving alternatives
+   survive unavailable observations.
+11. Add the device-toolchain source projection and provider from source-owned
    device/runtime observation facts. This slice must consume only the shared
-   provider-source DTOs, avoid shell probing inside dependency inventory, and
-   prove explicit unavailable constraints surface bounded alternatives without
-   auto-selecting them.
-11. Plan system-package inventory separately before implementation because it
+   provider-source DTOs, avoid shell probing inside dependency inventory,
+   carry explicit unavailable alternatives through the contract from step 10,
+   and prove explicit unavailable constraints surface bounded alternatives
+   without auto-selecting them.
+12. Plan system-package inventory separately before implementation because it
    is platform/package-manager specific and likely needs a host inventory
    source rather than direct probing in embedded-runtime.
 
@@ -525,9 +535,10 @@ Standards gates:
   names, or graph-authored strings to recover managed-runtime, feature, or
   toolchain identity.
 - Keep result projection centralized. Concrete providers may return typed
-  observation rows, provider diagnostics, and freshness/correlation facts, but
-  dependency-environment readiness/install/operation/result-state mapping must
-  live in the shared projector so mixed-provider payloads are easy to reason
+  observation rows, provider diagnostics, freshness/correlation facts, and
+  bounded provider alternatives, but dependency-environment
+  readiness/install/operation/result-state mapping must live in the shared
+  projector so mixed-provider payloads are easy to reason
   about and later consumers can trust the same evidence.
 - After the per-binding dispatcher slice, there must be no payload-wide
   Python/not-implemented branch such as "if every selected binding is Python,
@@ -741,6 +752,16 @@ Implementation progress:
   source states to typed observation rows and diagnostics, and does not consume
   workflow-service capability DTOs, runtime-registry scheduler candidates,
   graph strings, display names, shell output, or generic requirement names.
+- 2026-05-30 device-toolchain alternatives re-plan: device-toolchain provider
+  implementation is blocked until bounded provider alternatives can move from
+  `DeviceToolchainProviderSourceRow` through `DependencyInventoryObservationRow`
+  and into `DependencyBindingStatusRow`. The selected approach is a
+  contract-first dependency-planning slice that adds bounded alternatives to
+  per-binding observations/status rows and projector tests before implementing
+  device-toolchain source projection/provider behavior. The provider slice
+  must then consume source-owned device/runtime facts only, avoid shell probing
+  inside dependency inventory, and surface alternatives as diagnostics/evidence
+  without scheduler auto-selection.
 
 ## Verification Strategy
 

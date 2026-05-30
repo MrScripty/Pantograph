@@ -17649,9 +17649,35 @@ Worker rules:
     only warning observed remains the pre-existing
     `set_active_run_execution_plan` dead-code warning in
     `pantograph-workflow-service`.
-  - Remaining follow-up: implement the device-toolchain source projection and
-    provider in a separate slice from source-owned device/runtime observation
-    facts. System-package inventory remains separately planned.
+  - Remaining follow-up: before implementing the device-toolchain provider,
+    add a contract-first dependency-planning slice that carries bounded
+    provider alternatives from source rows through
+    `DependencyInventoryObservationRow` and into `DependencyBindingStatusRow`
+    projector output. Then implement the device-toolchain source
+    projection/provider in a separate slice from source-owned device/runtime
+    observation facts. System-package inventory remains separately planned.
+- 2026-05-30 selected re-plan for device-toolchain alternatives:
+  - Boundary: device-toolchain provider rows already support bounded
+    alternatives, but dependency inventory observations and binding status
+    results do not currently preserve those alternatives. Implementing the
+    provider now would either drop alternatives at the projector boundary or
+    require encoding alternatives into diagnostic text, both of which would
+    violate the typed-contract/no-fallback direction.
+  - Decision: add a dedicated dependency-planning contract slice first. Extend
+    per-binding inventory observation/status rows with bounded provider
+    alternatives, keep validation and bounds in the shared contract crate, and
+    update the shared projector so alternatives survive unavailable
+    observations without changing readiness state, scheduler policy, or
+    auto-selection behavior.
+  - Standards result expected: embedded-runtime providers remain simple
+    source-to-observation adapters; dependency-environment result projection
+    remains centralized; scheduler, node-engine, graph editor, frontend, and
+    Tauri consume typed status facts only; alternatives remain structured
+    evidence instead of display text, graph strings, generic requirement
+    names, shell output, or runtime-registry ranking facts.
+  - Next implementation order: dependency-planning alternatives propagation
+    contract, then device-toolchain source projection/provider, then
+    separately planned system-package inventory.
 
 ### Traceability Links
 
