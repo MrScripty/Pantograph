@@ -17,7 +17,10 @@ use crate::{
     SharedExtensions, SharedWorkflowService,
 };
 #[cfg(feature = "standalone")]
-use crate::{EmbeddedRuntimeError, StandaloneRuntimeConfig, TauriModelDependencyResolver};
+use crate::{
+    EmbeddedDependencyReadinessSnapshotProducer, EmbeddedRuntimeError, StandaloneRuntimeConfig,
+    TauriModelDependencyResolver,
+};
 
 impl EmbeddedRuntime {
     pub fn from_components(
@@ -42,6 +45,7 @@ impl EmbeddedRuntime {
             extensions,
             workflow_service,
             runtime_registry: None,
+            dependency_readiness_snapshot_producer: None,
             session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
             session_executions: Arc::new(
                 workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore::new(),
@@ -121,6 +125,14 @@ impl EmbeddedRuntime {
             .await;
 
         let dependency_readiness = WorkflowDependencyReadinessComponents::new();
+        let dependency_readiness_snapshot_producer =
+            EmbeddedDependencyReadinessSnapshotProducer::new(
+                dependency_readiness.snapshot_provider(),
+            )
+            .spawn(tokio::runtime::Handle::current())
+            .map_err(|error| EmbeddedRuntimeError::Initialization {
+                message: error.to_string(),
+            })?;
         let workflow_service = Arc::new(dependency_readiness.workflow_service());
         workflow_service
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
@@ -163,7 +175,8 @@ impl EmbeddedRuntime {
             extensions,
             workflow_service,
             None,
-        ))
+        )
+        .with_dependency_readiness_snapshot_producer(dependency_readiness_snapshot_producer))
     }
 
     pub fn config(&self) -> &EmbeddedRuntimeConfig {
@@ -188,6 +201,14 @@ impl EmbeddedRuntime {
             )))
             .expect("scheduler diagnostics provider should be configured");
         self.runtime_registry = Some(runtime_registry);
+        self
+    }
+
+    pub fn with_dependency_readiness_snapshot_producer(
+        mut self,
+        producer: crate::EmbeddedDependencyReadinessSnapshotProducerHandle,
+    ) -> Self {
+        self.dependency_readiness_snapshot_producer = Some(producer);
         self
     }
 
@@ -227,6 +248,9 @@ impl EmbeddedRuntime {
             .await;
         } else {
             self.gateway.stop().await;
+        }
+        if let Some(producer) = self.dependency_readiness_snapshot_producer.as_ref() {
+            producer.shutdown().await;
         }
     }
 

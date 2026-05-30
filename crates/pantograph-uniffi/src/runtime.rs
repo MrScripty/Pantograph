@@ -2,7 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use node_engine::ExecutorExtensions;
-use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
+use pantograph_embedded_runtime::{
+    EmbeddedDependencyReadinessSnapshotProducer, EmbeddedRuntime, EmbeddedRuntimeConfig,
+};
 use pantograph_workflow_service::{
     ArtifactConsumeAcknowledgementRequest, ArtifactDescriptorQueryRequest,
     ArtifactFormatDependencyVersions, ArtifactFormatSettingsQueryRequest,
@@ -156,6 +158,17 @@ impl FfiPantographRuntime {
             )
         })?;
         let dependency_readiness = WorkflowDependencyReadinessComponents::new();
+        let dependency_readiness_snapshot_producer =
+            EmbeddedDependencyReadinessSnapshotProducer::new(
+                dependency_readiness.snapshot_provider(),
+            )
+            .spawn(tokio::runtime::Handle::current())
+            .map_err(|error| {
+                workflow_adapter_error(
+                    WorkflowErrorCode::InternalError,
+                    format!("failed to start dependency-readiness snapshot producer: {error}"),
+                )
+            })?;
         let workflow_service = Arc::new(
             dependency_readiness
                 .ephemeral_attribution_workflow_service()
@@ -178,7 +191,8 @@ impl FfiPantographRuntime {
             extensions.clone(),
             workflow_service,
             None,
-        );
+        )
+        .with_dependency_readiness_snapshot_producer(dependency_readiness_snapshot_producer);
 
         Ok(Arc::new(Self {
             runtime: Arc::new(runtime),

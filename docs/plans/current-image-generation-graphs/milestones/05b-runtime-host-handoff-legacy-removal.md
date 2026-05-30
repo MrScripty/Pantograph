@@ -728,3 +728,24 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   cancellation, shutdown, retry, tracing, and real host package/runtime probe
   publication before production runtime-host dispatch relies on live
   dependency readiness.
+- 2026-05-29 dependency-readiness producer lifecycle shell slice completed.
+  Added `EmbeddedDependencyReadinessSnapshotProducer` and a tracked
+  `EmbeddedDependencyReadinessSnapshotProducerHandle` in embedded-runtime. The
+  lifecycle validates non-zero polling intervals, spawns one owned Tokio task,
+  records heartbeat tracing, supports idempotent shutdown, and is wired into
+  standalone embedded runtime plus the UniFFI embedded runtime constructor so
+  those composition paths own startup and shutdown for the provider they
+  create. The lifecycle intentionally publishes no snapshots and performs no
+  package, filesystem, Pumas, runtime-host, technical-fit, or legacy preflight
+  probing; dependency readiness remains fail-closed until a later slice adds
+  real host probe publication. Verification passed: `cargo test -p
+  pantograph-embedded-runtime dependency_readiness_lifecycle -- --nocapture`;
+  `cargo check -p pantograph-embedded-runtime`; `cargo check -p
+  pantograph-embedded-runtime --features standalone`; `cargo check -p
+  pantograph-uniffi`; `cargo check -p pantograph-uniffi
+  --no-default-features --features frontend-http`; `cargo fmt -p
+  pantograph-embedded-runtime -p pantograph-uniffi -- --check`. Verification
+  caveat: workflow-service still emits the known unused
+  `set_active_run_execution_plan` warning. Remaining follow-up: add the real
+  host package/runtime probe producer behind this lifecycle with retry/backoff,
+  typed probe failures, and validated snapshot publication.

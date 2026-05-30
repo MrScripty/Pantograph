@@ -10,6 +10,7 @@ use pantograph_workflow_service::{
     WorkflowSchedulerRuntimeRegistryDiagnostics,
 };
 pub mod dependency_readiness;
+mod dependency_readiness_lifecycle;
 mod embedded_data_graph_execution;
 mod embedded_edit_session_execution;
 mod embedded_runtime_lifecycle;
@@ -52,6 +53,10 @@ mod workflow_execution_session_execution;
 pub mod workflow_runtime;
 mod workflow_scheduler_diagnostics;
 
+pub use dependency_readiness_lifecycle::{
+    EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
+    EmbeddedDependencyReadinessSnapshotProducerHandle,
+};
 pub use embedded_edit_session_execution::EditSessionGraphExecutionOutcome;
 pub use host_runtime::HostRuntimeModeSnapshot;
 pub use managed_runtime_manager::{
@@ -112,6 +117,8 @@ pub struct EmbeddedRuntime {
     extensions: SharedExtensions,
     workflow_service: SharedWorkflowService,
     runtime_registry: Option<SharedRuntimeRegistry>,
+    dependency_readiness_snapshot_producer:
+        Option<dependency_readiness_lifecycle::EmbeddedDependencyReadinessSnapshotProducerHandle>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
     session_executions:
         Arc<workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore>,

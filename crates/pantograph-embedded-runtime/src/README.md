@@ -20,6 +20,7 @@ packages.
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |
 | `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
 | `dependency_readiness.rs` | Owns embedded-runtime projection from inference-owned dependency requirement declarations plus host-observed Python package snapshots into typed dependency-readiness facts without probing environments, ranking candidates, or selecting runtimes. |
+| `dependency_readiness_lifecycle.rs` | Owns the tracked no-probe dependency-readiness snapshot producer lifecycle, including startup validation, task handle ownership, cancellation, shutdown, and heartbeat tracing before real host probes are wired. |
 | `package_readiness_provider.rs` | Owns the runtime-scoped package-readiness provider contract that shapes typed environment probe requests, deduplicates probe work within one technical-fit request, and projects probe outcomes into inference-owned dependency-readiness facts without selecting runtimes or calling legacy dependency preflight. |
 | `package_readiness_provider_tests.rs` | Focused fake-runner tests for the package-readiness provider contract, including typed scope projection, request deduplication, missing package diagnostics, Python-unavailable diagnostics, unsupported dependency kinds, and probe-failure projection. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
@@ -111,9 +112,10 @@ Pumas-specific dependency resolution.
   `pytorch.diffusers` only where a runtime-variant distinction is needed.
 - Standalone and binding-owned workflow services must be constructed with the
   shared dependency-readiness snapshot provider before the service is wrapped in
-  `Arc`. The provider is a synchronous no-probe consumer until an
-  embedded-runtime or infrastructure lifecycle owner publishes validated
-  snapshots; missing snapshots must continue to fail closed.
+  `Arc`. Embedded runtimes that own the matching provider must also own the
+  tracked dependency-readiness snapshot producer lifecycle. The current
+  lifecycle is no-probe and publishes no snapshots; missing snapshots must
+  continue to fail closed until real host probes are wired.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

@@ -16729,6 +16729,31 @@ Worker rules:
     `set_active_run_execution_plan` warning. Remaining follow-up: implement
     the tracked async readiness snapshot producer lifecycle before real
     package/runtime probes can publish production snapshots.
+- 2026-05-29 Milestone 5b dependency-readiness producer lifecycle shell slice
+  completed:
+  - Slice scope: embedded-runtime no-probe producer lifecycle, standalone
+    embedded runtime wiring, UniFFI embedded runtime wiring, focused lifecycle
+    tests, embedded-runtime README, and Milestone 5b records.
+  - Implementation: embedded-runtime now has a tracked
+    `EmbeddedDependencyReadinessSnapshotProducer` task owner with startup
+    validation, heartbeat tracing, idempotent shutdown, and stored task handle.
+    Standalone and UniFFI embedded runtime constructors start the lifecycle for
+    the same snapshot provider they install in workflow-service.
+  - No-fallback/no-legacy gate: the lifecycle publishes no snapshots and does
+    not probe packages, filesystems, Pumas, runtime hosts, technical-fit facts,
+    `ModelDependencyRequest`, `ModelRefV2`, `model_path`/`modelPath`, or
+    reduced execution plans. Missing readiness still fails closed.
+  - Verification passed: `cargo test -p pantograph-embedded-runtime
+    dependency_readiness_lifecycle -- --nocapture`; `cargo check -p
+    pantograph-embedded-runtime`; `cargo check -p pantograph-embedded-runtime
+    --features standalone`; `cargo check -p pantograph-uniffi`; `cargo check
+    -p pantograph-uniffi
+    --no-default-features --features frontend-http`; and `cargo fmt -p
+    pantograph-embedded-runtime -p pantograph-uniffi -- --check`.
+  - Verification caveat: workflow-service still emits the known unused
+    `set_active_run_execution_plan` warning. Remaining follow-up: wire real
+    host package/runtime probes behind the lifecycle and publish validated
+    readiness snapshots with retry/backoff and typed failure diagnostics.
 
 ### Traceability Links
 
