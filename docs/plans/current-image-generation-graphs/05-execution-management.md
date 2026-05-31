@@ -19404,6 +19404,28 @@ Worker rules:
     readiness/admission task state before restart/replay, cancellation
     recovery, duplicate-dispatch prevention, or production-grade recovery
     semantics.
+- 2026-05-30 hosted dispatch dependency wiring re-plan boundary:
+  - Investigation result: the next production wiring slice cannot be started
+    safely under the standards. Hosted embedded runtime currently receives an
+    already shared `Arc<WorkflowService>`, while the resource-backed dispatch
+    dependency bundle must be installed before sharing the service. Pumas
+    owner selector access is available from runtime extensions after setup,
+    and the runtime registry is attached later through `with_runtime_registry`.
+  - Standards concern: installing dispatch dependencies through post-share
+    mutation would complect runtime composition with workflow-service
+    lifecycle internals, create a race-prone initialization story for active
+    sessions, and risk moving Pumas/runtime-registry ownership into the wrong
+    layer.
+  - Options recorded in `09-runtime-host-handoff-legacy-removal.md`: hosted
+    workflow-service factory/composition input before sharing (recommended),
+    post-share mutating setters with strict single-use initialization guards,
+    standalone-only wiring, or defer and keep fail-closed diagnostics.
+  - Recommendation pending user decision: add a hosted workflow-service
+    composition/factory boundary owned by embedded-runtime. The factory should
+    install dependency-readiness, resource-backed dispatch dependencies,
+    runtime-host port, reservation lifecycle port, and diagnostics provider
+    before wrapping `WorkflowService` in `Arc`, while keeping Tauri/frontends
+    business-logic-free.
 
 ### Traceability Links
 

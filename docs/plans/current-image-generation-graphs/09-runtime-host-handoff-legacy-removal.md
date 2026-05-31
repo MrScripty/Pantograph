@@ -1579,6 +1579,44 @@ Next implementation sequence:
    selected device candidates from runtime capability facts instead of provider
    guesses.
 
+2026-05-30 re-plan trigger: hosted embedded-runtime startup cannot yet install
+the resource-backed dispatch dependency bundle without changing ownership
+boundaries. `EmbeddedRuntime::hosted_with_default_python_runtime` receives an
+already shared `Arc<WorkflowService>`, but
+`EmbeddedWorkflowServiceDispatchDependencies::resource_backed` must be applied
+before the service is shared. The required Pumas owner selector access is also
+resolved from runtime extensions after the current service handoff, while the
+runtime registry is attached later through `with_runtime_registry`. Mutating an
+already shared service to install dispatch dependencies would complect runtime
+composition with service internals and violate the composition-root standard.
+
+Standards-aligned options:
+
+1. Add an embedded-runtime workflow-service factory/composition input for
+   hosted startup. The host provides config, gateway, runtime registry, Pumas
+   selector access, and optional preconfigured stores before `WorkflowService`
+   is wrapped in `Arc`; embedded-runtime installs dependency-readiness,
+   resource-backed dispatch dependencies, runtime-host port, reservation
+   lifecycle port, and diagnostics provider in one composition root. This is
+   the recommended path because it keeps business logic out of Tauri/frontends
+   and avoids post-share mutation.
+2. Add mutating setters to `WorkflowService` for dispatch dependencies after
+   sharing. Do not use this path unless a later design proves the setters can
+   be single-use, race-free, and initialized before any session run; otherwise
+   it creates lifecycle complection and weakens reasoning about active runs.
+3. Limit resource-backed dispatch wiring to standalone runtime for now. This
+   is standards-compliant only as a scoped standalone slice, but it does not
+   unblock hosted complete inference-run testing and must not be presented as
+   production hosted wiring.
+4. Defer hosted wiring and keep fail-closed dispatch diagnostics. This
+   preserves correctness but stops progress toward complete inference runs.
+
+Selected recommendation pending user decision: option 1. Add a hosted
+workflow-service composition/factory boundary so all runtime dispatch
+dependencies are installed before sharing the service. The slice must not move
+Pumas facts, runtime registry policy, runtime-host execution, or dependency
+readiness business logic into Tauri or workflow-service.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
