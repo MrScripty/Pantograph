@@ -72,7 +72,8 @@ contracts first, implementation after the shared shape is frozen.
 ## Dependencies
 
 **Internal:** None.
-Reason: This crate is the neutral dependency target for later host adapters.
+Reason: This crate is the neutral dependency target for a later backend-owned
+conversion service and host infrastructure adapters.
 Revisit trigger: A converter implementation lands here and requires a narrow
 internal dependency.
 

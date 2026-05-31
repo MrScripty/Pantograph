@@ -28,7 +28,8 @@ Tauri, and generated binding surfaces.
 - Graph mutation and diagnostics contracts are consumed by frontend and
   bindings, so shape changes must be coordinated.
 - Scheduler and runtime-preflight decisions must stay backend-owned.
-- Managed media conversion enters through a neutral executor trait; this crate
+- Media conversion is outside workflow-service until a backend-owned
+  scheduler task-result/output projection service is introduced. This crate
   must not depend on Tauri, inference managed-dependency state, or host process
   execution.
 

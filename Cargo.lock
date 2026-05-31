@@ -7318,7 +7318,6 @@ dependencies = [
  "pantograph-embedded-runtime",
  "pantograph-inference-interface-contracts",
  "pantograph-managed-dependencies",
- "pantograph-media-conversion",
  "pantograph-runtime-identity",
  "pantograph-runtime-registry",
  "pantograph-workflow-service",

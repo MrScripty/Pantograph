@@ -460,6 +460,13 @@ durable task orchestration path.
   replan boundary: active execution-plan storage still exists because
   embedded-runtime planned inference reads it; removing it requires replacing
   that cross-crate bridge with scheduler-selected runtime handoff dispatch.
+  2026-05-31 media conversion ownership decision: delete the unused Tauri
+  managed media conversion adapter in the next cleanup slice instead of
+  preserving dormant desktop-owned business logic. Future conversion must be a
+  backend-owned, host-agnostic service boundary with typed request, result,
+  attribution, and diagnostic contracts, consumed by scheduler task-result
+  materialization or runtime-host output projection. Tauri may supply only
+  process/tool lease infrastructure and event transport.
   2026-05-25 replan decision: the cross-crate replacement must preserve the
   task scheduler as the only source of runtime truth. Runtime selection from a
   graph node remains a scheduler input/constraint, not an executor decision.
@@ -575,8 +582,9 @@ durable task orchestration path.
   verification must include targeted usage searches for `workflow_run_internal`,
   old runtime-load/session-admission helpers, `session_runtime_load_lifecycle`,
   execution-plan admission helpers, queue runtime-admission/preflight fields,
-  `artifact_output_conversion`, and `media_conversion_executor`, plus compile
-  checks without new dead-code warnings for the touched crates.
+  `artifact_output_conversion`, `media_conversion_executor`, and the Tauri
+  managed media conversion adapter, plus compile checks without new dead-code
+  warnings for the touched crates.
 
 **No-Fallback Requirements:**
 

@@ -3183,9 +3183,13 @@ defining an image-only inference-node interface.
         touched setup/embedded-runtime files for the removed selected-detail
         settings path.
       - Verification caveat: `cargo check -p pantograph` now reaches past this
-        API change but still fails in `src-tauri/src/app_setup.rs` because
-        `WorkflowService` does not expose `set_media_conversion_executor`.
-        That existing Tauri app setup mismatch is outside this slice.
+        API change. At the time of this slice it still failed in
+        `src-tauri/src/app_setup.rs` because `WorkflowService` did not expose
+        `set_media_conversion_executor`; the stale injection has since been
+        removed. The remaining media-conversion cleanup is to delete the
+        unused Tauri managed media conversion adapter and keep any future
+        conversion feature behind a backend-owned service boundary rather than
+        desktop-owned business logic.
     - Not Milestone 5d deletion targets: `crates/inference` backend and worker
       `model_path`/`entry_path` fields are runtime/load-target internals owned
       by runtime-host dispatch and Pumas artifact resolution, not graph
@@ -5836,9 +5840,10 @@ defining an image-only inference-node interface.
   - Verification blocked: `cargo test -p pantograph puma_lib_commands` did not
     reach this module because the `pantograph` test binary currently fails to
     compile in `src-tauri/src/app_setup.rs` with missing
-    `WorkflowService::set_media_conversion_executor`. Record this as a
-    discovered unrelated compile blocker before relying on app-crate tests for
-    future slices.
+    `WorkflowService::set_media_conversion_executor`. That blocker has since
+    been fixed by removing the stale injection; before relying on app-crate
+    tests for future slices, complete the separate cleanup that deletes the
+    now-unused Tauri managed media conversion adapter.
   - Remaining follow-up: replace the Tauri command input/API and frontend call
     sites so selected-model hydration receives `pumas_model_ref` only, then
     implement the canonical path-free dependency-environment hydration service

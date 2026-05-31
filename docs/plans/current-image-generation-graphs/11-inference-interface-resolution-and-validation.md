@@ -1011,9 +1011,16 @@ instead of falling back to previously rendered ports.
   canonical path-free dependency-environment service boundary replaces the
   retired request. Verification passed: `cargo fmt`, `git diff --check`, and
   targeted source search. Verification blocked: `cargo test -p pantograph
-  puma_lib_commands` is currently stopped by the unrelated
+  puma_lib_commands` was stopped at the time by the unrelated
   `WorkflowService::set_media_conversion_executor` compile error in
   `src-tauri/src/app_setup.rs`.
+- 2026-05-31 update: the stale workflow-service media conversion injection was
+  removed from Tauri app setup, so that compile blocker is resolved. The
+  remaining media-conversion follow-up is to delete the unused Tauri managed
+  media conversion adapter rather than keep desktop-owned business logic. Any
+  future conversion feature must be introduced as a backend-owned service
+  boundary and remain separate from inference-interface resolution,
+  scheduler/runtime dispatch, and graph-authored model inputs.
 
 ## Open Design Decisions
 

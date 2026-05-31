@@ -1509,9 +1509,15 @@ Initial classification targets:
 - Queue runtime-admission/preflight fields and helper methods are deletion
   targets unless an active scheduler read model or policy still consumes them
   without reintroducing runtime admission/load.
-- `artifact_output_conversion` and `media_conversion_executor` are conversion
-  targets for a later scheduler task-result artifactization/output boundary.
-  They must not keep the old whole-run artifact path alive.
+- `artifact_output_conversion` and `media_conversion_executor` are not active
+  scheduler/runtime-host handoff surfaces. The old workflow-service
+  artifactization route and host-injected conversion executor have been
+  removed; the remaining unused Tauri managed media conversion adapter must be
+  deleted rather than kept as dormant business logic.
+- Future media conversion belongs behind a backend-owned, host-agnostic service
+  boundary consumed by scheduler task-result materialization or runtime-host
+  output projection. Tauri may provide platform infrastructure only, not
+  conversion policy, planning, or workflow ownership.
 
 Verification for this gate must include targeted usage searches for each
 retired symbol, focused tests for any reattached or converted surface, crate
@@ -1595,6 +1601,17 @@ runtime-host output projection concern. The remaining warning surface is the
 active execution-plan storage read by embedded-runtime planned inference; that
 is a cross-crate bridge replacement boundary, not a local workflow-service
 dead-code deletion.
+
+2026-05-31 media conversion ownership decision: delete the unused
+`src-tauri/src/workflow/managed_media_conversion.rs` adapter and its module
+export in the next cleanup slice. Keeping the adapter behind Tauri would
+preserve business logic in the desktop shell after workflow-service removed the
+canonical injection point. A future media conversion feature must be planned as
+a backend-owned service boundary with typed request/result/diagnostic
+contracts, then attached to scheduler task-result materialization or
+runtime-host output projection. That future service may receive Tauri-provided
+process/tooling infrastructure, but Tauri must not own conversion semantics or
+act as the workflow conversion policy surface.
 
 ## Scheduler Runtime Handoff Replacement Replan
 

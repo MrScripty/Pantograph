@@ -19555,10 +19555,69 @@ Worker rules:
     `cargo check -p pantograph`. `cargo check` still reports the pre-existing
     workflow-service `set_active_run_execution_plan` warning and now exposes
     dead-code warnings for the unused Tauri managed media conversion adapter.
-  - Remaining follow-up: decide whether the unused Tauri managed media
-    conversion adapter should be deleted, moved behind a future dedicated
-    host-side conversion command, or wired through a new non-workflow-service
-    media conversion boundary after the current hosted composition migration.
+  - Decision after follow-up review: delete the unused Tauri managed media
+    conversion adapter now instead of preserving dormant business logic in the
+    desktop shell or wiring a direct host-side conversion command. The next
+    cleanup slice may touch only `src-tauri/src/workflow/managed_media_conversion.rs`,
+    `src-tauri/src/workflow/mod.rs`, `src-tauri/Cargo.toml`, `Cargo.lock`,
+    `src-tauri/src/workflow/README.md`, `src-tauri/src/README.md`, backend
+    README files with stale conversion ownership wording, and this execution
+    log unless verification exposes a narrower required edit.
+  - Future design note: if media conversion is needed for scheduler task
+    outputs, introduce a backend-owned, host-agnostic media conversion service
+    boundary with typed request, result, attribution, and diagnostic contracts.
+    That boundary must live outside Tauri command/business logic, be consumed
+    by scheduler task-result materialization or runtime-host output projection,
+    and fail closed with typed diagnostics when conversion cannot be planned.
+    Tauri may supply only infrastructure capabilities such as app data
+    directories, bounded process execution, managed tool leases, and event
+    transport.
+  - No-fallback/no-legacy guardrail for the cleanup: do not restore
+    `WorkflowService::set_media_conversion_executor`, do not move media
+    conversion into runtime dispatch, do not create a Tauri-owned conversion
+    policy command, and do not preserve the unused adapter behind
+    `#[allow(dead_code)]`.
+- 2026-05-31 Tauri managed media conversion deletion slice:
+  - Smallest useful slice: delete the unused desktop managed media conversion
+    adapter now that workflow-service no longer exposes a host-injected
+    conversion executor, and align dependency/docs ownership wording with the
+    backend-owned future service boundary.
+  - Allowed files touched: `src-tauri/src/workflow/managed_media_conversion.rs`,
+    `src-tauri/src/workflow/mod.rs`, `src-tauri/Cargo.toml`, `Cargo.lock`,
+    `src-tauri/src/workflow/README.md`, `src-tauri/src/README.md`,
+    `crates/pantograph-workflow-service/README.md`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `crates/pantograph-embedded-runtime/src/task_executor/README.md`,
+    `crates/pantograph-media-conversion/README.md`,
+    `crates/pantograph-media-conversion/src/README.md`, and this execution
+    log. The backend README edits were required because reference search found
+    stale host-executor wording that would contradict the deletion.
+  - Implementation: removed the `managed_media_conversion` Tauri module and
+    deleted its adapter/tests, removed the Tauri crate dependency on
+    `pantograph-media-conversion`, and let `Cargo.lock` drop that dependency
+    edge. README wording now states that future conversion must be
+    backend-owned and that Tauri may provide only platform/process/tooling
+    infrastructure to that boundary.
+  - Focused tests/fixtures: no new tests were added because this slice deletes
+    an unused adapter and its private tests rather than introducing a new
+    behavior surface. The verification relies on compile checks and targeted
+    reference searches to prove no Tauri adapter/export/dependency remains.
+  - No-fallback/no-legacy result: no workflow-service setter was restored, no
+    Tauri conversion command or policy surface was added, no conversion path
+    was moved into runtime dispatch, and no dead-code allow was used to keep
+    the adapter.
+  - Verification passed: `cargo fmt -- --check`, `cargo check -p pantograph`,
+    targeted source search for `managed_media_conversion`,
+    `TauriManagedMediaConversionExecutor`, `pantograph_media_conversion`, and
+    `pantograph-media-conversion` under `src-tauri`, and `git diff --check`.
+    `cargo check -p pantograph` still reports pre-existing dead-code warnings
+    for workflow-service active execution-plan storage and unrelated Tauri
+    diagnostics/event/runtime helper surfaces; the prior managed media
+    conversion dead-code warning is gone.
+  - Remaining follow-up: future media conversion must be planned after the
+    complete inference path as a backend-owned service boundary for scheduler
+    task-result materialization or runtime-host output projection, with Tauri
+    limited to infrastructure injection.
 
 ### Traceability Links
 

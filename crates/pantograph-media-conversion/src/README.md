@@ -95,8 +95,9 @@ timeouts, and `uuid` for conversion ids.
 
 - `None identified as of 2026-04-29.`
 - `Reason: Stage 13 is still defining the implementation boundary; promote an
-  ADR when the concrete host process executor and public metadata contract land
-  across workflow-service, diagnostics, and Tauri.`
+  ADR when the backend-owned conversion service, host infrastructure adapter,
+  and public metadata contract land across scheduler output materialization
+  and diagnostics.`
 - `Revisit trigger: The conversion executor is wired into workflow execution or
   changes a public ArtifactStore descriptor field.`
 

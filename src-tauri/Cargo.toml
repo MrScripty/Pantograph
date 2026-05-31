@@ -42,7 +42,6 @@ workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library
 pantograph-workflow-service = { path = "../crates/pantograph-workflow-service" }
 pantograph-embedded-runtime = { path = "../crates/pantograph-embedded-runtime", default-features = false, features = ["backend-llamacpp", "backend-candle"] }
 pantograph-managed-dependencies = { path = "../crates/pantograph-managed-dependencies" }
-pantograph-media-conversion = { path = "../crates/pantograph-media-conversion" }
 pantograph-runtime-identity = { path = "../crates/pantograph-runtime-identity" }
 pantograph-runtime-registry = { path = "../crates/pantograph-runtime-registry" }
 pantograph-dependency-planning = { path = "../crates/pantograph-dependency-planning" }

@@ -319,10 +319,11 @@ path is removed.
   fields must be added and mapped together across workflow-service,
   diagnostics-ledger, Tauri, embedded runtime, frontend contracts, and contract
   tests so conversion attribution does not drift across boundaries.
-- Workflow-service must remain host-agnostic for managed media conversion:
-  hosts inject a neutral executor, while lease acquisition, executable path
-  resolution, command execution, and inference/Tauri-specific dependency state
-  stay outside this crate.
+- Workflow-service must remain host-agnostic for managed media conversion.
+  It no longer accepts a host-injected conversion executor. Future conversion
+  behavior must enter through a backend-owned scheduler task-result/output
+  projection service boundary with typed request, result, attribution, and
+  diagnostic contracts.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.

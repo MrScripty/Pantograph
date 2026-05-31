@@ -36,7 +36,6 @@ owner of that policy itself.
 | `graph_validation_lifecycle_transport.rs` | Dedicated graph-validation lifecycle event name and compact typed transport payload. |
 | `projection_invalidation_bridge.rs` | Tauri lifecycle owner for the diagnostics projection refresh sink; coalesces backend refresh requests, invokes workflow-service refresh, and emits successful invalidations. |
 | `projection_invalidation_transport.rs` | Compact diagnostics projection invalidation event payload and coalescing transport helper. |
-| `managed_media_conversion.rs` | Desktop host adapter that leases managed FFmpeg/OpenImageIO/OpenColorIO tools, runs bounded stdin/stdout conversion pipelines, and returns typed conversion attribution to `pantograph-workflow-service`. |
 
 ## Problem
 Pantograph’s standalone GUI still needs a native bridge, but graph editing can
@@ -218,18 +217,12 @@ delegates to `pantograph-workflow-service`, and returns the backend graph
 mutation response; it does not validate proposal identity, construct patch
 operations, rewrite node data, remove edges, clear literals, or infer submit
 authority.
-Managed media conversion is no longer injected into the shared workflow
-service at startup. The neutral conversion request/result contract stays in
-`pantograph-media-conversion`; the Tauri adapter only resolves
-desktop-managed dependency leases, executes converter processes, and releases
-leases after each attempt when a dedicated host-side conversion caller invokes
-it.
-The adapter owns a local dependency-plan cleanup guard so leases acquired before
-converter execution are also released when a conversion future is cancelled or
-dropped after acquisition.
-Focused adapter tests cover fake-runner lease attribution, dropped-future
-cleanup, managed executable fixture invocation through `StdProcessRunner`, and
-dependency removal refusal while a conversion lease is active.
+Managed media conversion is not owned by Tauri workflow transport. The neutral
+conversion request/result contract stays in `pantograph-media-conversion` for a
+future backend-owned service boundary. Tauri may supply infrastructure to that
+boundary, such as managed tool leases, bounded process execution, app data
+paths, and event transport, but it must not own conversion policy, workflow
+artifactization, or conversion diagnostics.
 Diagnostics projection refresh command handlers call the workflow-service
 refresh contract first, then emit compact
 `workflow://diagnostics/projection-invalidated` events from the successful
