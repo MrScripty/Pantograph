@@ -18870,6 +18870,36 @@ Worker rules:
     pair explicitly so hosted startup can pass runtime-registry/gateway
     dependencies to the factory and reject partial candidate-provider or
     lifecycle-port wiring.
+- 2026-05-30 paired dispatch dependency factory slice:
+  - Slice scope: embedded-runtime workflow-service composition module and plan
+    logs only.
+  - Implementation: added `EmbeddedWorkflowServiceDispatchDependencies`, a
+    typed factory input that carries runtime dispatch candidate provider,
+    runtime-host execution port, and reservation lifecycle port together.
+    The composition factory applies that complete bundle before sharing the
+    workflow service; default construction continues to use fail-closed
+    workflow-service defaults.
+  - Test coverage: added a focused composition test proving the factory builds
+    when the complete dispatch dependency bundle is supplied. The type shape
+    intentionally has no partial provider-only or lifecycle-only production
+    constructor.
+  - No-fallback/no-legacy result: the slice does not supply real
+    resource-backed candidates and still does not synthesize candidates from
+    graph paths, reduced execution plans, frontend state, display strings,
+    `ModelRefV2`, or provider-private cleanup state.
+  - Standards result: this keeps coupled runtime dispatch dependencies in one
+    composition-root input and avoids mutable post-share workflow-service
+    reconfiguration while preserving separate ownership for scheduler policy,
+    runtime-host execution, and runtime-registry lifecycle side effects.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: implement or select the concrete resource-backed
+    dispatch candidate provider and runtime-host execution port, then pass
+    them with the embedded runtime-registry reservation lifecycle port through
+    this bundle.
 
 ### Traceability Links
 

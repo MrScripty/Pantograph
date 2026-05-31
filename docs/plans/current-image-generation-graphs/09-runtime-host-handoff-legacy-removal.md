@@ -1163,6 +1163,12 @@ Next implementation sequence:
    lifecycle port through the same composition path. The plan still forbids
    enabling non-empty resource-backed candidates until both dependencies are
    present.
+   Started 2026-05-30: the composition factory now exposes a single typed
+   `EmbeddedWorkflowServiceDispatchDependencies` bundle for runtime dispatch
+   candidate provider, runtime-host execution port, and reservation lifecycle
+   port. Partial production wiring is not represented by the factory API. The
+   remaining work is to supply the real resource-backed implementations through
+   that bundle.
 5. Remove the staged `#[allow(dead_code)]` from the embedded lifecycle port
    when production composition exercises it.
 6. Add tests proving production composition fails closed or refuses to build
@@ -1193,6 +1199,19 @@ store/ledger/artifact customization without sharing the service first, but it
 does not yet move Tauri/UniFFI startup through the factory or configure the
 runtime-registry-backed lifecycle port. Those remain blocked until the
 production dispatch dependency pair is represented explicitly.
+
+2026-05-30 paired dispatch dependency factory slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Discovered follow-up: the factory API now requires dispatch dependencies as a
+complete typed bundle, but the real runtime-registry resource-backed candidate
+provider and runtime-host execution port are not yet supplied. Keep
+resource-backed candidate sets disabled until those concrete implementations
+are wired through this bundle.
 
 ## Verification Strategy
 
