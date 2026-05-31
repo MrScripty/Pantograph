@@ -24,7 +24,6 @@ owner of that policy itself.
 | `event_serialization.rs` | Workflow event envelope serialization and backend-authored ownership projection for Tauri channel payloads. |
 | `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
-| `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
 | `diagnostics/` | Backend-owned diagnostics contracts, trace projection helpers, and in-memory overlay/store state for workflow UI snapshots. |
 | `headless_diagnostics.rs` | Backend-owned diagnostics projection and trace/scheduler snapshot adaptation for headless workflow transport. |

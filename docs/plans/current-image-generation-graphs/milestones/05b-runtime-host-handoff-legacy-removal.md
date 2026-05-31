@@ -414,7 +414,10 @@ cleanup.
   lifecycle/policy. Remaining follow-up: classify or retire retained resolver
   commands/tests and keep any retained surface diagnostic/tooling-only until
   deletion is possible. `pumas_dependency_runtime_probe` was retired as the
-  first probe cleanup slice.
+  first probe cleanup slice. 2026-05-31 progress: the stale Tauri workflow
+  `model_dependencies.rs` facade was deleted after the probe removal, so Tauri
+  no longer re-exports embedded-runtime resolver internals as a workflow-owned
+  module.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not

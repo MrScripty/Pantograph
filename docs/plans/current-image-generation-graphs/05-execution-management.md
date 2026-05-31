@@ -20682,6 +20682,24 @@ Worker rules:
     and delete `TauriModelDependencyResolver`/`ModelRefV2`-producing modules
     once canonical scheduler/runtime-host task-result response coverage allows
     broad resolver deletion.
+- 2026-05-31 stale Tauri resolver facade retirement slice:
+  - Smallest useful slice: remove the stale Tauri workflow
+    `model_dependencies.rs` facade that re-exported embedded-runtime resolver
+    internals after the only consumer, the probe binary, was deleted.
+  - Allowed files touched: `src-tauri/src/workflow/model_dependencies.rs`,
+    `src-tauri/src/workflow/README.md`, and these plan files.
+  - Implementation: deleted the unused facade and removed it from the
+    Tauri workflow README contents table.
+  - No-fallback/no-legacy result: Tauri no longer exposes a workflow module
+    named for dependency preflight/binding resolution/runtime-environment
+    selection, so app-shell code cannot accidentally treat resolver internals
+    as a Tauri-owned business boundary.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+    `cargo check -p pantograph --bins`; `rg -n
+    "workflow/model_dependencies|workflow::model_dependencies|mod model_dependencies|pub mod model_dependencies|model_dependencies::"
+    src-tauri/src src-tauri/Cargo.toml` returning no hits; and `git diff
+    --check`. `cargo check` still reports pre-existing dead-code warnings in
+    `pantograph-workflow-service` and Tauri workflow modules.
 
 ### Traceability Links
 
