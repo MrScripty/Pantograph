@@ -1,5 +1,7 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use node_engine::ExecutorExtensions;
 use pantograph_runtime_host_contracts::{ReservationLifecyclePort, RuntimeHostExecutionPort};
 use pantograph_runtime_registry::SharedRuntimeRegistry;
 use pantograph_workflow_service::workflow::{
@@ -8,7 +10,7 @@ use pantograph_workflow_service::workflow::{
 use pantograph_workflow_service::{
     WorkflowDependencyReadinessComponents, WorkflowService, WorkflowServiceError,
 };
-use workflow_nodes::setup::PumasSelectorAccess;
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 use crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource;
 use crate::reservation_lifecycle::EmbeddedReservationLifecyclePort;
@@ -21,9 +23,11 @@ use crate::runtime_dispatch_source_snapshot::{
 use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
 use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
+use crate::SharedExtensions;
 use crate::{
-    runtime_registry::HostRuntimeRegistryController, EmbeddedDependencyReadinessSnapshotProducer,
-    EmbeddedDependencyReadinessSnapshotProducerConfig,
+    model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver},
+    runtime_registry::HostRuntimeRegistryController,
+    EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
 };
 
@@ -34,7 +38,7 @@ use crate::{
 /// this module owns the moment concrete dependency-readiness components are
 /// attached before the service is wrapped in `Arc`.
 #[derive(Default)]
-pub(crate) struct EmbeddedWorkflowServiceComposition {
+pub struct EmbeddedWorkflowServiceComposition {
     dependency_readiness: WorkflowDependencyReadinessComponents,
     dispatch_dependencies: Option<EmbeddedWorkflowServiceDispatchDependencies>,
     scheduler_diagnostics_provider:
@@ -119,6 +123,82 @@ impl EmbeddedHostedWorkflowServiceCompositionOutput {
     pub(crate) fn workflow_service(&self) -> &SharedWorkflowService {
         &self.workflow_service
     }
+}
+
+/// Source used by hosted startup composition to obtain Pumas selector access.
+///
+/// Hosts may provide an already-created selector access handle, or they may
+/// delegate path-based setup to embedded-runtime so Pumas acquisition and owner
+/// validation happen before workflow-service is shared.
+pub enum EmbeddedHostedStartupPumasSelectorSource {
+    Provided(Arc<PumasSelectorAccess>),
+    SetupPath(Option<PathBuf>),
+}
+
+pub struct EmbeddedHostedStartupCompositionInput<C> {
+    workflow_service: WorkflowService,
+    max_loaded_sessions: Option<usize>,
+    runtime_registry: SharedRuntimeRegistry,
+    runtime_registry_controller: Arc<C>,
+    gateway: Arc<inference::InferenceGateway>,
+    pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
+    project_root: PathBuf,
+    kv_cache_dir: PathBuf,
+    dependency_readiness_runtime_handle: tokio::runtime::Handle,
+    dependency_readiness_producer_config: EmbeddedDependencyReadinessSnapshotProducerConfig,
+    max_dispatch_source_snapshot_age_ms: u64,
+}
+
+impl<C> EmbeddedHostedStartupCompositionInput<C> {
+    #[must_use]
+    pub fn new(
+        runtime_registry: SharedRuntimeRegistry,
+        runtime_registry_controller: Arc<C>,
+        gateway: Arc<inference::InferenceGateway>,
+        pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
+        project_root: PathBuf,
+        kv_cache_dir: PathBuf,
+        dependency_readiness_runtime_handle: tokio::runtime::Handle,
+        max_loaded_sessions: Option<usize>,
+        max_dispatch_source_snapshot_age_ms: u64,
+    ) -> Self {
+        Self {
+            workflow_service: WorkflowService::new(),
+            max_loaded_sessions,
+            runtime_registry,
+            runtime_registry_controller,
+            gateway,
+            pumas_selector_source,
+            project_root,
+            kv_cache_dir,
+            dependency_readiness_runtime_handle,
+            dependency_readiness_producer_config:
+                EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
+            max_dispatch_source_snapshot_age_ms,
+        }
+    }
+
+    #[must_use]
+    pub fn with_workflow_service(mut self, workflow_service: WorkflowService) -> Self {
+        self.workflow_service = workflow_service;
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependency_readiness_producer_config(
+        mut self,
+        config: EmbeddedDependencyReadinessSnapshotProducerConfig,
+    ) -> Self {
+        self.dependency_readiness_producer_config = config;
+        self
+    }
+}
+
+pub struct EmbeddedHostedStartupCompositionOutput {
+    pub workflow_service: SharedWorkflowService,
+    pub shared_extensions: SharedExtensions,
+    pub model_dependency_resolver: SharedModelDependencyResolver,
+    pub dependency_readiness_snapshot_producer: EmbeddedDependencyReadinessSnapshotProducerHandle,
 }
 
 #[derive(Clone)]
@@ -321,6 +401,117 @@ impl EmbeddedWorkflowServiceComposition {
             workflow_service,
             dependency_readiness_snapshot_producer,
         })
+    }
+
+    pub async fn resource_backed_hosted_startup<C>(
+        input: EmbeddedHostedStartupCompositionInput<C>,
+    ) -> Result<EmbeddedHostedStartupCompositionOutput, EmbeddedRuntimeError>
+    where
+        C: HostRuntimeRegistryController + Send + Sync + 'static,
+    {
+        let shared_extensions: SharedExtensions =
+            Arc::new(tokio::sync::RwLock::new(ExecutorExtensions::new()));
+        let pumas_selector_access = Self::initialize_hosted_startup_extensions(
+            &shared_extensions,
+            input.pumas_selector_source,
+        )
+        .await?;
+        Self::require_owner_pumas_selector_access(pumas_selector_access.as_ref())?;
+
+        let model_dependency_resolver: SharedModelDependencyResolver = Arc::new(
+            TauriModelDependencyResolver::new(shared_extensions.clone(), input.project_root),
+        );
+        {
+            let resolver_trait: Arc<dyn node_engine::ModelDependencyResolver> =
+                model_dependency_resolver.clone();
+            let kv_store = Arc::new(inference::kv_cache::KvCacheStore::new(
+                input.kv_cache_dir,
+                inference::kv_cache::StoragePolicy::MemoryAndDisk,
+            ));
+            let mut guard = shared_extensions.write().await;
+            guard.set(
+                node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+                resolver_trait,
+            );
+            guard.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
+        }
+
+        let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            input.runtime_registry,
+            input.runtime_registry_controller,
+            input.gateway,
+            pumas_selector_access,
+            input.max_loaded_sessions,
+            input.max_dispatch_source_snapshot_age_ms,
+        )
+        .with_workflow_service(input.workflow_service);
+        let composition_input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+            factory_input,
+            input.dependency_readiness_runtime_handle,
+        )
+        .with_dependency_readiness_producer_config(input.dependency_readiness_producer_config);
+        let output = Self::resource_backed_hosted_bundle(composition_input)?;
+
+        Ok(EmbeddedHostedStartupCompositionOutput {
+            workflow_service: output.workflow_service,
+            shared_extensions,
+            model_dependency_resolver,
+            dependency_readiness_snapshot_producer: output.dependency_readiness_snapshot_producer,
+        })
+    }
+
+    async fn initialize_hosted_startup_extensions(
+        shared_extensions: &SharedExtensions,
+        source: Option<EmbeddedHostedStartupPumasSelectorSource>,
+    ) -> Result<Arc<PumasSelectorAccess>, EmbeddedRuntimeError> {
+        let Some(source) = source else {
+            return Err(EmbeddedRuntimeError::Initialization {
+                message: "hosted startup composition requires a Pumas selector source before workflow-service sharing".to_string(),
+            });
+        };
+        {
+            let mut guard = shared_extensions.write().await;
+            match source {
+                EmbeddedHostedStartupPumasSelectorSource::Provided(selector_access) => {
+                    if let PumasSelectorAccess::Owner(api) = selector_access.as_ref() {
+                        guard.set(node_engine::extension_keys::PUMAS_API, api.clone());
+                    }
+                    guard.set(PUMAS_SELECTOR_ACCESS, selector_access);
+                }
+                EmbeddedHostedStartupPumasSelectorSource::SetupPath(path) => {
+                    workflow_nodes::setup_extensions_with_path(&mut guard, path.as_deref()).await;
+                }
+            }
+        }
+
+        let selector_access = {
+            let guard = shared_extensions.read().await;
+            guard
+                .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+                .cloned()
+        };
+        match selector_access {
+            Some(selector_access) => Ok(selector_access),
+            None => Err(EmbeddedRuntimeError::Initialization {
+                message: "hosted startup composition could not initialize Pumas selector access before workflow-service sharing".to_string(),
+            }),
+        }
+    }
+
+    fn require_owner_pumas_selector_access(
+        selector_access: &PumasSelectorAccess,
+    ) -> Result<(), EmbeddedRuntimeError> {
+        match selector_access {
+            PumasSelectorAccess::Owner(_) => Ok(()),
+            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+                Err(EmbeddedRuntimeError::Initialization {
+                    message: format!(
+                        "hosted startup composition requires Pumas owner selector access, got {} access",
+                        selector_access.role_name()
+                    ),
+                })
+            }
+        }
     }
 
     pub(crate) fn into_shared_workflow_service(
@@ -639,5 +830,181 @@ mod tests {
         assert!(error
             .to_string()
             .contains("dependency-readiness snapshot producer poll interval"));
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_composition_returns_service_extensions_and_lifecycle_handle() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+                Arc::new(PumasSelectorAccess::Owner(pumas_api.clone())),
+            )),
+            temp_dir.path().to_path_buf(),
+            temp_dir.path().join("kv-cache"),
+            tokio::runtime::Handle::current(),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+
+        let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input)
+            .await
+            .expect("hosted startup composition should build");
+
+        assert!(Arc::strong_count(&output.workflow_service) >= 1);
+        {
+            let extensions = output.shared_extensions.read().await;
+            let selector_access = extensions
+                .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+                .expect("selector access should be installed");
+            assert!(matches!(
+                selector_access.as_ref(),
+                PumasSelectorAccess::Owner(_)
+            ));
+            assert!(
+                extensions
+                    .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
+                        node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+                    )
+                    .is_some(),
+                "dependency resolver should be installed"
+            );
+            assert!(
+                extensions
+                    .get::<Arc<inference::kv_cache::KvCacheStore>>(
+                        node_engine::extension_keys::KV_CACHE_STORE,
+                    )
+                    .is_some(),
+                "kv cache store should be installed"
+            );
+        }
+        output
+            .dependency_readiness_snapshot_producer
+            .shutdown()
+            .await;
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_composition_rejects_missing_pumas_selector_source() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            None,
+            temp_dir.path().to_path_buf(),
+            temp_dir.path().join("kv-cache"),
+            tokio::runtime::Handle::current(),
+            Some(1),
+            1_000,
+        );
+
+        let error =
+            match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
+                Ok(_) => panic!("missing selector source must reject hosted startup composition"),
+                Err(error) => error,
+            };
+
+        assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
+        assert!(error
+            .to_string()
+            .contains("requires a Pumas selector source"));
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_composition_rejects_non_owner_pumas_selector_access() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("pumas api");
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let read_only = pumas_library::PumasReadOnlyLibrary::open(
+            temp_dir.path().join("shared-resources/models"),
+        )
+        .expect("read-only pumas");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+                Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+            )),
+            temp_dir.path().to_path_buf(),
+            temp_dir.path().join("kv-cache"),
+            tokio::runtime::Handle::current(),
+            Some(1),
+            1_000,
+        );
+
+        let error =
+            match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
+                Ok(_) => panic!("read-only access cannot build hosted startup composition"),
+                Err(error) => error,
+            };
+
+        assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
+        assert!(error
+            .to_string()
+            .contains("requires Pumas owner selector access"));
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_composition_rejects_service_error_before_starting_sidecar() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+                Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            )),
+            temp_dir.path().to_path_buf(),
+            temp_dir.path().join("kv-cache"),
+            tokio::runtime::Handle::current(),
+            Some(0),
+            1_000,
+        );
+
+        let error =
+            match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
+                Ok(_) => panic!("invalid workflow-service capacity must reject hosted startup"),
+                Err(error) => error,
+            };
+
+        assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
+        assert!(error.to_string().contains("invalid"));
     }
 }

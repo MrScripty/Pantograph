@@ -140,6 +140,10 @@ pub use runtime_extensions::{
 };
 pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
 pub(crate) use workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
+pub use workflow_service_composition::{
+    EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupCompositionOutput,
+    EmbeddedHostedStartupPumasSelectorSource, EmbeddedWorkflowServiceComposition,
+};
 
 pub type SharedWorkflowService = Arc<WorkflowService>;
 

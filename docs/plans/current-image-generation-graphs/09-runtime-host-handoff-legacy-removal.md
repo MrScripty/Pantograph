@@ -1765,6 +1765,15 @@ Next staged implementation sequence:
    app-shell event sinks, but it must not own Pumas fact interpretation,
    dependency-readiness production policy, runtime-registry policy, or runtime
    dispatch decisions.
+   Completed 2026-05-31 for the backend startup boundary: embedded-runtime now
+   exports `EmbeddedHostedStartupCompositionInput`,
+   `EmbeddedHostedStartupCompositionOutput`,
+   `EmbeddedHostedStartupPumasSelectorSource`, and
+   `EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup`. The
+   boundary validates owner Pumas selector access before workflow-service
+   sharing, installs shared extensions, KV-cache, and model dependency
+   resolver wiring, invokes the hosted composition bundle, and returns
+   lifecycle handles for the host to manage. Tauri migration remains pending.
 4. Narrow or replace `EmbeddedRuntime::hosted_with_default_python_runtime`.
    It must not remain the successful resource-backed hosted path while it
    accepts an already shared `WorkflowService`. During migration it may remain

@@ -106,7 +106,7 @@ packages.
 | `workflow_runtime_tests/` | Focused workflow-runtime helper tests for diagnostics snapshot assembly, event projection, metrics/model-target helpers, and registry reconciliation behavior. |
 | `workflow_execution_plan_projection.rs` | Projects workflow-service run execution-plan node decisions, including reduced dependency-readiness proof, into inference `BackendExecutionDecision` contracts at the embedded-runtime composition boundary. |
 | `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
-| `workflow_service_composition.rs` | Owns embedded-runtime workflow-service construction before the service is shared, attaching dependency-readiness components, hosted resource-backed runtime dispatch dependencies, scheduler diagnostics, dependency-readiness lifecycle handles, and capacity limits at the composition boundary so runtime dispatch wiring does not require mutable post-share service mutation. |
+| `workflow_service_composition.rs` | Owns embedded-runtime workflow-service and hosted startup construction before the service is shared, attaching dependency-readiness components, hosted resource-backed runtime dispatch dependencies, scheduler diagnostics, executor extensions, model dependency resolver wiring, dependency-readiness lifecycle handles, and capacity limits at the composition boundary so runtime dispatch wiring does not require mutable post-share service mutation. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,

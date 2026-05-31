@@ -19701,6 +19701,47 @@ Worker rules:
     successful resource-backed path accepting an already shared service, and
     fail closed with typed initialization diagnostics when required hosted
     inputs are missing.
+- 2026-05-31 embedded-runtime hosted startup composition boundary slice:
+  - Smallest useful slice: add the backend-owned startup composition boundary
+    that the next Tauri migration can call, without changing Tauri startup or
+    exposing a partial alternate runtime-dispatch path.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this execution
+    log.
+  - Implementation: added `EmbeddedHostedStartupCompositionInput`,
+    `EmbeddedHostedStartupCompositionOutput`, and
+    `EmbeddedHostedStartupPumasSelectorSource`, plus the exported
+    `EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup`
+    entry point. The boundary initializes or validates Pumas selector access
+    before workflow-service sharing, requires owner access for
+    resource-backed hosted dispatch, installs executor extensions, KV-cache,
+    and model dependency resolver wiring through embedded-runtime helpers,
+    calls the existing hosted composition bundle, and returns the shared
+    workflow service, shared extensions, model dependency resolver, and
+    dependency-readiness producer handle.
+  - Focused tests added: hosted startup composition success returns service,
+    extensions, resolver, and lifecycle handle; missing selector source fails
+    with typed initialization diagnostics; read-only selector access fails
+    before dispatch wiring can succeed; invalid workflow-service capacity
+    fails before a sidecar handle is returned.
+  - No-fallback/no-legacy result: no Tauri startup behavior was changed, no
+    post-share runtime-dispatch setter was added, no Pumas package facts or
+    runtime-registry policy moved into Tauri, and
+    `hosted_with_default_python_runtime` remains untouched pending the
+    follow-up migration/narrowing slice.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    `cargo check -p pantograph-embedded-runtime`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`, and
+    `git diff --check`. Checks still report the pre-existing
+    workflow-service `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: migrate `src-tauri/src/app_setup.rs` to call the
+    startup composition before managing workflow state, manage the returned
+    service/extensions/resolver/lifecycle handle, then migrate
+    `src-tauri/src/workflow/headless_runtime.rs` away from the successful
+    resource-backed use of `hosted_with_default_python_runtime`.
 
 ### Traceability Links
 
