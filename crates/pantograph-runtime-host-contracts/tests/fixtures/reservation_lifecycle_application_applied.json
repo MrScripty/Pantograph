@@ -1,0 +1,13 @@
+{
+  "contract_version": 1,
+  "lifecycle_event_id": "reservation.lifecycle.1",
+  "reservation_lease_id": "runtime-registry.42",
+  "state": "applied",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "candidate_unselected",
+      "message": "Runtime-registry reservation release was applied."
+    }
+  ]
+}

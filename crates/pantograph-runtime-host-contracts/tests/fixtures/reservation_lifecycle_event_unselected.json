@@ -1,0 +1,18 @@
+{
+  "contract_version": 1,
+  "lifecycle_event_id": "reservation.lifecycle.1",
+  "reservation_lease_id": "runtime-registry.42",
+  "workflow_id": "workflow.image",
+  "workflow_run_id": "run.image.1",
+  "node_id": "infer",
+  "task_id": "infer",
+  "outcome": "candidate_unselected",
+  "candidate_id": "candidate.diffusers.cuda0",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "candidate_unselected",
+      "message": "Scheduler selected a different dispatch candidate."
+    }
+  ]
+}

@@ -18693,6 +18693,39 @@ Worker rules:
     default; embedded-runtime runtime-registry lifecycle implementation; then
     final provider wiring that requires candidate provider and lifecycle port
     to be configured together.
+- 2026-05-30 reservation lifecycle contract slice:
+  - Slice scope: shared runtime-host contract crate only plus plan/docs.
+    Allowed files:
+    `crates/pantograph-runtime-host-contracts/src/reservation_lifecycle.rs`,
+    `crates/pantograph-runtime-host-contracts/src/reservation_lifecycle_tests.rs`,
+    `crates/pantograph-runtime-host-contracts/src/lib.rs`,
+    `crates/pantograph-runtime-host-contracts/src/README.md`,
+    `crates/pantograph-runtime-host-contracts/tests/fixtures/README.md`,
+    reservation lifecycle fixture JSON files, and this execution log.
+  - Implementation: added contract-versioned reservation lifecycle event and
+    application DTOs, typed lifecycle outcomes, diagnostics, validated
+    wrappers, async lifecycle port trait, and typed contract/port errors.
+  - Test coverage: added fixture-backed tests proving valid event/application
+    fixtures decode and validate, path-shaped fields are rejected, failure
+    outcomes require diagnostics, failed applications require diagnostics, and
+    diagnostic vectors are bounded.
+  - No-fallback/no-legacy result: the contract carries scheduler lease/task
+    correlation and typed outcomes only. It carries no graph paths,
+    `ModelRefV2`, reduced execution-plan fields, runtime-host load targets,
+    Pumas load targets, or provider-private facts.
+  - Standards result: the slice separates application lifecycle outcome
+    emission from embedded-runtime registry I/O, uses typed enums/ids,
+    validated wrappers, `serde(deny_unknown_fields)`, bounded diagnostics,
+    README/fixture traceability, and no new dependencies or lockfile changes.
+    Line-count review: `reservation_lifecycle.rs` 321 lines and
+    `reservation_lifecycle_tests.rs` 143 lines.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-runtime-host-contracts reservation_lifecycle --lib`,
+    `cargo test -p pantograph-runtime-host-contracts`,
+    `cargo check -p pantograph-runtime-host-contracts`, and `git diff --check`.
+  - Remaining follow-up: wire workflow-service lifecycle emission with a
+    fail-closed unavailable default before embedded-runtime implements the
+    runtime-registry release/reconcile port.
 
 ### Traceability Links
 

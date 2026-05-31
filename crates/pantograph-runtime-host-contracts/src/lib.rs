@@ -2,14 +2,25 @@
 //!
 //! This crate owns the serialized request/response DTOs, validation wrappers,
 //! typed errors, runtime-host execution port, and scheduler dispatch helper
-//! used between workflow orchestration and host runtime execution. It does not
-//! own scheduler policy, workflow orchestration, runtime loading, Pumas
-//! load-target resolution, node-engine execution, concrete I/O, or Tokio
-//! runtime lifecycle.
+//! used between workflow orchestration and host runtime execution. It also owns
+//! the shared reservation lifecycle contract that lets workflow-service report
+//! dispatch/session outcomes while embedded-runtime owns runtime-registry
+//! release and retention side effects. It does not own scheduler policy,
+//! workflow orchestration, runtime loading, Pumas load-target resolution,
+//! node-engine execution, concrete I/O, or Tokio runtime lifecycle.
 
+mod reservation_lifecycle;
 mod runtime_host_dispatch;
 mod runtime_host_execution;
 
+pub use reservation_lifecycle::{
+    ReservationLifecycleApplication, ReservationLifecycleApplicationState,
+    ReservationLifecycleContractError, ReservationLifecycleDiagnostic,
+    ReservationLifecycleDiagnosticCode, ReservationLifecycleDiagnosticSeverity,
+    ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
+    ReservationLifecyclePortError, ValidatedReservationLifecycleApplication,
+    ValidatedReservationLifecycleEvent, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+};
 pub use runtime_host_dispatch::{
     RuntimeHostDispatchError, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
     SchedulerRuntimeHostDispatcher,

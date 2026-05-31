@@ -1022,6 +1022,9 @@ Staged implementation:
 
 1. Add the shared reservation lifecycle contract and fixture/validation tests.
    This is contract-only and must not wire production provider emission.
+   Completed 2026-05-30 in `pantograph-runtime-host-contracts` with typed
+   lifecycle event/application DTOs, validated wrappers, lifecycle port trait,
+   fixture coverage, and path-shaped field rejection.
 2. Add workflow-service lifecycle emission around dispatch selection and
    runtime-host dispatch using the shared port with a typed unavailable
    default that fails closed when production lifecycle wiring is absent.
