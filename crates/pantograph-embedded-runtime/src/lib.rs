@@ -84,6 +84,8 @@ mod workflow_execution_plan_projection;
 mod workflow_execution_session_execution;
 pub mod workflow_runtime;
 mod workflow_scheduler_diagnostics;
+#[cfg(any(test, feature = "standalone"))]
+mod workflow_service_composition;
 
 pub use dependency_readiness_lifecycle::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,

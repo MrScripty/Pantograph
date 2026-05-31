@@ -18813,6 +18813,35 @@ Worker rules:
     construction so runtime-registry/gateway dependencies are available before
     the workflow service is shared; wire final candidate provider and lifecycle
     port together; then remove the staged lifecycle-port dead-code allowance.
+- 2026-05-30 embedded-runtime workflow-service composition factory slice:
+  - Slice scope: embedded-runtime workflow-service composition module,
+    standalone runtime construction, embedded-runtime module README, and plan
+    logs only.
+  - Implementation: added a focused `EmbeddedWorkflowServiceComposition` that
+    owns dependency-readiness component attachment and loaded-runtime capacity
+    configuration before returning `Arc<WorkflowService>`, then routed
+    standalone runtime construction through that boundary while preserving the
+    public embedded-runtime facade shape.
+  - Test coverage: added focused composition tests proving dependency-readiness
+    components remain attached to the shared workflow service and invalid
+    capacity is rejected before a service is returned.
+  - No-fallback/no-legacy result: the slice does not synthesize runtime
+    dispatch candidates, recover model identity from graph paths, use reduced
+    execution plans as handoff inputs, adapt back to `ModelRefV2`, or enable
+    resource-backed scheduler candidates.
+  - Standards result: concrete workflow-service construction is now moving
+    into an embedded-runtime composition root, while scheduler policy,
+    runtime-registry release policy, graph validation, and runtime-host worker
+    execution remain outside the factory.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: add hosted construction support that receives
+    runtime-registry/gateway dependencies before workflow-service sharing, then
+    require the final dispatch candidate provider and reservation lifecycle
+    port to be configured as a pair.
 
 ### Traceability Links
 

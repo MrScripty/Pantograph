@@ -4,14 +4,14 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "standalone")]
 use node_engine::ExecutorExtensions;
 use pantograph_runtime_registry::SharedRuntimeRegistry;
-#[cfg(feature = "standalone")]
-use pantograph_workflow_service::WorkflowDependencyReadinessComponents;
 use pantograph_workflow_service::WorkflowRuntimeCapability;
 #[cfg(feature = "standalone")]
 use tokio::sync::RwLock;
 
 #[cfg(feature = "standalone")]
 use crate::dependency_inventory::DependencyInventoryService;
+#[cfg(feature = "standalone")]
+use crate::workflow_service_composition::EmbeddedWorkflowServiceComposition;
 use crate::{
     runtime_capabilities, runtime_registry, workflow_execution_session_execution, EmbeddedRuntime,
     EmbeddedRuntimeConfig, EmbeddedWorkflowHost, EmbeddedWorkflowSchedulerDiagnosticsProvider,
@@ -126,7 +126,8 @@ impl EmbeddedRuntime {
             )))
             .await;
 
-        let dependency_readiness = WorkflowDependencyReadinessComponents::new();
+        let workflow_service_composition = EmbeddedWorkflowServiceComposition::new();
+        let dependency_readiness = workflow_service_composition.dependency_readiness();
         let dependency_readiness_snapshot_producer =
             EmbeddedDependencyReadinessSnapshotProducer::new(
                 dependency_readiness.snapshot_provider(),
@@ -141,9 +142,8 @@ impl EmbeddedRuntime {
             .map_err(|error| EmbeddedRuntimeError::Initialization {
                 message: error.to_string(),
             })?;
-        let workflow_service = Arc::new(dependency_readiness.workflow_service());
-        workflow_service
-            .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
+        let workflow_service = workflow_service_composition
+            .into_shared_workflow_service(config.max_loaded_sessions)
             .map_err(|error| EmbeddedRuntimeError::Initialization {
                 message: error.to_string(),
             })?;

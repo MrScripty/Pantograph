@@ -1142,8 +1142,15 @@ Next implementation sequence:
 1. Add a narrow embedded-runtime workflow-service composition module that owns
    construction of a fully wired `WorkflowService` and documents why the
    boundary exists.
+   Completed 2026-05-30: `pantograph-embedded-runtime` now has a focused
+   workflow-service composition module that attaches dependency-readiness
+   components and capacity limits before sharing the service.
 2. Move standalone workflow-service construction through that module while
    preserving the public embedded-runtime facade shape.
+   Completed 2026-05-30: standalone runtime construction now creates the
+   dependency-readiness snapshot producer from the composition-owned
+   components and receives the shared workflow service from the same
+   composition boundary.
 3. Add hosted construction support that accepts runtime-registry/gateway
    inputs early enough to configure the reservation lifecycle port before the
    service is wrapped in `Arc`.
@@ -1156,6 +1163,18 @@ Next implementation sequence:
 6. Add tests proving production composition fails closed or refuses to build
    when only one of the paired dispatch dependencies is present, and proving
    direct test construction still uses fail-closed defaults.
+
+2026-05-30 workflow-service composition factory slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Discovered follow-up: hosted construction still receives an already shared
+workflow service. The next slice must add hosted construction support that
+accepts runtime-registry/gateway inputs before service sharing, then wire the
+final dispatch candidate provider and reservation lifecycle port together.
 
 ## Verification Strategy
 
