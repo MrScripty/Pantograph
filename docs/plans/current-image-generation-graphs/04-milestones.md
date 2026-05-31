@@ -128,7 +128,16 @@ readiness/handoff re-plan: consume the canonical
 `DependencyReadinessProofEnvelope`, keep queue-admission and pre-dispatch
 freshness checks, materialize runtime-host requests from durable scheduler task
 state, reject old APIs with diagnostics if reached, and then delete the
-retired dependency/runtime contracts.
+retired dependency/runtime contracts. The 2026-05-31 refinement requires a
+classification slice before further deletion: every remaining
+`model_path`/`modelPath`, `ModelDependencyRequest`, `ModelDependencyResolver`,
+`ModelRefV2`, and `build_model_ref_v2` reference must be recorded as runtime
+execution replacement, canonical scheduler/runtime-host state, app
+configuration/embedding/RAG, stale diagnostic fixture, tooling/probe, or
+frontend/Tauri transport. Runtime execution references must convert to
+scheduler task state/results and runtime-host responses or fail closed with
+typed diagnostics; if the canonical contracts lack required facts, stop and
+re-plan a shared contract extension.
 
 Pumas P2-P5 may proceed in parallel with Pantograph Milestones 1-5, but Pumas
 producer-fact completion is a hard gate before Milestone 5a, Milestone 5c,

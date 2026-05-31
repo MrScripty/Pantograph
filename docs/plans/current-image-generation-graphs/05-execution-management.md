@@ -20261,6 +20261,68 @@ Worker rules:
     `build_model_ref_v2`, path repair helpers, and path-shaped success
     fixtures in later slices after their production callers are converted to
     scheduler task state/results.
+- 2026-05-31 retired model-path cleanup re-plan:
+  - Decision: use the phased fail-closed retirement path for the remaining
+    `model_path`/`modelPath`, `ModelDependencyRequest`,
+    `ModelDependencyResolver`, `ModelRefV2`, and `build_model_ref_v2`
+    cleanup.
+  - Standards basis: the old dependency path complects validation, runtime
+    side effects, executable path resolution, diagnostics, install/probe
+    behavior, and execution identity. The selected plan separates those
+    concerns by first classifying remaining references, then converting
+    runtime graph execution to scheduler task state/results and runtime-host
+    responses or diagnostic-only fail-closed behavior, then removing
+    production resolver installation and deleting old contracts.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness fact may
+    be adapted back into `ModelRefV2`, `ModelDependencyRequest`, graph
+    `model_path`, frontend `modelPath`, path repair helpers, or old runtime
+    success fixtures. Tauri remains transport/composition only and must not
+    own scheduler, runtime, dependency, or artifact business policy.
+  - Re-plan trigger: if the classification finds a production caller that
+    needs facts absent from `SchedulerRuntimeHandoff`,
+    `DependencyReadinessProofEnvelope`,
+    `RuntimeHostExecutionRequest`/`RuntimeHostExecutionResponse`, scheduler
+    task state/results, or the canonical inference-interface descriptor, stop
+    and design a shared contract extension before editing manifests, lockfiles,
+    or production source.
+- 2026-05-31 retired model-path inventory/classification slice:
+  - Smallest useful slice: run the required inventory before additional source
+    deletion and record ownership categories for every remaining
+    `model_path`/`modelPath`, `ModelDependencyRequest`,
+    `ModelDependencyResolver`, `ModelRefV2`, and `build_model_ref_v2`
+    reference class.
+  - Allowed files touched: plan files only:
+    `docs/plans/current-image-generation-graphs/04-milestones.md`,
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`,
+    `docs/plans/current-image-generation-graphs/09-runtime-host-handoff-legacy-removal.md`,
+    and
+    `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`.
+  - Classification result: runtime graph execution replacement targets remain
+    in node-engine and embedded-runtime task execution/preflight paths;
+    production resolver removal targets remain in embedded-runtime
+    composition/resolver modules; inference crate hits are backend-local
+    executable load-target consumers that must only receive host-owned facts;
+    Tauri LLM hits are app config/embedding/RAG/direct command surfaces;
+    `pumas_dependency_runtime_probe` is tooling/probe-only or retirement work;
+    scheduler/runtime-host/dependency-service/workflow-node hits are mostly
+    canonical guardrails and negative tests; `.pantograph` hits are persisted
+    stale workflow/artifact evidence.
+  - No-fallback/no-legacy result: no code path was adapted. The next source
+    slice must start from the classified runtime graph execution or production
+    resolver targets and convert them to scheduler task state/results,
+    runtime-host responses, or typed fail-closed diagnostics.
+  - Verification passed: reviewed
+    `Coding-Standards/CODING-STANDARDS.md` simplicity/complection and
+    composition-root guidance plus `PLAN-STANDARDS.md` worktree and execution
+    rules; ran
+    `rg -n "model_path|modelPath|ModelDependencyRequest|ModelDependencyResolver|ModelRefV2|build_model_ref_v2" crates src-tauri docs .pantograph --glob '!docs/plans/current-image-generation-graphs/**' --glob '!target/**'`;
+    ran the same search narrowed over node-engine, embedded-runtime,
+    inference, and Tauri source roots; and ran `git diff --check` for the
+    touched plan files.
+  - Verification deviation: an initial broad `rg` invocation included missing
+    top-level `frontend` and `tests` paths and returned an OS-error status;
+    it was discarded and replaced with the successful existing-path searches
+    above.
 
 ### Traceability Links
 

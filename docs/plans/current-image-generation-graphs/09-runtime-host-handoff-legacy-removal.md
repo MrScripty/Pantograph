@@ -31,6 +31,37 @@ scheduler/workflow-service production paths to those contracts in validated
 vertical slices, then delete or fail closed old entry points before removing
 them. Do not introduce a second readiness proof type.
 
+2026-05-31 `model_path`/`ModelDependency` cleanup re-plan decision: use the
+phased fail-closed retirement path. Before editing production source, classify
+every remaining `model_path`, `modelPath`, `ModelDependencyRequest`,
+`ModelDependencyResolver`, `ModelRefV2`, and `build_model_ref_v2` reference by
+ownership category:
+
+1. Runtime graph execution or node-engine runtime launch. These references are
+   replacement targets and must either consume scheduler task state/results
+   plus runtime-host responses or fail closed with typed diagnostics.
+2. Runtime-host and scheduler canonical facts. These may carry path-free model,
+   artifact, package-fact, readiness, and dispatch identity only; executable
+   load targets remain host-local after dispatch.
+3. App configuration, embedding/RAG, diagnostics, stale-graph tests, or
+   tooling/probe surfaces. These must be classified before deletion because
+   they may not be graph execution identity, but they still must not provide a
+   successful runtime execution bridge.
+4. Frontend/Tauri transport and graph-editor actions. These must display or
+   submit typed backend facts only. Tauri remains an app shell/composition
+   boundary and must not own scheduler/runtime/dependency business policy.
+
+The standards-aligned sequence is to convert remaining runtime-success callers
+to canonical scheduler/runtime-host state or diagnostic-only fail-closed
+behavior first, remove production composition of old resolvers next, then
+delete old contracts and path-shaped fixtures once no successful caller
+remains. If classification finds a production caller that needs facts not
+present in `SchedulerRuntimeHandoff`, `DependencyReadinessProofEnvelope`,
+`RuntimeHostExecutionRequest`/`RuntimeHostExecutionResponse`, scheduler task
+state/results, or the canonical inference-interface descriptor, stop and
+re-plan a shared contract extension before editing manifests, lockfiles, or
+production source. Do not create an adapter-local bridge as a shortcut.
+
 ## Problem
 
 Milestone 5a established scheduler-owned readiness admission and runtime
@@ -137,15 +168,28 @@ Use the clean replacement path:
 7. Retire planned-inference launch from node-engine. Inference nodes become
    scheduler task-intent producers and consumers of scheduler task state/results
    rather than callers of `PlannedInferenceExecutionHost`.
-8. Replace PyTorch, llama.cpp, and audio node execution so successful execution
+8. Classify every remaining `model_path`/`modelPath`,
+   `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`, and
+   `build_model_ref_v2` reference before changing it. Record whether it is
+   runtime graph execution, canonical scheduler/runtime-host state, app
+   configuration/embedding/RAG, stale diagnostic fixture, tooling/probe
+   surface, or frontend/Tauri transport. Runtime graph execution references
+   are replacement targets; stale diagnostic references may remain only when
+   they prove invalid legacy graphs fail closed.
+9. Replace PyTorch, llama.cpp, and audio node execution so successful execution
    no longer reads graph `model_path`, reduced execution-plan projections, or
    emits `ModelRefV2`.
-9. Replace node-engine dependency preflight output with typed readiness proof
+10. Replace node-engine dependency preflight output with typed readiness proof
    or scheduler task state consumption. Old preflight APIs must fail closed
    with typed diagnostics until their callers are replaced; they must not
    translate canonical readiness back into `ModelDependencyRequest`,
    `ModelRefV2`, or path-shaped request fields.
-10. Delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+11. Remove production composition of `ModelDependencyResolver` and
+   `ModelRefV2`-producing paths after the scheduler/runtime-host response path
+   covers the relevant caller. Remaining resolver commands, probes, or tests
+   must be diagnostic-only or explicitly classified as non-execution
+   configuration/tooling before they are retained.
+12. Delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
    `build_model_ref_v2`, path repair helpers, direct old runtime task success
    fixtures, and path-shaped tests once their successful production callers are
    gone.
@@ -205,13 +249,25 @@ typed diagnostics.
    submit or reference schedulable task intent and consume scheduler task
    results/state. Missing scheduler task state fails closed with typed
    diagnostics.
-7. **Runtime execution migration:** update PyTorch, llama.cpp, and audio
-   execution paths to use host-owned executable facts instead of graph
-   `model_path`.
-8. **Node-engine preflight replacement:** replace `Option<ModelRefV2>` output
+7. **Retired model-path inventory:** perform a source/test/config/fixture
+   inventory of all remaining retired model-path and model-dependency
+   references. This is a required planning slice before additional deletion:
+   it prevents app configuration, stale diagnostics, and tooling/probe
+   references from being confused with runtime execution identity.
+8. **Runtime execution migration:** update PyTorch, llama.cpp, and audio
+   execution paths to use scheduler-dispatched runtime-host requests plus
+   host-owned executable facts instead of graph `model_path`. If a path is
+   still reachable without scheduler task state/results, make it fail closed
+   with typed diagnostics rather than launching execution.
+9. **Node-engine preflight replacement:** replace `Option<ModelRefV2>` output
    with typed readiness/task-state facts and fail closed if scheduler-owned
    readiness or task state is absent.
-9. **Legacy deletion:** remove `ModelDependencyResolver`,
+10. **Production resolver retirement:** remove old resolver installation from
+   production embedded-runtime composition once canonical readiness snapshots,
+   scheduler task state, and runtime-host responses cover that execution path.
+   Any retained resolver-like command must be explicitly diagnostic-only and
+   must not create executable launch inputs.
+11. **Legacy deletion:** remove `ModelDependencyResolver`,
    `ModelDependencyRequest`, `ModelRefV2`, `build_model_ref_v2`, path repair
    helpers, `PlannedInferenceExecutionHost`,
    `EmbeddedPlannedInferenceExecutionHost`, frontend `modelPath` dependency

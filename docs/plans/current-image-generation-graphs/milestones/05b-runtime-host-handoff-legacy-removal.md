@@ -39,6 +39,21 @@ tasks through `Ready` as a temporary compatibility detour, and do not encode
 this transition only in workflow-service; the legal lifecycle belongs in the
 `pantograph-scheduler` task-state contract.
 
+Selected retired model-path cleanup re-plan as of 2026-05-31: use the phased
+fail-closed retirement path. Before another source deletion slice, inventory
+and classify every remaining `model_path`, `modelPath`,
+`ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`, and
+`build_model_ref_v2` reference as runtime graph execution, canonical
+scheduler/runtime-host state, app configuration/embedding/RAG,
+diagnostic/stale fixture, tooling/probe, or frontend/Tauri transport. Runtime
+execution references are replacement targets; non-execution references may be
+retained only with explicit ownership and only if they cannot feed successful
+runtime launch. If any production caller requires facts missing from the
+canonical scheduler task state/results, runtime-host request/response,
+readiness proof, or inference-interface descriptor contracts, stop and re-plan
+a shared contract extension instead of creating a `ModelRefV2` or path-shaped
+adapter.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -212,6 +227,61 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   scheduler-owned task-state/result diagnostic. Successful runtime inference
   state/result consumption remains owned by workflow-service scheduler session
   orchestration and runtime-host task-result projection, not node-engine.
+- [x] Inventory and classify every remaining retired model-path/model-dependency
+  reference before additional source deletion. The classification must cover
+  runtime graph execution, scheduler/runtime-host canonical facts,
+  app configuration/embedding/RAG, stale diagnostic fixtures, tooling/probes,
+  and frontend/Tauri transport. Record the result in this milestone before
+  choosing each deletion or fail-closed conversion slice. 2026-05-31
+  classification result:
+  - Runtime graph execution replacement targets:
+    `crates/node-engine/src/core_executor/{pytorch_nodes.rs,llamacpp_nodes.rs,audio_nodes.rs,model_nodes.rs,dependency_preflight.rs,dependency_preflight/input_projection.rs,tests.rs,inference_tests.rs}`,
+    `crates/node-engine/src/{core_executor.rs,engine/dependency_inputs.rs,model_dependencies.rs,lib.rs,extensions.rs}`,
+    `crates/pantograph-embedded-runtime/src/{task_executor.rs,task_executor/dependency_environment.rs,task_executor/dependency_environment/helpers.rs,task_executor/python_execution.rs,python_runtime_bridge.py,embedded_workflow_host_helpers.rs}`,
+    and related node-engine/embedded-runtime tests. These are not allowed to
+    remain successful launch paths. Next slices must convert them to scheduler
+    task state/results plus runtime-host responses or typed fail-closed
+    diagnostics.
+  - Production resolver/removal targets:
+    `crates/pantograph-embedded-runtime/src/{workflow_service_composition.rs,embedded_runtime_lifecycle.rs,runtime_extensions.rs,model_dependencies.rs,model_dependency_operations.rs,model_dependency_descriptors.rs,model_dependency_activity.rs,model_dependency_python.rs,model_dependencies_tests.rs}`.
+    These still compose or test `ModelDependencyResolver` and `ModelRefV2`
+    infrastructure; remove production composition after canonical runtime-host
+    response coverage exists, then delete tests with the old contract.
+  - Host/backend runtime-internal load target consumers:
+    `crates/inference/src/{gateway.rs,server.rs,types.rs,embedding_runtime.rs,runtime_load.rs,backend/mod.rs,backend/pytorch.rs,backend/llamacpp.rs,backend/llamacpp_support.rs,backend/pytorch_worker_contract.rs}`,
+    `crates/inference/{torch,audio,onnx,depth}/`, and inference backend
+    tests/fixtures. These may continue to use model paths only as
+    runtime/backend-local executable load targets supplied by runtime-host or
+    source-owned config. They must not be fed graph `model_path`,
+    `ModelRefV2`, or node-engine path repair.
+  - App configuration, embedding/RAG, and direct local command surfaces:
+    `src-tauri/src/{config.rs,llm/gateway.rs,llm/startup.rs,llm/recovery.rs,llm/commands/rag.rs,llm/commands/server.rs,llm/runtime_registry.rs}` and
+    `crates/pantograph-embedded-runtime/src/embedding_workflow.rs`. These are
+    not the graph inference path, but Tauri must remain app-shell/transport;
+    any future cleanup must move business policy behind backend-owned service
+    boundaries rather than connecting these paths to graph execution.
+  - Tooling/probe surfaces:
+    `src-tauri/src/bin/pumas_dependency_runtime_probe.rs` still builds
+    `ModelDependencyRequest` directly and uses the embedded-runtime resolver.
+    It must become diagnostic/tooling-only, be moved behind a backend-owned
+    inventory/readiness boundary, or be retired; it must not feed successful
+    workflow execution.
+  - Canonical guardrails and negative tests:
+    `crates/pantograph-scheduler/**`, `crates/pantograph-runtime-host-contracts/**`,
+    `crates/pantograph-dependency-environment-service/**`,
+    `crates/workflow-nodes/**`, and workflow-service graph/inference-interface
+    tests include expected rejection, stripping, or "must not expose" cases.
+    Keep these until replacement tests prove the old contracts are deleted.
+  - Persisted stale workflow/artifact evidence:
+    `.pantograph/workflows/**` and `.pantograph/artifacts/**` still include
+    path-shaped historical workflow data. Treat these as persisted
+    stale-diagnostic evidence or generated run artifacts, not current
+    successful execution fixtures. Do not edit them outside an explicit saved
+    workflow/artifact cleanup slice.
+  - Historical/completed docs:
+    `docs/completed-plans/**`, `docs/historical-plans/**`,
+    `docs/standards-compliance-analysis/**`, and unrelated plan docs are
+    traceability records only and are not runtime code owners.
 - [ ] Replace PyTorch execution so successful model loading consumes
   scheduler-dispatched runtime-host requests plus host-owned executable facts
   and no longer reads graph `model_path`, reduced execution-plan projections,
@@ -223,6 +293,16 @@ this transition only in workflow-service; the legal lifecycle belongs in the
 - [ ] Replace audio execution so successful model loading consumes host-owned
   executable facts and no longer reads graph `model_path`, reduced
   execution-plan projections, or emits `ModelRefV2`.
+- [ ] Convert remaining runtime graph execution references to scheduler task
+  state/results, runtime-host responses, or typed diagnostic-only fail-closed
+  behavior. This includes PyTorch, llama.cpp, audio, and any node-engine
+  inference/dependency path that can still launch from `model_path`,
+  `ModelRefV2`, reduced execution-plan projections, or path repair helpers.
+- [ ] Remove production embedded-runtime composition of
+  `ModelDependencyResolver` and `ModelRefV2`-producing paths after canonical
+  runtime-host response coverage exists. Retained commands/probes must be
+  explicitly classified as non-execution or diagnostic-only and must not
+  produce executable launch inputs.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
@@ -308,6 +388,12 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `build_model_ref_v2`, `PlannedInferenceExecutionHost`, frontend `modelPath`
   dependency actions, direct old runtime task success fixtures, or path-shaped
   success fixtures.
+- Classification/search checks proving every retained `model_path`,
+  `modelPath`, `ModelDependencyRequest`, `ModelDependencyResolver`,
+  `ModelRefV2`, and `build_model_ref_v2` hit is recorded as non-execution,
+  stale-diagnostic-only, tooling-only, or pending replacement before the next
+  code slice starts. Successful runtime graph execution must have zero retained
+  hits for those contracts.
 - Focused crate checks for every touched Rust crate, including default,
   all-features, and no-default-features checks when public feature contracts
   change.
