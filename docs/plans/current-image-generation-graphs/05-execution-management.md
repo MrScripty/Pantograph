@@ -20072,12 +20072,40 @@ Worker rules:
     runtime_host_media_artifact_sink -- --nocapture`. These focused commands
     still report the known workflow-service
     `set_active_run_execution_plan` dead-code warning.
-  - Remaining follow-up before production use: wire embedded-runtime
-    composition to inject the Pumas package-facts resolver, Pumas load-target
-    resolver, inference gateway, and workflow-service media sink into the
-    runtime-host execution port used by scheduler dispatch; add session-level
-    coverage that scheduler task execution records the completed runtime-host
-    response.
+  - Re-plan trigger before production use: the validated runtime-host port can
+    complete image execution when all dependencies are injected, but hosted
+    production composition cannot safely inject the current
+    workflow-service-backed media sink by passing `Arc<WorkflowService>` back
+    into the runtime-host port. `WorkflowService` installs the runtime-host
+    execution port before the service is shared behind `Arc`, so a direct sink
+    creates a self-reference or pushes artifact persistence into the wrong
+    layer.
+  - Selected production composition direction: use option 2, a shared
+    backend-owned artifact writer handle. The composition root must create a
+    narrow artifact writer before `WorkflowService` is wrapped, inject that
+    same handle into `WorkflowService` artifact operations and the
+    runtime-host media artifact sink, then construct the runtime-host port
+    with the package-facts resolver, load-target resolver, inference gateway,
+    and artifact-writer-backed sink. Tauri remains an app-shell/composition
+    caller only and must not own artifact persistence business logic.
+  - Required next slice: introduce or expose the narrow artifact writer
+    contract at the workflow-service artifact boundary, refactor the
+    workflow-service media sink to depend on that writer instead of full
+    `WorkflowService`, wire hosted embedded-runtime composition through the
+    shared writer, and add session-level coverage that scheduler task
+    execution records the completed runtime-host response.
+  - Rejected/deferred alternatives: a late-bound delegating runtime-host port
+    remains an emergency-only bridge because it adds mutable post-share
+    initialization state; a workflow-service-owned runtime port factory risks
+    moving infrastructure assembly into workflow-service; keeping production
+    image execution fail-closed is allowed only until the shared writer slice
+    exists.
+  - Verification required: tests must prove workflow-service artifact writes
+    and runtime-host media writes share the same backend writer without a
+    `WorkflowService` self-reference, partial hosted composition fails closed
+    with typed diagnostics, Tauri contains no artifact persistence policy, and
+    completed image runtime-host responses are recorded as scheduler task
+    results.
 
 ### Traceability Links
 

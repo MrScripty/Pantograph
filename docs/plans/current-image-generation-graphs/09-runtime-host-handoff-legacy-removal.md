@@ -1979,11 +1979,58 @@ runtime_host_load_target -- --nocapture`; `cargo test -p
 pantograph-embedded-runtime runtime_host_media_artifact_sink -- --nocapture`.
 Verification caveat: the focused commands still report the known
 workflow-service `set_active_run_execution_plan` warning. Remaining production
-follow-up: wire embedded-runtime composition so scheduler dispatch receives a
-runtime-host port with Pumas package-facts resolver, Pumas load-target
-resolver, inference gateway, and workflow-service media sink injected, then
-add session-level coverage that completed runtime-host responses are recorded
-as scheduler task results.
+follow-up is now governed by the production artifact-writer composition
+re-plan below.
+
+2026-05-31 production artifact-writer composition re-plan decision: use option
+2, a shared backend-owned artifact writer handle, before enabling hosted
+production image execution. The runtime-host image path already works in
+focused tests when its dependencies are injected, but hosted composition
+cannot safely inject the current workflow-service-backed media sink by passing
+`Arc<WorkflowService>` back into the runtime-host port. That would make
+`WorkflowService` depend on a port that depends on the same `WorkflowService`,
+or force persistence policy into Tauri/embedded-runtime composition code.
+
+Selected design:
+
+1. Introduce or expose a narrow artifact writer contract at the backend
+   workflow-service artifact boundary. The handle should cover only the
+   artifact write/read descriptor operations needed by workflow-service
+   artifact APIs and runtime-host generated-media persistence.
+2. Construct the artifact writer in the embedded-runtime/backend composition
+   root before `WorkflowService` is wrapped in `Arc`.
+3. Inject the same writer into `WorkflowService` artifact operations and into
+   the runtime-host media artifact sink, refactoring or replacing the current
+   full-service-backed sink as needed.
+4. Construct `EmbeddedRuntimeHostExecutionPort` with the Pumas package-facts
+   resolver, Pumas load-target resolver, inference gateway, and the
+   artifact-writer-backed media sink.
+5. Keep scheduler dispatch and task-result recording as the only production
+   successful caller of runtime-host execution.
+
+Options disposition:
+
+1. Deferred emergency bridge: install a late-bound delegating runtime-host port
+   and initialize it after `Arc<WorkflowService>` exists. This is faster but
+   adds mutable lifecycle state and conflicts with the existing no mutable
+   post-share wiring guardrail unless separately replanned.
+2. Selected: shared backend artifact writer handle. This keeps artifact
+   persistence business logic backend-owned, avoids a self-reference, keeps
+   Tauri as app shell, and follows the standards' simplicity/complection
+   guidance by separating artifact persistence from runtime execution and
+   composition mechanics.
+3. Rejected for this slice: workflow-service-owned runtime port factory. It
+   can avoid the self-reference but risks moving runtime-host infrastructure
+   assembly into workflow-service.
+4. Temporary guardrail only: keep production image execution fail-closed until
+   the shared writer exists. This remains valid between slices but is not a
+   replacement for the production composition work.
+
+Verification for the next slice must prove the same backend writer is used by
+workflow-service artifact APIs and runtime-host media output, no
+`WorkflowService` self-reference or Tauri persistence policy is introduced,
+partial composition fails closed with typed diagnostics, and completed
+runtime-host image responses are recorded as scheduler task results.
 
 ## Verification Strategy
 
@@ -1993,6 +2040,10 @@ as scheduler task results.
   workflow payloads reject executable path fields.
 - Runtime-host tests proving Pumas load targets are resolved only inside the
   host boundary and unavailable states fail with typed diagnostics.
+- Backend artifact-writer composition tests proving workflow-service artifact
+  operations and runtime-host media output use the same backend-owned writer
+  handle without a `WorkflowService` self-reference, without Tauri business
+  logic, and with typed diagnostics for missing or partial writer wiring.
 - Scheduler dispatch tests proving runtime-host execution requests are built
   only from dispatch-selected `SchedulerRuntimeHandoff` values plus
   workflow-service-owned typed materialized inputs, reject reduced

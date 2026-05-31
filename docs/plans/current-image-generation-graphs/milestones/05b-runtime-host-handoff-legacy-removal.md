@@ -164,7 +164,14 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   own workflow-service persistence internals, invent artifact ids, return
   inline base64 media as scheduler task results, or call Tauri/frontend code.
   Missing sink or artifact write failures must return typed runtime-host
-  diagnostics.
+  diagnostics. 2026-05-31 production composition re-plan update: the hosted
+  production path must not inject the current full-workflow-service-backed
+  sink through `Arc<WorkflowService>` because that creates a self-reference
+  with the runtime-host execution port. The selected next slice is a shared
+  backend artifact writer handle created before `WorkflowService` is wrapped,
+  injected into both workflow-service artifact operations and the runtime-host
+  media sink. Tauri must remain an app-shell/composition caller and must not
+  own artifact persistence policy.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
@@ -231,6 +238,11 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   owner, cancellation and shutdown drain or abort spawned tasks deliberately,
   probe failures/stale snapshots remain non-ready, and no execution path reads
   technical-fit preview facts as runtime dispatch authority.
+- Backend artifact-writer composition tests proving hosted workflow-service
+  artifact operations and runtime-host media output share one backend-owned
+  writer handle, do not form a `WorkflowService` self-reference, do not move
+  artifact persistence policy into Tauri, and fail closed with typed
+  diagnostics when writer wiring is missing or partial.
 - Boundary tests proving graph, node-engine, saved-workflow, scheduler hint,
   and scheduler handoff payloads reject executable path fields.
 - Runtime-host tests proving Pumas load targets are resolved only at the host
@@ -300,6 +312,10 @@ this transition only in workflow-service; the legal lifecycle belongs in the
 - Do not move host package/runtime probing, async task ownership, or snapshot
   production into `pantograph-workflow-service`; keep it in a composition-owned
   infrastructure lifecycle.
+- Do not inject `Arc<WorkflowService>` back into the runtime-host execution
+  port for production media output; use a shared backend artifact writer
+  handle instead so artifact persistence remains backend-owned without a
+  service self-reference.
 - Do not derive execution readiness snapshots from technical-fit preview facts,
   graph node data, Tauri/frontend payloads, reduced execution plans, runtime
   handoff load targets, `ModelDependencyRequest`, `ModelRefV2`, or
@@ -1200,7 +1216,27 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   fixed issue: `runtime_host_load_target` tests still expected the old
   `selected_artifact_path`/caller-observed entry path in the canonical
   fixture; the test now asserts those path-shaped fields stay absent.
-  Remaining follow-up: wire embedded-runtime production composition to inject
-  package-facts resolver, load-target resolver, inference gateway, and
-  workflow-service media sink into the scheduler dispatch runtime-host port,
-  then add session-level completed task result coverage.
+  Remaining follow-up: wire embedded-runtime production composition through a
+  shared backend artifact writer handle, inject package-facts resolver,
+  load-target resolver, inference gateway, and artifact-writer-backed media
+  sink into the scheduler dispatch runtime-host port, then add session-level
+  completed task result coverage.
+- 2026-05-31 production artifact-writer composition re-plan selected.
+  Decision: use option 2, a shared backend-owned artifact writer handle, before
+  enabling hosted production image execution. The current focused image path
+  can complete when dependencies are injected, but production composition
+  cannot safely pass `Arc<WorkflowService>` into the runtime-host media sink
+  because `WorkflowService` owns the runtime-host port before it is wrapped,
+  creating a service self-reference or pushing artifact persistence policy into
+  the wrong layer. Required next slice: introduce/expose the narrow writer at
+  the workflow-service artifact boundary, make workflow-service artifact APIs
+  and runtime-host media output use the same writer, construct the writer in
+  backend composition before sharing the service, and wire the runtime-host
+  port with package-facts resolver, load-target resolver, inference gateway,
+  and artifact-writer-backed sink. Rejected/deferred options: late-bound
+  delegating runtime-host port is emergency-only mutable lifecycle state;
+  workflow-service-owned runtime port factory risks moving infrastructure
+  assembly into workflow-service; keeping production fail-closed is only a
+  temporary guardrail. Verification must prove no self-reference, no Tauri
+  business logic, typed diagnostics for partial wiring, and completed
+  runtime-host responses recorded as scheduler task results.
