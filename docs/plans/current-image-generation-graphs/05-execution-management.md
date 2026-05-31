@@ -20191,6 +20191,41 @@ Worker rules:
     composition path through a completed runtime-host image response, then
     retire the remaining node-engine/planned-inference successful launch
     branches.
+- 2026-05-31 embedded-runtime planned-inference host retirement slice:
+  - Smallest useful slice: remove embedded-runtime's successful
+    planned-inference host installation after hosted runtime-host composition
+    gained the full canonical dependency set.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/workflow_execution_session_execution.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/planned_inference_host.rs`,
+    `crates/pantograph-embedded-runtime/src/planned_inference_host_tests.rs`,
+    and these plan files.
+  - Implementation: removed the session-executor installation of
+    `PLANNED_INFERENCE_EXECUTION_HOST`, removed the embedded-runtime
+    `planned_inference_host` module, and deleted
+    `EmbeddedPlannedInferenceExecutionHost` with its embedded-runtime tests.
+  - No-fallback/no-legacy result: embedded-runtime no longer provides an
+    alternate successful planned-inference launch branch. If old node-engine
+    inference launch is reached from hosted/session execution, it fails closed
+    through the existing missing-host diagnostic instead of adapting scheduler
+    or runtime-host facts back into planned-inference behavior.
+  - Verification passed: `cargo fmt --package pantograph-embedded-runtime`;
+    `cargo check -p pantograph-embedded-runtime`; `cargo test -p
+    pantograph-workflow-service
+    workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+    -- --nocapture`. These commands still report the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Verification attempted with known unrelated failures: `cargo test -p
+    pantograph-embedded-runtime workflow_run_execution -- --nocapture`
+    currently fails stale graph/legacy fixture assertions for ONNX/audio and
+    human-input workflow cases that predate this slice's focused deletion.
+    The failures were not repaired in this slice because doing so would widen
+    into stale graph fixture migration and old runtime fixture ownership.
+  - Remaining follow-up: remove or convert the node-engine
+    `PlannedInferenceExecutionHost` contract/tests to diagnostic-only
+    fail-closed coverage after affected runtime inference nodes consume
+    scheduler task state/results exclusively.
 
 ### Traceability Links
 

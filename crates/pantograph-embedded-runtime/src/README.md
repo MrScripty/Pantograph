@@ -169,6 +169,11 @@ Pumas-specific dependency resolution.
   writer-backed media sink at this boundary. Missing artifact persistence must
   fail closed with typed initialization diagnostics instead of installing a
   partial production runtime-host port.
+- Embedded-runtime workflow-session execution must not install a
+  planned-inference host as an alternate successful launch path. Runtime
+  inference execution belongs behind scheduler-selected runtime-host dispatch;
+  old node-engine planned-inference launch attempts reached from this crate
+  fail closed through missing-host diagnostics.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

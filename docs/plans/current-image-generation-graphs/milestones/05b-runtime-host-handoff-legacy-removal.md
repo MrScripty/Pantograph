@@ -201,7 +201,14 @@ this transition only in workflow-service; the legal lifecycle belongs in the
 - [ ] Retire node-engine planned-inference launch ownership for runtime
   inference nodes. Affected nodes must submit or reference scheduler task
   intent and consume scheduler task state/results; missing scheduler task state
-  must fail closed with typed diagnostics.
+  must fail closed with typed diagnostics. 2026-05-31 progress:
+  embedded-runtime no longer installs or ships
+  `EmbeddedPlannedInferenceExecutionHost`, so hosted production/session
+  execution cannot use the old planned-inference host as a successful launch
+  branch. Remaining before this task is fully complete: remove the
+  node-engine `PlannedInferenceExecutionHost` contract/tests or convert them
+  to diagnostic-only fail-closed coverage once all affected runtime inference
+  nodes consume scheduler task state/results.
 - [ ] Replace PyTorch execution so successful model loading consumes
   scheduler-dispatched runtime-host requests plus host-owned executable facts
   and no longer reads graph `model_path`, reduced execution-plan projections,
@@ -226,7 +233,11 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
   `build_model_ref_v2`, `PlannedInferenceExecutionHost`, path repair helpers,
   and successful `model_path` test fixtures only after scheduler-to-runtime-host
-  dispatch and load-target resolution are wired.
+  dispatch and load-target resolution are wired. 2026-05-31 progress:
+  `EmbeddedPlannedInferenceExecutionHost` and its embedded-runtime tests were
+  removed after hosted runtime-host composition was wired. The node-engine
+  planned-inference contract remains as a separate removal/fail-closed
+  cleanup item.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

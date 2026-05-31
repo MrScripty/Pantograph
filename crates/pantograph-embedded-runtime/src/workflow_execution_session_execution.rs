@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::planned_inference_host::EmbeddedPlannedInferenceExecutionHost;
 use crate::task_executor;
 use crate::{
     apply_runtime_extensions_for_execution, EmbeddedWorkflowHost,
@@ -355,13 +354,6 @@ pub(crate) async fn run_session_workflow(
         Some(python_runtime_execution_recorder.clone()),
         inference_lifecycle_sink.clone(),
     );
-    install_planned_inference_host(
-        host,
-        &mut executor,
-        workflow_execution_session_id,
-        &runtime_ext,
-        inference_lifecycle_sink,
-    );
     let mut node_outputs = HashMap::new();
     let run_result = async {
         if replayed_inputs {
@@ -422,27 +414,6 @@ pub(crate) async fn run_session_workflow(
     host.observe_python_runtime_execution_metadata(&python_runtime_execution_metadata)?;
 
     EmbeddedWorkflowHost::collect_run_outputs(&node_outputs, &output_node_ids, output_targets)
-}
-
-fn install_planned_inference_host(
-    host: &EmbeddedWorkflowHost,
-    executor: &mut WorkflowExecutor,
-    workflow_execution_session_id: &str,
-    runtime_extensions: &RuntimeExtensionsSnapshot,
-    inference_lifecycle_sink: Option<Arc<dyn inference::InferenceRequestLifecycleEventSink>>,
-) {
-    let planned_host = EmbeddedPlannedInferenceExecutionHost::new(
-        host.workflow_service.clone(),
-        workflow_execution_session_id.to_string(),
-        host.gateway.clone(),
-        runtime_extensions.clone(),
-        inference_lifecycle_sink,
-    );
-    executor.extensions_mut().set(
-        node_engine::extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
-        Arc::new(planned_host)
-            as Arc<dyn node_engine::planned_inference::PlannedInferenceExecutionHost>,
-    );
 }
 
 async fn reconcile_session_graph_change(

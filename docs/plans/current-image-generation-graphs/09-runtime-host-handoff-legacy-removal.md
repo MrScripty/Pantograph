@@ -2062,6 +2062,16 @@ session-level coverage that scheduler task execution records completed
 runtime-host image responses through the hosted composition path, then remove
 the remaining planned-inference/node-engine launch branches.
 
+Completed 2026-05-31 for embedded-runtime planned-inference host retirement:
+embedded-runtime no longer installs `PLANNED_INFERENCE_EXECUTION_HOST` into
+workflow-session executors, and `EmbeddedPlannedInferenceExecutionHost` plus
+its embedded-runtime tests were removed. Reaching old node-engine
+planned-inference execution from hosted/session execution now fails closed
+through the missing-host diagnostic instead of invoking the deleted successful
+host branch. Remaining follow-up: remove or convert the node-engine
+`PlannedInferenceExecutionHost` contract and tests after the affected runtime
+inference nodes consume scheduler task state/results exclusively.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

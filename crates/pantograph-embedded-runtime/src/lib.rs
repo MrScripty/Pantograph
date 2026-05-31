@@ -51,7 +51,6 @@ mod node_execution_diagnostics;
 mod node_execution_ledger;
 mod node_io_artifacts;
 pub mod package_readiness_provider;
-mod planned_inference_host;
 #[allow(dead_code)]
 mod pumas_dispatch_package_facts;
 pub mod python_package_readiness_probe;
