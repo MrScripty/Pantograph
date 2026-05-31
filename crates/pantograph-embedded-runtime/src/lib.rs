@@ -73,6 +73,8 @@ mod runtime_dispatch_resource_facts;
 mod runtime_dispatch_source_snapshot;
 mod runtime_extensions;
 pub mod runtime_health;
+#[allow(dead_code)]
+mod runtime_host_execution_port;
 mod runtime_host_load_target;
 pub mod runtime_recovery;
 pub mod runtime_registry;

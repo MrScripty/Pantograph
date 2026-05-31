@@ -1554,6 +1554,12 @@ Next implementation sequence:
    execution port and snapshot refresh lifecycle are available together.
 10. Follow-on: add the canonical embedded runtime-host execution port needed
    for a complete inference path.
+   Completed 2026-05-30 as a fail-closed boundary:
+   `EmbeddedRuntimeHostExecutionPort` validates dispatch-selected
+   runtime-host requests, requires host-owned Pumas load-target resolution,
+   returns typed rejected responses for missing/unavailable load targets, and
+   does not call legacy node-engine, whole-run, `ModelRefV2`, graph-path, or
+   reduced-plan execution paths.
 11. After the first complete inference path works end-to-end, implement option
    3 by promoting the validated dispatch source-fact snapshot into
    readiness/admission task state with persistence, freshness, drift, and

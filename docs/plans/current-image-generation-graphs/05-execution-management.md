@@ -19328,6 +19328,36 @@ Worker rules:
     execution port, then connect hosted embedded-runtime startup to the paired
     resource-backed dependency bundle only when that port and snapshot refresh
     lifecycle are both available.
+- 2026-05-30 embedded runtime-host execution port slice:
+  - Smallest useful slice: add the canonical embedded-runtime implementation
+    of `RuntimeHostExecutionPort` as a fail-closed host boundary before
+    runtime-specific execution is wired.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `09-runtime-host-handoff-legacy-removal.md`, and this execution log.
+  - Implementation: added `EmbeddedRuntimeHostExecutionPort`, which validates
+    `RuntimeHostExecutionRequest` values, requires host-owned Pumas
+    load-target resolution, maps missing or unavailable load targets into
+    typed rejected `RuntimeHostExecutionResponse` diagnostics, and returns a
+    typed runtime-unavailable response if load-target resolution succeeds
+    before runtime-specific execution is wired.
+  - No-fallback/no-legacy result: the port does not call node-engine planned
+    inference, whole-run execution, graph paths, `ModelRefV2`, reduced
+    execution plans, dependency-preflight compatibility paths, or runtime
+    display strings. It exposes no executable Pumas load target outside the
+    runtime-host boundary and fails closed until canonical runtime execution is
+    implemented.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_host_execution_port --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: connect hosted embedded-runtime startup to the paired
+    resource-backed dispatch dependency bundle only after adding the snapshot
+    refresh lifecycle that can keep dispatch facts fresh before session
+    dispatch.
 
 ### Traceability Links
 
