@@ -1914,6 +1914,32 @@ recovery behavior. Tauri remains an infrastructure/app-shell composition
 caller only; scheduler keeps dispatch policy only; graph editor and node-engine
 do not own Pumas load targets or runtime execution business logic.
 
+Completed 2026-05-31 for the media artifact sink slice:
+`pantograph-embedded-runtime` now has
+`runtime_host_media_artifact_sink.rs`, defining the
+`RuntimeHostMediaArtifactSink` contract plus a workflow-service-backed image
+implementation. The sink decodes generated `inference::EncodedImage` payloads,
+writes retained image bytes through the backend artifact store, preserves
+workflow/run/node/port/model/runtime attribution, uses deterministic artifact
+ids, and returns path-free `RuntimeHostExecutionMediaArtifactRef` values. It
+fails closed with typed sink errors for malformed base64 and unavailable
+artifact persistence. This does not wire successful gateway execution yet and
+does not introduce inline media outputs, fake refs, Tauri/frontend logic,
+scheduler persistence workarounds, planned-inference branches, graph paths, or
+`ModelRefV2` adapters. Verification passed: `cargo fmt --package
+pantograph-embedded-runtime`; `cargo test -p pantograph-embedded-runtime
+runtime_host_media_artifact_sink -- --nocapture`. Verification caveat: the
+focused test command still reports the known workflow-service
+`set_active_run_execution_plan` warning. Discovered follow-up: runtime-host
+and scheduler media refs currently validate `media_type` as an identifier, so
+the sink returns identifier-safe values such as `image_png` while artifact
+descriptors retain the real MIME type; a later shared contract cleanup should
+rename that field to a media type id or allow MIME values without weakening
+artifact id validation. Remaining before execution: inject the sink into
+`EmbeddedRuntimeHostExecutionPort`, map missing sink/write failures into typed
+runtime-host diagnostics, call the image gateway, and project completed image
+results into path-free media artifact outputs.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

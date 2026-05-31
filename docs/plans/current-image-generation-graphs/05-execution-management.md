@@ -19965,6 +19965,45 @@ Worker rules:
     load-target resolution, image projection, gateway execution, sink-backed
     media artifact refs, and typed failure diagnostics inside
     `EmbeddedRuntimeHostExecutionPort`.
+- 2026-05-31 runtime-host media artifact sink slice:
+  - Smallest useful slice: define the backend-owned media artifact sink
+    boundary and workflow-service-backed image implementation without wiring
+    successful gateway execution yet.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_media_artifact_sink.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: added `RuntimeHostMediaArtifactSink`,
+    `RuntimeHostImageArtifactWriteRequest`, and
+    `WorkflowServiceRuntimeHostMediaArtifactSink`. The implementation decodes
+    generated `inference::EncodedImage` payloads, writes real image bytes
+    through `WorkflowService::write_artifact`, preserves workflow/run/node/
+    port/model/runtime attribution, uses deterministic artifact ids, and
+    returns `RuntimeHostExecutionMediaArtifactRef`.
+  - No-fallback/no-legacy result: the sink does not call Tauri/frontend,
+    node-engine, planned-inference hosts, reduced execution plans, graph paths,
+    scheduler persistence workarounds, or `ModelRefV2`. Invalid base64 and
+    missing artifact-store configuration fail closed with typed sink errors;
+    no inline base64 outputs or fake refs were introduced.
+  - Focused tests added: successful image output writes a retained artifact and
+    returns a path-free ref, invalid image payloads fail closed, and missing
+    artifact-store configuration is reported as a write failure.
+  - Verification passed: `cargo fmt --package pantograph-embedded-runtime`;
+    `cargo test -p pantograph-embedded-runtime
+    runtime_host_media_artifact_sink -- --nocapture`. The focused test command
+    still reports the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Discovered follow-up: runtime-host and scheduler media-ref contracts
+    currently validate `media_type` with identifier rules, so this slice
+    returns the existing identifier-safe form such as `image_png` while the
+    artifact descriptor stores the real MIME type `image/png`. A later shared
+    contract cleanup should either rename that field to a media type id or
+    allow standards-compliant MIME values without weakening artifact id
+    validation.
+  - Remaining follow-up before successful execution: inject the sink into
+    `EmbeddedRuntimeHostExecutionPort`, map missing sink/write failures into
+    typed runtime-host diagnostics, call the image gateway, and project
+    completed results into path-free media artifact outputs.
 
 ### Traceability Links
 

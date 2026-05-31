@@ -79,6 +79,8 @@ mod runtime_host_execution_port;
 mod runtime_host_image_execution;
 mod runtime_host_load_target;
 #[allow(dead_code)]
+mod runtime_host_media_artifact_sink;
+#[allow(dead_code)]
 mod runtime_host_package_facts;
 pub mod runtime_recovery;
 pub mod runtime_registry;

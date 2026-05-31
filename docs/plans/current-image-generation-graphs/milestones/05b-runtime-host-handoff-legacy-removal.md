@@ -1129,3 +1129,27 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   store delegation, missing-sink diagnostics, write-failure diagnostics, and a
   runtime-host response test proving completed image execution returns only
   path-free media artifact refs.
+- 2026-05-31 runtime-host media artifact sink slice completed.
+  Smallest useful vertical slice: add the backend-owned media artifact sink
+  contract and workflow-service-backed image implementation while keeping
+  successful gateway execution unwired. Allowed write set: embedded-runtime
+  media sink module, module index, README, this milestone, runtime-host
+  handoff plan, and execution-management ledger. No-fallback/no-legacy result:
+  generated image outputs are persisted only through the backend artifact
+  store boundary; invalid base64 and missing artifact-store configuration
+  return typed sink errors; no inline media, fake artifact refs, graph paths,
+  Tauri/frontend logic, scheduler persistence workaround, planned-inference
+  branch, or `ModelRefV2` path was added. Verification passed: `cargo fmt
+  --package pantograph-embedded-runtime`; `cargo test -p
+  pantograph-embedded-runtime runtime_host_media_artifact_sink --
+  --nocapture`. Verification caveat: the focused test command still reports
+  the known workflow-service `set_active_run_execution_plan` warning.
+  Discovered follow-up: runtime-host and scheduler media refs currently use
+  identifier validation for `media_type`, so the sink returns identifier-safe
+  values such as `image_png` while artifact descriptors retain the real MIME
+  type. A future shared contract cleanup should either rename that field to a
+  media type id or allow MIME values without weakening artifact id validation.
+  Remaining follow-up: inject the sink into `EmbeddedRuntimeHostExecutionPort`,
+  map missing sink/write failures into typed runtime-host diagnostics, call
+  the image gateway, and project completed image results into path-free media
+  artifact outputs.
