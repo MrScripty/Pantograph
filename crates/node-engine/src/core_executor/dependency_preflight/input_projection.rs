@@ -11,22 +11,8 @@ use inference::{
     ResolvedModelPackageFacts, TaskRegistryEntry,
 };
 
-use super::super::read_optional_input_value;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use super::super::{read_optional_input_string_aliases, read_optional_input_value_aliases};
-use crate::model_dependencies::ModelDependencyBinding;
-
-pub(crate) fn read_input_dependency_bindings(
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Vec<ModelDependencyBinding> {
-    let Some(raw) = read_optional_input_value(inputs, "dependency_bindings") else {
-        return Vec::new();
-    };
-    if raw.is_null() {
-        return Vec::new();
-    }
-    serde_json::from_value(raw).unwrap_or_default()
-}
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 pub(crate) fn read_input_selected_binding_ids(

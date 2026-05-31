@@ -489,7 +489,13 @@ cleanup.
   scheduler/runtime-host-owned state. Remaining cleanup in this task is the
   broader public `ModelDependencyRequest`/`ModelDependencyResolver`/
   `ModelRefV2` contract, retained diagnostic strings proving retired contract
-  rejection, path-repair helper, and fixture removal.
+  rejection, path-repair helper, and fixture removal. 2026-05-31 progress:
+  the public node-engine `model_dependencies` module and re-exports were
+  deleted, the unused dependency-binding reader was removed, and retained
+  dependency override parsing now uses the shared
+  `pantograph-dependency-planning` DTO instead of a node-engine legacy
+  re-export. Remaining source hits for retired contract names are diagnostic
+  strings/tests only.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.
@@ -561,9 +567,9 @@ cleanup.
   `PlannedInferenceExecutionHost`.
 - Deletion/search checks proving successful production paths no longer contain
   `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
-  `build_model_ref_v2`, `PlannedInferenceExecutionHost`, frontend `modelPath`
-  dependency actions, direct old runtime task success fixtures, or path-shaped
-  success fixtures.
+  `model_dependencies`, `build_model_ref_v2`, `PlannedInferenceExecutionHost`,
+  frontend `modelPath` dependency actions, direct old runtime task success
+  fixtures, or path-shaped success fixtures.
 - Classification/search checks proving every retained `model_path`,
   `modelPath`, `ModelDependencyRequest`, `ModelDependencyResolver`,
   `ModelRefV2`, and `build_model_ref_v2` hit is recorded as non-execution,

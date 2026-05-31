@@ -2,20 +2,9 @@ use super::*;
 
 impl TauriTaskExecutor {
     #[allow(dead_code)]
-    pub(in crate::task_executor) fn parse_dependency_requirements_input(
-        inputs: &HashMap<String, serde_json::Value>,
-    ) -> Option<node_engine::ModelDependencyRequirements> {
-        let raw = Self::read_optional_input_value_aliases(
-            inputs,
-            &["dependency_requirements", "dependencyRequirements"],
-        )?;
-        serde_json::from_value(raw).ok()
-    }
-
-    #[allow(dead_code)]
     pub(in crate::task_executor) fn read_input_dependency_override_patches(
         inputs: &HashMap<String, serde_json::Value>,
-    ) -> Vec<node_engine::DependencyOverridePatchV1> {
+    ) -> Vec<pantograph_dependency_planning::DependencyOverridePatchV1> {
         let Some(raw) = Self::read_optional_input_value_aliases(
             inputs,
             &[
@@ -32,12 +21,16 @@ impl TauriTaskExecutor {
             return Vec::new();
         }
         if raw.is_object() {
-            return serde_json::from_value::<node_engine::DependencyOverridePatchV1>(raw)
-                .map(|single| vec![single])
-                .unwrap_or_default();
+            return serde_json::from_value::<
+                pantograph_dependency_planning::DependencyOverridePatchV1,
+            >(raw)
+            .map(|single| vec![single])
+            .unwrap_or_default();
         }
-        serde_json::from_value::<Vec<node_engine::DependencyOverridePatchV1>>(raw)
-            .unwrap_or_default()
+        serde_json::from_value::<Vec<pantograph_dependency_planning::DependencyOverridePatchV1>>(
+            raw,
+        )
+        .unwrap_or_default()
     }
 
     #[allow(dead_code)]

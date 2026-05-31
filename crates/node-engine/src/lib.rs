@@ -61,7 +61,6 @@ pub mod error;
 pub mod events;
 pub mod extensions;
 pub mod groups;
-pub mod model_dependencies;
 pub mod orchestration;
 pub mod path_validation;
 pub mod port_options;
@@ -108,13 +107,6 @@ pub use groups::{
 
 // Re-export descriptor types
 pub use descriptor::{DescriptorFn, PortMetadata, TaskDescriptor, TaskMetadata};
-pub use model_dependencies::{
-    DependencyOverrideFieldsV1, DependencyOverridePatchV1, DependencyOverrideScope,
-    DependencyState, DependencyValidationError, DependencyValidationErrorScope,
-    DependencyValidationState, ModelDependencyBinding, ModelDependencyBindingStatus,
-    ModelDependencyInstallResult, ModelDependencyRequest, ModelDependencyRequirement,
-    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
-};
 pub use path_validation::resolve_path_within_root;
 
 // Re-export port options types

@@ -21002,6 +21002,41 @@ Worker rules:
     `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contract
     and node-engine path-repair helpers once scheduler task-state/results and
     runtime-host responses cover the final inference path.
+- 2026-05-31 public model-dependency contract deletion slice:
+  - Smallest useful slice: delete the public node-engine
+    `model_dependencies` module and re-exports after production resolver
+    composition, extension visibility, request builders, model-ref builders,
+    and embedded-runtime resolver test fixtures were removed.
+  - Allowed files touched: `crates/node-engine/src/lib.rs`,
+    `crates/node-engine/src/model_dependencies.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight/input_projection.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/helpers.rs`,
+    and these plan files.
+  - Implementation: removed the legacy DTO/trait module, removed the public
+    re-exports, deleted the unused dependency-binding reader that depended on
+    `ModelDependencyBinding`, removed the unused
+    `parse_dependency_requirements_input` helper, and switched retained
+    dependency override parsing to the shared
+    `pantograph-dependency-planning::DependencyOverridePatchV1` type.
+  - No-fallback/no-legacy result: node-engine no longer exposes
+    `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`, or
+    related binding/status DTOs as a public compatibility contract. No
+    scheduler/runtime-host/readiness facts were adapted back into legacy
+    shapes.
+  - Verification passed: `cargo fmt -p node-engine -p
+    pantograph-embedded-runtime`; `cargo test -p node-engine --features
+    inference-nodes,pytorch-nodes dependency_preflight -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime task_executor -- --nocapture`;
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`;
+    `cargo check -p pantograph-embedded-runtime`; `git diff --check`; and
+    targeted `rg` confirming no non-diagnostic source hit remains for
+    `model_dependencies`, `ModelDependencyRequest`, `ModelDependencyResolver`,
+    `ModelRefV2`, `ModelDependencyBinding`, `ModelDependencyRequirements`, or
+    `read_input_dependency_bindings`.
+  - Remaining follow-up: remove node-engine path-repair helpers and any
+    path-shaped fixtures once the next slice proves their retained behavior is
+    diagnostic-only or replaces them with scheduler task-state/results and
+    runtime-host responses.
 
 ### Traceability Links
 
