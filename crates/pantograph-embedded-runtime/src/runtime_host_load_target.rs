@@ -13,7 +13,6 @@ use thiserror::Error;
 const PANTOGRAPH_RUNTIME_HOST_CONSUMER: &str = "pantograph-embedded-runtime";
 const MAX_DIAGNOSTICS: usize = 4;
 
-#[allow(dead_code)]
 pub(crate) struct RuntimeHostPumasLoadTargetResolver {
     pumas_api: Arc<pumas_library::PumasApi>,
 }
@@ -26,7 +25,6 @@ pub(crate) trait RuntimeHostLoadTargetResolver: Send + Sync {
     ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError>;
 }
 
-#[allow(dead_code)]
 impl RuntimeHostPumasLoadTargetResolver {
     pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
         Self { pumas_api }

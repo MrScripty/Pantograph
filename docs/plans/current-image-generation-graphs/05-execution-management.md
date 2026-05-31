@@ -21318,6 +21318,32 @@ Worker rules:
     image-generation runtime-host execution, add retry/defer/cancellation
     leases, and clean up stale workflow-service tests recorded in the prior
     slice.
+- 2026-05-31 Milestone 5b hosted runtime-host resolver standards cleanup
+  slice:
+  - Smallest useful slice: remove stale `dead_code` suppressions from the
+    embedded-runtime Pumas load-target and full package-facts resolver
+    structs/constructors now consumed by hosted runtime-host composition.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_load_target.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`, and
+    these plan files.
+  - Implementation: unsuppressed `RuntimeHostPumasLoadTargetResolver` and
+    `RuntimeHostPumasPackageFactsResolver` plus their constructors while
+    leaving behavior unchanged.
+  - No-fallback/no-legacy result: this slice only tightens compiler visibility
+    on the canonical runtime-host Pumas resolver path; it does not add
+    path-shaped resolver behavior, Tauri-owned policy, or a legacy execution
+    route.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    check -p pantograph-embedded-runtime`; `cargo test -p
+    pantograph-embedded-runtime runtime_host_load_target -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime runtime_host_package_facts --
+    --nocapture`; and `cargo test -p pantograph-embedded-runtime
+    runtime_host_execution_port -- --nocapture`.
+  - Remaining follow-up: add session-level scheduler task-result coverage for
+    production runtime-host responses, complete gateway-backed
+    image-generation execution, and continue deleting or converting remaining
+    legacy node-engine/planned-inference launch surfaces.
 
 ### Traceability Links
 

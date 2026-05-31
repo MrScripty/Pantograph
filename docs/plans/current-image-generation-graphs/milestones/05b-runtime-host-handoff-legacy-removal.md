@@ -230,10 +230,13 @@ cleanup.
   `EmbeddedRuntimeHostExecutionPort` with Pumas load-target resolution, full
   Pumas package-facts resolution, the inference gateway, and the writer-backed
   media sink. Partial hosted composition without artifact persistence fails
-  closed with typed initialization diagnostics. Remaining before this task is
-  fully complete: add session-level scheduler task-result coverage for the
-  production runtime-host response path and then remove the remaining
-  node-engine/planned-inference launch paths.
+  closed with typed initialization diagnostics. 2026-05-31 progress: removed
+  stale staging-only `dead_code` suppressions from the Pumas load-target and
+  full package-facts resolver structs/constructors now used by hosted
+  runtime-host composition. Remaining before this task is fully complete: add
+  session-level scheduler task-result coverage for the production runtime-host
+  response path and then remove the remaining node-engine/planned-inference
+  launch paths.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing

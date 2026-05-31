@@ -6,7 +6,6 @@ use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
 use pumas_library::PumasError;
 use thiserror::Error;
 
-#[allow(dead_code)]
 pub(crate) struct RuntimeHostPumasPackageFactsResolver {
     pumas_api: Arc<pumas_library::PumasApi>,
 }
@@ -19,7 +18,6 @@ pub(crate) trait RuntimeHostPackageFactsResolver: Send + Sync {
     ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError>;
 }
 
-#[allow(dead_code)]
 impl RuntimeHostPumasPackageFactsResolver {
     pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
         Self { pumas_api }
