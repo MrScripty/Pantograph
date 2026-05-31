@@ -338,7 +338,7 @@ async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics
     let host_runtime_mode_info =
         HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let runtime_registry = Arc::new(RuntimeRegistry::new());
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),

@@ -1798,6 +1798,12 @@ Next staged implementation sequence:
    narrow, rename, or delete `hosted_with_default_python_runtime` for the
    embedded-runtime test/non-resource-backed path so it cannot be confused with
    the canonical resource-backed hosted composition entry point.
+   Completed 2026-05-31 for helper narrowing: the legacy helper is now the
+   `#[cfg(test)] pub(crate)`
+   `EmbeddedRuntime::test_hosted_with_default_python_runtime` constructor, and
+   all remaining call sites are embedded-runtime tests. Production hosted
+   runtime construction now flows through the startup/workflow-service
+   composition boundary plus `EmbeddedRuntime::from_hosted_composition`.
 5. Add focused tests proving hosted composition cannot expose successful
    resource-backed dispatch without owner Pumas access and runtime registry,
    that Tauri/headless runtime construction does not install dispatch

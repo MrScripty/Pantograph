@@ -19819,6 +19819,35 @@ Worker rules:
   - Remaining follow-up: narrow, rename, or delete
     `EmbeddedRuntime::hosted_with_default_python_runtime` so it is clearly not
     the canonical hosted resource-backed dispatch composition entry point.
+- 2026-05-31 legacy hosted runtime helper narrowing slice:
+  - Smallest useful slice: remove the production/public ambiguity from the
+    old hosted helper without rewriting the embedded-runtime test fixtures
+    that still exercise registry and capability behavior through that helper.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/edit_session_execution_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/runtime_lifecycle_capability_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/session_runtime_lifecycle_tests.rs`,
+    and this plan log.
+  - Implementation: renamed `EmbeddedRuntime::hosted_with_default_python_runtime`
+    to the `#[cfg(test)] pub(crate)`
+    `EmbeddedRuntime::test_hosted_with_default_python_runtime` helper and
+    updated all remaining call sites. No production Tauri or embedded-runtime
+    API can now call the legacy successful hosted path.
+  - Focused tests/fixtures: updated existing embedded-runtime test fixtures to
+    use the explicit test-only helper.
+  - No-fallback/no-legacy result: the canonical production path is the hosted
+    startup/workflow-service composition plus `from_hosted_composition`; the
+    old helper is test-only and cannot be used as a resource-backed production
+    fallback.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_lifecycle_capability_tests --lib`,
+    `cargo check -p pantograph-embedded-runtime --no-default-features`,
+    `cargo check -p pantograph`, and `git diff --check`. Checks still report
+    pre-existing dead-code warnings in workflow-service and Tauri workflow
+    modules.
+  - Remaining follow-up: continue from the runtime-host handoff milestone with
+    the first complete inference path behind `EmbeddedRuntimeHostExecutionPort`.
 
 ### Traceability Links
 

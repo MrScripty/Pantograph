@@ -121,7 +121,11 @@ impl EmbeddedRuntime {
         }
     }
 
-    pub async fn hosted_with_default_python_runtime(
+    /// Test-only legacy hosted constructor for exercising runtime-registry and
+    /// capability behavior without the resource-backed hosted composition
+    /// boundary.
+    #[cfg(test)]
+    pub(crate) async fn test_hosted_with_default_python_runtime(
         config: EmbeddedRuntimeConfig,
         gateway: Arc<inference::InferenceGateway>,
         extensions: SharedExtensions,

@@ -49,7 +49,7 @@ async fn hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from
             last_error: None,
         }),
     });
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),
@@ -167,7 +167,7 @@ async fn embedded_runtime_shutdown_reconciles_registry_to_stopped() {
         }),
         embedding_runtime: None,
     });
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),
@@ -212,7 +212,7 @@ async fn embedded_runtime_shutdown_marks_loaded_sessions_unloaded() {
     install_fake_default_runtime(&app_data_dir);
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),

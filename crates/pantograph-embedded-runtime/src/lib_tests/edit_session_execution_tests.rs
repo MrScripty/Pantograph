@@ -55,7 +55,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
         .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),
@@ -168,7 +168,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
         .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),
@@ -329,7 +329,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
         .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),
@@ -452,7 +452,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
         .await
         .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
 
-    let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+    let runtime = EmbeddedRuntime::test_hosted_with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
             project_root: temp.path().to_path_buf(),
