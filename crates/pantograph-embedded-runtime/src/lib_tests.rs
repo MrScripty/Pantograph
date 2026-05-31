@@ -23,7 +23,8 @@ use pantograph_workflow_service::{
     WorkflowRunResponse, WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeInstallState,
     WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
     WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
-    WorkflowSessionRuntimeLoadProof, WorkflowTechnicalFitOverride,
+    WorkflowSessionRuntimeLoadProof, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
+    WorkflowSessionRuntimeLoadProofReadinessState, WorkflowTechnicalFitOverride,
     WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitResourceEstimateKind,
 };
 use std::path::{Path, PathBuf};

@@ -4,6 +4,10 @@ use std::sync::Arc;
 
 use pantograph_diagnostics_ledger::{DiagnosticsLedgerError, SchedulerModelCacheState};
 use pantograph_runtime_attribution::{AttributionError, BucketSelection, CredentialProofRequest};
+pub use pantograph_runtime_host_contracts::{
+    WorkflowSessionRuntimeLoadProof, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
+    WorkflowSessionRuntimeLoadProofReadinessState,
+};
 
 use crate::graph::{
     WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphDiagnostic, WorkflowGraphRunSettings,
@@ -109,20 +113,6 @@ impl Default for WorkflowRuntimeRequirements {
             required_extensions: Vec::new(),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionRuntimeLoadProof {
-    pub backend_key: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub active_model_path: Option<String>,
-    #[serde(default)]
-    pub requested_model_active: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

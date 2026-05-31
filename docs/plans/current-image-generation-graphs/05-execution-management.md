@@ -21251,6 +21251,45 @@ Worker rules:
     Pumas artifact/load-target, and runtime-host readiness producer path rather
     than test code, then promote the stable proof DTOs into the shared
     executable contract area with stale/missing proof diagnostics.
+- 2026-05-31 Milestone 5b shared runtime load-proof contract slice:
+  - Smallest useful slice: promote the embedded-runtime proof shape into the
+    shared executable runtime-host contract crate while keeping workflow-service
+    as a re-exporting consumer and embedded-runtime as the current lifecycle
+    store/validator.
+  - Allowed files touched:
+    `crates/pantograph-runtime-host-contracts/src/{lib.rs,README.md,runtime_session_load.rs,runtime_session_load_tests.rs}`,
+    `crates/pantograph-workflow-service/src/{lib.rs,workflow/contracts.rs,workflow/tests/session_execution.rs}`,
+    `crates/pantograph-embedded-runtime/src/{embedded_runtime_lifecycle.rs,embedded_workflow_host_helpers.rs,lib_tests.rs,lib_tests/session_runtime_lifecycle_tests.rs}`,
+    and these plan files.
+  - Implementation: added a versioned, path-free
+    `WorkflowSessionRuntimeLoadProof` contract with workflow/task correlation,
+    backend/runtime/model/artifact/load-target identity, readiness state,
+    diagnostic phase, ready-state active-model validation, and serde unknown
+    field rejection for `active_model_path`. Workflow-service now re-exports
+    the shared contract type; embedded-runtime validates producer records,
+    workflow id correlation, proof readiness, backend identity, and active
+    model state before lifecycle readiness succeeds.
+  - No-fallback/no-legacy result: the shared proof contract does not accept
+    executable paths or graph `model_path` aliases, and no scheduler/runtime
+    fact is adapted back into `ModelRefV2` or path-shaped runtime authority.
+  - Verification passed: `cargo fmt -p pantograph-runtime-host-contracts -p
+    pantograph-workflow-service -p pantograph-embedded-runtime`; `cargo test
+    -p pantograph-runtime-host-contracts runtime_session_load -- --nocapture`;
+    `cargo check -p pantograph-workflow-service`; `cargo check -p
+    pantograph-embedded-runtime`; and `cargo test -p
+    pantograph-embedded-runtime session_runtime_load -- --nocapture`.
+  - Discovered issue: the existing
+    `workflow_execution_session_records_load_completed_only_with_runtime_proof`
+    workflow-service test is stale relative to the current task-level scheduler
+    runner. It was already using a non-source input binding; after correcting
+    that binding during investigation, the test still expects old scheduler
+    admission/lifecycle ledger events from a non-runtime text graph. This slice
+    does not rely on that stale test for validation; a future workflow-service
+    test cleanup should either rebuild it around a real runtime task graph or
+    retire the obsolete assertions.
+  - Remaining follow-up: wire production proof producers from canonical
+    planning, Pumas load-target, and runtime-host readiness facts, then add
+    stale/missing proof producer diagnostics across the production lifecycle.
 
 ### Traceability Links
 

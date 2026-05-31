@@ -24,7 +24,8 @@ use pantograph_runtime_host_contracts::{
     ReservationLifecyclePortError, RuntimeHostExecutionMediaArtifactRef,
     RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RuntimeHostExecutionState, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
+    WorkflowSessionRuntimeLoadProofReadinessState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
@@ -1799,10 +1800,19 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         8,
         1024,
         WorkflowSessionRuntimeLoadProof {
+            contract_version:
+                pantograph_runtime_host_contracts::RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
+            workflow_id: "wf-runtime-proof".to_string(),
+            task_id: Some("node-1".to_string()),
             backend_key: "llama_cpp".to_string(),
             runtime_id: Some("managed-llama-slot".to_string()),
             model_id: Some("model-a".to_string()),
-            active_model_path: Some("/models/model-a.gguf".to_string()),
+            artifact_id: Some("artifact-model-a".to_string()),
+            load_target_id: Some("load-target-model-a".to_string()),
+            readiness_state: WorkflowSessionRuntimeLoadProofReadinessState::Ready,
+            diagnostic_phase: Some(
+                WorkflowSessionRuntimeLoadProofDiagnosticPhase::RuntimeModelLoad,
+            ),
             requested_model_active: true,
         },
     );
@@ -1870,7 +1880,7 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
                 session_id: created.session_id,
                 workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
-                    node_id: "text-output-1".to_string(),
+                    node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
                     value: serde_json::json!("hello"),
                 }],

@@ -12,6 +12,7 @@
 mod reservation_lifecycle;
 mod runtime_host_dispatch;
 mod runtime_host_execution;
+mod runtime_session_load;
 
 pub use reservation_lifecycle::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
@@ -34,4 +35,9 @@ pub use runtime_host_execution::{
     RuntimeHostExecutionState, RuntimeHostExecutionTerminalMetadata,
     ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+};
+pub use runtime_session_load::{
+    RuntimeSessionLoadProofContractError, ValidatedWorkflowSessionRuntimeLoadProof,
+    WorkflowSessionRuntimeLoadProof, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
+    WorkflowSessionRuntimeLoadProofReadinessState, RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
 };

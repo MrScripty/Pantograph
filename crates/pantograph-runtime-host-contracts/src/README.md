@@ -17,6 +17,8 @@ to release or retain runtime-registry leases acquired for dispatch candidates.
 | `runtime_host_execution_tests.rs` | Fixture-backed runtime-host execution contract tests. |
 | `runtime_host_dispatch.rs` | Runtime-host execution port trait, scheduler dispatcher, response correlation checks, and typed dispatch errors. |
 | `runtime_host_dispatch_tests.rs` | Focused dispatcher tests using a fake runtime-host port. |
+| `runtime_session_load.rs` | Path-free backend-owned runtime session load-proof DTO, readiness state, diagnostic phase, validation wrapper, and typed contract errors. |
+| `runtime_session_load_tests.rs` | Runtime session load-proof contract tests for validation, path-field rejection, and ready-state invariants. |
 | `../tests/fixtures/` | Serialized request/response contract fixtures. |
 
 ## Invariants
@@ -34,6 +36,10 @@ to release or retain runtime-registry leases acquired for dispatch candidates.
 - Response outputs must be typed, bounded, and path-free. They are runtime-host
   contract values that workflow-service maps into scheduler task results; this
   crate must not depend on workflow-service DTOs.
+- Runtime session load proofs carry workflow/task correlation, backend/runtime
+  identity, model/artifact/load-target identity, readiness state, diagnostic
+  phase, and requested-model-active state without exposing executable paths.
+  Ready proofs must explicitly mark the requested model active.
 - Reservation lifecycle events carry scheduler lease ids, task/run
   correlation, typed outcomes, optional candidate ids, diagnostics, and
   idempotency event ids. Workflow-service emits these events, but the

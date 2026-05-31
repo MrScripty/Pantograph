@@ -283,10 +283,19 @@ async fn session_runtime_load_consumes_backend_owned_llamacpp_load_proof() {
         .record_workflow_session_runtime_load_proof(
             "runtime-llama",
             WorkflowSessionRuntimeLoadProof {
+                contract_version:
+                    pantograph_runtime_host_contracts::RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
+                workflow_id: "runtime-llama".to_string(),
+                task_id: Some("inference".to_string()),
                 backend_key: "llama_cpp".to_string(),
                 runtime_id: Some("llama_cpp".to_string()),
                 model_id: Some("pumas://models/maid".to_string()),
-                active_model_path: None,
+                artifact_id: Some("pumas://models/maid/artifacts/q4".to_string()),
+                load_target_id: Some("load-target:maid:q4".to_string()),
+                readiness_state: WorkflowSessionRuntimeLoadProofReadinessState::Ready,
+                diagnostic_phase: Some(
+                    WorkflowSessionRuntimeLoadProofDiagnosticPhase::RuntimeModelLoad,
+                ),
                 requested_model_active: true,
             },
         )
@@ -308,7 +317,8 @@ async fn session_runtime_load_consumes_backend_owned_llamacpp_load_proof() {
         .expect("load proof query succeeds")
         .expect("load proof should be present");
     assert_eq!(proof.backend_key, "llama_cpp");
-    assert_eq!(proof.active_model_path, None);
+    assert_eq!(proof.workflow_id, "runtime-llama");
+    assert_eq!(proof.load_target_id.as_deref(), Some("load-target:maid:q4"));
     assert!(proof.requested_model_active);
 }
 

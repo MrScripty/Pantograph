@@ -534,10 +534,19 @@ cleanup.
   authority. 2026-05-31 progress: lifecycle checks now require typed proofs
   for llama.cpp workflows and fail closed with `RuntimeModelLoad` diagnostics
   for missing, backend-mismatched, or inactive-model proofs.
-- [ ] Promote proven lifecycle/load-proof DTOs into the shared executable
+- [x] Promote proven lifecycle/load-proof DTOs into the shared executable
   contract area with validation/normalization for workflow id, task id,
   backend/runtime identity, model id, artifact/load-target identity, readiness
-  state, diagnostic phase, and stale/missing proof errors.
+  state, diagnostic phase, and stale/missing proof errors. 2026-05-31
+  progress: `WorkflowSessionRuntimeLoadProof` now lives in
+  `pantograph-runtime-host-contracts` with a versioned, path-free wire shape,
+  validation wrapper, readiness state, diagnostic phase, workflow/task
+  correlation, backend/runtime/model/artifact/load-target identity, and
+  ready-state active-model invariant. Workflow-service re-exports the shared
+  type for host traits, and embedded-runtime validates producer records before
+  storing or consuming them. Remaining follow-up: production proof producers
+  must populate the shared contract from canonical planning, Pumas load-target,
+  and runtime-host readiness facts rather than test hooks.
 - [x] Delete embedded-runtime workflow-host graph path resolver helpers and
   update session/edit workflow fixtures to store typed model intent rather than
   executable paths after the typed lifecycle proof vertical slice passes.

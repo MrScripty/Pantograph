@@ -272,6 +272,19 @@ impl EmbeddedRuntime {
         Option<pantograph_workflow_service::WorkflowSessionRuntimeLoadProof>,
         pantograph_workflow_service::WorkflowServiceError,
     > {
+        proof.validate().map_err(|error| {
+            pantograph_workflow_service::WorkflowServiceError::InvalidRequest(format!(
+                "invalid workflow session runtime load proof: {error}"
+            ))
+        })?;
+        if proof.workflow_id != workflow_id {
+            return Err(pantograph_workflow_service::WorkflowServiceError::InvalidRequest(
+                format!(
+                    "runtime load proof workflow_id '{}' does not match requested workflow '{workflow_id}'",
+                    proof.workflow_id
+                ),
+            ));
+        }
         let mut proofs = self.session_runtime_load_proofs.lock().map_err(|_| {
             pantograph_workflow_service::WorkflowServiceError::Internal(
                 "session runtime load proof lock poisoned".to_string(),

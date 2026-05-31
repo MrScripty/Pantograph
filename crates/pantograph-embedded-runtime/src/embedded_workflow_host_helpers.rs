@@ -12,7 +12,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState, WorkflowHost,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeDiagnosticPhaseHint,
     WorkflowRuntimeRequirements, WorkflowServiceError, WorkflowSessionRuntimeLoadProof,
-    WorkflowTechnicalFitResourceEstimateKind, WorkflowTechnicalFitResourceEstimateState,
+    WorkflowSessionRuntimeLoadProofReadinessState, WorkflowTechnicalFitResourceEstimateKind,
+    WorkflowTechnicalFitResourceEstimateState,
 };
 use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
@@ -592,11 +593,32 @@ fn validate_llamacpp_runtime_load_proof(
     workflow_id: &str,
     proof: &WorkflowSessionRuntimeLoadProof,
 ) -> Result<(), WorkflowServiceError> {
+    proof.validate().map_err(|error| {
+        WorkflowServiceError::RuntimeNotReady(format!(
+            "workflow '{workflow_id}' has invalid runtime load proof: {error}"
+        ))
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad)
+    })?;
+    if proof.workflow_id != workflow_id {
+        return Err(WorkflowServiceError::RuntimeNotReady(format!(
+            "workflow '{workflow_id}' runtime load proof belongs to workflow '{}'",
+            proof.workflow_id
+        ))
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad));
+    }
+
     if canonical_engine_backend_key(Some(proof.backend_key.as_str())).as_deref() != Some("llamacpp")
     {
         return Err(WorkflowServiceError::RuntimeNotReady(format!(
             "workflow '{workflow_id}' runtime load proof backend '{}' does not satisfy required llama.cpp runtime",
             proof.backend_key
+        ))
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad));
+    }
+
+    if proof.readiness_state != WorkflowSessionRuntimeLoadProofReadinessState::Ready {
+        return Err(WorkflowServiceError::RuntimeNotReady(format!(
+            "workflow '{workflow_id}' runtime load proof is not ready"
         ))
         .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad));
     }
