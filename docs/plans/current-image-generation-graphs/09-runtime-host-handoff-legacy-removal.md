@@ -1415,6 +1415,49 @@ Remaining follow-up: add runtime-registry reservation through
 `RuntimeDispatchResourceFactsSource`, project reservation leases into scheduler
 resource facts, and only then emit validated scheduler candidate bundles.
 
+2026-05-30 re-plan trigger: resource-backed scheduler candidate emission cannot
+be implemented without changing the candidate reservation contract. The staged
+`RuntimeDispatchResourceFactsSource` correctly returns
+`Vec<SchedulerResourceReservation>` for one runtime-registry lease because a
+single runtime dispatch may reserve RAM, VRAM, or later additional resource
+claims together. `WorkflowRuntimeDispatchCandidateFact`,
+`SchedulerDispatchCandidate`, and `SchedulerDispatchDecision` currently carry
+only one `SchedulerResourceReservation` / reservation lease id. Selecting one
+reservation would silently drop resource claims; duplicating a candidate per
+reservation would misrepresent one runtime execution as several scheduler
+candidates. The provider also cannot invent a selected device id when the task
+intent does not explicitly constrain one because current runtime capability
+facts do not expose device candidate facts.
+
+Standards-aligned options:
+
+1. Keep the current single-reservation contract and initially emit candidates
+   only for explicit-device tasks whose resource source returns exactly one
+   reservation. This is the smallest code change, but it bakes in a special
+   case and would either reject common RAM+VRAM reservations or tempt future
+   fallback behavior.
+2. Change the workflow-service and scheduler dispatch-selection contracts to
+   carry `Vec<SchedulerResourceReservation>` per candidate/decision, with
+   validation that all reservations belong to the same workflow run, task, and
+   reservation lease group. This preserves the source-of-truth shape from the
+   runtime-registry, avoids dropped claims, and lets runtime-host lifecycle
+   release one lease while scheduler diagnostics can still show every resource
+   claim.
+3. Introduce a composite scheduler reservation summary containing one lease id
+   plus aggregate resource-claim details, while keeping detailed reservations
+   internal to runtime-registry. This narrows scheduler surface area but adds a
+   second resource representation that can drift from runtime-registry facts.
+4. Defer resource-backed candidate emission until a larger runtime/device
+   capability source is designed that supplies selected device candidates and
+   multi-resource reservation facts together. This avoids a partial contract,
+   but blocks complete inference-run dispatch longer.
+
+Recommendation: option 2. It is the cleanest standards-compliant contract
+change because it keeps the runtime-registry reservation fact shape intact,
+avoids special-case fallbacks, and separates concerns: runtime-registry owns
+claims and leases, provider projects all claim reservations, scheduler selects
+one candidate, and runtime-host lifecycle releases the selected lease.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

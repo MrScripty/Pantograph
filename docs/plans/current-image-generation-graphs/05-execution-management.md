@@ -19056,6 +19056,28 @@ Worker rules:
     drafts, project reservation leases into scheduler resource facts, and only
     then emit validated scheduler candidate bundles with lifecycle coverage.
 
+- 2026-05-30 resource-backed candidate emission re-plan trigger
+  - Finding: `RuntimeDispatchResourceFactsSource` returns
+    `Vec<SchedulerResourceReservation>` for one runtime-registry lease, while
+    `WorkflowRuntimeDispatchCandidateFact`, `SchedulerDispatchCandidate`, and
+    `SchedulerDispatchDecision` currently carry only one reservation. A
+    resource-backed provider cannot emit standards-compliant candidates without
+    either dropping resource claims or duplicating one runtime candidate per
+    resource claim.
+  - Additional constraint: current runtime capability facts do not expose
+    selected device candidates, so the provider must not invent a device id for
+    unconstrained tasks.
+  - Options recorded in `09-runtime-host-handoff-legacy-removal.md`: restrict
+    to single-reservation explicit-device tasks, change scheduler/workflow
+    contracts to carry reservation vectors, introduce a composite reservation
+    summary, or defer emission until runtime/device capability and reservation
+    facts are redesigned together.
+  - Recommendation recorded: change scheduler/workflow dispatch contracts to
+    carry `Vec<SchedulerResourceReservation>` per candidate/decision, validated
+    as one workflow run/task/lease group. This preserves runtime-registry
+    ownership, avoids dropped claims, and prevents fallback or special-case
+    candidate construction.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module
