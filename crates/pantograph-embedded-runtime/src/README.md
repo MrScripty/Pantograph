@@ -80,6 +80,7 @@ packages.
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
 | `python_package_readiness_probe.rs` | Owns the no-shell default-host Python package-readiness probe runner used by the runtime-scoped package-readiness provider, including bounded timeout/output handling and typed provider diagnostics. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
+| `reservation_lifecycle.rs` | Implements the shared runtime-host reservation lifecycle port against runtime-registry release, retention, and reclaim/reconcile APIs. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, Python-sidecar and roadmap vLLM/MLX capability builders, task request-contract projection, and capability-to-lifecycle projection. |
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
 | `runtime_dispatch_capability_facts.rs` | Owns the staged runtime-registry capability-facts source for runtime dispatch. It projects path-free runtime ids, backend keys, lifecycle status, loaded model ids, reservation ids, and admission-budget presence from the shared registry snapshot, and returns typed diagnostics for missing runtime/backend-key facts. It intentionally does not intersect these facts with Pumas package facts or create scheduler candidates until resource ownership is wired. |
@@ -169,6 +170,13 @@ Pumas-specific dependency resolution.
   component/backend-hint facts; scheduler candidates still require separate
   runtime-registry capability facts and real resource reservation/resource-fit
   facts before non-empty production candidate sets are allowed.
+- Reservation lifecycle handling is implemented as an embedded-runtime port
+  over `SharedRuntimeRegistry`. It accepts only scheduler lease ids issued by
+  the runtime-registry resource-facts source, releases terminal/unselected
+  leases through the registry's release-and-reconcile helper, treats duplicate
+  releases as idempotent `already_applied` applications with typed
+  diagnostics, and leaves workflow-service responsible only for emitting
+  application lifecycle outcomes.
 - `puma-lib` execution and preload paths may rehydrate selected model details
   through Pumas only when a canonical `model_id`/model ref is present. Display
   names such as `modelName` are not a lookup contract and must not trigger

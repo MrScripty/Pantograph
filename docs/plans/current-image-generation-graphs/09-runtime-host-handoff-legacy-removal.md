@@ -1036,6 +1036,11 @@ Staged implementation:
    runtime-host dispatch.
 3. Add the embedded-runtime lifecycle port implementation backed by
    runtime-registry release/retention/reconcile APIs.
+   Completed 2026-05-30 in `pantograph-embedded-runtime`: added the staged
+   embedded reservation lifecycle port over `SharedRuntimeRegistry`, mapping
+   runtime-registry scheduler lease ids to release-and-reconcile behavior,
+   idempotent duplicate release applications, typed owner-mismatch
+   diagnostics, and dispatch-started no-op applications.
 4. Wire embedded-runtime composition to provide both the final dispatch
    candidate provider and reservation lifecycle port together. Do not allow one
    without the other in production.
@@ -1057,6 +1062,20 @@ reservation lifecycle port together with the final resource-backed dispatch
 candidate provider. Workflow-service now fails closed if that lifecycle owner
 is absent, so the next slice must implement the embedded-runtime port before
 real resource-backed candidates can be enabled.
+
+2026-05-30 embedded-runtime lifecycle port slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime reservation_lifecycle --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+- `git diff --check`
+
+Discovered follow-up: the embedded lifecycle port is intentionally staged with
+`#[allow(dead_code)]` until production composition wires it together with the
+final dispatch candidate provider. The next slice must remove that staging
+allowance by injecting the port wherever real resource-backed candidate bundles
+are enabled.
 
 ## Verification Strategy
 

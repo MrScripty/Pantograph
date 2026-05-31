@@ -18760,6 +18760,35 @@ Worker rules:
     by runtime-registry release/retention/reconcile APIs and wire production
     candidate provider plus lifecycle port together before enabling real
     resource-backed candidates.
+- 2026-05-30 embedded-runtime reservation lifecycle port slice:
+  - Slice scope: embedded-runtime reservation lifecycle port, module index,
+    focused lifecycle tests, embedded-runtime README, and plan logs only.
+  - Implementation: added an embedded-runtime implementation of the shared
+    reservation lifecycle port over `SharedRuntimeRegistry`, parsing scheduler
+    lease ids issued by runtime-registry resource facts, applying terminal and
+    unselected outcomes through release-and-reconcile behavior, returning
+    idempotent `already_applied` applications for duplicate release attempts,
+    and failing owner-mismatched lease ids with typed diagnostics.
+  - Test coverage: added focused tests for terminal completion release with
+    runtime reconcile/producer stop, duplicate terminal release idempotency,
+    dispatch-started no-op behavior, and non-runtime-registry lease rejection.
+  - No-fallback/no-legacy result: the port accepts only
+    `runtime-registry.{id}` scheduler lease ids from canonical resource facts.
+    It does not infer leases from graph paths, runtime display strings,
+    reduced execution plans, `ModelRefV2`, or provider-private state.
+  - Standards result: workflow-service still emits application events only;
+    embedded-runtime owns infrastructure side effects; runtime-registry owns
+    release, retention, and reclaim policy; and the staged module is marked
+    dead-code allowed only until production composition injects it with the
+    final resource-backed candidate provider.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime reservation_lifecycle --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire embedded-runtime composition so the final
+    runtime dispatch candidate provider and reservation lifecycle port are
+    configured together, then remove the staged dead-code allowance.
 
 ### Traceability Links
 

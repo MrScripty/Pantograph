@@ -59,6 +59,8 @@ pub mod python_runtime;
 mod python_runtime_env_resolution;
 mod python_runtime_execution;
 pub mod rag;
+#[allow(dead_code)]
+mod reservation_lifecycle;
 pub mod runtime_capabilities;
 mod runtime_config;
 #[allow(dead_code)]
