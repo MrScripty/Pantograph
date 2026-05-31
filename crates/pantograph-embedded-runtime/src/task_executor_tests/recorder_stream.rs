@@ -77,10 +77,6 @@ async fn failing_python_adapter_is_not_reached_after_retired_preflight_blocks() 
     let executor = TauriTaskExecutor::with_python_runtime(None, Arc::new(FailingPythonAdapter));
     let mut extensions = ExecutorExtensions::new();
     let resolver = Arc::new(CountingDependencyResolver::new());
-    extensions.set(
-        extension_keys::MODEL_DEPENDENCY_RESOLVER,
-        resolver.clone() as Arc<dyn ModelDependencyResolver>,
-    );
     let recorder = install_python_runtime_recorder(&mut extensions);
 
     let inputs = HashMap::from([

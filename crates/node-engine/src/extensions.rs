@@ -80,10 +80,6 @@ pub mod extension_keys {
     /// Key for `Arc<inference::kv_cache::KvCacheStore>` — KV cache storage.
     pub const KV_CACHE_STORE: &str = "kv_cache_store";
 
-    /// Key for `Arc<dyn crate::model_dependencies::ModelDependencyResolver>` —
-    /// host-provided model dependency resolver.
-    pub const MODEL_DEPENDENCY_RESOLVER: &str = "model_dependency_resolver";
-
     /// Key for `Arc<dyn inference::InferenceRequestLifecycleEventSink>` —
     /// host-provided sink for typed inference lifecycle facts.
     #[cfg(feature = "inference-nodes")]

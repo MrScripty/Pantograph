@@ -431,7 +431,14 @@ cleanup.
   `TauriModelDependencyResolver` stack and no longer ships resolver,
   descriptor, requirements, Python install/check, model-ref, or resolver test
   modules. `DependencyActivityHub` remains the only public dependency activity
-  boundary.
+  boundary. 2026-05-31 progress: the stale
+  `MODEL_DEPENDENCY_RESOLVER` extension key was deleted from node-engine, and
+  runtime-extension tests no longer install a legacy resolver just to prove it
+  is filtered. This removes the last standard extension slot that could carry
+  legacy resolver business logic into runtime execution. Remaining resolver
+  references are the explicit public legacy contract, diagnostic strings, and
+  diagnostic/tooling test stubs pending the model-dependency/model-ref
+  deletion slice.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
@@ -505,9 +512,10 @@ cleanup.
   artifact persistence policy into Tauri, and fail closed with typed
   diagnostics when writer wiring is missing or partial.
 - Resolver-composition guardrail tests proving production workflow executor
-  extensions no longer install or snapshot `MODEL_DEPENDENCY_RESOLVER`, Tauri
-  receives dependency activity only through a backend-owned diagnostic/activity
-  subscription boundary, retained resolver/probe surfaces are
+  extensions no longer install, snapshot, or expose a
+  `MODEL_DEPENDENCY_RESOLVER` extension key, Tauri receives dependency
+  activity only through a backend-owned diagnostic/activity subscription
+  boundary, retained resolver/probe surfaces are
   diagnostic/tooling-only, and no runtime execution path can call
   `ModelDependencyResolver`, emit `ModelRefV2`, or construct executable
   dependency launch inputs.

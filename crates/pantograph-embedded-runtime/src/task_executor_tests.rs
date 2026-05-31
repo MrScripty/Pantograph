@@ -55,11 +55,7 @@ async fn dependency_environment_execution_is_retired_from_embedded_runtime() {
         response: HashMap::new(),
     });
     let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, mut extensions) = test_executor(adapter, resolver.clone());
-    extensions.set(
-        extension_keys::MODEL_DEPENDENCY_RESOLVER,
-        resolver.clone() as Arc<dyn ModelDependencyResolver>,
-    );
+    let (executor, extensions) = test_executor(adapter, resolver.clone());
 
     let error = executor
         .execute_task(
@@ -236,13 +232,10 @@ impl ModelDependencyResolver for CountingDependencyResolver {
 
 fn test_executor(
     adapter: Arc<dyn PythonRuntimeAdapter>,
-    resolver: Arc<dyn ModelDependencyResolver>,
+    _resolver: Arc<dyn ModelDependencyResolver>,
 ) -> (TauriTaskExecutor, ExecutorExtensions) {
     let executor = TauriTaskExecutor::with_python_runtime(None, adapter);
-
-    let mut extensions = ExecutorExtensions::new();
-    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
-    (executor, extensions)
+    (executor, ExecutorExtensions::new())
 }
 
 fn install_python_runtime_recorder(

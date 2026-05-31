@@ -3,12 +3,6 @@ use super::super::*;
 use crate::engine::TaskExecutor;
 #[cfg(feature = "inference-nodes")]
 use crate::extension_keys;
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use crate::model_dependencies::{
-    DependencyState, DependencyValidationState, ModelDependencyInstallResult,
-    ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
-    ModelDependencyStatus, ModelRefV2,
-};
 #[cfg(feature = "inference-nodes")]
 use async_trait::async_trait;
 #[cfg(feature = "inference-nodes")]
@@ -2631,13 +2625,8 @@ async fn test_dependency_preflight_fails_closed_before_resolver_request() {
         Arc::new(MockInferenceLifecycleSink {
             events: lifecycle_events.clone(),
         });
-    let captured_requests = Arc::new(Mutex::new(Vec::new()));
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(CapturingDependencyResolver {
-        captured_requests: captured_requests.clone(),
-    });
     let mut extensions = ExecutorExtensions::new();
     extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
-    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
 
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
@@ -2682,14 +2671,6 @@ async fn test_dependency_preflight_fails_closed_before_resolver_request() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert!(
-        captured_requests
-            .lock()
-            .expect("captured dependency requests lock")
-            .is_empty(),
-        "diagnostic-only preflight must not build ModelDependencyRequest or call resolver"
-    );
-
     let events = lifecycle_events.lock().expect("lifecycle events lock");
     assert_eq!(events.len(), 3);
     assert!(events.iter().all(|event| {
@@ -2732,10 +2713,8 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
         Arc::new(MockInferenceLifecycleSink {
             events: lifecycle_events.clone(),
         });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(NotReadyDependencyResolver);
     let mut extensions = ExecutorExtensions::new();
     extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
-    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
 
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
@@ -2940,163 +2919,10 @@ async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycl
     assert!(events[2].artifact_refs.is_empty());
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[allow(dead_code)]
-struct CapturingDependencyResolver {
-    captured_requests: Arc<Mutex<Vec<ModelDependencyRequest>>>,
-}
-
-#[cfg(feature = "inference-nodes")]
-struct NotReadyDependencyResolver;
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[async_trait]
-impl ModelDependencyResolver for CapturingDependencyResolver {
-    async fn resolve_model_dependency_requirements(
-        &self,
-        request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyRequirements, String> {
-        self.captured_requests
-            .lock()
-            .expect("captured dependency requests lock")
-            .push(request.clone());
-        Ok(model_dependency_requirements_for_request(&request))
-    }
-
-    async fn check_dependencies(
-        &self,
-        request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyStatus, String> {
-        let requirements = model_dependency_requirements_for_request(&request);
-        Ok(ModelDependencyStatus {
-            state: DependencyState::Ready,
-            code: None,
-            message: None,
-            requirements,
-            bindings: Vec::new(),
-            checked_at: None,
-        })
-    }
-
-    async fn install_dependencies(
-        &self,
-        request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyInstallResult, String> {
-        Ok(ModelDependencyInstallResult {
-            state: DependencyState::Ready,
-            code: None,
-            message: None,
-            requirements: model_dependency_requirements_for_request(&request),
-            bindings: Vec::new(),
-            installed_at: None,
-        })
-    }
-
-    async fn resolve_model_ref(
-        &self,
-        request: ModelDependencyRequest,
-        _requirements: Option<ModelDependencyRequirements>,
-    ) -> std::result::Result<Option<ModelRefV2>, String> {
-        let model_id = request
-            .model_id
-            .clone()
-            .unwrap_or_else(|| request.model_path.clone());
-        let model_path = if request.model_path.trim().is_empty() {
-            format!("pumas-resolved://{model_id}")
-        } else {
-            request.model_path.clone()
-        };
-        Ok(Some(ModelRefV2 {
-            contract_version: 2,
-            engine: request.backend_key.unwrap_or_else(|| "pytorch".to_string()),
-            model_id,
-            model_path,
-            task_type_primary: request
-                .task_type_primary
-                .unwrap_or_else(|| "text-generation".to_string()),
-            dependency_bindings: Vec::new(),
-            dependency_requirements_id: Some("requirements.pytorch.hf".to_string()),
-        }))
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
-#[async_trait]
-impl ModelDependencyResolver for NotReadyDependencyResolver {
-    async fn resolve_model_dependency_requirements(
-        &self,
-        request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyRequirements, String> {
-        Ok(model_dependency_requirements_for_request(&request))
-    }
-
-    async fn check_dependencies(
-        &self,
-        request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyStatus, String> {
-        let requirements = model_dependency_requirements_for_request(&request);
-        Ok(ModelDependencyStatus {
-            state: DependencyState::Missing,
-            code: Some("missing_dependency".to_string()),
-            message: Some("install Python package before execution".to_string()),
-            requirements,
-            bindings: Vec::new(),
-            checked_at: None,
-        })
-    }
-
-    async fn install_dependencies(
-        &self,
-        request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyInstallResult, String> {
-        Ok(ModelDependencyInstallResult {
-            state: DependencyState::Missing,
-            code: Some("missing_dependency".to_string()),
-            message: Some("install Python package before execution".to_string()),
-            requirements: model_dependency_requirements_for_request(&request),
-            bindings: Vec::new(),
-            installed_at: None,
-        })
-    }
-
-    async fn resolve_model_ref(
-        &self,
-        _request: ModelDependencyRequest,
-        _requirements: Option<ModelDependencyRequirements>,
-    ) -> std::result::Result<Option<ModelRefV2>, String> {
-        Ok(None)
-    }
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[allow(dead_code)]
-fn model_dependency_requirements_for_request(
-    request: &ModelDependencyRequest,
-) -> ModelDependencyRequirements {
-    ModelDependencyRequirements {
-        model_id: request
-            .model_id
-            .clone()
-            .unwrap_or_else(|| request.model_path.clone()),
-        platform_key: "linux-x86_64".to_string(),
-        backend_key: request.backend_key.clone(),
-        dependency_contract_version: 1,
-        validation_state: DependencyValidationState::Resolved,
-        validation_errors: Vec::new(),
-        bindings: Vec::new(),
-        selected_binding_ids: request.selected_binding_ids.clone(),
-    }
-}
-
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
 async fn test_dependency_preflight_rejects_explicit_hf_transformers_before_request() {
-    let captured_requests = Arc::new(Mutex::new(Vec::new()));
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(CapturingDependencyResolver {
-        captured_requests: captured_requests.clone(),
-    });
-    let mut extensions = ExecutorExtensions::new();
-    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
+    let extensions = ExecutorExtensions::new();
 
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
@@ -3125,14 +2951,6 @@ async fn test_dependency_preflight_rejects_explicit_hf_transformers_before_reque
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-
-    let requests = captured_requests
-        .lock()
-        .expect("captured dependency requests lock");
-    assert!(
-        requests.is_empty(),
-        "diagnostic-only preflight must not build ModelDependencyRequest or call resolver"
-    );
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

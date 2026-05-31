@@ -198,10 +198,12 @@ Use the clean replacement path:
    `ModelRefV2`, or path-shaped request fields.
 11. Remove production composition of `ModelDependencyResolver` and
    `ModelRefV2`-producing paths through the option 2 backend
-   diagnostic/activity split. First stop installing `MODEL_DEPENDENCY_RESOLVER`
-   into production workflow executor extensions and stop snapshotting/applying
-   the resolver into runtime execution. Then introduce or reuse a backend-owned
-   dependency diagnostic/activity handle for bounded event subscription so
+   diagnostic/activity split. The 2026-05-31 guardrail slices stopped
+   installing, snapshotting, applying, and finally exposing
+   `MODEL_DEPENDENCY_RESOLVER` as a standard extension key, so runtime
+   execution no longer has an extension channel for legacy resolver business
+   logic. Continue by retaining dependency activity only through the
+   backend-owned diagnostic/activity handle for bounded event subscription so
    Tauri only forwards activity events and does not own resolver lifecycle,
    dependency policy, or event attachment policy. Remaining resolver commands,
    probes, or tests must be diagnostic-only or explicitly classified as
@@ -229,9 +231,9 @@ typed diagnostics.
   launch branches after scheduler-to-runtime-host dispatch is wired.
 - Do not leave old resolver calls as alternate successful branches after the
   host handoff is wired.
-- Do not install `ModelDependencyResolver` into production workflow executor
-  extensions or runtime extension snapshots after the resolver-composition
-  guardrail slice.
+- Do not install or expose `ModelDependencyResolver` through production
+  workflow executor extensions or runtime extension snapshots after the
+  resolver-composition guardrail slice.
 - Do not let Tauri manage `TauriModelDependencyResolver` as business state or
   attach dependency activity policy directly to the resolver. Tauri may only
   subscribe to or forward backend-owned diagnostic activity.

@@ -20937,6 +20937,40 @@ Worker rules:
     `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contracts
     and diagnostic-only resolver tests once all remaining non-execution or
     stale-diagnostic ownership is classified.
+- 2026-05-31 resolver extension-key deletion slice:
+  - Smallest useful slice: delete the stale
+    `MODEL_DEPENDENCY_RESOLVER` node-engine extension key and remove the
+    remaining tests that installed a legacy resolver only to prove runtime
+    extension filtering.
+  - Allowed files touched: `crates/node-engine/src/extensions.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/recorder_stream.rs`,
+    and these plan files.
+  - Implementation: removed the standard resolver extension key, removed
+    runtime-extension assertions that depended on that key, stopped embedded
+    task-executor tests from seeding the resolver into execution extensions,
+    and deleted now-unused node-engine diagnostic resolver stubs from
+    dependency-preflight tests.
+  - No-fallback/no-legacy result: runtime execution no longer has a standard
+    extension slot that can carry legacy `ModelDependencyResolver` business
+    logic. No scheduler/runtime-host/readiness facts were adapted back into
+    `ModelDependencyRequest`, `ModelRefV2`, or path-shaped launch payloads.
+  - Verification passed: `cargo fmt -p node-engine -p
+    pantograph-embedded-runtime`; `cargo test -p node-engine --features
+    inference-nodes,pytorch-nodes dependency_preflight -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime runtime_extensions --
+    --nocapture`; `cargo test -p pantograph-embedded-runtime
+    dependency_preflight -- --nocapture`; `cargo check -p node-engine
+    --features inference-nodes,pytorch-nodes`; and `cargo check -p
+    pantograph-embedded-runtime`.
+  - Remaining follow-up: delete or replace the public node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contract,
+    embedded-runtime diagnostic test stubs, and path-repair helpers once
+    scheduler task-state/results and runtime-host responses cover the final
+    inference path.
 
 ### Traceability Links
 

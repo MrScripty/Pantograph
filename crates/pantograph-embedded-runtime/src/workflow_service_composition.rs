@@ -923,14 +923,6 @@ mod tests {
             ));
             assert!(
                 extensions
-                    .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
-                        node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-                    )
-                    .is_none(),
-                "dependency resolver must not be installed into runtime execution extensions"
-            );
-            assert!(
-                extensions
                     .get::<Arc<inference::kv_cache::KvCacheStore>>(
                         node_engine::extension_keys::KV_CACHE_STORE,
                     )
