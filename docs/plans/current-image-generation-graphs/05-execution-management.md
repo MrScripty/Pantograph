@@ -18605,6 +18605,40 @@ Worker rules:
        scheduler candidates.
     4. Only then join Pumas, runtime capability, and resource facts into the
        validated workflow-service candidate-fact bundle.
+- 2026-05-30 embedded-runtime resource reservation source slice:
+  - Slice scope: embedded-runtime runtime-registry resource source only.
+    Allowed files:
+    `crates/pantograph-embedded-runtime/src/runtime_dispatch_resource_facts.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: added `RuntimeDispatchResourceFactsSource`, its explicit
+    request/result DTOs, source diagnostics, runtime-registry reservation
+    acquisition/reuse, owned-claim projection into scheduler reservation facts,
+    and scheduler fit-assessment projection for success or admission failure.
+  - Test coverage: added focused tests proving real lease acquisition projects
+    scheduler RAM/VRAM reservation facts, same-owner calls reuse the
+    runtime-registry lease, admission failure returns typed fit diagnostics,
+    and empty resource claims are rejected before registry reservation.
+  - No-fallback/no-legacy result: this source creates no final
+    workflow-service candidate bundle rows, no scheduler dispatch candidates,
+    no Pumas/runtime-capability joins, no graph-path reservations, no dry-run
+    placeholder leases, no `ModelRefV2`, and no reduced execution-plan
+    authority.
+  - Standards result: resource lifecycle side effects stay in embedded-runtime
+    composition against the runtime-registry owner. Scheduler selection remains
+    synchronous and receives only typed facts after real reservation ownership
+    exists. Candidate mapping remains blocked until release/retention cleanup
+    is wired and tested.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_resource_facts --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    The only non-staged warning observed is the pre-existing
+    `set_active_run_execution_plan` dead-code warning in
+    `pantograph-workflow-service`.
+  - Remaining follow-up: wire session-runner/final-provider cleanup ownership
+    for acquired leases before enabling non-empty candidate mapping from the
+    joined Pumas, runtime capability, and resource facts.
 
 ### Traceability Links
 

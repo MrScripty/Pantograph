@@ -2237,6 +2237,13 @@ Implementation order:
    non-empty dispatch candidates can be emitted. A dedicated scheduler
    resource-reservation service remains the long-term target when resource
    policy needs to move beyond runtime-registry admission.
+   2026-05-30 source slice completed: embedded-runtime now has a staged
+   `RuntimeDispatchResourceFactsSource` that accepts explicit selected
+   runtime/device/task/resource requirements, acquires or reuses real
+   runtime-registry reservations, projects owned claims into scheduler
+   reservation facts, and returns scheduler fit diagnostics on admission
+   failure. It still does not join Pumas/runtime capability facts or emit
+   scheduler candidates until release/retention cleanup ownership is wired.
 5. Map the validated bundle into `SchedulerDispatchCandidate` values only when
    every required source fact is present and valid.
 

@@ -63,6 +63,8 @@ pub mod runtime_capabilities;
 mod runtime_config;
 #[allow(dead_code)]
 mod runtime_dispatch_capability_facts;
+#[allow(dead_code)]
+mod runtime_dispatch_resource_facts;
 mod runtime_extensions;
 pub mod runtime_health;
 mod runtime_host_load_target;
