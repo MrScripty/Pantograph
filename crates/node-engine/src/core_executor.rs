@@ -26,8 +26,6 @@ use crate::events::EventSink;
 use crate::extensions::extension_keys;
 use crate::extensions::ExecutorExtensions;
 
-#[cfg(feature = "audio-nodes")]
-mod audio_nodes;
 #[cfg(any(
     feature = "inference-nodes",
     feature = "pytorch-nodes",
@@ -46,13 +44,12 @@ mod pure_nodes;
 #[cfg(feature = "inference-nodes")]
 mod retrieval_nodes;
 mod settings;
-#[cfg(feature = "audio-nodes")]
-pub(crate) use audio_nodes::*;
 #[cfg(any(
     feature = "inference-nodes",
     feature = "pytorch-nodes",
     feature = "audio-nodes"
 ))]
+#[allow(unused_imports)]
 pub(crate) use dependency_preflight::*;
 pub(crate) use file_io::*;
 #[cfg(feature = "inference-nodes")]
@@ -398,9 +395,10 @@ impl TaskExecutor for CoreTaskExecutor {
             // Audio generation (in-process via PyO3 + Stable Audio)
             #[cfg(feature = "audio-nodes")]
             "audio-generation" => {
-                let resolved_model_ref =
-                    enforce_dependency_preflight("audio-generation", &inputs, extensions).await?;
-                execute_audio_generation(&inputs, resolved_model_ref).await
+                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
+                Err(NodeEngineError::ExecutionFailed(format!(
+                    "Stable Audio runtime execution is scheduler-owned and requires scheduler task state/results; node-engine audio-generation launch is retired for workflow run '{exec_id}', node '{task_id}'"
+                )))
             }
 
             // Unknown — signal that this node requires a host-specific executor

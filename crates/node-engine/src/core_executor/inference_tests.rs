@@ -1,7 +1,7 @@
 use super::super::*;
 #[cfg(feature = "inference-nodes")]
 use crate::engine::TaskExecutor;
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 use crate::extension_keys;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::model_dependencies::{
@@ -27,7 +27,7 @@ use inference::{
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
-#[cfg(feature = "inference-nodes")]
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "inference-nodes")]
@@ -2437,6 +2437,37 @@ async fn test_canonical_llm_llamacpp_backend_key_fails_closed_before_dependency_
     }
 }
 
+#[cfg(feature = "audio-nodes")]
+#[tokio::test]
+async fn test_audio_generation_fails_closed_before_dependency_preflight() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "audio-generation"}),
+    );
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/tmp/audio-model"),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("drums"));
+
+    let executor = CoreTaskExecutor::new().with_execution_id("exec-a".to_string());
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("audio-generation-1", inputs, &context, &extensions)
+        .await
+        .expect_err("audio generation should require scheduler task state");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Stable Audio runtime execution is scheduler-owned"));
+            assert!(message.contains("requires scheduler task state/results"));
+            assert!(message.contains("node-engine audio-generation launch is retired"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
 #[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
 #[tokio::test]
 async fn test_canonical_llm_package_facts_do_not_dispatch_to_dependency_preflight() {
@@ -2898,6 +2929,7 @@ async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycl
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[allow(dead_code)]
 struct CapturingDependencyResolver {
     captured_requests: Arc<Mutex<Vec<ModelDependencyRequest>>>,
 }
@@ -3025,6 +3057,7 @@ impl ModelDependencyResolver for NotReadyDependencyResolver {
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[allow(dead_code)]
 fn model_dependency_requirements_for_request(
     request: &ModelDependencyRequest,
 ) -> ModelDependencyRequirements {

@@ -308,9 +308,15 @@ adapter.
   module and the old live llama.cpp KV restore/capture helper source were
   deleted in the same slice; explicit KV-cache save/load/truncate node
   handlers remain because they do not launch runtime inference.
-- [ ] Replace audio execution so successful model loading consumes host-owned
+- [x] Replace audio execution so successful model loading consumes host-owned
   executable facts and no longer reads graph `model_path`, reduced
-  execution-plan projections, or emits `ModelRefV2`.
+  execution-plan projections, or emits `ModelRefV2`. 2026-05-31 progress:
+  `audio-generation` now fails closed inside node-engine before dependency
+  preflight, Stable Audio Python-worker initialization, graph `model_path`
+  loading, audio generation, or `ModelRefV2` output. The diagnostic states
+  that Stable Audio runtime execution is scheduler-owned and requires
+  scheduler task state/results. The old node-engine Stable Audio launch module
+  was deleted in the same slice.
 - [ ] Convert remaining runtime graph execution references to scheduler task
   state/results, runtime-host responses, or typed diagnostic-only fail-closed
   behavior. This includes PyTorch, llama.cpp, audio, and any node-engine

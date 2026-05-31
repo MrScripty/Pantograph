@@ -27,7 +27,9 @@ use crate::model_dependencies::ModelRefV2;
 use crate::model_dependencies::{DependencyState, ModelDependencyResolver};
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use super::{read_optional_input_string_aliases, read_optional_input_value_aliases};
+use super::read_optional_input_string_aliases;
+#[cfg(feature = "inference-nodes")]
+use super::read_optional_input_value_aliases;
 
 mod input_projection;
 pub(crate) use input_projection::*;

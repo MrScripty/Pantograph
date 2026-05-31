@@ -20396,6 +20396,35 @@ Worker rules:
     transitional tested cleanup target. It is marked as temporary retired
     code in the module declaration to keep checks clean until the planned
     dependency/preflight removal slice deletes or replaces it.
+- 2026-05-31 node-engine Stable Audio execution fail-closed slice:
+  - Smallest useful slice: retire node-engine successful `audio-generation`
+    launch.
+  - Allowed files touched: `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/audio_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/README.md`,
+    `crates/node-engine/src/README.md`, and these plan files.
+  - Implementation: the `audio-generation` branch now returns a typed
+    scheduler-owned task-state/result diagnostic before dependency preflight,
+    graph `model_path` loading, Stable Audio Python-worker initialization,
+    audio generation, or `ModelRefV2` output construction. The node-engine
+    Stable Audio launch module was deleted.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness facts
+    were adapted back into `ModelDependencyRequest`, `ModelRefV2`, or
+    graph-path execution. Successful audio runtime execution remains a future
+    runtime-host/scheduler task-result path.
+  - Focused test added:
+    `test_audio_generation_fails_closed_before_dependency_preflight` asserts
+    the scheduler-owned fail-closed diagnostic.
+  - Verification passed: `cargo fmt --package node-engine`; `cargo test -p
+    node-engine --features audio-nodes
+    test_audio_generation_fails_closed_before_dependency_preflight --
+    --nocapture`; `cargo check -p node-engine --features audio-nodes`;
+    `cargo check -p node-engine --features
+    inference-nodes,audio-nodes,pytorch-nodes`; `cargo check -p
+    node-engine`; and `rg -n
+    "audio_nodes|execute_audio_generation|ensure_audio_worker_initialised|generate_audio_from_text|stable_audio.py|Invalid stable_audio source|AudioGeneration: loading|Audio generation failed"
+    crates/node-engine/src` returning no hits.
 
 ### Traceability Links
 

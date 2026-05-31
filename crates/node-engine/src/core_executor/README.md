@@ -12,7 +12,6 @@ into frontend, transport, or descriptor crates.
 ## Contents
 | File | Responsibility |
 | --- | --- |
-| `audio_nodes.rs` | Feature-gated Stable Audio Python-worker initialization and text-to-audio execution. |
 | `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
 | `inference_nodes.rs` | Feature-gated shared canonical inference request builders, graph result projection, and unload-model handling. |
@@ -91,10 +90,12 @@ stable public facade and dispatch owner.
   completed event may also carry bounded backend compatibility summaries when
   resolved package facts are present; started and cleanup events stay free of
   usage, cache, artifact refs, option, tensor, prompt, and local-path payloads.
-- Gateway-backed inference handlers stay in `inference_nodes.rs`; Stable Audio
-  Python-worker handlers remain separate feature-gated execution. Node-engine
+- Gateway-backed inference handlers stay in `inference_nodes.rs`. Node-engine
   PyTorch launch has been retired; successful PyTorch execution must come from
   scheduler task state/results and runtime-host responses, not this directory.
+  Node-engine Stable Audio launch has also been retired; successful audio
+  execution must come from scheduler task state/results and runtime-host
+  responses, not a node-engine Python-worker adapter or graph `model_path`.
   The retired direct `vision-analysis` HTTP path must not bypass canonical
   `llm-inference` image-understanding task contracts.
 - Canonical `llm-inference` request builders in `inference_nodes.rs` accept
