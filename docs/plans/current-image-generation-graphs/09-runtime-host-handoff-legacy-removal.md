@@ -1611,11 +1611,36 @@ Standards-aligned options:
 4. Defer hosted wiring and keep fail-closed dispatch diagnostics. This
    preserves correctness but stops progress toward complete inference runs.
 
-Selected recommendation pending user decision: option 1. Add a hosted
-workflow-service composition/factory boundary so all runtime dispatch
-dependencies are installed before sharing the service. The slice must not move
-Pumas facts, runtime registry policy, runtime-host execution, or dependency
-readiness business logic into Tauri or workflow-service.
+Selected decision: option 1. Add a hosted workflow-service
+composition/factory boundary so all runtime dispatch dependencies are
+installed before sharing the service. The slice must not move Pumas facts,
+runtime registry policy, runtime-host execution, or dependency-readiness
+business logic into Tauri or workflow-service.
+
+Next implementation sequence:
+
+1. Add an embedded-runtime factory/input DTO for hosted workflow-service
+   construction. Inputs must be explicit: config capacity, gateway,
+   extensions/Pumas selector access source, runtime registry, runtime-host
+   load-target resolver inputs, dependency-readiness composition, and optional
+   preconfigured stores. Do not accept an already shared `Arc<WorkflowService>`
+   on the new resource-backed path.
+2. Build the workflow service through `EmbeddedWorkflowServiceComposition`
+   before sharing. The factory must attach dependency-readiness components,
+   resource-backed dispatch dependencies, the embedded runtime-host execution
+   port, reservation lifecycle port, and scheduler diagnostics provider in one
+   composition root.
+3. Update hosted startup to use the factory only when it has the required
+   runtime registry and Pumas selector access. Missing required construction
+   inputs must produce typed initialization diagnostics or keep the existing
+   fail-closed service path; do not silently install partial dispatch
+   dependencies.
+4. Add focused tests proving the hosted factory builds a shared workflow
+   service with the paired dispatch refresher/provider/runtime-host/lifecycle
+   dependencies before sessions can run, and proving Tauri/frontends do not own
+   runtime dispatch business logic.
+5. After this factory slice, continue to the first complete inference path by
+   wiring runtime-specific execution behind `EmbeddedRuntimeHostExecutionPort`.
 
 ## Verification Strategy
 

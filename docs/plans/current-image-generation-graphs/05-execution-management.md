@@ -19420,12 +19420,17 @@ Worker rules:
     workflow-service factory/composition input before sharing (recommended),
     post-share mutating setters with strict single-use initialization guards,
     standalone-only wiring, or defer and keep fail-closed diagnostics.
-  - Recommendation pending user decision: add a hosted workflow-service
-    composition/factory boundary owned by embedded-runtime. The factory should
-    install dependency-readiness, resource-backed dispatch dependencies,
-    runtime-host port, reservation lifecycle port, and diagnostics provider
-    before wrapping `WorkflowService` in `Arc`, while keeping Tauri/frontends
+  - Selected decision: use the hosted workflow-service composition/factory
+    boundary owned by embedded-runtime. The factory must install
+    dependency-readiness, resource-backed dispatch dependencies, runtime-host
+    port, reservation lifecycle port, and diagnostics provider before wrapping
+    `WorkflowService` in `Arc`, while keeping Tauri/frontends
     business-logic-free.
+  - Next implementation sequence: add the hosted factory/input DTO, route the
+    resource-backed path through `EmbeddedWorkflowServiceComposition` before
+    sharing, require typed diagnostics or the existing fail-closed service path
+    when required hosted construction inputs are unavailable, and add focused
+    tests proving dispatch dependencies are paired before sessions can run.
 
 ### Traceability Links
 
