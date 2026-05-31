@@ -1625,20 +1625,44 @@ Next implementation sequence:
    load-target resolver inputs, dependency-readiness composition, and optional
    preconfigured stores. Do not accept an already shared `Arc<WorkflowService>`
    on the new resource-backed path.
+   Completed 2026-05-31 for the composition boundary:
+   `EmbeddedHostedWorkflowServiceFactoryInput` now carries explicit gateway,
+   runtime registry, runtime-registry lifecycle controller, owner Pumas
+   selector access, capacity, and dispatch snapshot freshness inputs. The
+   resource-backed path rejects read-only and local-client Pumas access with a
+   typed workflow-service invalid-request diagnostic instead of installing a
+   partial dispatch stack.
 2. Build the workflow service through `EmbeddedWorkflowServiceComposition`
    before sharing. The factory must attach dependency-readiness components,
    resource-backed dispatch dependencies, the embedded runtime-host execution
    port, reservation lifecycle port, and scheduler diagnostics provider in one
    composition root.
+   Completed 2026-05-31 for the factory slice:
+   `EmbeddedWorkflowServiceComposition::resource_backed_hosted` builds the
+   Pumas load-target resolver, embedded runtime-host execution port,
+   reservation lifecycle port, resource-backed dispatch dependency bundle,
+   and scheduler diagnostics provider before returning the shared workflow
+   service. `WorkflowService::with_scheduler_diagnostics_provider` was added
+   so diagnostics can be installed during construction instead of through
+   post-share mutation.
 3. Update hosted startup to use the factory only when it has the required
    runtime registry and Pumas selector access. Missing required construction
    inputs must produce typed initialization diagnostics or keep the existing
    fail-closed service path; do not silently install partial dispatch
    dependencies.
+   Remaining: hosted startup still receives or constructs the workflow
+   service outside this factory. The next slice must move hosted startup onto
+   this factory or introduce a final embedded-runtime lifecycle bundle that
+   returns the service plus any producer handles needed by the hosted runtime.
+   Until then, `workflow_service_composition` carries a temporary staged
+   production `#[allow(dead_code)]` allowance.
 4. Add focused tests proving the hosted factory builds a shared workflow
    service with the paired dispatch refresher/provider/runtime-host/lifecycle
    dependencies before sessions can run, and proving Tauri/frontends do not own
    runtime dispatch business logic.
+   Completed 2026-05-31 for factory behavior: embedded-runtime tests prove the
+   resource-backed hosted factory builds a shared service with owner Pumas
+   access and rejects non-owner Pumas selector access.
 5. After this factory slice, continue to the first complete inference path by
    wiring runtime-specific execution behind `EmbeddedRuntimeHostExecutionPort`.
 

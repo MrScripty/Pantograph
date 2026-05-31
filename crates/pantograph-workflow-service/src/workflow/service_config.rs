@@ -227,6 +227,15 @@ impl WorkflowService {
         Ok(())
     }
 
+    #[must_use]
+    pub fn with_scheduler_diagnostics_provider(
+        mut self,
+        provider: Arc<dyn WorkflowSchedulerDiagnosticsProvider>,
+    ) -> Self {
+        self.scheduler_diagnostics_provider = Arc::new(Mutex::new(Some(provider)));
+        self
+    }
+
     pub fn set_loaded_runtime_capacity_limit(
         &self,
         max_loaded_sessions: Option<usize>,

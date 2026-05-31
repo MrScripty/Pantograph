@@ -1,21 +1,27 @@
 use std::sync::Arc;
 
 use pantograph_runtime_host_contracts::{ReservationLifecyclePort, RuntimeHostExecutionPort};
+use pantograph_runtime_registry::SharedRuntimeRegistry;
 use pantograph_workflow_service::workflow::{
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchSourceRefresher,
 };
 use pantograph_workflow_service::{
     WorkflowDependencyReadinessComponents, WorkflowService, WorkflowServiceError,
 };
+use workflow_nodes::setup::PumasSelectorAccess;
 
 use crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource;
+use crate::reservation_lifecycle::EmbeddedReservationLifecyclePort;
 use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
 use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
 use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
 use crate::runtime_dispatch_source_snapshot::{
     EmbeddedRuntimeDispatchSourceFactRefresher, EmbeddedRuntimeDispatchSourceFactSnapshotStore,
 };
-use crate::SharedWorkflowService;
+use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
+use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
+use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
+use crate::{runtime_registry::HostRuntimeRegistryController, SharedWorkflowService};
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
 ///
@@ -27,6 +33,45 @@ use crate::SharedWorkflowService;
 pub(crate) struct EmbeddedWorkflowServiceComposition {
     dependency_readiness: WorkflowDependencyReadinessComponents,
     dispatch_dependencies: Option<EmbeddedWorkflowServiceDispatchDependencies>,
+    scheduler_diagnostics_provider:
+        Option<Arc<dyn pantograph_workflow_service::WorkflowSchedulerDiagnosticsProvider>>,
+}
+
+pub(crate) struct EmbeddedHostedWorkflowServiceFactoryInput<C> {
+    pub(crate) workflow_service: WorkflowService,
+    pub(crate) max_loaded_sessions: Option<usize>,
+    pub(crate) runtime_registry: SharedRuntimeRegistry,
+    pub(crate) runtime_registry_controller: Arc<C>,
+    pub(crate) gateway: Arc<inference::InferenceGateway>,
+    pub(crate) pumas_selector_access: Arc<PumasSelectorAccess>,
+    pub(crate) max_dispatch_source_snapshot_age_ms: u64,
+}
+
+impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
+    pub(crate) fn new(
+        runtime_registry: SharedRuntimeRegistry,
+        runtime_registry_controller: Arc<C>,
+        gateway: Arc<inference::InferenceGateway>,
+        pumas_selector_access: Arc<PumasSelectorAccess>,
+        max_loaded_sessions: Option<usize>,
+        max_dispatch_source_snapshot_age_ms: u64,
+    ) -> Self {
+        Self {
+            workflow_service: WorkflowService::new(),
+            max_loaded_sessions,
+            runtime_registry,
+            runtime_registry_controller,
+            gateway,
+            pumas_selector_access,
+            max_dispatch_source_snapshot_age_ms,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_workflow_service(mut self, workflow_service: WorkflowService) -> Self {
+        self.workflow_service = workflow_service;
+        self
+    }
 }
 
 #[derive(Clone)]
@@ -110,6 +155,60 @@ impl EmbeddedWorkflowServiceComposition {
         self
     }
 
+    #[must_use]
+    pub(crate) fn with_scheduler_diagnostics_provider(
+        mut self,
+        provider: Arc<dyn pantograph_workflow_service::WorkflowSchedulerDiagnosticsProvider>,
+    ) -> Self {
+        self.scheduler_diagnostics_provider = Some(provider);
+        self
+    }
+
+    pub(crate) fn resource_backed_hosted<C>(
+        input: EmbeddedHostedWorkflowServiceFactoryInput<C>,
+    ) -> Result<SharedWorkflowService, WorkflowServiceError>
+    where
+        C: HostRuntimeRegistryController + Send + Sync + 'static,
+    {
+        let pumas_api = match input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(api) => api.clone(),
+            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "hosted resource-backed workflow-service construction requires Pumas owner selector access, got {} access",
+                    input.pumas_selector_access.role_name()
+                )));
+            }
+        };
+        let runtime_host_execution_port =
+            Arc::new(EmbeddedRuntimeHostExecutionPort::with_load_target_resolver(
+                RuntimeHostPumasLoadTargetResolver::new(pumas_api),
+            ));
+        let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
+            input.runtime_registry.clone(),
+            input.runtime_registry_controller,
+        ));
+        let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
+            PumasDispatchPackageFactsSource::new(Some(input.pumas_selector_access)),
+            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
+            RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
+            input.max_dispatch_source_snapshot_age_ms,
+            runtime_host_execution_port,
+            reservation_lifecycle_port,
+        );
+        let scheduler_diagnostics_provider =
+            Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
+                input.gateway,
+                input.runtime_registry,
+            ));
+        Self::new()
+            .with_runtime_dispatch_dependencies(dispatch_dependencies)
+            .with_scheduler_diagnostics_provider(scheduler_diagnostics_provider)
+            .into_shared_configured_workflow_service(
+                input.workflow_service,
+                input.max_loaded_sessions,
+            )
+    }
+
     pub(crate) fn into_shared_workflow_service(
         self,
         max_loaded_sessions: Option<usize>,
@@ -127,6 +226,10 @@ impl EmbeddedWorkflowServiceComposition {
             .configure_workflow_service(service);
         let service = match self.dispatch_dependencies {
             Some(dependencies) => dependencies.configure_workflow_service(service),
+            None => service,
+        };
+        let service = match self.scheduler_diagnostics_provider {
+            Some(provider) => service.with_scheduler_diagnostics_provider(provider),
             None => service,
         };
         service.set_loaded_runtime_capacity_limit(max_loaded_sessions)?;
@@ -275,5 +378,73 @@ mod tests {
             .expect("resource-backed dependency bundle should build workflow service");
 
         drop(shared);
+    }
+
+    #[tokio::test]
+    async fn builds_resource_backed_hosted_workflow_service_before_sharing() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+
+        let shared = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input)
+            .expect("hosted resource-backed workflow service should build");
+
+        drop(shared);
+    }
+
+    #[tokio::test]
+    async fn hosted_resource_backed_factory_rejects_non_owner_pumas_access() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("pumas api");
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let read_only = pumas_library::PumasReadOnlyLibrary::open(
+            temp_dir.path().join("shared-resources/models"),
+        )
+        .expect("read-only pumas");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+            Some(1),
+            1_000,
+        );
+
+        let error = match EmbeddedWorkflowServiceComposition::resource_backed_hosted(input) {
+            Ok(_) => panic!("read-only access cannot build resource-backed hosted dispatch"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
+        assert!(error
+            .to_string()
+            .contains("requires Pumas owner selector access"));
     }
 }

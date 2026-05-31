@@ -19431,6 +19431,45 @@ Worker rules:
     sharing, require typed diagnostics or the existing fail-closed service path
     when required hosted construction inputs are unavailable, and add focused
     tests proving dispatch dependencies are paired before sessions can run.
+- 2026-05-31 hosted workflow-service factory slice:
+  - Smallest useful slice: add the embedded-runtime hosted workflow-service
+    factory/input DTO and workflow-service scheduler-diagnostics builder needed
+    to compose resource-backed dispatch dependencies before the service is
+    shared. Hosted startup integration is intentionally left for the next
+    slice because this slice validates the composition boundary first.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `09-runtime-host-handoff-legacy-removal.md`, and this execution log.
+  - Implementation: added
+    `EmbeddedHostedWorkflowServiceFactoryInput` and
+    `EmbeddedWorkflowServiceComposition::resource_backed_hosted`. The factory
+    requires owner `PumasSelectorAccess`, builds the Pumas load-target
+    resolver, embedded runtime-host execution port, reservation lifecycle
+    port, resource-backed dispatch refresher/provider bundle, and scheduler
+    diagnostics provider, then applies them before wrapping `WorkflowService`
+    in `Arc`.
+  - No-fallback/no-legacy result: the factory does not mutate an already
+    shared workflow service, does not install partial dispatch dependencies,
+    does not move Pumas/runtime-registry ownership into workflow-service or
+    Tauri/frontend code, and does not adapt canonical runtime dispatch back
+    into graph paths, `ModelRefV2`, reduced execution plans, or selector
+    summaries.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    `cargo check -p pantograph-workflow-service`, and
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Deviation/follow-up: `workflow_service_composition` is now compiled for
+    embedded-runtime as staged production composition, but hosted startup has
+    not yet been migrated to call the factory. The module therefore carries a
+    temporary `#[allow(dead_code)]` gate for the staged factory surface. The
+    next hosted-startup slice must either use this factory from the hosted
+    composition root or replace it with the final lifecycle bundle so the
+    staging allowance can be removed.
 
 ### Traceability Links
 
