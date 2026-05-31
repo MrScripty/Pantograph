@@ -67,7 +67,6 @@ pub(crate) struct StartedNonRuntimeTaskExecution {
 
 #[derive(Debug, Clone)]
 #[must_use]
-#[allow(dead_code)]
 pub(crate) struct StartedRuntimeTaskExecution {
     pub(crate) task: WorkflowSchedulerTask,
     pub(crate) materialized_results: Vec<WorkflowSchedulerTaskResult>,
@@ -98,7 +97,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn dispatch_runtime_handoff(
         &self,
         execution_request_id: impl Into<String>,
@@ -114,7 +112,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn select_and_dispatch_runtime_task(
         &self,
         execution_request_id: impl Into<String>,
@@ -499,7 +496,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .and_then(applied_task_state_record)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn start_ready_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -572,7 +568,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn complete_started_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -718,7 +713,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn advance_awaiting_runtime_task_inputs(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -823,7 +817,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn apply_runtime_dependency_readiness_admission(
         &self,
         store: &mut WorkflowExecutionSessionStore,

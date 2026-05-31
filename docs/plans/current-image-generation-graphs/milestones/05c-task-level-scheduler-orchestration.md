@@ -294,6 +294,17 @@ durable task orchestration path.
   handoff method now consumes the mapper after shared dispatcher response
   validation; runtime execution is still not wired into production session
   progression.
+  2026-05-31 implementation status: removed stale staging-only `dead_code`
+  suppressions from the scheduler runtime-dispatch orchestration type and
+  methods now consumed by the production session runner:
+  `StartedRuntimeTaskExecution`, `dispatch_runtime_handoff`,
+  `select_and_dispatch_runtime_task`, `start_ready_runtime_task`,
+  `complete_started_runtime_task`, `advance_awaiting_runtime_task_inputs`, and
+  `apply_runtime_dependency_readiness_admission`. This keeps the standards
+  signal clean for the canonical scheduler to runtime-host handoff path instead
+  of hiding it as unused staging code. Remaining runtime follow-ups are still
+  production proof producers, complete image-generation runtime-host execution,
+  retry/defer/cancellation leases, and stale test cleanup.
   2026-05-25 replan decision for production dispatch selection: use option 2
   with option 3 discipline. The next scheduler slice must add a minimal
   scheduler-owned dispatch-selection contract rather than letting

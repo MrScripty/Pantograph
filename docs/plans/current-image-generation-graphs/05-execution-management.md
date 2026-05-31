@@ -21290,6 +21290,34 @@ Worker rules:
   - Remaining follow-up: wire production proof producers from canonical
     planning, Pumas load-target, and runtime-host readiness facts, then add
     stale/missing proof producer diagnostics across the production lifecycle.
+- 2026-05-31 Milestone 5c scheduler runtime-dispatch standards cleanup slice:
+  - Smallest useful slice: remove stale `dead_code` suppressions from the
+    scheduler runtime-dispatch orchestration surfaces that are now used by the
+    production session runner.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs` and
+    these plan files.
+  - Implementation: unsuppressed `StartedRuntimeTaskExecution`,
+    `dispatch_runtime_handoff`, `select_and_dispatch_runtime_task`,
+    `start_ready_runtime_task`, `complete_started_runtime_task`,
+    `advance_awaiting_runtime_task_inputs`, and
+    `apply_runtime_dependency_readiness_admission`.
+  - No-fallback/no-legacy result: this slice changes no execution behavior and
+    does not add compatibility shims; it makes the canonical scheduler to
+    runtime-host path visible to compiler dead-code checks now that production
+    code consumes it.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    check -p pantograph-workflow-service`; `cargo test -p
+    pantograph-workflow-service orchestrator_persists_started_runtime_task_result
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+    -- --nocapture`; and `cargo test -p pantograph-workflow-service
+    orchestrator_dispatches_runtime_task_through_shared_runtime_host_port --
+    --nocapture`.
+  - Remaining follow-up: finish production proof producers, complete
+    image-generation runtime-host execution, add retry/defer/cancellation
+    leases, and clean up stale workflow-service tests recorded in the prior
+    slice.
 
 ### Traceability Links
 
