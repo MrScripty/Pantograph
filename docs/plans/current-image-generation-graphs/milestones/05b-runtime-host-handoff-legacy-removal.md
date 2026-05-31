@@ -463,8 +463,11 @@ cleanup.
   workflow-service active execution-plan storage/API/tests and embedded-runtime
   reduced execution-plan projection helper/tests were deleted after
   scheduler-selected runtime-host dispatch coverage existed for session
-  runtime tasks. Remaining cleanup in this task is the
-  model-dependency/model-ref/path-shaped contract and fixture removal.
+  runtime tasks. 2026-05-31 progress: the node-engine `build_model_ref_v2`
+  constructor and its path-shaped unit test were deleted after dependency
+  preflight stopped returning `Option<ModelRefV2>`. Remaining cleanup in this
+  task is the broader `ModelDependencyRequest`/`ModelDependencyResolver`/
+  `ModelRefV2` contract, path-repair helper, and fixture removal.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

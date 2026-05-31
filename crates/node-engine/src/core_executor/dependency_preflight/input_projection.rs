@@ -11,11 +11,11 @@ use inference::{
     ResolvedModelPackageFacts, TaskRegistryEntry,
 };
 
+use crate::model_dependencies::ModelDependencyBinding;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::model_dependencies::ModelDependencyRequest;
-use crate::model_dependencies::{ModelDependencyBinding, ModelRefV2};
 
-use super::super::{read_optional_input_string, read_optional_input_value};
+use super::super::read_optional_input_value;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use super::super::{read_optional_input_string_aliases, read_optional_input_value_aliases};
 
@@ -158,53 +158,6 @@ fn resolver_task_type_primary(task: &TaskRegistryEntry) -> String {
         }
         _ => task.canonical_label().replace('_', "-"),
     }
-}
-
-pub(crate) fn build_model_ref_v2(
-    resolved: Option<ModelRefV2>,
-    engine: &str,
-    model_id: &str,
-    model_path: &str,
-    task_type_primary: &str,
-    inputs: &HashMap<String, serde_json::Value>,
-) -> ModelRefV2 {
-    let fallback_dependency_bindings = read_input_dependency_bindings(inputs);
-    let fallback_dependency_requirements_id =
-        read_optional_input_string(inputs, "dependency_requirements_id");
-
-    let mut model_ref = resolved.unwrap_or(ModelRefV2 {
-        contract_version: 2,
-        engine: engine.to_string(),
-        model_id: model_id.to_string(),
-        model_path: model_path.to_string(),
-        task_type_primary: task_type_primary.to_string(),
-        dependency_bindings: fallback_dependency_bindings.clone(),
-        dependency_requirements_id: fallback_dependency_requirements_id.clone(),
-    });
-
-    if model_ref.contract_version != 2 {
-        model_ref.contract_version = 2;
-    }
-    if model_ref.engine.trim().is_empty() {
-        model_ref.engine = engine.to_string();
-    }
-    if model_ref.model_id.trim().is_empty() {
-        model_ref.model_id = model_id.to_string();
-    }
-    if model_ref.model_path.trim().is_empty() {
-        model_ref.model_path = model_path.to_string();
-    }
-    if model_ref.task_type_primary.trim().is_empty() {
-        model_ref.task_type_primary = task_type_primary.to_string();
-    }
-    if model_ref.dependency_bindings.is_empty() {
-        model_ref.dependency_bindings = fallback_dependency_bindings;
-    }
-    if model_ref.dependency_requirements_id.is_none() {
-        model_ref.dependency_requirements_id = fallback_dependency_requirements_id;
-    }
-
-    model_ref
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

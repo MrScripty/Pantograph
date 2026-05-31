@@ -3329,28 +3329,6 @@ fn test_inputs_with_model_path_rejects_unresolved_model_source() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_model_ref_v2_ignores_resolved_model_source_identity() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
-    );
-
-    let model_ref = build_model_ref_v2(
-        None,
-        "llamacpp",
-        "/models/tiny/model.gguf",
-        "/models/tiny/model.gguf",
-        "text-generation",
-        &inputs,
-    );
-
-    assert_eq!(model_ref.model_id, "/models/tiny/model.gguf");
-    assert_eq!(model_ref.model_path, "/models/tiny/model.gguf");
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
 fn test_build_model_dependency_request_ignores_resolved_model_source_identity() {
     let mut inputs = HashMap::new();
     inputs.insert(

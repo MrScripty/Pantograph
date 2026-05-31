@@ -20818,6 +20818,36 @@ Worker rules:
     contracts, `build_model_ref_v2`, path-repair helpers, and diagnostic-only
     tests once scheduler task-state/results and runtime-host responses cover
     the final inference path.
+- 2026-05-31 `build_model_ref_v2` deletion slice:
+  - Smallest useful slice: delete node-engine's legacy `build_model_ref_v2`
+    constructor and its single path-shaped unit test after the preflight
+    output narrowing slice removed the reachable `Option<ModelRefV2>` return
+    path.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/dependency_preflight/input_projection.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight/README.md`,
+    and these plan files.
+  - Implementation: removed the helper, removed the now-unused
+    `ModelRefV2`/`read_optional_input_string` imports from the projection
+    module, removed the path-shaped helper test, and documented that the
+    constructor must not be recreated as a compatibility bridge.
+  - No-fallback/no-legacy result: node-engine can no longer rebuild a
+    `ModelRefV2` from graph paths or resolved legacy input state through this
+    helper. No scheduler/runtime-host/readiness facts were adapted back into
+    legacy model-ref contracts.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes dependency_preflight
+    -- --nocapture`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; `git diff --check`; and targeted `rg -n
+    "build_model_ref_v2" crates/node-engine/src
+    docs/plans/current-image-generation-graphs -g "*.rs" -g "*.md"`, which
+    now has no source-code hit outside plan/README traceability text.
+  - Remaining follow-up: delete or replace remaining node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contracts,
+    `build_model_dependency_request`, path-repair helpers, and diagnostic-only
+    tests once canonical scheduler task-state/results and runtime-host
+    responses cover the final inference path.
 
 ### Traceability Links
 

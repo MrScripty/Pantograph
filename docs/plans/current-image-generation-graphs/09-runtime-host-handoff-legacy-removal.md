@@ -2169,6 +2169,13 @@ legacy `model_ref` payload after preflight. This keeps the existing
 diagnostic-only fail-closed behavior while removing the remaining reachable
 preflight output shape that could carry legacy runtime identity.
 
+Completed 2026-05-31 for `build_model_ref_v2` deletion: node-engine no longer
+ships the legacy constructor that rebuilt `ModelRefV2` from resolved or
+path-shaped graph inputs, and its path-shaped unit test was removed. Remaining
+model-dependency/model-ref contracts are diagnostic test stubs or pending
+replacement/deletion surfaces; they must not be used as successful runtime
+identity.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
