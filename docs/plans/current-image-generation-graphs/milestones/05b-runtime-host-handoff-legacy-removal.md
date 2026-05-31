@@ -1173,3 +1173,34 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `set_active_run_execution_plan` warning. Remaining follow-up: compose
   package-facts resolution, image projection, gateway execution, sink-backed
   output writing, and typed gateway/write diagnostics inside the port.
+- 2026-05-31 runtime-host image execution composition slice completed.
+  Smallest useful vertical slice: compose package-facts resolution,
+  load-target resolution, image projection, gateway execution, and
+  sink-backed output writing inside `EmbeddedRuntimeHostExecutionPort`, while
+  still leaving production composition wiring as a follow-up. Implementation:
+  added `RuntimeHostPackageFactsResolver`, made the port call
+  `InferenceGateway::generate_image_from_planning_input`, map successful
+  generated images through the media artifact sink, and return completed
+  `RuntimeHostExecutionOutputValue::MediaArtifactRef` outputs. Gateway and
+  artifact-write failures return typed failed runtime-host responses.
+  No-fallback/no-legacy result: the successful path consumes only validated
+  scheduler handoff, owner-resolved Pumas package/load-target facts, canonical
+  inference gateway planning, and backend artifact-store refs; it does not use
+  Tauri/frontend logic, node-engine launch, planned-inference hosts, reduced
+  execution plans, graph paths, scheduler persistence workarounds, inline
+  media, fake refs, or `ModelRefV2`. Verification passed: `cargo fmt
+  --package pantograph-embedded-runtime`; `cargo test -p
+  pantograph-embedded-runtime runtime_host_execution_port -- --nocapture`;
+  `cargo test -p pantograph-embedded-runtime runtime_host_package_facts --
+  --nocapture`; `cargo test -p pantograph-embedded-runtime
+  runtime_host_load_target -- --nocapture`; `cargo test -p
+  pantograph-embedded-runtime runtime_host_media_artifact_sink --
+  --nocapture`. Verification caveat: the focused commands still report the
+  known workflow-service `set_active_run_execution_plan` warning. Discovered
+  fixed issue: `runtime_host_load_target` tests still expected the old
+  `selected_artifact_path`/caller-observed entry path in the canonical
+  fixture; the test now asserts those path-shaped fields stay absent.
+  Remaining follow-up: wire embedded-runtime production composition to inject
+  package-facts resolver, load-target resolver, inference gateway, and
+  workflow-service media sink into the scheduler dispatch runtime-host port,
+  then add session-level completed task result coverage.

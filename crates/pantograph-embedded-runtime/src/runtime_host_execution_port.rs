@@ -3,17 +3,26 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
-    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, ValidatedRuntimeHostExecutionRequest,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    ValidatedRuntimeHostExecutionRequest, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
+use crate::runtime_host_image_execution::{
+    project_runtime_host_image_generation, RuntimeHostImageGenerationProjectionError,
+};
 use crate::runtime_host_load_target::{
     RuntimeHostLoadTargetResolver, RuntimeHostPumasLoadTargetError,
     RuntimeHostPumasLoadTargetResolver,
 };
-use crate::runtime_host_media_artifact_sink::RuntimeHostMediaArtifactSink;
+use crate::runtime_host_media_artifact_sink::{
+    RuntimeHostImageArtifactWriteRequest, RuntimeHostMediaArtifactSink,
+    RuntimeHostMediaArtifactSinkError,
+};
+use crate::runtime_host_package_facts::{
+    RuntimeHostPackageFactsResolver, RuntimeHostPumasPackageFactsError,
+};
 
 const MISSING_LOAD_TARGET_RESOLVER_HINT: &str =
     "embedded_runtime_host_execution_port.missing_load_target_resolver";
@@ -21,12 +30,26 @@ const LOAD_TARGET_UNAVAILABLE_HINT: &str =
     "embedded_runtime_host_execution_port.pumas_load_target_unavailable";
 const MISSING_MEDIA_ARTIFACT_SINK_HINT: &str =
     "embedded_runtime_host_execution_port.missing_media_artifact_sink";
+const MISSING_PACKAGE_FACTS_RESOLVER_HINT: &str =
+    "embedded_runtime_host_execution_port.missing_package_facts_resolver";
+const MISSING_INFERENCE_GATEWAY_HINT: &str =
+    "embedded_runtime_host_execution_port.missing_inference_gateway";
+const PACKAGE_FACTS_UNAVAILABLE_HINT: &str =
+    "embedded_runtime_host_execution_port.pumas_package_facts_unavailable";
+const IMAGE_PROJECTION_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.image_projection_failed";
+const GATEWAY_EXECUTION_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.gateway_execution_failed";
+const MEDIA_ARTIFACT_WRITE_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.media_artifact_write_failed";
 const RUNTIME_EXECUTION_UNAVAILABLE_HINT: &str =
     "embedded_runtime_host_execution_port.runtime_execution_unavailable";
 
 pub(crate) struct EmbeddedRuntimeHostExecutionPort {
     load_target_resolver: Option<Arc<dyn RuntimeHostLoadTargetResolver>>,
     media_artifact_sink: Option<Arc<dyn RuntimeHostMediaArtifactSink>>,
+    package_facts_resolver: Option<Arc<dyn RuntimeHostPackageFactsResolver>>,
+    gateway: Option<Arc<inference::InferenceGateway>>,
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
@@ -35,6 +58,8 @@ impl EmbeddedRuntimeHostExecutionPort {
         Self {
             load_target_resolver: None,
             media_artifact_sink: None,
+            package_facts_resolver: None,
+            gateway: None,
         }
     }
 
@@ -45,17 +70,23 @@ impl EmbeddedRuntimeHostExecutionPort {
         Self {
             load_target_resolver: Some(Arc::new(load_target_resolver)),
             media_artifact_sink: None,
+            package_facts_resolver: None,
+            gateway: None,
         }
     }
 
     #[must_use]
     pub(crate) fn with_runtime_dependencies(
         load_target_resolver: Arc<dyn RuntimeHostLoadTargetResolver>,
+        package_facts_resolver: Arc<dyn RuntimeHostPackageFactsResolver>,
         media_artifact_sink: Arc<dyn RuntimeHostMediaArtifactSink>,
+        gateway: Arc<inference::InferenceGateway>,
     ) -> Self {
         Self {
             load_target_resolver: Some(load_target_resolver),
             media_artifact_sink: Some(media_artifact_sink),
+            package_facts_resolver: Some(package_facts_resolver),
+            gateway: Some(gateway),
         }
     }
 
@@ -66,6 +97,8 @@ impl EmbeddedRuntimeHostExecutionPort {
         Self {
             load_target_resolver: Some(load_target_resolver),
             media_artifact_sink: None,
+            package_facts_resolver: None,
+            gateway: None,
         }
     }
 }
@@ -93,7 +126,7 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
         };
 
         match load_target_resolver.resolve(&validated_request).await {
-            Ok(_load_target) => {
+            Ok(load_target) => {
                 let Some(_media_artifact_sink) = self.media_artifact_sink.as_ref() else {
                     return Ok(rejected_response(
                         validated_request.as_ref(),
@@ -102,12 +135,73 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                         MISSING_MEDIA_ARTIFACT_SINK_HINT,
                     ));
                 };
-                Ok(rejected_response(
+                let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+                    return Ok(rejected_response(
+                        validated_request.as_ref(),
+                        RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                        "embedded runtime-host execution requires a Pumas package-facts resolver",
+                        MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+                    ));
+                };
+                let Some(gateway) = self.gateway.as_ref() else {
+                    return Ok(rejected_response(
+                        validated_request.as_ref(),
+                        RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                        "embedded runtime-host execution requires an inference gateway",
+                        MISSING_INFERENCE_GATEWAY_HINT,
+                    ));
+                };
+                let package_facts = match package_facts_resolver.resolve(&validated_request).await {
+                    Ok(package_facts) => package_facts,
+                    Err(error) => {
+                        return Ok(rejected_response(
+                            validated_request.as_ref(),
+                            RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                            &package_facts_error_message(error),
+                            PACKAGE_FACTS_UNAVAILABLE_HINT,
+                        ));
+                    }
+                };
+                let projection = match project_runtime_host_image_generation(
+                    &validated_request,
+                    package_facts,
+                    load_target,
+                ) {
+                    Ok(projection) => projection,
+                    Err(error) => {
+                        return Ok(rejected_response(
+                            validated_request.as_ref(),
+                            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                            &image_projection_error_message(error),
+                            IMAGE_PROJECTION_FAILED_HINT,
+                        ));
+                    }
+                };
+                let result = match gateway
+                    .generate_image_from_planning_input(projection.planning_input())
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(error) => {
+                        return Ok(failed_response(
+                            validated_request.as_ref(),
+                            &gateway_error_message(error),
+                            GATEWAY_EXECUTION_FAILED_HINT,
+                        ));
+                    }
+                };
+                match completed_image_response(
                     validated_request.as_ref(),
-                    RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
-                    "embedded runtime-host execution has resolved the Pumas load target and media artifact sink, but runtime-specific execution is not wired yet",
-                    RUNTIME_EXECUTION_UNAVAILABLE_HINT,
-                ))
+                    result,
+                    _media_artifact_sink.as_ref(),
+                ) {
+                    Ok(response) => Ok(response),
+                    Err(error) => Ok(failed_response(
+                        validated_request.as_ref(),
+                        &media_artifact_sink_error_message(error),
+                        MEDIA_ARTIFACT_WRITE_FAILED_HINT,
+                    )),
+                }
             }
             Err(error) => Ok(rejected_response(
                 validated_request.as_ref(),
@@ -144,21 +238,123 @@ fn rejected_response(
     }
 }
 
+fn failed_response(
+    request: &RuntimeHostExecutionRequest,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostExecutionResponse {
+    RuntimeHostExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        execution_request_id: request.execution_request_id.clone(),
+        workflow_id: request.handoff.workflow_id.clone(),
+        workflow_run_id: request.handoff.workflow_run_id.clone(),
+        node_id: request.handoff.node_id.clone(),
+        task_id: request.handoff.task_id.clone(),
+        state: RuntimeHostExecutionState::Failed,
+        outputs: Vec::new(),
+        diagnostics: vec![RuntimeHostExecutionDiagnostic {
+            severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+            code: RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            message: message.to_string(),
+            hint: Some(hint.to_string()),
+        }],
+        terminal_metadata: None,
+    }
+}
+
+fn completed_image_response(
+    request: &RuntimeHostExecutionRequest,
+    result: inference::ImageGenerationResult,
+    media_artifact_sink: &dyn RuntimeHostMediaArtifactSink,
+) -> Result<RuntimeHostExecutionResponse, RuntimeHostMediaArtifactSinkError> {
+    let dispatch_decision = request.handoff.dispatch_decision.as_ref();
+    let model_id = dispatch_decision.map(|decision| decision.selected_model_ref.model_id.as_str());
+    let runtime_id = dispatch_decision.map(|decision| decision.selected_runtime_id.as_str());
+    let mut outputs = Vec::with_capacity(result.images.len());
+    for (image_index, image) in result.images.iter().enumerate() {
+        let artifact_ref =
+            media_artifact_sink.write_image_output(RuntimeHostImageArtifactWriteRequest {
+                workflow_run_id: request.handoff.workflow_run_id.as_str(),
+                workflow_id: request.handoff.workflow_id.as_str(),
+                node_id: request.handoff.node_id.as_str(),
+                task_id: request.handoff.task_id.as_str(),
+                port_id: "image",
+                image_index,
+                image,
+                model_id,
+                runtime_id,
+            })?;
+        outputs.push(RuntimeHostExecutionOutput {
+            port_id: "image".to_string(),
+            value: RuntimeHostExecutionOutputValue::MediaArtifactRef(artifact_ref),
+        });
+    }
+
+    Ok(RuntimeHostExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        execution_request_id: request.execution_request_id.clone(),
+        workflow_id: request.handoff.workflow_id.clone(),
+        workflow_run_id: request.handoff.workflow_run_id.clone(),
+        node_id: request.handoff.node_id.clone(),
+        task_id: request.handoff.task_id.clone(),
+        state: RuntimeHostExecutionState::Completed,
+        outputs,
+        diagnostics: vec![RuntimeHostExecutionDiagnostic {
+            severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+            code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+            message: "embedded runtime-host image execution completed".to_string(),
+            hint: None,
+        }],
+        terminal_metadata: None,
+    })
+}
+
 fn load_target_error_message(error: RuntimeHostPumasLoadTargetError) -> String {
     format!("embedded runtime-host Pumas load-target resolution failed: {error}")
+}
+
+fn package_facts_error_message(error: RuntimeHostPumasPackageFactsError) -> String {
+    format!("embedded runtime-host Pumas package-facts resolution failed: {error}")
+}
+
+fn image_projection_error_message(error: RuntimeHostImageGenerationProjectionError) -> String {
+    format!("embedded runtime-host image projection failed: {error}")
+}
+
+fn gateway_error_message(error: inference::GatewayError) -> String {
+    format!("embedded runtime-host image gateway execution failed: {error}")
+}
+
+fn media_artifact_sink_error_message(error: RuntimeHostMediaArtifactSinkError) -> String {
+    format!("embedded runtime-host media artifact write failed: {error}")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::stream;
+    use inference::backend::{
+        BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+        EmbeddingResult, InferenceBackend,
+    };
+    use inference::process::ProcessSpawner;
+    use inference::{
+        BackendExecutionContext, ImageGenerationExecutionPlan, ImageGenerationResult,
+        RerankRequest, RerankResponse,
+    };
     use pantograph_runtime_host_contracts::RuntimeHostExecutionContractError;
+    use pantograph_workflow_service::{
+        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowService,
+    };
     use pumas_library::models::{
         AssetValidationState, PackageArtifactKind, PumasArtifactLoadPathKind,
         PumasArtifactLoadTarget, StorageKind,
     };
+    use std::pin::Pin;
 
     use crate::runtime_host_media_artifact_sink::{
         RuntimeHostImageArtifactWriteRequest, RuntimeHostMediaArtifactSinkError,
+        WorkflowServiceRuntimeHostMediaArtifactSink,
     };
 
     #[tokio::test]
@@ -238,17 +434,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn port_rejects_runtime_unavailable_after_required_dependencies_exist() {
+    async fn port_rejects_after_load_target_when_package_facts_resolver_is_missing() {
         let request = runtime_host_request_fixture();
-        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-            Arc::new(ReadyLoadTargetResolver),
-            Arc::new(UnusedMediaArtifactSink),
-        );
+        let port = EmbeddedRuntimeHostExecutionPort {
+            load_target_resolver: Some(Arc::new(ReadyLoadTargetResolver)),
+            media_artifact_sink: Some(Arc::new(UnusedMediaArtifactSink)),
+            package_facts_resolver: None,
+            gateway: None,
+        };
 
         let response = port
             .execute_runtime_host_request(request)
             .await
-            .expect("unwired runtime execution should be a typed rejected response");
+            .expect("missing package resolver should be a typed rejected response");
 
         assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
         assert!(response.outputs.is_empty());
@@ -259,8 +457,65 @@ mod tests {
         );
         assert_eq!(
             diagnostic.hint.as_deref(),
-            Some(RUNTIME_EXECUTION_UNAVAILABLE_HINT)
+            Some(MISSING_PACKAGE_FACTS_RESOLVER_HINT)
         );
+    }
+
+    #[tokio::test]
+    async fn port_completes_image_execution_with_sink_backed_media_ref() {
+        let temp = tempfile::TempDir::new().expect("temp artifact dir");
+        let workflow_service = Arc::new(workflow_service_with_artifact_store(&temp));
+        let mut request = runtime_host_request_fixture();
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("fixture has dispatch decision")
+            .runtime_trait_settings
+            .clear();
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+                workflow_service.clone(),
+            )),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(MockImageBackend),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request)
+            .await
+            .expect("image execution should complete");
+
+        assert_eq!(
+            response.state,
+            RuntimeHostExecutionState::Completed,
+            "{response:#?}"
+        );
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::ExecutionCompleted
+        );
+        let RuntimeHostExecutionOutputValue::MediaArtifactRef(artifact_ref) =
+            &response.outputs[0].value
+        else {
+            panic!("image output should be a media artifact ref");
+        };
+        assert_eq!(response.outputs[0].port_id, "image");
+        assert_eq!(artifact_ref.media_type.as_deref(), Some("image_png"));
+        let body = workflow_service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: artifact_ref.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("image artifact body should be retained");
+        assert_eq!(body.body, b"hello");
+        assert_eq!(body.response.media_type, "image/png");
     }
 
     fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
@@ -297,6 +552,39 @@ mod tests {
         }
     }
 
+    struct FixturePackageFactsResolver;
+
+    #[async_trait]
+    impl RuntimeHostPackageFactsResolver for FixturePackageFactsResolver {
+        async fn resolve(
+            &self,
+            request: &ValidatedRuntimeHostExecutionRequest,
+        ) -> Result<inference::ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError>
+        {
+            let selected_model_ref = request
+                .as_ref()
+                .handoff
+                .dispatch_decision
+                .as_ref()
+                .expect("fixture has dispatch decision")
+                .selected_model_ref
+                .clone();
+            let mut package_facts: inference::ResolvedModelPackageFacts =
+                serde_json::from_str(include_str!(
+                    "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+                ))
+                .expect("image package facts fixture should decode");
+            package_facts.model_ref = inference::PumasModelRef {
+                model_id: selected_model_ref.model_id,
+                revision: selected_model_ref.revision,
+                selected_artifact_id: selected_model_ref.selected_artifact_id,
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            };
+            Ok(package_facts)
+        }
+    }
+
     struct UnusedMediaArtifactSink;
 
     impl RuntimeHostMediaArtifactSink for UnusedMediaArtifactSink {
@@ -308,6 +596,112 @@ mod tests {
             RuntimeHostMediaArtifactSinkError,
         > {
             panic!("media sink must not be called before runtime execution is wired")
+        }
+    }
+
+    struct MockImageBackend;
+
+    #[async_trait]
+    impl InferenceBackend for MockImageBackend {
+        fn name(&self) -> &'static str {
+            "Mock"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock image backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities {
+                image_generation: true,
+                ..BackendCapabilities::default()
+            }
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_mock_runtime".to_string()),
+            })
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<
+            Pin<Box<dyn futures_util::Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+            BackendError,
+        > {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
+        async fn generate_image_from_plan(
+            &self,
+            plan: ImageGenerationExecutionPlan,
+            _context: BackendExecutionContext,
+        ) -> Result<ImageGenerationResult, BackendError> {
+            Ok(ImageGenerationResult {
+                images: vec![inference::EncodedImage {
+                    data_base64: "aGVsbG8=".to_string(),
+                    mime_type: "image/png".to_string(),
+                    width: plan.width,
+                    height: plan.height,
+                }],
+                seed_used: plan.seed,
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    fn workflow_service_with_artifact_store(temp: &tempfile::TempDir) -> WorkflowService {
+        let artifact_store = ArtifactStore::open(temp.path().join("artifacts"), artifact_policy())
+            .expect("open artifact store");
+        WorkflowService::new().with_artifact_store(artifact_store)
+    }
+
+    fn artifact_policy() -> ArtifactPolicy {
+        ArtifactPolicy {
+            policy_id: "runtime-host-execution-port-test".to_string(),
+            policy_version: 1,
+            ttl_seconds: None,
+            max_disk_bytes: None,
+            max_memory_bytes: None,
+            max_single_artifact_bytes: None,
+            spill_threshold_bytes: None,
+            delete_on_consume: false,
         }
     }
 }

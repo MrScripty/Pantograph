@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use inference::ResolvedModelPackageFacts;
 use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
 use pumas_library::PumasError;
@@ -10,13 +11,24 @@ pub(crate) struct RuntimeHostPumasPackageFactsResolver {
     pumas_api: Arc<pumas_library::PumasApi>,
 }
 
+#[async_trait]
+pub(crate) trait RuntimeHostPackageFactsResolver: Send + Sync {
+    async fn resolve(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError>;
+}
+
 #[allow(dead_code)]
 impl RuntimeHostPumasPackageFactsResolver {
     pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
         Self { pumas_api }
     }
+}
 
-    pub(crate) async fn resolve(
+#[async_trait]
+impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
+    async fn resolve(
         &self,
         request: &ValidatedRuntimeHostExecutionRequest,
     ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {

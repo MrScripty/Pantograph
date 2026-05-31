@@ -20035,6 +20035,49 @@ Worker rules:
   - Remaining follow-up before successful execution: compose package-facts
     resolution, image projection, gateway execution, sink-backed output
     writing, and typed gateway/write diagnostics inside the port.
+- 2026-05-31 runtime-host image execution composition slice:
+  - Smallest useful slice: compose the already validated runtime-host image
+    pieces inside `EmbeddedRuntimeHostExecutionPort` and prove a complete
+    image result can be returned as a path-free media artifact ref when all
+    canonical dependencies are injected.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_load_target_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: added a `RuntimeHostPackageFactsResolver` trait,
+    composed package-facts resolution, image projection,
+    `InferenceGateway::generate_image_from_planning_input`, and sink-backed
+    image output writes inside the runtime-host port. Completed responses now
+    emit `RuntimeHostExecutionOutputValue::MediaArtifactRef` values; gateway
+    errors and media-write errors return typed failed responses.
+  - No-fallback/no-legacy result: successful execution uses only validated
+    scheduler handoff, owner-resolved Pumas package facts/load targets, the
+    canonical inference gateway planning API, and backend artifact-store refs.
+    It does not call Tauri/frontend, node-engine, planned-inference hosts,
+    reduced execution plans, graph paths, scheduler persistence workarounds,
+    inline media outputs, fake refs, or `ModelRefV2`.
+  - Focused tests added/updated: fake load-target/package-facts/gateway plus
+    the real workflow-service media sink prove completed image execution
+    returns one media artifact ref with retained image bytes; missing package
+    facts remains rejected; load-target tests now assert the canonical fixture
+    stays path-free by leaving `selected_artifact_path` and
+    `caller_observed_entry_path` absent.
+  - Verification passed: `cargo fmt --package pantograph-embedded-runtime`;
+    `cargo test -p pantograph-embedded-runtime runtime_host_execution_port --
+    --nocapture`; `cargo test -p pantograph-embedded-runtime
+    runtime_host_package_facts -- --nocapture`; `cargo test -p
+    pantograph-embedded-runtime runtime_host_load_target -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime
+    runtime_host_media_artifact_sink -- --nocapture`. These focused commands
+    still report the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up before production use: wire embedded-runtime
+    composition to inject the Pumas package-facts resolver, Pumas load-target
+    resolver, inference gateway, and workflow-service media sink into the
+    runtime-host execution port used by scheduler dispatch; add session-level
+    coverage that scheduler task execution records the completed runtime-host
+    response.
 
 ### Traceability Links
 

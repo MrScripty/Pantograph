@@ -1958,6 +1958,33 @@ before execution: compose package facts, image projection, gateway execution,
 sink-backed output writing, and typed gateway/write diagnostics inside the
 port.
 
+Completed 2026-05-31 for the image execution composition slice:
+`EmbeddedRuntimeHostExecutionPort` now composes the first complete
+image-generation execution path when all canonical dependencies are injected.
+It resolves package facts through the new `RuntimeHostPackageFactsResolver`
+trait, projects the validated runtime-host request through the existing image
+planning boundary, calls
+`InferenceGateway::generate_image_from_planning_input`, writes generated images
+through `RuntimeHostMediaArtifactSink`, and returns completed
+`RuntimeHostExecutionOutputValue::MediaArtifactRef` outputs. Gateway failures
+and media artifact write failures become typed failed runtime-host responses.
+The slice also corrected `runtime_host_load_target` tests to assert the
+canonical runtime-host request fixture stays path-free by leaving
+`selected_artifact_path` and `caller_observed_entry_path` absent. Verification
+passed: `cargo fmt --package pantograph-embedded-runtime`; `cargo test -p
+pantograph-embedded-runtime runtime_host_execution_port -- --nocapture`;
+`cargo test -p pantograph-embedded-runtime runtime_host_package_facts --
+--nocapture`; `cargo test -p pantograph-embedded-runtime
+runtime_host_load_target -- --nocapture`; `cargo test -p
+pantograph-embedded-runtime runtime_host_media_artifact_sink -- --nocapture`.
+Verification caveat: the focused commands still report the known
+workflow-service `set_active_run_execution_plan` warning. Remaining production
+follow-up: wire embedded-runtime composition so scheduler dispatch receives a
+runtime-host port with Pumas package-facts resolver, Pumas load-target
+resolver, inference gateway, and workflow-service media sink injected, then
+add session-level coverage that completed runtime-host responses are recorded
+as scheduler task results.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

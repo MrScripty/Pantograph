@@ -26,14 +26,8 @@ fn load_target_request_uses_scheduler_selected_model_ref() {
         pumas_request.model_ref.selected_artifact_id.as_deref(),
         Some("diffusers-bundle")
     );
-    assert_eq!(
-        pumas_request.model_ref.selected_artifact_path.as_deref(),
-        Some("juggernaut-xl-v10/diffusers")
-    );
-    assert_eq!(
-        pumas_request.caller_observed_entry_path.as_deref(),
-        Some("juggernaut-xl-v10/diffusers")
-    );
+    assert_eq!(pumas_request.model_ref.selected_artifact_path, None);
+    assert_eq!(pumas_request.caller_observed_entry_path, None);
     assert_eq!(pumas_request.expected_artifact_kind, None);
     assert_eq!(
         pumas_request.consumer.runtime_family.as_deref(),
