@@ -2189,6 +2189,12 @@ constructs legacy request payloads, and the builder-specific tests were
 removed. Python runtime preflight remains diagnostic-only and must not recreate
 the request builder as a compatibility bridge.
 
+Completed 2026-05-31 for node-engine `unload-model` fail-closed retirement:
+the handler no longer validates or consumes legacy `ModelRefV2` `model_ref`
+inputs and no longer calls backend unload side effects. Runtime lifecycle is
+scheduler/runtime-host owned; reaching the old node now returns a typed
+diagnostic before legacy model-ref parsing.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

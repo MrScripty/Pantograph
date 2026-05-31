@@ -8,7 +8,6 @@ use inference::{
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::extensions::{extension_keys, ExecutorExtensions};
-use crate::model_dependencies::ModelRefV2;
 
 use super::{
     build_extra_settings, parse_reranker_documents_input, read_optional_input_bool_aliases,
@@ -1255,96 +1254,11 @@ fn read_rerank_model_name(
 
 #[cfg(feature = "inference-nodes")]
 pub(crate) async fn execute_unload_model(
-    gateway: Option<&Arc<InferenceGateway>>,
-    inputs: &HashMap<String, serde_json::Value>,
+    _gateway: Option<&Arc<InferenceGateway>>,
+    _inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
-    let model_ref_value = inputs.get("model_ref").ok_or_else(|| {
-        NodeEngineError::ExecutionFailed(
-            "Missing model_ref input. Connect an inference node's Model Reference output."
-                .to_string(),
-        )
-    })?;
-    let model_ref =
-        ModelRefV2::validate_value(model_ref_value).map_err(NodeEngineError::ExecutionFailed)?;
-
-    let engine = model_ref.engine.as_str();
-    let model_id = model_ref.model_id.as_str();
-
-    let trigger_value = inputs
-        .get("trigger")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
-
-    log::info!(
-        "UnloadModel: unloading '{}' from engine '{}'",
-        model_id,
-        engine
-    );
-
-    match engine {
-        "llamacpp" => {
-            let gw = require_gateway(gateway)?;
-            gw.stop().await;
-            log::info!(
-                "UnloadModel: llama.cpp server stopped for model '{}'",
-                model_id
-            );
-        }
-        "ollama" => {
-            return Err(NodeEngineError::ExecutionFailed(format!(
-                "Ollama model_ref for '{model_id}' cannot be unloaded because Ollama is no longer supported as a first-party Pantograph inference backend. Migrate this workflow to canonical llm-inference with a Pumas model reference and a supported runtime."
-            )));
-        }
-        #[cfg(feature = "pytorch-nodes")]
-        "pytorch" => {
-            inference::backend::pytorch::unload_embedded_pytorch_model()
-                .await
-                .map_err(|error| {
-                    NodeEngineError::ExecutionFailed(format!(
-                        "Failed to unload PyTorch model '{}': {}",
-                        model_id, error
-                    ))
-                })?;
-            log::info!("UnloadModel: PyTorch model '{}' unloaded", model_id);
-        }
-        #[cfg(feature = "audio-nodes")]
-        "stable_audio" => {
-            use pyo3::types::PyAnyMethods;
-            let model_id_owned = model_id.to_string();
-            tokio::task::spawn_blocking(move || {
-                pyo3::Python::with_gil(|py| {
-                    if let Ok(worker) = py.import("pantograph_audio_worker") {
-                        let _ = worker.call_method0("unload_model");
-                    }
-                });
-            })
-            .await
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Failed to unload audio model '{}': {}",
-                    model_id_owned, e
-                ))
-            })?;
-            log::info!("UnloadModel: audio model '{}' unloaded", model_id);
-        }
-        "onnx-runtime" | "onnxruntime" => {
-            log::info!(
-                "UnloadModel: onnx-runtime model '{}' does not keep a shared runtime session",
-                model_id
-            );
-        }
-        other => {
-            return Err(NodeEngineError::ExecutionFailed(format!(
-                "Unknown inference engine '{}'. Supported: llamacpp, pytorch, stable_audio, onnx-runtime",
-                other
-            )));
-        }
-    }
-
-    let status_msg = format!("Model '{}' unloaded from {}", model_id, engine);
-
-    let mut outputs = HashMap::new();
-    outputs.insert("status".to_string(), serde_json::json!(status_msg));
-    outputs.insert("trigger_passthrough".to_string(), trigger_value);
-    Ok(outputs)
+    Err(NodeEngineError::ExecutionFailed(
+        "Retired unload-model node is no longer executable from node-engine. Runtime lifecycle is scheduler/runtime-host owned and cannot consume legacy ModelRefV2 model_ref inputs."
+            .to_string(),
+    ))
 }

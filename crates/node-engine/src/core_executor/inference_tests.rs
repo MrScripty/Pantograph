@@ -2342,7 +2342,7 @@ async fn test_canonical_llm_rejects_unresolved_migration_model_reference_before_
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_unload_model_rejects_ollama_model_ref_without_network() {
+async fn test_unload_model_fails_closed_before_model_ref_validation() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "model_ref".to_string(),
@@ -2357,12 +2357,12 @@ async fn test_unload_model_rejects_ollama_model_ref_without_network() {
 
     let error = execute_unload_model(None, &inputs)
         .await
-        .expect_err("Ollama unload should be retired before network access");
+        .expect_err("unload-model should fail closed before model_ref validation");
     match error {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("Ollama model_ref"));
-            assert!(message.contains("canonical llm-inference"));
-            assert!(message.contains("Pumas model reference"));
+            assert!(message.contains("Retired unload-model node"));
+            assert!(message.contains("scheduler/runtime-host owned"));
+            assert!(message.contains("ModelRefV2"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }

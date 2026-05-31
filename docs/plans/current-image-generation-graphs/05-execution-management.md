@@ -20909,6 +20909,34 @@ Worker rules:
     path-repair helpers, and diagnostic-only tests once canonical scheduler
     task-state/results and runtime-host responses cover the final inference
     path.
+- 2026-05-31 node-engine `unload-model` fail-closed retirement slice:
+  - Smallest useful slice: remove node-engine's production consumption of
+    legacy `ModelRefV2` from the `unload-model` handler by making the node fail
+    closed before `model_ref` validation or backend unload side effects.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/inference_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and these plan
+    files.
+  - Implementation: removed the `ModelRefV2` import from inference node
+    execution, replaced backend-specific unload behavior with a typed
+    fail-closed diagnostic, and updated the unload-model test to assert that
+    the retired node fails before model-ref validation.
+  - No-fallback/no-legacy result: runtime lifecycle/unload is no longer a
+    node-engine graph execution path that consumes `ModelRefV2`. No backend
+    unload branch remains reachable from the retired node, and no
+    scheduler/runtime-host/readiness facts were adapted back into
+    `model_ref`.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes unload_model --
+    --nocapture`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; and targeted `rg` over
+    `crates/node-engine/src/core_executor/inference_nodes.rs` and
+    `crates/node-engine/src/core_executor/inference_tests.rs` for
+    `ModelRefV2`, `execute_unload_model`, and `unload-model`.
+  - Remaining follow-up: delete or replace the remaining public node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contracts
+    and diagnostic-only resolver tests once all remaining non-execution or
+    stale-diagnostic ownership is classified.
 
 ### Traceability Links
 

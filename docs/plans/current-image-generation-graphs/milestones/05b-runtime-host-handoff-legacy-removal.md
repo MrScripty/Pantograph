@@ -472,7 +472,10 @@ cleanup.
   `pantograph-dependency-planning` contracts. 2026-05-31 progress: the
   embedded-runtime private `build_model_dependency_request` helper and its
   builder-specific tests were deleted after Python runtime dependency
-  preflight became diagnostic-only. Remaining cleanup in this task is the
+  preflight became diagnostic-only. 2026-05-31 progress: the node-engine
+  `unload-model` handler now fails closed before validating legacy
+  `ModelRefV2` `model_ref` input, so runtime lifecycle can only be handled by
+  scheduler/runtime-host-owned state. Remaining cleanup in this task is the
   broader `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2`
   contract, path-repair helper, and fixture removal.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
