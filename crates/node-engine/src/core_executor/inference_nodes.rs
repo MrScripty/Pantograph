@@ -9,7 +9,6 @@ use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::extensions::{extension_keys, ExecutorExtensions};
 use crate::model_dependencies::ModelRefV2;
-use crate::planned_inference::{PlannedImageGenerationRequest, PlannedInferenceExecutionHost};
 
 use super::{
     build_extra_settings, parse_reranker_documents_input, read_optional_input_bool_aliases,
@@ -69,22 +68,6 @@ fn assign_typed_request_id(
 #[cfg(feature = "inference-nodes")]
 fn inference_request_id(task_id: &str, execution_id: &str, task_label: &str) -> String {
     format!("{execution_id}:{task_id}:{task_label}")
-}
-
-#[cfg(feature = "inference-nodes")]
-fn require_planned_inference_execution_host(
-    extensions: &ExecutorExtensions,
-) -> Result<Arc<dyn PlannedInferenceExecutionHost>> {
-    extensions
-        .get::<Arc<dyn PlannedInferenceExecutionHost>>(
-            extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
-        )
-        .cloned()
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "Image generation requires planned inference execution host".to_string(),
-            )
-        })
 }
 
 /// Resolve a model path that may be a directory to the actual `.gguf` file inside.
@@ -776,88 +759,15 @@ pub(crate) async fn execute_audio_transcription_inference(
 pub(crate) async fn execute_image_generation_inference(
     _gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
-    extensions: &ExecutorExtensions,
+    _extensions: &ExecutorExtensions,
     task_id: &str,
     execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let mut request = build_image_generation_execution_request(inputs)?;
     assign_typed_request_id(&mut request, task_id, execution_id);
-    let image_request = match request.input {
-        inference::InferenceExecutionInput::ImageGeneration { request } => request,
-        other => {
-            return Err(NodeEngineError::ExecutionFailed(format!(
-                "Image generation request builder returned unexpected input: {other:?}"
-            )));
-        }
-    };
-    let request_id = request.request_id.ok_or_else(|| {
-        NodeEngineError::ExecutionFailed(
-            "Image generation request id was not assigned before planned execution".to_string(),
-        )
-    })?;
-    let planned_request =
-        PlannedImageGenerationRequest::new(execution_id, task_id, request_id, image_request)
-            .map_err(|error| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Invalid planned image generation request: {error}"
-                ))
-            })?;
-    let host = require_planned_inference_execution_host(extensions)?;
-    let image_result = host
-        .generate_image(planned_request)
-        .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("Planned image generation failed: {error}"))
-        })?;
-
-    let mut outputs = HashMap::new();
-    outputs.insert(
-        "image".to_string(),
-        image_result
-            .images
-            .first()
-            .map(|image| serde_json::json!(image.data_base64))
-            .unwrap_or(serde_json::Value::Null),
-    );
-    outputs.insert(
-        "results".to_string(),
-        compact_image_generation_result(&image_result),
-    );
-    outputs.insert(
-        "metadata".to_string(),
-        serde_json::json!({
-            "seed_used": image_result.seed_used,
-            "image_count": image_result.images.len(),
-            "backend_metadata": image_result.metadata,
-        }),
-    );
-    outputs.insert("diagnostics".to_string(), serde_json::json!([]));
-    Ok(outputs)
-}
-
-#[cfg(feature = "inference-nodes")]
-fn compact_image_generation_result(
-    image_result: &inference::ImageGenerationResult,
-) -> serde_json::Value {
-    let images = image_result
-        .images
-        .iter()
-        .enumerate()
-        .map(|(index, image)| {
-            serde_json::json!({
-                "index": index,
-                "mime_type": image.mime_type,
-                "width": image.width,
-                "height": image.height,
-            })
-        })
-        .collect::<Vec<_>>();
-
-    serde_json::json!({
-        "images": images,
-        "seed_used": image_result.seed_used,
-        "metadata": image_result.metadata,
-    })
+    Err(NodeEngineError::ExecutionFailed(format!(
+        "Image generation runtime execution is scheduler-owned and requires scheduler task state/results; node-engine planned inference launch is retired for workflow run '{execution_id}', node '{task_id}'"
+    )))
 }
 
 #[cfg(feature = "inference-nodes")]

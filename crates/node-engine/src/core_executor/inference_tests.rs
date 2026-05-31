@@ -10,10 +10,6 @@ use crate::model_dependencies::{
     ModelDependencyStatus, ModelRefV2,
 };
 #[cfg(feature = "inference-nodes")]
-use crate::planned_inference::{
-    PlannedImageGenerationRequest, PlannedInferenceExecutionError, PlannedInferenceExecutionHost,
-};
-#[cfg(feature = "inference-nodes")]
 use async_trait::async_trait;
 #[cfg(feature = "inference-nodes")]
 use futures_util::stream;
@@ -23,12 +19,11 @@ use inference::backend::BackendStartOutcome;
 use inference::{
     AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment,
     BackendCapabilities, BackendConfig, BackendError, CacheGenerationOptions, ChatChunk,
-    EmbeddingResult, EncodedImage, GenerationOptions, ImageGenerationResult, InferenceBackend,
-    InferenceExecutionInput, InferenceLifecyclePhase, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
-    InferenceResourceObservationSourceKind, InferenceTaskId, InferenceUsage,
-    LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest, RerankResponse,
-    RerankResult, ResolvedModelPackageFacts, SamplingGenerationOptions,
+    EmbeddingResult, GenerationOptions, InferenceBackend, InferenceExecutionInput,
+    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, InferenceResourceObservationSourceKind, InferenceTaskId,
+    InferenceUsage, LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest,
+    RerankResponse, RerankResult, ResolvedModelPackageFacts, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -1535,86 +1530,8 @@ fn test_build_image_generation_execution_request_ignores_legacy_package_facts_pa
 }
 
 #[cfg(feature = "inference-nodes")]
-fn image_generation_package_facts_fixture() -> ResolvedModelPackageFacts {
-    let fixture = include_str!(
-        "../../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
-    );
-    serde_json::from_str(fixture).expect("image package facts fixture")
-}
-
-#[cfg(feature = "inference-nodes")]
-#[derive(Debug)]
-struct MockPlannedImageGenerationHost {
-    requests: Arc<Mutex<Vec<PlannedImageGenerationRequest>>>,
-}
-
-#[cfg(feature = "inference-nodes")]
-#[async_trait]
-impl PlannedInferenceExecutionHost for MockPlannedImageGenerationHost {
-    async fn generate_image(
-        &self,
-        request: PlannedImageGenerationRequest,
-    ) -> std::result::Result<ImageGenerationResult, PlannedInferenceExecutionError> {
-        self.requests
-            .lock()
-            .expect("planned image host requests lock")
-            .push(request);
-        Ok(sample_image_generation_result())
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
-fn sample_image_generation_result() -> ImageGenerationResult {
-    ImageGenerationResult {
-        images: vec![EncodedImage {
-            data_base64: "aW1hZ2U=".to_string(),
-            mime_type: "image/png".to_string(),
-            width: Some(512),
-            height: Some(384),
-        }],
-        seed_used: Some(42),
-        metadata: serde_json::json!({
-            "image_count": 1,
-            "backend": "mock-planned-host"
-        }),
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
-fn planned_image_generation_host_extensions(
-    requests: Arc<Mutex<Vec<PlannedImageGenerationRequest>>>,
-) -> ExecutorExtensions {
-    let mut extensions = ExecutorExtensions::new();
-    let host: Arc<dyn PlannedInferenceExecutionHost> =
-        Arc::new(MockPlannedImageGenerationHost { requests });
-    extensions.set(
-        crate::extensions::extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
-        host,
-    );
-    extensions
-}
-
-#[cfg(feature = "inference-nodes")]
-#[derive(Debug)]
-struct FailingPlannedImageGenerationHost;
-
-#[cfg(feature = "inference-nodes")]
-#[async_trait]
-impl PlannedInferenceExecutionHost for FailingPlannedImageGenerationHost {
-    async fn generate_image(
-        &self,
-        request: PlannedImageGenerationRequest,
-    ) -> std::result::Result<ImageGenerationResult, PlannedInferenceExecutionError> {
-        Err(PlannedInferenceExecutionError::execution_failed(
-            &request,
-            "planned host unavailable",
-        ))
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_canonical_llm_image_generation_requires_planned_execution_host() {
+async fn test_canonical_llm_image_generation_fails_closed_without_scheduler_task_state() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -1641,161 +1558,14 @@ async fn test_canonical_llm_image_generation_requires_planned_execution_host() {
     let error = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect_err("image generation must require a planned execution host");
-
-    assert!(error
-        .to_string()
-        .contains("planned inference execution host"));
-}
-
-#[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_canonical_llm_image_generation_uses_planned_execution_host_boundary() {
-    let package_facts = image_generation_package_facts_fixture();
-    let planned_requests = Arc::new(Mutex::new(Vec::new()));
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "_data".to_string(),
-        serde_json::json!({"node_type": "llm-inference"}),
-    );
-    inputs.insert(
-        "task_kind".to_string(),
-        serde_json::json!("image_generation"),
-    );
-    inputs.insert(
-        "prompt".to_string(),
-        serde_json::json!("paint a quiet lake SECRET_PROMPT"),
-    );
-    inputs.insert(
-        "task_options".to_string(),
-        serde_json::json!({
-            "negative_prompt": "blur",
-            "width": 512,
-            "height": 384,
-            "num_inference_steps": 12,
-            "guidance_scale": 7.5,
-            "seed": 42,
-            "num_images_per_prompt": 1
-        }),
-    );
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::json!({"legacy": "must be ignored"}),
-    );
-    inputs.insert(
-        "pumas_model_ref".to_string(),
-        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
-    );
-    inputs.insert(
-        "resolved_model_artifact_load_target".to_string(),
-        serde_json::json!({
-            "local_load_path": "/should/not/reach/node-engine",
-            "artifact_kind": "diffusers_bundle"
-        }),
-    );
-
-    let executor = CoreTaskExecutor::new().with_execution_id("run-image".to_string());
-    let context = graph_flow::Context::new();
-    let extensions = planned_image_generation_host_extensions(planned_requests.clone());
-    let outputs = executor
-        .execute_task("llm-inference-1", inputs, &context, &extensions)
-        .await
-        .expect("canonical image generation inference should use planned execution host");
-
-    assert_eq!(outputs["results"]["images"][0]["mime_type"], "image/png");
-    assert_eq!(outputs["results"]["images"][0]["width"], 512);
-    assert!(outputs["results"]["images"][0].get("data_base64").is_none());
-    assert_eq!(outputs["image"], "aW1hZ2U=");
-    assert_eq!(outputs["metadata"]["seed_used"], 42);
-    assert_eq!(outputs["metadata"]["image_count"], 1);
-    assert_eq!(
-        outputs["metadata"]["backend_metadata"]["backend"],
-        "mock-planned-host"
-    );
-    let compact_results =
-        serde_json::to_string(&outputs["results"]).expect("compact results serialize");
-    assert!(!compact_results.contains("aW1hZ2U="));
-    let bounded_outputs = serde_json::to_string(&serde_json::json!({
-        "metadata": outputs.get("metadata"),
-        "results": outputs.get("results"),
-        "diagnostics": outputs.get("diagnostics"),
-    }))
-    .expect("bounded outputs serialize");
-    assert!(!bounded_outputs.contains("SECRET_PROMPT"));
-    assert!(!bounded_outputs.contains("aW1hZ2U="));
-
-    let captured = planned_requests
-        .lock()
-        .expect("planned execution host requests lock");
-    assert_eq!(captured.len(), 1);
-    let planned_request = &captured[0];
-    assert_eq!(planned_request.workflow_run_id(), "run-image");
-    assert_eq!(planned_request.node_id(), "llm-inference-1");
-    assert_eq!(
-        planned_request.request_id(),
-        "run-image:llm-inference-1:image_generation"
-    );
-    let image_request = planned_request.image_request();
-    assert_eq!(image_request.model, package_facts.model_ref.model_id);
-    assert_eq!(image_request.prompt, "paint a quiet lake SECRET_PROMPT");
-    assert_eq!(image_request.negative_prompt.as_deref(), Some("blur"));
-    assert_eq!(image_request.width, Some(512));
-    assert_eq!(image_request.height, Some(384));
-    assert_eq!(image_request.num_inference_steps, Some(12));
-    assert_eq!(image_request.guidance_scale, Some(7.5));
-    assert_eq!(image_request.seed, Some(42));
-    assert_eq!(image_request.num_images_per_prompt, Some(1));
-    assert_eq!(image_request.denoising_scheduler, None);
-    let captured_json = serde_json::to_string(image_request).expect("image request serialize");
-    assert!(!captured_json.contains("/should/not/reach/node-engine"));
-}
-
-#[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_canonical_llm_image_generation_reports_planned_execution_host_error() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "_data".to_string(),
-        serde_json::json!({"node_type": "llm-inference"}),
-    );
-    inputs.insert(
-        "task_kind".to_string(),
-        serde_json::json!("image_generation"),
-    );
-    inputs.insert(
-        "prompt".to_string(),
-        serde_json::json!("paint a quiet lake SECRET_PROMPT"),
-    );
-    inputs.insert(
-        "pumas_model_ref".to_string(),
-        serde_json::json!({
-            "model_id": "pumas://models/tiny-diffusion"
-        }),
-    );
-
-    let executor = CoreTaskExecutor::new().with_execution_id("run-image".to_string());
-    let mut extensions = ExecutorExtensions::new();
-    let host: Arc<dyn PlannedInferenceExecutionHost> = Arc::new(FailingPlannedImageGenerationHost);
-    extensions.set(
-        crate::extensions::extension_keys::PLANNED_INFERENCE_EXECUTION_HOST,
-        host,
-    );
-    let error = executor
-        .execute_task(
-            "llm-inference-1",
-            inputs,
-            &graph_flow::Context::new(),
-            &extensions,
-        )
-        .await
-        .expect_err("planned execution host errors must fail image generation");
+        .expect_err("image generation must require scheduler task state");
 
     let message = error.to_string();
-    assert!(message.contains("Planned image generation failed"));
+    assert!(message.contains("scheduler-owned"));
+    assert!(message.contains("scheduler task state/results"));
+    assert!(message.contains("planned inference launch is retired"));
     assert!(message.contains("workflow run 'run-image'"));
     assert!(message.contains("node 'llm-inference-1'"));
-    assert!(message.contains("request 'run-image:llm-inference-1:image_generation'"));
-    assert!(message.contains("planned host unavailable"));
 }
 
 #[cfg(feature = "inference-nodes")]

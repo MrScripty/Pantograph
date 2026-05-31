@@ -20226,6 +20226,41 @@ Worker rules:
     `PlannedInferenceExecutionHost` contract/tests to diagnostic-only
     fail-closed coverage after affected runtime inference nodes consume
     scheduler task state/results exclusively.
+- 2026-05-31 node-engine planned-inference contract retirement slice:
+  - Smallest useful slice: remove node-engine's planned-inference execution
+    host contract and convert image-generation executor behavior to an
+    explicit scheduler-owned fail-closed diagnostic.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/inference_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/extensions.rs`,
+    `crates/node-engine/src/lib.rs`,
+    `crates/node-engine/src/planned_inference.rs`,
+    `crates/node-engine/src/README.md`, and these plan files.
+  - Implementation: deleted `PlannedInferenceExecutionHost`,
+    `PlannedImageGenerationRequest`, and planned-inference errors; removed the
+    extension key and public module export; changed image-generation execution
+    to validate the canonical image request shape and then fail closed with a
+    scheduler-owned task-state/result diagnostic; replaced planned-host tests
+    with fail-closed coverage.
+  - No-fallback/no-legacy result: node-engine no longer has a successful
+    planned-inference launch branch, cannot accept a host-installed planned
+    inference executor, and does not adapt scheduler/runtime-host facts into a
+    node-engine execution path. Successful runtime inference state/result
+    consumption remains in workflow-service scheduler session orchestration and
+    runtime-host task-result projection.
+  - Verification passed: `cargo fmt --package node-engine`; `cargo check -p
+    node-engine`; `cargo check -p node-engine --features inference-nodes`;
+    `cargo test -p node-engine --features inference-nodes
+    test_canonical_llm_image_generation_fails_closed_without_scheduler_task_state
+    -- --nocapture`; `cargo check -p pantograph-embedded-runtime`. The
+    embedded-runtime check still reports the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: delete or replace the remaining
+    `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
+    `build_model_ref_v2`, path repair helpers, and path-shaped success
+    fixtures in later slices after their production callers are converted to
+    scheduler task state/results.
 
 ### Traceability Links
 

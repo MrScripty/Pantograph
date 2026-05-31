@@ -64,8 +64,6 @@ pub mod groups;
 pub mod model_dependencies;
 pub mod orchestration;
 pub mod path_validation;
-#[cfg(feature = "inference-nodes")]
-pub mod planned_inference;
 pub mod port_options;
 pub mod registry;
 pub mod single_task;

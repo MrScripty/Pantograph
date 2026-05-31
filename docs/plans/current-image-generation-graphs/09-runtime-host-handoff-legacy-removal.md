@@ -2072,6 +2072,16 @@ host branch. Remaining follow-up: remove or convert the node-engine
 `PlannedInferenceExecutionHost` contract and tests after the affected runtime
 inference nodes consume scheduler task state/results exclusively.
 
+Completed 2026-05-31 for node-engine planned-inference contract retirement:
+node-engine no longer exports `PlannedInferenceExecutionHost`, no longer has a
+`PLANNED_INFERENCE_EXECUTION_HOST` extension key, and image-generation
+execution no longer calls a host-installed planned-inference boundary. The
+node-engine image-generation executor still validates canonical request shape,
+then fails closed with a scheduler-owned task-state/result diagnostic so old
+node-engine launch attempts cannot become successful execution. The
+workflow-service scheduler session runner and runtime-host task-result mapping
+remain the successful state/result path.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

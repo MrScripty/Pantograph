@@ -88,11 +88,6 @@ pub mod extension_keys {
     /// host-provided sink for typed inference lifecycle facts.
     #[cfg(feature = "inference-nodes")]
     pub const INFERENCE_LIFECYCLE_SINK: &str = "inference_lifecycle_sink";
-
-    /// Key for `Arc<dyn crate::planned_inference::PlannedInferenceExecutionHost>` —
-    /// host-owned planned inference execution boundary.
-    #[cfg(feature = "inference-nodes")]
-    pub const PLANNED_INFERENCE_EXECUTION_HOST: &str = "planned_inference_execution_host";
 }
 
 #[cfg(test)]

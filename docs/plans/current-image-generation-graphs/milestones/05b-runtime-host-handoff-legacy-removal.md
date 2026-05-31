@@ -198,17 +198,20 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   behavior. The runner must keep graph editing, validation, dependency
   readiness, runtime input materialization, and runtime-host dispatch as
   separate boundaries.
-- [ ] Retire node-engine planned-inference launch ownership for runtime
+- [x] Retire node-engine planned-inference launch ownership for runtime
   inference nodes. Affected nodes must submit or reference scheduler task
   intent and consume scheduler task state/results; missing scheduler task state
   must fail closed with typed diagnostics. 2026-05-31 progress:
   embedded-runtime no longer installs or ships
   `EmbeddedPlannedInferenceExecutionHost`, so hosted production/session
   execution cannot use the old planned-inference host as a successful launch
-  branch. Remaining before this task is fully complete: remove the
-  node-engine `PlannedInferenceExecutionHost` contract/tests or convert them
-  to diagnostic-only fail-closed coverage once all affected runtime inference
-  nodes consume scheduler task state/results.
+  branch. 2026-05-31 completion: node-engine no longer exports
+  `PlannedInferenceExecutionHost`, no longer accepts a
+  `PLANNED_INFERENCE_EXECUTION_HOST` extension, and image-generation execution
+  now validates canonical request shape then fails closed with a typed
+  scheduler-owned task-state/result diagnostic. Successful runtime inference
+  state/result consumption remains owned by workflow-service scheduler session
+  orchestration and runtime-host task-result projection, not node-engine.
 - [ ] Replace PyTorch execution so successful model loading consumes
   scheduler-dispatched runtime-host requests plus host-owned executable facts
   and no longer reads graph `model_path`, reduced execution-plan projections,
@@ -235,9 +238,10 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   and successful `model_path` test fixtures only after scheduler-to-runtime-host
   dispatch and load-target resolution are wired. 2026-05-31 progress:
   `EmbeddedPlannedInferenceExecutionHost` and its embedded-runtime tests were
-  removed after hosted runtime-host composition was wired. The node-engine
-  planned-inference contract remains as a separate removal/fail-closed
-  cleanup item.
+  removed after hosted runtime-host composition was wired; node-engine
+  `PlannedInferenceExecutionHost` and its extension key were removed in the
+  follow-up fail-closed node-engine slice. Remaining cleanup in this task is
+  the model-dependency/model-ref/path-shaped contract and fixture removal.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

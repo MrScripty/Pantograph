@@ -27,7 +27,6 @@ inputs, and keeps execution dispatch aligned with descriptors published by
 | `model_dependencies.rs` | Model dependency typing used by execution preflight and runtime selection. |
 | `orchestration/` | Orchestration-specific execution and state modules. |
 | `path_validation.rs` | Validation helpers for file and model-path inputs. |
-| `planned_inference.rs` | Run-scoped planned inference decision context installed by hosts through executor extensions. |
 | `port_options.rs` | Port metadata helpers used by graph editing and execution, including validated provider query context and typed disabled/unavailable rows for fact-aware option lists. |
 | `registry.rs` | Built-in node registration, descriptor inventory, and callback-executor type boundaries. |
 | `single_task.rs` | One-task core execution API that owns `graph_flow::Context` and empty extension setup for scheduler-owned non-runtime adapters. |
@@ -51,6 +50,10 @@ boundaries instead of forcing new workloads through incompatible legacy paths.
   classification can start the wrong engine mode.
 - Built-in dispatch must fail explicitly for disabled node behavior instead of
   synthesizing successful placeholder outputs.
+- Image-generation runtime execution is scheduler-owned. Node-engine may keep
+  request-shaping helpers for validation, but it must not launch image
+  generation through a planned-inference host or host-installed executor
+  extension.
 
 ## Decision
 Keep `core_executor.rs` as the single dispatch boundary for built-in node types
