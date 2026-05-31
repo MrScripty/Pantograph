@@ -7,8 +7,7 @@ async fn onnx_nodes_block_when_dependency_preflight_is_not_ready() {
         requests: requests.clone(),
         response: HashMap::new(),
     });
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, extensions) = test_executor(adapter, resolver.clone());
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -35,7 +34,6 @@ async fn onnx_nodes_block_when_dependency_preflight_is_not_ready() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
@@ -49,8 +47,7 @@ async fn onnx_nodes_fail_closed_before_resolved_model_ref_preflight() {
         response: adapter_response,
     });
 
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, extensions) = test_executor(adapter, resolver.clone());
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -72,7 +69,6 @@ async fn onnx_nodes_fail_closed_before_resolved_model_ref_preflight() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
@@ -86,8 +82,7 @@ async fn onnx_nodes_with_ready_environment_ref_fail_closed_before_adapter() {
         response: adapter_response,
     });
 
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, extensions) = test_executor(adapter, resolver.clone());
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -116,6 +111,5 @@ async fn onnx_nodes_with_ready_environment_ref_fail_closed_before_adapter() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }

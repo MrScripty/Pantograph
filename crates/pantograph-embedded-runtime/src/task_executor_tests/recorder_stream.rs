@@ -7,8 +7,7 @@ async fn python_runtime_recorder_is_not_used_after_retired_preflight_blocks() {
         requests: requests.clone(),
         response: HashMap::from([("audio".to_string(), serde_json::json!("base64-audio"))]),
     });
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, mut extensions) = test_executor(adapter, resolver.clone());
+    let (executor, mut extensions) = test_executor(adapter);
     let recorder = install_python_runtime_recorder(&mut extensions);
 
     let inputs = HashMap::from([
@@ -31,7 +30,6 @@ async fn python_runtime_recorder_is_not_used_after_retired_preflight_blocks() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert!(requests.lock().expect("recording lock").is_empty());
     assert!(recorder.snapshots().is_empty());
 }
@@ -76,7 +74,6 @@ impl PythonRuntimeAdapter for FailingPythonAdapter {
 async fn failing_python_adapter_is_not_reached_after_retired_preflight_blocks() {
     let executor = TauriTaskExecutor::with_python_runtime(None, Arc::new(FailingPythonAdapter));
     let mut extensions = ExecutorExtensions::new();
-    let resolver = Arc::new(CountingDependencyResolver::new());
     let recorder = install_python_runtime_recorder(&mut extensions);
 
     let inputs = HashMap::from([
@@ -101,7 +98,6 @@ async fn failing_python_adapter_is_not_reached_after_retired_preflight_blocks() 
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert!(recorder.snapshots().is_empty());
 }
 
@@ -146,8 +142,7 @@ async fn stream_events_are_not_emitted_after_retired_preflight_blocks() {
         })],
         response: HashMap::from([("audio".to_string(), serde_json::json!("final-audio"))]),
     });
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, mut extensions) = test_executor(adapter, resolver.clone());
+    let (executor, mut extensions) = test_executor(adapter);
     let sink = Arc::new(VecEventSink::new());
     extensions.set(
         runtime_extension_keys::EVENT_SINK,
@@ -182,7 +177,6 @@ async fn stream_events_are_not_emitted_after_retired_preflight_blocks() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert!(sink
         .events()
         .into_iter()

@@ -7,12 +7,7 @@ async fn onnx_nodes_fail_fast_when_environment_ref_is_not_ready() {
         requests: requests.clone(),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -52,8 +47,7 @@ async fn python_nodes_block_when_no_dependency_bindings_are_available() {
         response: HashMap::new(),
     });
 
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, extensions) = test_executor(adapter, resolver.clone());
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -79,7 +73,6 @@ async fn python_nodes_block_when_no_dependency_bindings_are_available() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
@@ -91,8 +84,7 @@ async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
         response: HashMap::new(),
     });
 
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, extensions) = test_executor(adapter, resolver.clone());
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -118,6 +110,5 @@ async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }

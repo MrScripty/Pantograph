@@ -7,12 +7,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_output
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, mut extensions) = test_executor(adapter, resolver);
+    let (executor, mut extensions) = test_executor(adapter);
 
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
@@ -98,12 +93,7 @@ async fn puma_lib_execution_preserves_explicit_model_ref_without_model_path_outp
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let (executor, extensions) = test_executor(adapter);
 
     let artifact_path = "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf";
     let mut inputs = HashMap::new();
@@ -154,12 +144,7 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, mut extensions) = test_executor(adapter, resolver);
+    let (executor, mut extensions) = test_executor(adapter);
 
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
@@ -230,12 +215,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_puma
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, mut extensions) = test_executor(adapter, resolver);
+    let (executor, mut extensions) = test_executor(adapter);
 
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
@@ -317,12 +297,7 @@ async fn puma_lib_execution_does_not_emit_inference_settings_from_saved_or_selec
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, mut extensions) = test_executor(adapter, resolver);
+    let (executor, mut extensions) = test_executor(adapter);
 
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
@@ -385,12 +360,7 @@ async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id()
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, mut extensions) = test_executor(adapter, resolver);
+    let (executor, mut extensions) = test_executor(adapter);
 
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");

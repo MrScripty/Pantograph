@@ -438,7 +438,11 @@ cleanup.
   legacy resolver business logic into runtime execution. Remaining resolver
   references are the explicit public legacy contract, diagnostic strings, and
   diagnostic/tooling test stubs pending the model-dependency/model-ref
-  deletion slice.
+  deletion slice. 2026-05-31 progress: embedded-runtime task-executor tests
+  no longer construct legacy resolver stubs, import model-dependency/model-ref
+  DTOs, or assert resolver call counts. Those tests now prove fail-closed
+  behavior through diagnostics and absent Python adapter/recorder effects
+  without installing any resolver fixture.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
@@ -483,8 +487,9 @@ cleanup.
   `unload-model` handler now fails closed before validating legacy
   `ModelRefV2` `model_ref` input, so runtime lifecycle can only be handled by
   scheduler/runtime-host-owned state. Remaining cleanup in this task is the
-  broader `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2`
-  contract, path-repair helper, and fixture removal.
+  broader public `ModelDependencyRequest`/`ModelDependencyResolver`/
+  `ModelRefV2` contract, retained diagnostic strings proving retired contract
+  rejection, path-repair helper, and fixture removal.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

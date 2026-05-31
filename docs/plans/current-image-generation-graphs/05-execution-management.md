@@ -20971,6 +20971,37 @@ Worker rules:
     embedded-runtime diagnostic test stubs, and path-repair helpers once
     scheduler task-state/results and runtime-host responses cover the final
     inference path.
+- 2026-05-31 embedded-runtime resolver test-stub cleanup slice:
+  - Smallest useful slice: remove embedded-runtime task-executor test fixtures
+    that still constructed legacy `ModelDependencyResolver` implementations
+    after the resolver extension key was deleted.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_fail_closed.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_preflight.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/puma_lib.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/recorder_stream.rs`,
+    and these plan files.
+  - Implementation: simplified the shared test executor helper to accept only
+    the Python adapter, removed `StubDependencyResolver` and
+    `CountingDependencyResolver`, deleted model-dependency/model-ref imports,
+    and removed resolver call-count assertions whose safety is now guaranteed
+    by the missing extension channel.
+  - No-fallback/no-legacy result: embedded-runtime task-executor tests no
+    longer install or construct legacy resolver fixtures. Fail-closed coverage
+    still proves diagnostics and absent Python adapter/recorder side effects
+    without preserving a resolver-shaped compatibility path.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime task_executor -- --nocapture`; `cargo
+    check -p pantograph-embedded-runtime`; `git diff --check`; and targeted
+    `rg` confirming no `ModelDependencyResolver`, `ModelDependencyRequest`,
+    `ModelRefV2`, `StubDependencyResolver`, `CountingDependencyResolver`,
+    `make_requirements`, or `make_status` source hit remains in embedded
+    task-executor tests outside diagnostic string assertions.
+  - Remaining follow-up: delete or replace the public node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contract
+    and node-engine path-repair helpers once scheduler task-state/results and
+    runtime-host responses cover the final inference path.
 
 ### Traceability Links
 

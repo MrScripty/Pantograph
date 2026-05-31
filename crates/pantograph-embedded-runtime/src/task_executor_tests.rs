@@ -1,9 +1,5 @@
 use super::*;
-use node_engine::{
-    extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
-    ModelDependencyInstallResult, ModelDependencyRequest, ModelDependencyRequirements,
-    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
-};
+use node_engine::{extension_keys, ExecutorExtensions, VecEventSink, WorkflowEvent};
 use std::sync::Mutex;
 
 #[test]
@@ -21,12 +17,7 @@ async fn canonical_llm_inference_falls_through_to_core_executor() {
         requests: requests.clone(),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
@@ -54,8 +45,7 @@ async fn dependency_environment_execution_is_retired_from_embedded_runtime() {
         requests: requests.clone(),
         response: HashMap::new(),
     });
-    let resolver = Arc::new(CountingDependencyResolver::new());
-    let (executor, extensions) = test_executor(adapter, resolver.clone());
+    let (executor, extensions) = test_executor(adapter);
 
     let error = executor
         .execute_task(
@@ -77,7 +67,6 @@ async fn dependency_environment_execution_is_retired_from_embedded_runtime() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
-    assert_eq!(resolver.call_count(), 0);
     assert!(requests.lock().expect("recording lock").is_empty());
 }
 
@@ -88,12 +77,7 @@ async fn retired_direct_diffusion_falls_through_without_python_execution() {
         requests: requests.clone(),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let (executor, extensions) = test_executor(adapter);
 
     let mut inputs = HashMap::new();
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
@@ -119,45 +103,6 @@ async fn retired_direct_diffusion_falls_through_without_python_execution() {
     assert!(requests.lock().expect("recording lock").is_empty());
 }
 
-#[derive(Clone)]
-struct StubDependencyResolver {
-    requirements: ModelDependencyRequirements,
-    status: ModelDependencyStatus,
-    model_ref: Option<ModelRefV2>,
-}
-
-#[async_trait]
-impl ModelDependencyResolver for StubDependencyResolver {
-    async fn resolve_model_dependency_requirements(
-        &self,
-        _request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyRequirements, String> {
-        Ok(self.requirements.clone())
-    }
-
-    async fn check_dependencies(
-        &self,
-        _request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyStatus, String> {
-        Ok(self.status.clone())
-    }
-
-    async fn install_dependencies(
-        &self,
-        _request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyInstallResult, String> {
-        Err("install not used in task-executor tests".to_string())
-    }
-
-    async fn resolve_model_ref(
-        &self,
-        _request: ModelDependencyRequest,
-        _requirements: Option<ModelDependencyRequirements>,
-    ) -> std::result::Result<Option<ModelRefV2>, String> {
-        Ok(self.model_ref.clone())
-    }
-}
-
 struct RecordingPythonAdapter {
     requests: Arc<Mutex<Vec<PythonNodeExecutionRequest>>>,
     response: HashMap<String, serde_json::Value>,
@@ -174,65 +119,8 @@ impl PythonRuntimeAdapter for RecordingPythonAdapter {
     }
 }
 
-struct CountingDependencyResolver {
-    calls: Mutex<usize>,
-}
-
-impl CountingDependencyResolver {
-    fn new() -> Self {
-        Self {
-            calls: Mutex::new(0),
-        }
-    }
-
-    fn call_count(&self) -> usize {
-        *self.calls.lock().expect("resolver call lock")
-    }
-
-    fn record_call(&self) {
-        *self.calls.lock().expect("resolver call lock") += 1;
-    }
-}
-
-#[async_trait]
-impl ModelDependencyResolver for CountingDependencyResolver {
-    async fn resolve_model_dependency_requirements(
-        &self,
-        _request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyRequirements, String> {
-        self.record_call();
-        Err("unexpected resolve".to_string())
-    }
-
-    async fn check_dependencies(
-        &self,
-        _request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyStatus, String> {
-        self.record_call();
-        Err("unexpected check".to_string())
-    }
-
-    async fn install_dependencies(
-        &self,
-        _request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyInstallResult, String> {
-        self.record_call();
-        Err("unexpected install".to_string())
-    }
-
-    async fn resolve_model_ref(
-        &self,
-        _request: ModelDependencyRequest,
-        _requirements: Option<ModelDependencyRequirements>,
-    ) -> std::result::Result<Option<ModelRefV2>, String> {
-        self.record_call();
-        Err("unexpected model ref".to_string())
-    }
-}
-
 fn test_executor(
     adapter: Arc<dyn PythonRuntimeAdapter>,
-    _resolver: Arc<dyn ModelDependencyResolver>,
 ) -> (TauriTaskExecutor, ExecutorExtensions) {
     let executor = TauriTaskExecutor::with_python_runtime(None, adapter);
     (executor, ExecutorExtensions::new())
@@ -247,30 +135,6 @@ fn install_python_runtime_recorder(
         recorder.clone(),
     );
     recorder
-}
-
-fn make_requirements(state: DependencyValidationState) -> ModelDependencyRequirements {
-    ModelDependencyRequirements {
-        model_id: "model-a".to_string(),
-        platform_key: "linux-x86_64".to_string(),
-        backend_key: Some("pytorch".to_string()),
-        dependency_contract_version: 1,
-        validation_state: state,
-        validation_errors: Vec::new(),
-        bindings: Vec::new(),
-        selected_binding_ids: Vec::new(),
-    }
-}
-
-fn make_status(state: DependencyState, code: Option<&str>) -> ModelDependencyStatus {
-    ModelDependencyStatus {
-        state,
-        code: code.map(|s| s.to_string()),
-        message: code.map(|s| format!("status={}", s)),
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        bindings: Vec::new(),
-        checked_at: None,
-    }
 }
 
 fn create_test_env() -> tempfile::TempDir {
