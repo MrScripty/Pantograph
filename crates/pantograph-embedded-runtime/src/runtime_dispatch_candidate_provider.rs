@@ -30,6 +30,11 @@ use crate::runtime_dispatch_resource_facts::{
     RuntimeDispatchResourceFactsDiagnostic, RuntimeDispatchResourceFactsOutcome,
     RuntimeDispatchResourceFactsRequest, RuntimeDispatchResourceFactsSource,
 };
+use crate::runtime_dispatch_source_snapshot::{
+    EmbeddedRuntimeDispatchCandidateSourceSnapshot,
+    EmbeddedRuntimeDispatchSourceSnapshotDiagnostic,
+    EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode,
+};
 
 const MISSING_PUMAS_PACKAGE_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_pumas_package_facts";
@@ -45,12 +50,6 @@ const PATH_CARRYING_MODEL_REF_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.path_carrying_model_ref";
 const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.incompatible_runtime_backend";
-
-#[derive(Debug, Default, Clone)]
-pub(crate) struct EmbeddedRuntimeDispatchCandidateSourceSnapshot {
-    pub(crate) pumas_package_facts: Option<PumasDispatchPackageFactsBridgeOutcome>,
-    pub(crate) runtime_capability_facts: Option<RuntimeDispatchCapabilityFactsOutcome>,
-}
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
@@ -143,6 +142,7 @@ fn resource_backed_candidate_set(
     diagnostics.extend(runtime_capability_diagnostics(
         source_snapshot.runtime_capability_facts.as_ref(),
     ));
+    diagnostics.extend(source_snapshot_diagnostics(&source_snapshot.diagnostics));
     let (candidate_drafts, draft_diagnostics) = candidate_drafts(source_snapshot);
     diagnostics.extend(draft_diagnostics);
 
@@ -260,6 +260,7 @@ fn fail_closed_diagnostics(
     diagnostics.extend(runtime_capability_diagnostics(
         source_snapshot.runtime_capability_facts.as_ref(),
     ));
+    diagnostics.extend(source_snapshot_diagnostics(&source_snapshot.diagnostics));
     let (_candidate_drafts, draft_diagnostics) = candidate_drafts(source_snapshot);
     diagnostics.extend(draft_diagnostics);
     diagnostics.push(provider_diagnostic(
@@ -268,6 +269,59 @@ fn fail_closed_diagnostics(
         MISSING_RUNTIME_RESOURCE_FACTS_HINT,
     ));
     diagnostics
+}
+
+fn source_snapshot_diagnostics(
+    diagnostics: &[EmbeddedRuntimeDispatchSourceSnapshotDiagnostic],
+) -> Vec<SchedulerDispatchSelectionDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| {
+            provider_diagnostic(
+                source_snapshot_diagnostic_code(diagnostic.code),
+                &diagnostic.message,
+                source_snapshot_diagnostic_hint(diagnostic.code),
+            )
+        })
+        .collect()
+}
+
+fn source_snapshot_diagnostic_code(
+    code: EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode,
+) -> SchedulerDispatchSelectionDiagnosticCode {
+    match code {
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::PathCarryingModelRef
+        | EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::InvalidContractVersion
+        | EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::ModelRefMismatch => {
+            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+        }
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::MissingSnapshot
+        | EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::StaleSnapshot => {
+            SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+        }
+    }
+}
+
+fn source_snapshot_diagnostic_hint(
+    code: EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode,
+) -> &'static str {
+    match code {
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::MissingSnapshot => {
+            "embedded_runtime_dispatch_candidate_provider.source_snapshot.missing"
+        }
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::StaleSnapshot => {
+            "embedded_runtime_dispatch_candidate_provider.source_snapshot.stale"
+        }
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::ModelRefMismatch => {
+            "embedded_runtime_dispatch_candidate_provider.source_snapshot.model_ref_mismatch"
+        }
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::InvalidContractVersion => {
+            "embedded_runtime_dispatch_candidate_provider.source_snapshot.invalid_contract_version"
+        }
+        EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::PathCarryingModelRef => {
+            "embedded_runtime_dispatch_candidate_provider.source_snapshot.path_carrying_model_ref"
+        }
+    }
 }
 
 fn pumas_package_diagnostics(
@@ -664,6 +718,7 @@ mod tests {
                         message: "runtime registry has no runtimes".to_string(),
                     }],
                 }),
+                ..EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
             },
             &path_free_model_ref(),
         );
@@ -681,6 +736,26 @@ mod tests {
         assert!(diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message == "runtime registry has no runtimes"));
+    }
+
+    #[test]
+    fn fail_closed_provider_projects_snapshot_lifecycle_diagnostics() {
+        let diagnostics = fail_closed_diagnostics(
+            &EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+                diagnostics: vec![EmbeddedRuntimeDispatchSourceSnapshotDiagnostic {
+                    code: EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::StaleSnapshot,
+                    message: "runtime dispatch source-fact snapshot is stale".to_string(),
+                }],
+                ..EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
+            },
+            &path_free_model_ref(),
+        );
+
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.hint.as_deref()
+                == Some("embedded_runtime_dispatch_candidate_provider.source_snapshot.stale")
+                && diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+        }));
     }
 
     #[test]
@@ -752,6 +827,7 @@ mod tests {
                     )]),
                     diagnostics: Vec::new(),
                 }),
+                ..EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
             },
         )
         .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
@@ -794,6 +870,7 @@ mod tests {
                     )]),
                     diagnostics: Vec::new(),
                 }),
+                ..EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
             },
         )
         .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry));

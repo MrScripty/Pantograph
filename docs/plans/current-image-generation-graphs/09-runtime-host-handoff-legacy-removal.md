@@ -1530,6 +1530,12 @@ Next implementation sequence:
    embedded-runtime composition. Async Pumas/runtime source owners refresh the
    snapshot before dispatch, while the synchronous workflow-service provider
    reads only validated fresh, path-free facts.
+   Completed 2026-05-30: `pantograph-embedded-runtime` now has
+   `EmbeddedRuntimeDispatchSourceFactSnapshotStore`, which refreshes Pumas
+   package facts and runtime capability facts through their source owners,
+   versions the snapshot, validates freshness/model-ref/path-free constraints,
+   and returns typed lifecycle diagnostics instead of exposing stale or
+   mismatched source facts to the synchronous dispatch provider.
 8. Bridge guardrail: the option 1 snapshot must use the same validated
    dispatch source-fact shape that the later option 3
    readiness/admission-attached snapshot will persist. Missing, stale,

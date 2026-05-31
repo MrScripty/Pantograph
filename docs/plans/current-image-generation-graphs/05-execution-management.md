@@ -19252,6 +19252,46 @@ Worker rules:
     4. After the complete inference path works, add the option 3
        readiness/admission-attached persisted snapshot and drift/freshness
        diagnostics before durable replay/recovery semantics.
+- 2026-05-30 dispatch source-fact snapshot bridge slice:
+  - Smallest useful slice: add the embedded-runtime versioned dispatch
+    source-fact snapshot lifecycle and validation around the existing staged
+    Pumas package-facts and runtime capability sources, without wiring
+    production candidate emission.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_dispatch_source_snapshot.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `09-runtime-host-handoff-legacy-removal.md`, and this execution log.
+  - Implementation: added
+    `EmbeddedRuntimeDispatchSourceFactSnapshotStore`, a composition-owned
+    versioned snapshot bridge that refreshes Pumas package facts through
+    `PumasDispatchPackageFactsSource`, refreshes runtime capability facts
+    through `RuntimeDispatchCapabilityFactsSource`, validates model-ref,
+    contract-version, and freshness constraints, and strips source facts from
+    stale or mismatched snapshots before the synchronous provider can read
+    them.
+  - Provider integration: moved the provider's staged source snapshot type to
+    the new lifecycle module and projected snapshot lifecycle diagnostics into
+    scheduler no-candidate or invalid-candidate diagnostics. The provider
+    remains synchronous and still emits no candidates when required resource
+    facts or valid source snapshots are unavailable.
+  - No-fallback/no-legacy result: the slice adds no static production
+    snapshot, no provider-private cache contract, no selector-summary
+    promotion, no graph path or reduced-plan evidence, no `ModelRefV2`, no
+    inferred runtime/device values, and no production candidate wiring.
+    Missing, stale, mismatched, or path-carrying snapshots fail closed with
+    typed diagnostics.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_source_snapshot --lib`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: wire resource-backed provider construction to read
+    the validated snapshot plus runtime-registry resource source through the
+    paired composition dependency bundle, then add the canonical embedded
+    runtime-host execution port needed for a complete inference path.
 
 ### Traceability Links
 
