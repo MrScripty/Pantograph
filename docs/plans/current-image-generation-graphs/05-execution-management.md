@@ -20425,6 +20425,37 @@ Worker rules:
     node-engine`; and `rg -n
     "audio_nodes|execute_audio_generation|ensure_audio_worker_initialised|generate_audio_from_text|stable_audio.py|Invalid stable_audio source|AudioGeneration: loading|Audio generation failed"
     crates/node-engine/src` returning no hits.
+- 2026-05-31 legacy dependency/model-ref cleanup sequencing re-plan:
+  - Decision: use the two-step hybrid transition. The next source slice must
+    first make remaining production dependency-preflight, path-repair,
+    `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`, and
+    `build_model_ref_v2` surfaces diagnostic-only if they can still be
+    reached. Then implement canonical workflow/session task-result coverage
+    through scheduler task state and runtime-host responses. Delete the old
+    resolver/model-ref/preflight contracts only after that canonical path is
+    verified.
+  - Standards alignment: this follows the simplicity/complection rule by
+    separating diagnostics, scheduler state transitions, runtime side effects,
+    persistence, and transport instead of tying them together in a temporary
+    compatibility adapter. Scheduler remains the state-machine owner,
+    runtime-host remains the executable load-target/execution boundary,
+    workflow-service remains the task-result/materialization owner, and
+    Tauri/frontend remain transport/display layers.
+  - No-fallback/no-legacy result: the transition may keep diagnostic-only code
+    temporarily, but it must not build executable `ModelDependencyRequest`
+    payloads, emit `ModelRefV2`, repair `model_path`, feed runtime-host
+    dispatch, or adapt canonical readiness/handoff facts back into legacy
+    shapes.
+  - Next implementation slice: add focused guardrail tests and code proving
+    still-reachable old dependency/model-ref surfaces fail closed before
+    successful execution. Do not start broad deletion or runtime-host
+    task-result wiring until that guardrail is green.
+  - Verification for this plan update: reviewed
+    `Coding-Standards/CODING-STANDARDS.md` simplicity/complection, layered
+    architecture, backend-owned data, service independence, composition-root,
+    and single-state-owner guidance; reviewed `PLAN-STANDARDS.md` re-plan and
+    worktree hygiene guidance; updated this execution note and Milestone 5b
+    sequencing.
 
 ### Traceability Links
 

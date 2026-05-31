@@ -54,6 +54,26 @@ readiness proof, or inference-interface descriptor contracts, stop and re-plan
 a shared contract extension instead of creating a `ModelRefV2` or path-shaped
 adapter.
 
+Selected legacy dependency/model-ref cleanup sequencing re-plan as of
+2026-05-31: use the two-step hybrid transition with canonical
+scheduler/runtime-host task-result coverage as the target architecture. The
+next source slice must first make every remaining production
+`ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
+`build_model_ref_v2`, dependency-preflight, and path-repair surface
+diagnostic-only if it can still be reached before deletion. That slice must
+prove those surfaces cannot launch inference, cannot produce executable launch
+inputs, cannot feed runtime-host dispatch, and cannot adapt canonical
+readiness/handoff facts back into legacy request or model-ref shapes. After
+that guardrail, implement workflow/session task-result coverage that dispatches
+runtime work from scheduler task state through the runtime-host port and
+records typed responses. Only after canonical task-result/runtime-host response
+coverage is verified may production resolver/model-ref composition, old
+dependency-preflight output, path-shaped fixtures, and legacy helper contracts
+be deleted. This sequencing follows the standards' simplicity/complection rule:
+diagnostics, lifecycle/state transition, runtime side effects, transport, and
+persistence remain independently owned and do not become a temporary fallback
+adapter.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -322,20 +342,32 @@ adapter.
   behavior. This includes PyTorch, llama.cpp, audio, and any node-engine
   inference/dependency path that can still launch from `model_path`,
   `ModelRefV2`, reduced execution-plan projections, or path repair helpers.
+  Next required guardrail slice: make any still-reachable
+  dependency-preflight/model-ref/path-repair surface diagnostic-only before it
+  can build `ModelDependencyRequest`, emit `ModelRefV2`, repair `model_path`,
+  or hand executable inputs to runtime-host dispatch. This guardrail must be
+  verified before broader deletion or scheduler/runtime-host task-result
+  integration continues.
 - [ ] Remove production embedded-runtime composition of
-  `ModelDependencyResolver` and `ModelRefV2`-producing paths after canonical
-  runtime-host response coverage exists. Retained commands/probes must be
-  explicitly classified as non-execution or diagnostic-only and must not
-  produce executable launch inputs.
+  `ModelDependencyResolver` and `ModelRefV2`-producing paths after the
+  diagnostic-only guardrail and canonical runtime-host task-result response
+  coverage exist. Retained commands/probes must be explicitly classified as
+  non-execution or diagnostic-only and must not produce executable launch
+  inputs.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
   repair old inputs. Any old dependency/preflight command reached before its
   replacement must be diagnostic-only and must not successfully produce
   `ModelDependencyRequest`, `ModelRefV2`, path-shaped dependency payloads, or
-  executable launch inputs.
+  executable launch inputs. The immediate transition step is not a new
+  readiness adapter; it is a fail-closed diagnostic guardrail that prevents the
+  old output shape from being used while canonical task-result coverage is
+  completed.
 - [ ] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
-  paths after runtime host load-target resolution is wired.
+  paths after runtime host load-target resolution, diagnostic-only legacy
+  guardrails, and scheduler task-result/runtime-host response coverage are
+  wired.
 - [ ] Remove retired node-engine contracts and helpers:
   `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
   `build_model_ref_v2`, `PlannedInferenceExecutionHost`, path repair helpers,
