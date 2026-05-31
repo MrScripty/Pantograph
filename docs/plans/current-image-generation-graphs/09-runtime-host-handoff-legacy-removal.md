@@ -1519,9 +1519,17 @@ Next implementation sequence:
    returned reservation, and emit validated scheduler candidate bundles.
    The default fail-closed provider path remains in place when no resource
    facts source is injected.
-6. Next: wire resource-backed provider construction into the embedded runtime
-   composition boundary that owns the runtime registry and runtime-host ports.
-7. Follow-on: add a device-source slice so unconstrained tasks receive
+6. Re-plan trigger recorded 2026-05-30: wiring resource-backed provider
+   construction into production composition requires deciding who owns the live
+   Pumas package facts and runtime capability facts at scheduler-dispatch time.
+   `WorkflowRuntimeDispatchCandidateProvider` is synchronous, but Pumas package
+   fact collection currently depends on async selector access. Do not wire a
+   test-only static source snapshot into production composition.
+7. Next after re-plan: wire resource-backed provider construction into the
+   embedded runtime composition boundary that owns the runtime registry,
+   runtime-host port, reservation lifecycle port, and the selected source-fact
+   ownership model.
+8. Follow-on: add a device-source slice so unconstrained tasks receive
    selected device candidates from runtime capability facts instead of provider
    guesses.
 

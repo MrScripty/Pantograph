@@ -19177,6 +19177,48 @@ Worker rules:
     candidates until runtime capability facts expose selected device
     candidates. Provider guesses remain forbidden.
 
+- 2026-05-30 production provider wiring re-plan trigger
+  - Finding: the next planned integration slice cannot be implemented safely as
+    a thin code change because production `EmbeddedWorkflowService`
+    composition does not yet own a live, standards-compliant source of Pumas
+    package facts and runtime capability facts at scheduler-dispatch time.
+  - Architectural conflict: `WorkflowRuntimeDispatchCandidateProvider` is a
+    synchronous workflow-service boundary, while `PumasDispatchPackageFactsSource`
+    currently collects through async selector access. Wiring a static
+    test-style source snapshot into production composition would preserve a
+    stale/fallback path and would not support real workflow dispatch.
+  - Additional integration gap: production runtime-host execution remains
+    behind the workflow-service `RuntimeHostExecutionPort`; the existing
+    embedded-runtime composition tests only use rejecting ports. Complete
+    inference runs require a canonical embedded runtime-host port in addition
+    to candidate source-fact ownership.
+  - Standards impact: the next design must keep source fact ownership explicit,
+    avoid hidden async work behind a sync trait, avoid cached mutable facts
+    without freshness/version ownership, and continue returning typed
+    diagnostics instead of falling back to graph paths, reduced execution
+    plans, or provider-invented device/runtime values.
+  - Options to resolve before implementation:
+    1. Add an explicit, versioned dispatch source-fact snapshot cache owned by
+       embedded-runtime composition; async producers refresh Pumas/runtime
+       facts ahead of scheduler dispatch, and the sync provider reads only the
+       validated snapshot.
+    2. Change `WorkflowRuntimeDispatchCandidateProvider` to an async trait so
+       production providers can collect Pumas/runtime facts at dispatch time.
+       This has a larger workflow-service blast radius and must preserve
+       non-blocking editor validation.
+    3. Move source-fact snapshot production into readiness/admission output so
+       the scheduler provider consumes facts already attached to the ready task
+       proof. This needs persistence/freshness/version rules to avoid
+       complecting dependency readiness with runtime selection policy.
+    4. Keep the provider unit-level path only and defer production wiring. This
+       is not enough for complete inference-run testing and should only be a
+       temporary stop.
+  - Recommendation pending user decision: prefer option 1 if the goal is the
+    smallest standards-compliant production bridge, because it keeps the
+    scheduler provider synchronous, makes freshness/version ownership explicit,
+    and avoids widening workflow-service orchestration before complete
+    inference-run testing.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module
