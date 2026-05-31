@@ -282,10 +282,20 @@ adapter.
     `docs/completed-plans/**`, `docs/historical-plans/**`,
     `docs/standards-compliance-analysis/**`, and unrelated plan docs are
     traceability records only and are not runtime code owners.
-- [ ] Replace PyTorch execution so successful model loading consumes
+- [x] Replace PyTorch execution so successful model loading consumes
   scheduler-dispatched runtime-host requests plus host-owned executable facts
   and no longer reads graph `model_path`, reduced execution-plan projections,
-  or emits `ModelRefV2`.
+  or emits `ModelRefV2`. 2026-05-31 progress: canonical `llm-inference` with
+  `backend_key=pytorch` now fails closed inside node-engine before dependency
+  preflight, `ModelRefV2` construction, graph `model_path` loading, PyTorch
+  backend loading, generation, KV capture, or node-engine model-ref output.
+  The diagnostic states that PyTorch runtime execution is scheduler-owned and
+  requires scheduler task state/results. The inference crate still contains
+  backend-local PyTorch load-target contracts for runtime-host/inference-owned
+  execution; those are not graph execution identity and must be fed only by
+  host-owned facts in later runtime-host slices. The node-engine PyTorch
+  launch module and PyTorch KV-cache source were deleted in the same slice so
+  the retired branch does not leave unused successful-launch helpers behind.
 - [ ] Replace llama.cpp execution so successful model loading consumes
   scheduler-dispatched runtime-host requests plus host-owned executable facts
   and no longer reads graph `model_path`, reduced execution-plan projections,

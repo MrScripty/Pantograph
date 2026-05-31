@@ -2370,7 +2370,7 @@ async fn test_unload_model_rejects_ollama_model_ref_without_network() {
 
 #[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
 #[tokio::test]
-async fn test_canonical_llm_pytorch_backend_key_dispatches_to_dependency_preflight() {
+async fn test_canonical_llm_pytorch_backend_key_fails_closed_before_dependency_preflight() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -2390,10 +2390,12 @@ async fn test_canonical_llm_pytorch_backend_key_dispatches_to_dependency_preflig
     let err = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect_err("canonical PyTorch inference should require dependency preflight");
+        .expect_err("canonical PyTorch inference should require scheduler task state");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("dependency resolver is not configured"));
+            assert!(message.contains("PyTorch runtime execution is scheduler-owned"));
+            assert!(message.contains("requires scheduler task state/results"));
+            assert!(message.contains("node-engine PyTorch launch is retired"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2740,109 +2742,6 @@ fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
         context.resolved_artifact_kind.as_deref(),
         Some("hf_compatible_directory")
     );
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_accepts_empty_settings() {
-    let settings = HashMap::new();
-    assert_eq!(
-        pytorch_typed_generation_settings(&settings).expect("empty settings should be accepted"),
-        PyTorchTypedGenerationSettings::default()
-    );
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_accepts_single_top_k() {
-    let mut settings = HashMap::new();
-    settings.insert("top_k".to_string(), serde_json::json!(40));
-    assert_eq!(
-        pytorch_typed_generation_settings(&settings)
-            .expect("top_k should be accepted")
-            .top_k,
-        Some(40)
-    );
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_accepts_sampling_controls() {
-    let mut settings = HashMap::new();
-    settings.insert("top_p".to_string(), serde_json::json!(0.9));
-    settings.insert("temperature".to_string(), serde_json::json!(0.25));
-    let parsed =
-        pytorch_typed_generation_settings(&settings).expect("sampling controls should be accepted");
-    assert_eq!(
-        parsed,
-        PyTorchTypedGenerationSettings {
-            max_tokens: None,
-            temperature: Some(0.25),
-            top_p: Some(0.9),
-            top_k: None,
-        }
-    );
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_accepts_length_aliases() {
-    let mut settings = HashMap::new();
-    settings.insert("max_new_tokens".to_string(), serde_json::json!(128));
-    settings.insert("max_tokens".to_string(), serde_json::json!(128));
-    assert_eq!(
-        pytorch_typed_generation_settings(&settings)
-            .expect("matching length aliases should be accepted")
-            .max_tokens,
-        Some(128)
-    );
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_rejects_invalid_top_p() {
-    let mut settings = HashMap::new();
-    settings.insert("top_p".to_string(), serde_json::json!("high"));
-    let error =
-        pytorch_typed_generation_settings(&settings).expect_err("invalid top_p should be rejected");
-    match error {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("PyTorch top_p must be numeric"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_rejects_conflicting_length_aliases() {
-    let mut settings = HashMap::new();
-    settings.insert("max_new_tokens".to_string(), serde_json::json!(128));
-    settings.insert("max_tokens".to_string(), serde_json::json!(64));
-    let error = pytorch_typed_generation_settings(&settings)
-        .expect_err("conflicting length aliases should be rejected");
-    match error {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("max_new_tokens and max_tokens settings conflict"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
-}
-
-#[cfg(feature = "pytorch-nodes")]
-#[test]
-fn test_pytorch_typed_generation_settings_rejects_custom_kwargs() {
-    let mut settings = HashMap::new();
-    settings.insert("top_k".to_string(), serde_json::json!(40));
-    settings.insert("block_length".to_string(), serde_json::json!(32));
-    let error =
-        pytorch_typed_generation_settings(&settings).expect_err("custom kwargs should be rejected");
-    match error {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("Unsupported PyTorch generation setting 'block_length'"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
 }
 
 #[cfg(feature = "pytorch-nodes")]

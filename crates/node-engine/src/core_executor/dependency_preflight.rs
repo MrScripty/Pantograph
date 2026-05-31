@@ -161,7 +161,7 @@ pub(crate) async fn enforce_dependency_preflight(
     enforce_dependency_preflight_inner(node_type, inputs, extensions, None).await
 }
 
-#[cfg(any(feature = "pytorch-nodes", test))]
+#[cfg(all(test, feature = "inference-nodes"))]
 pub(crate) async fn enforce_dependency_preflight_with_lifecycle(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,

@@ -44,8 +44,6 @@ mod llamacpp_nodes;
 mod model_nodes;
 mod processing_nodes;
 mod pure_nodes;
-#[cfg(feature = "pytorch-nodes")]
-mod pytorch_nodes;
 #[cfg(feature = "inference-nodes")]
 mod retrieval_nodes;
 mod settings;
@@ -65,8 +63,6 @@ pub(crate) use llamacpp_nodes::*;
 pub(crate) use model_nodes::*;
 pub(crate) use processing_nodes::*;
 pub(crate) use pure_nodes::*;
-#[cfg(feature = "pytorch-nodes")]
-pub(crate) use pytorch_nodes::*;
 #[cfg(feature = "inference-nodes")]
 pub(crate) use retrieval_nodes::*;
 pub(crate) use settings::*;
@@ -355,28 +351,15 @@ impl TaskExecutor for CoreTaskExecutor {
                     _ if preferred_backend.as_deref() == Some("pytorch") => {
                         #[cfg(feature = "pytorch-nodes")]
                         {
-                            let preflight_context = dependency_preflight_lifecycle_context(
+                            let _preflight_context = dependency_preflight_lifecycle_context(
                                 &canonical_inputs,
                                 task_id,
                                 exec_id,
                                 preferred_backend.as_deref(),
                             );
-                            let resolved_model_ref = enforce_dependency_preflight_with_lifecycle(
-                                "llm-inference",
-                                &canonical_inputs,
-                                extensions,
-                                Some(&preflight_context),
-                            )
-                            .await?;
-                            execute_pytorch_inference(
-                                &canonical_inputs,
-                                task_id,
-                                self.event_sink.as_ref(),
-                                exec_id,
-                                resolved_model_ref,
-                                extensions,
-                            )
-                            .await
+                            Err(NodeEngineError::ExecutionFailed(format!(
+                                "PyTorch runtime execution is scheduler-owned and requires scheduler task state/results; node-engine PyTorch launch is retired for workflow run '{exec_id}', node '{task_id}'"
+                            )))
                         }
                         #[cfg(not(feature = "pytorch-nodes"))]
                         {

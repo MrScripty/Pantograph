@@ -20323,6 +20323,42 @@ Worker rules:
     top-level `frontend` and `tests` paths and returned an OS-error status;
     it was discarded and replaced with the successful existing-path searches
     above.
+- 2026-05-31 node-engine PyTorch execution fail-closed slice:
+  - Smallest useful slice: retire the remaining node-engine successful PyTorch
+    launch branch for canonical `llm-inference` with `backend_key=pytorch`.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/kv_cache.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and these plan
+    files. The finalized slice also deletes retired successful-launch source
+    files `crates/node-engine/src/core_executor/pytorch_nodes.rs` and
+    `crates/node-engine/src/core_executor/kv_cache_pytorch.rs`, and updates
+    `crates/node-engine/src/README.md` plus
+    `crates/node-engine/src/core_executor/README.md` to remove stale module
+    ownership text.
+  - Implementation: the PyTorch backend-key branch now returns a typed
+    scheduler-owned task-state/result diagnostic before dependency preflight,
+    graph `model_path` loading, PyTorch backend load/generation, KV cache
+    output capture, or `ModelRefV2` output construction. The node-engine
+    PyTorch launch module and PyTorch KV-cache source were deleted, and tests
+    for retired node-engine PyTorch generation option parsing were removed
+    with that launch path.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness facts
+    were adapted back into `ModelDependencyRequest`, `ModelRefV2`, or
+    graph-path execution. The old PyTorch node-engine launch path is
+    diagnostic-only until workflow-service scheduler task state/results and
+    runtime-host responses own successful execution.
+  - Focused test updated:
+    `test_canonical_llm_pytorch_backend_key_fails_closed_before_dependency_preflight`
+    now asserts the scheduler-owned fail-closed diagnostic instead of missing
+    resolver behavior.
+  - Verification passed: `cargo fmt --package node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes
+    test_canonical_llm_pytorch_backend_key_fails_closed_before_dependency_preflight
+    -- --nocapture`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; `cargo check -p node-engine`; and `rg -n
+    "pytorch_nodes|kv_cache_pytorch|execute_pytorch_inference|pytorch_typed_generation_settings|PyTorchTypedGenerationSettings|capture_pytorch_output_handle|restore_pytorch_input_handle"
+    crates/node-engine/src` returning no hits.
 
 ### Traceability Links
 

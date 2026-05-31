@@ -84,12 +84,6 @@ fn truncate_option_diagnostics(
 mod llamacpp;
 pub(super) use llamacpp::{capture_llamacpp_output_handle, restore_llamacpp_input_handle};
 
-#[cfg(feature = "pytorch-nodes")]
-#[path = "kv_cache_pytorch.rs"]
-mod pytorch;
-#[cfg(feature = "pytorch-nodes")]
-pub(super) use pytorch::{capture_pytorch_output_handle, restore_pytorch_input_handle};
-
 pub(super) async fn execute_save(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
