@@ -19144,6 +19144,39 @@ Worker rules:
     slice that calls `RuntimeDispatchResourceFactsSource`, passes through every
     returned reservation, and emits validated scheduler candidate bundles.
 
+- 2026-05-30 explicit-device resource-backed provider slice
+  - Smallest useful slice: update `EmbeddedRuntimeDispatchCandidateProvider`
+    so matched Pumas/runtime capability drafts can call
+    `RuntimeDispatchResourceFactsSource`, reserve runtime-registry resources,
+    and emit validated workflow-service candidate fact bundles with the full
+    reservation vector.
+  - Allowed files touched: embedded-runtime dispatch candidate provider,
+    runtime dispatch resource facts source derive metadata, and this plan.
+  - No-fallback/no-legacy result: the provider emits candidates only when
+    Pumas package facts, runtime capability facts, a schedulable task intent,
+    dependency environment ref, explicit requested device, and
+    runtime-registry reservation facts are available. Missing selected-device
+    facts return typed `IncompatibleDeviceRequirement` diagnostics; missing
+    resource claims or registry admission failures return resource-fit
+    diagnostics and no candidate.
+  - Tests added/updated: provider tests for successful explicit-device
+    resource-backed candidate emission with RAM and VRAM reservations, and
+    no-candidate diagnostics when selected-device facts are absent.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_resource_facts --lib`,
+    and `cargo check -p pantograph-embedded-runtime`.
+  - Known unrelated warning: `pantograph-workflow-service` still reports the
+    pre-existing unused `set_active_run_execution_plan` method.
+  - Discovered integration follow-up: production `EmbeddedWorkflowService`
+    construction still uses the fail-closed provider unless runtime dispatch
+    dependencies inject a `RuntimeDispatchResourceFactsSource`. The next slice
+    must wire resource-backed provider construction at the embedded-runtime
+    composition boundary that owns the runtime registry and runtime-host ports.
+  - Remaining device constraint: unconstrained tasks still do not emit
+    candidates until runtime capability facts expose selected device
+    candidates. Provider guesses remain forbidden.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

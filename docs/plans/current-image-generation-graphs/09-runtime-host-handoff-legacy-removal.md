@@ -1513,11 +1513,15 @@ Next implementation sequence:
 4. Completed 2026-05-30: update workflow-service tests and scheduler/runtime
    host fixtures that build candidate facts, scheduler candidates, or selected
    dispatch decisions.
-5. Next: update
+5. Completed 2026-05-30 for explicit-device tasks: update
    `EmbeddedRuntimeDispatchCandidateProvider` to call
    `RuntimeDispatchResourceFactsSource` for matched drafts, pass through every
    returned reservation, and emit validated scheduler candidate bundles.
-6. Follow-on: add a device-source slice so unconstrained tasks receive
+   The default fail-closed provider path remains in place when no resource
+   facts source is injected.
+6. Next: wire resource-backed provider construction into the embedded runtime
+   composition boundary that owns the runtime registry and runtime-host ports.
+7. Follow-on: add a device-source slice so unconstrained tasks receive
    selected device candidates from runtime capability facts instead of provider
    guesses.
 

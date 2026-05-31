@@ -9,7 +9,7 @@ use pantograph_scheduler::{
     SchedulerResourceKind, SchedulerResourceReservation, SchedulerTaskId, SchedulerWorkflowRunId,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct RuntimeDispatchResourceFactsSource {
     registry: SharedRuntimeRegistry,
 }

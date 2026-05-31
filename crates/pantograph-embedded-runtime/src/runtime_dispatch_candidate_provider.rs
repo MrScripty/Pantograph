@@ -3,14 +3,18 @@ use std::collections::BTreeSet;
 use pantograph_dependency_planning::{
     DependencyReadinessProofEnvelope, PumasModelRef, RuntimeIntentId,
 };
+use pantograph_runtime_registry::{
+    RuntimeReservationRequirements, RuntimeReservationResourceClaim, RuntimeRetentionHint,
+};
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerDispatchSelectionDiagnostic,
     SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionDiagnosticSeverity,
-    SchedulerTaskStateRecord,
+    SchedulerEstimateHintKind, SchedulerTaskStateRecord,
 };
 use pantograph_workflow_service::workflow::{
-    WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
-    WorkflowRuntimeDispatchCandidateSet,
+    ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
+    WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
+    WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
 };
 use pantograph_workflow_service::WorkflowSchedulerTask;
 
@@ -22,6 +26,10 @@ use crate::runtime_dispatch_capability_facts::{
     RuntimeDispatchCapabilityFactsDiagnostic, RuntimeDispatchCapabilityFactsOutcome,
     RuntimeDispatchCapabilityFactsProjection, RuntimeDispatchRuntimeCapabilityFacts,
 };
+use crate::runtime_dispatch_resource_facts::{
+    RuntimeDispatchResourceFactsDiagnostic, RuntimeDispatchResourceFactsOutcome,
+    RuntimeDispatchResourceFactsRequest, RuntimeDispatchResourceFactsSource,
+};
 
 const MISSING_PUMAS_PACKAGE_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_pumas_package_facts";
@@ -29,6 +37,10 @@ const MISSING_RUNTIME_CAPABILITY_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_capability_facts";
 const MISSING_RUNTIME_RESOURCE_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_resource_facts";
+const MISSING_DEPENDENCY_ENVIRONMENT_REF_HINT: &str =
+    "embedded_runtime_dispatch_candidate_provider.missing_dependency_environment_ref";
+const MISSING_SELECTED_DEVICE_FACTS_HINT: &str =
+    "embedded_runtime_dispatch_candidate_provider.missing_selected_device_facts";
 const PATH_CARRYING_MODEL_REF_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.path_carrying_model_ref";
 const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
@@ -43,6 +55,7 @@ pub(crate) struct EmbeddedRuntimeDispatchCandidateSourceSnapshot {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
     source_snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
+    resource_facts_source: Option<RuntimeDispatchResourceFactsSource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,18 +76,38 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
     pub(crate) fn with_source_snapshot(
         source_snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     ) -> Self {
-        Self { source_snapshot }
+        Self {
+            source_snapshot,
+            resource_facts_source: None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_resource_facts_source(
+        mut self,
+        resource_facts_source: RuntimeDispatchResourceFactsSource,
+    ) -> Self {
+        self.resource_facts_source = Some(resource_facts_source);
+        self
     }
 }
 
 impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandidateProvider {
     fn runtime_dispatch_candidates(
         &self,
-        _task: &WorkflowSchedulerTask,
+        task: &WorkflowSchedulerTask,
         _ready_record: &SchedulerTaskStateRecord,
         readiness_proof: &DependencyReadinessProofEnvelope,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
+        if let Some(resource_facts_source) = &self.resource_facts_source {
+            return resource_backed_candidate_set(
+                &self.source_snapshot,
+                resource_facts_source,
+                task,
+                readiness_proof,
+            );
+        }
         Ok(WorkflowRuntimeDispatchCandidateSet {
             candidates: Vec::new(),
             diagnostics: fail_closed_diagnostics(
@@ -83,6 +116,128 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
             ),
         })
     }
+}
+
+fn resource_backed_candidate_set(
+    source_snapshot: &EmbeddedRuntimeDispatchCandidateSourceSnapshot,
+    resource_facts_source: &RuntimeDispatchResourceFactsSource,
+    task: &WorkflowSchedulerTask,
+    readiness_proof: &DependencyReadinessProofEnvelope,
+) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError> {
+    let model_ref = &readiness_proof.preflight_result.identity_key.model_ref;
+    if model_ref.selected_artifact_path.is_some() {
+        return Ok(WorkflowRuntimeDispatchCandidateSet {
+            candidates: Vec::new(),
+            diagnostics: vec![provider_diagnostic(
+                SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+                "runtime dispatch candidate provider rejected a path-carrying Pumas model ref",
+                PATH_CARRYING_MODEL_REF_HINT,
+            )],
+        });
+    }
+
+    let mut diagnostics = Vec::new();
+    diagnostics.extend(pumas_package_diagnostics(
+        source_snapshot.pumas_package_facts.as_ref(),
+    ));
+    diagnostics.extend(runtime_capability_diagnostics(
+        source_snapshot.runtime_capability_facts.as_ref(),
+    ));
+    let (candidate_drafts, draft_diagnostics) = candidate_drafts(source_snapshot);
+    diagnostics.extend(draft_diagnostics);
+
+    let Some(task_intent) = task.schedulable_intent.as_ref() else {
+        diagnostics.push(provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+            "runtime dispatch candidate provider requires a schedulable task intent",
+            MISSING_RUNTIME_RESOURCE_FACTS_HINT,
+        ));
+        return Ok(WorkflowRuntimeDispatchCandidateSet {
+            candidates: Vec::new(),
+            diagnostics,
+        });
+    };
+    let Some(environment_ref) = readiness_proof.preflight_result.environment_ref.clone() else {
+        diagnostics.push(provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+            "runtime dispatch candidate provider requires a dependency environment ref",
+            MISSING_DEPENDENCY_ENVIRONMENT_REF_HINT,
+        ));
+        return Ok(WorkflowRuntimeDispatchCandidateSet {
+            candidates: Vec::new(),
+            diagnostics,
+        });
+    };
+    let Some(selected_device_id) = task_intent.constraints.requested_device_id.clone() else {
+        diagnostics.push(provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
+            "runtime dispatch candidate provider requires an explicit selected device until runtime capability facts expose device candidates",
+            MISSING_SELECTED_DEVICE_FACTS_HINT,
+        ));
+        return Ok(WorkflowRuntimeDispatchCandidateSet {
+            candidates: Vec::new(),
+            diagnostics,
+        });
+    };
+
+    let mut facts = Vec::new();
+    for draft in candidate_drafts {
+        match resource_facts_source.reserve(resource_facts_request(
+            &draft,
+            task_intent,
+            selected_device_id.clone(),
+        )) {
+            RuntimeDispatchResourceFactsOutcome::Reserved {
+                facts: resource_facts,
+                diagnostics: resource_diagnostics,
+            } => {
+                diagnostics.extend(resource_source_diagnostics(
+                    &draft.candidate_id,
+                    &resource_diagnostics,
+                ));
+                facts.push(WorkflowRuntimeDispatchCandidateFact {
+                    candidate_id: draft.candidate_id,
+                    selected_runtime_id: draft.selected_runtime_id,
+                    selected_runtime_variant_id: None,
+                    selected_device_ids: vec![selected_device_id.clone()],
+                    selected_model_ref: draft.selected_model_ref,
+                    runtime_trait_settings: task_intent.trait_settings.clone(),
+                    environment_ref: environment_ref.clone(),
+                    reservations: resource_facts.reservations,
+                    resource_fit_assessment: resource_facts.fit_assessment,
+                    batching_group_id: None,
+                });
+            }
+            RuntimeDispatchResourceFactsOutcome::Unavailable {
+                diagnostics: resource_diagnostics,
+                ..
+            } => diagnostics.extend(resource_source_diagnostics(
+                &draft.candidate_id,
+                &resource_diagnostics,
+            )),
+        }
+    }
+
+    if facts.is_empty() && diagnostics.is_empty() {
+        diagnostics.push(provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
+            "runtime dispatch candidate provider produced no resource-backed candidates",
+            MISSING_RUNTIME_RESOURCE_FACTS_HINT,
+        ));
+    }
+
+    let bundle =
+        ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+            WorkflowRuntimeDispatchCandidateFactBundle {
+                contract_version: pantograph_workflow_service::workflow::WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+                facts,
+                diagnostics,
+            },
+        )
+        .map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+            message: format!("runtime dispatch candidate facts failed validation: {error}"),
+        })?;
+    Ok(WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle))
 }
 
 fn fail_closed_diagnostics(
@@ -325,6 +480,71 @@ fn runtime_candidate_draft(
     }
 }
 
+fn resource_facts_request(
+    draft: &EmbeddedRuntimeDispatchCandidateDraft,
+    task_intent: &pantograph_scheduler::SchedulableTaskIntent,
+    selected_device_id: pantograph_dependency_planning::DeviceIntentId,
+) -> RuntimeDispatchResourceFactsRequest {
+    RuntimeDispatchResourceFactsRequest {
+        runtime_id: draft.selected_runtime_id.clone(),
+        selected_device_id,
+        workflow_id: task_intent.workflow_id.as_str().to_string(),
+        workflow_run_id: task_intent.workflow_run_id.clone(),
+        task_id: task_intent.task_id.clone(),
+        reservation_owner_id: format!(
+            "{}:{}",
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str()
+        ),
+        model_id: Some(draft.selected_model_ref.model_id.clone()),
+        usage_profile: Some(task_intent.task_type.as_str().to_string()),
+        requirements: reservation_requirements_from_estimate_hints(task_intent),
+        retention_hint: RuntimeRetentionHint::Ephemeral,
+    }
+}
+
+fn reservation_requirements_from_estimate_hints(
+    task_intent: &pantograph_scheduler::SchedulableTaskIntent,
+) -> RuntimeReservationRequirements {
+    let mut peak_ram_bytes = None;
+    let mut peak_vram_bytes = None;
+    for hint in &task_intent.estimate_hints {
+        match hint.kind {
+            SchedulerEstimateHintKind::PeakRamBytes => {
+                peak_ram_bytes = Some(peak_ram_bytes.unwrap_or(0).max(hint.value));
+            }
+            SchedulerEstimateHintKind::PeakVramBytes => {
+                peak_vram_bytes = Some(peak_vram_bytes.unwrap_or(0).max(hint.value));
+            }
+            _ => {}
+        }
+    }
+    let mut claims = Vec::new();
+    if let Some(bytes) = peak_ram_bytes {
+        claims.push(RuntimeReservationResourceClaim::ram_bytes(bytes));
+    }
+    if let Some(bytes) = peak_vram_bytes {
+        claims.push(RuntimeReservationResourceClaim::vram_bytes(bytes));
+    }
+    RuntimeReservationRequirements::from_claims(claims)
+}
+
+fn resource_source_diagnostics(
+    candidate_id: &SchedulerDispatchCandidateId,
+    diagnostics: &[RuntimeDispatchResourceFactsDiagnostic],
+) -> Vec<SchedulerDispatchSelectionDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| SchedulerDispatchSelectionDiagnostic {
+            severity: SchedulerDispatchSelectionDiagnosticSeverity::Error,
+            code: SchedulerDispatchSelectionDiagnosticCode::ResourceFitRejected,
+            message: diagnostic.message.clone(),
+            candidate_id: Some(candidate_id.clone()),
+            hint: Some(MISSING_RUNTIME_RESOURCE_FACTS_HINT.to_string()),
+        })
+        .collect()
+}
+
 fn backend_hint_keys(backend_hints: &inference::BackendHintFacts) -> BTreeSet<String> {
     backend_hints
         .accepted
@@ -365,6 +585,21 @@ fn provider_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
+    use pantograph_runtime_registry::{
+        RuntimeAdmissionBudget, RuntimeAdmissionResourceBudget, RuntimeRegistry, RuntimeTransition,
+    };
+    use pantograph_scheduler::{
+        SchedulableTaskIntent, SchedulerEstimateHint, SchedulerFairnessKey, SchedulerNodeId,
+        SchedulerRuntimeDeviceConstraints, SchedulerTaskId, SchedulerTaskState,
+        SchedulerTaskStateRecord, SchedulerTaskStateTransitionId, SchedulerTraitValue,
+        SchedulerWorkflowId, SchedulerWorkflowRunId, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+    };
+    use pantograph_workflow_service::workflow::WorkflowSchedulerTaskExecutionClass;
+    use serde_json::json;
+
     use super::*;
     use crate::runtime_dispatch_capability_facts::{
         RuntimeDispatchCapabilityFactsProjection, RuntimeDispatchRuntimeCapabilityFacts,
@@ -485,6 +720,99 @@ mod tests {
         );
     }
 
+    #[test]
+    fn provider_emits_resource_backed_candidate_for_explicit_device_task() {
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["diffusers".to_string()])
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                    RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * mib())),
+                    RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * mib())),
+                ])),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime.pytorch.001".to_string()),
+                },
+            )
+            .expect("runtime ready");
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+                pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
+                    facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                    diagnostics: Vec::new(),
+                }),
+                runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
+                    facts: runtime_capability_facts(vec![runtime_capability(
+                        "pytorch",
+                        vec!["diffusers"],
+                    )]),
+                    diagnostics: Vec::new(),
+                }),
+            },
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("resource-backed provider should not fail");
+
+        assert!(candidate_set.diagnostics.is_empty());
+        assert_eq!(candidate_set.candidates.len(), 1);
+        let candidate = &candidate_set.candidates[0];
+        assert_eq!(candidate.selected_runtime_id.as_str(), "pytorch");
+        assert_eq!(candidate.selected_device_ids[0].as_str(), "cuda:0");
+        assert_eq!(candidate.reservations.len(), 2);
+        assert!(candidate.resource_fit_assessment.is_some());
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+    }
+
+    #[test]
+    fn provider_does_not_emit_candidate_without_explicit_device_fact() {
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["diffusers".to_string()]),
+        );
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+                pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
+                    facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                    diagnostics: Vec::new(),
+                }),
+                runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
+                    facts: runtime_capability_facts(vec![runtime_capability(
+                        "pytorch",
+                        vec!["diffusers"],
+                    )]),
+                    diagnostics: Vec::new(),
+                }),
+            },
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry));
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(&workflow_task(None), &ready_record(), &readiness_proof())
+            .expect("missing selected device should be a typed diagnostic");
+
+        assert!(candidate_set.candidates.is_empty());
+        assert!(has_hint(
+            &candidate_set.diagnostics,
+            MISSING_SELECTED_DEVICE_FACTS_HINT
+        ));
+        assert!(candidate_set.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement
+        }));
+    }
+
     fn has_hint(diagnostics: &[SchedulerDispatchSelectionDiagnostic], hint: &str) -> bool {
         diagnostics
             .iter()
@@ -553,5 +881,120 @@ mod tests {
             active_reservation_ids: Vec::new(),
             has_admission_budget: true,
         }
+    }
+
+    fn workflow_task(requested_device_id: Option<&str>) -> WorkflowSchedulerTask {
+        let intent = schedulable_intent(requested_device_id);
+        WorkflowSchedulerTask {
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            node_type: "inference".to_string(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: Some(intent),
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn schedulable_intent(requested_device_id: Option<&str>) -> SchedulableTaskIntent {
+        SchedulableTaskIntent {
+            contract_version: 1,
+            workflow_id: SchedulerWorkflowId::parse("workflow.image").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse("run.image.001")
+                .expect("workflow run id"),
+            node_id: SchedulerNodeId::parse("node.inference").expect("node id"),
+            task_id: SchedulerTaskId::parse("task.inference.001").expect("task id"),
+            fairness_key: Some(SchedulerFairnessKey::parse("user.local").expect("fairness key")),
+            task_type: "image_generation".parse().expect("task type"),
+            model_ref: path_free_model_ref(),
+            constraints: SchedulerRuntimeDeviceConstraints {
+                requested_runtime_id: Some(RuntimeIntentId::parse("pytorch").expect("runtime id")),
+                requested_device_id: requested_device_id
+                    .map(|device_id| device_id.parse().expect("device id")),
+            },
+            trait_settings: vec![pantograph_scheduler::SchedulerTraitSetting {
+                trait_id: "denoiser.scheduler".parse().expect("trait id"),
+                value: SchedulerTraitValue::String("euler".to_string()),
+            }],
+            dependency_override_patches: Vec::new(),
+            estimate_hints: vec![
+                SchedulerEstimateHint {
+                    kind: SchedulerEstimateHintKind::PeakRamBytes,
+                    value: mib(),
+                },
+                SchedulerEstimateHint {
+                    kind: SchedulerEstimateHintKind::PeakVramBytes,
+                    value: 2 * mib(),
+                },
+            ],
+        }
+    }
+
+    fn ready_record() -> SchedulerTaskStateRecord {
+        let intent = schedulable_intent(Some("cuda:0"));
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: intent.workflow_id,
+            workflow_run_id: intent.workflow_run_id,
+            node_id: intent.node_id,
+            task_id: intent.task_id,
+            state: SchedulerTaskState::Ready {
+                execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::Runtime {
+                    task_intent: schedulable_intent(Some("cuda:0")),
+                },
+            },
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse("transition.ready")
+                .expect("transition id"),
+        }
+    }
+
+    fn readiness_proof() -> DependencyReadinessProofEnvelope {
+        serde_json::from_value(json!({
+            "contract_version": 1,
+            "execution_context": {
+                "contract_version": 1,
+                "workflow_id": "workflow.image",
+                "workflow_run_id": "run.image.001",
+                "scheduler_task_id": "task.inference.001",
+                "node_id": "node.inference",
+                "graph_revision": "graph.revision.001",
+                "validation_session_id": "validation.session.001",
+                "validation_snapshot_id": "validation.snapshot.001",
+                "descriptor_fingerprint": "descriptor.image.001",
+                "dependency_requirements_id": "deps.image",
+                "correlation_id": "correlation.image.001"
+            },
+            "preflight_result": {
+                "contract_version": 1,
+                "identity_key": {
+                    "model_ref": {
+                        "model_id": "pumas.model.sdxl",
+                        "revision": "main",
+                        "selected_artifact_id": "diffusers"
+                    },
+                    "task_id": "image_generation"
+                },
+                "readiness_state": "ready",
+                "dependency_requirements_id": "deps.image",
+                "environment_ref": {
+                    "environment_id": "env.image"
+                }
+            },
+            "readiness_proof_id": "readiness.proof.image.001",
+            "readiness_proof_version": 1
+        }))
+        .expect("readiness proof")
+    }
+
+    fn mib() -> u64 {
+        1024 * 1024
     }
 }
