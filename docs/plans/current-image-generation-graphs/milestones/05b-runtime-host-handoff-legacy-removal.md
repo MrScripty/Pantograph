@@ -514,7 +514,29 @@ cleanup.
   resolution, which reads graph node `model_path`/`modelPath` and active
   gateway descriptors by path. Replacing it requires a backend-owned runtime
   session state/readiness contract rather than another node-engine-local
-  deletion.
+  deletion. Decision: implement the option 3 target in two thin stages: first
+  prove embedded-runtime-owned runtime session/load-proof state that lifecycle
+  checks consume instead of graph paths, then promote the stable DTOs into the
+  shared executable contract area. Tauri/frontend may query and display the
+  resulting diagnostics, but must not own lifecycle decisions, infer model
+  identity from `modelPath`, resolve Pumas artifacts, or repair missing backend
+  proofs.
+- [ ] Add backend-owned runtime session/load-proof state in
+  `pantograph-embedded-runtime` keyed by workflow/task identity and populated
+  from canonical inference planning, Pumas artifact/load-target decisions, and
+  runtime-host readiness results.
+- [ ] Rewire embedded-runtime lifecycle checks to consume typed load proofs and
+  fail closed with diagnostics when proofs are stale, missing, backend
+  mismatched, or runtime-not-ready; do not read graph node `model_path`,
+  `modelPath`, selected artifact path, or Pumas entry path as executable
+  authority.
+- [ ] Promote proven lifecycle/load-proof DTOs into the shared executable
+  contract area with validation/normalization for workflow id, task id,
+  backend/runtime identity, model id, artifact/load-target identity, readiness
+  state, diagnostic phase, and stale/missing proof errors.
+- [ ] Delete embedded-runtime workflow-host graph path resolver helpers and
+  update session/edit workflow fixtures to store typed model intent rather than
+  executable paths after the typed lifecycle proof vertical slice passes.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

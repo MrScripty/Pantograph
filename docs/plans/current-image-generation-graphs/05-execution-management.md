@@ -21165,6 +21165,52 @@ Worker rules:
     remaining non-diagnostic path-shaped successful execution reads are in
     embedded-runtime lifecycle helpers and app/embedding configuration, while
     node-engine retained hits are diagnostic or rejection tests.
+- 2026-05-31 Milestone 5b embedded-runtime lifecycle replacement decision:
+  - Decision: proceed to the standards-aligned option 3 target, but validate it
+    in two thin stages. First add backend-owned runtime session/load-proof
+    state in `pantograph-embedded-runtime` so lifecycle checks stop depending
+    on graph-authored `model_path`/`modelPath`; then promote the proven DTOs
+    into the shared executable contract area when producer/consumer semantics
+    are stable.
+  - Stage 1 scope: introduce an embedded-runtime-owned lifecycle state surface
+    keyed by workflow/task identity and populated from canonical inference
+    planning, Pumas artifact/load-target decisions, and runtime-host readiness.
+    Update `ensure_workflow_inference_model_loaded` and
+    `workflow_session_runtime_load_proof` to read that state and fail closed
+    with typed diagnostics when no proof exists. Do not read graph node
+    `model_path`, `modelPath`, selected artifact path, or Pumas entry path as
+    executable authority.
+  - Stage 2 scope: move the stable load-proof/readiness DTOs into the shared
+    executable contract crate/module used by backend producers and consumers.
+    The contract must include validation/normalization for workflow id, task
+    id, backend/runtime identity, model id, artifact/load-target identity,
+    readiness state, diagnostic phase, and stale/missing proof errors.
+  - Tauri/frontend boundary: Tauri remains a transport/composition surface. It
+    may query, relay, and display lifecycle diagnostics, but it must not own
+    runtime lifecycle decisions, infer model identity from `modelPath`, resolve
+    Pumas artifacts, or repair missing backend proofs.
+  - Standards alignment: this follows the simplicity/complection rule by
+    separating graph parsing, lifecycle state, Pumas load-target resolution,
+    gateway readiness, and diagnostics into explicit concerns. It follows the
+    executable-boundary-contract rule because persisted workflow data and
+    runtime session state can drift across versions and must be validated once
+    at the boundary before internal code consumes typed proof values.
+  - Rejected options: immediate deletion without replacement would break
+    runtime lifecycle behavior before the backend proof producer exists; keeping
+    graph path reads as a temporary compatibility shim would violate the
+    no-fallback/no-legacy rule and keep saved graph paths as runtime authority.
+  - Required tests/verification: add boundary invariant tests proving forbidden
+    `model_path`/`modelPath` data cannot satisfy lifecycle readiness; add an
+    embedded-runtime vertical slice showing canonical planning/host readiness
+    produces a load proof consumed by session lifecycle checks; add stale,
+    missing, backend-mismatch, and runtime-not-ready diagnostics; then run
+    focused embedded-runtime lifecycle tests plus `cargo check -p
+    pantograph-embedded-runtime`.
+  - Follow-up after the vertical slice passes: delete
+    `resolve_llamacpp_workflow_model_path`, `resolve_puma_lib_node_model_path`,
+    and `model_path_from_node_data` from embedded workflow host helpers, and
+    update session/edit workflow fixtures to store typed model intent rather
+    than executable paths.
 
 ### Traceability Links
 
