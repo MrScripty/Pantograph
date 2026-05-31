@@ -9,7 +9,7 @@ runtime probes and developer diagnostics.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `pumas_dependency_runtime_probe.rs` | Probe binary for dependency/runtime behavior involving Pumas-backed model assets. |
+| _(none)_ | No helper binaries are currently active. |
 
 ## Problem
 Some runtime dependency behavior is easier to isolate outside the full desktop
@@ -22,8 +22,9 @@ entrypoints.
 - Probe outputs should stay understandable without being treated as public API.
 
 ## Decision
-Keep focused helper binaries here and document each as diagnostic tooling over
-existing backend paths.
+Keep this directory available for focused helper binaries, but do not keep
+diagnostic tools here when they need dependency/runtime business logic. Those
+tools must move to backend-owned crates or be retired.
 
 ## Alternatives Rejected
 - Put probes in ad hoc local scripts only: rejected because checked-in binaries
@@ -53,7 +54,7 @@ probe path.
 
 ## Usage Examples
 ```bash
-cargo run --manifest-path src-tauri/Cargo.toml --bin pumas_dependency_runtime_probe
+cargo check --manifest-path src-tauri/Cargo.toml --bins
 ```
 
 ## API Consumer Contract
@@ -79,3 +80,6 @@ cargo check --manifest-path src-tauri/Cargo.toml --bins
 
 ## Notes
 - Keep probes separate from product command handlers.
+- The retired Pumas dependency runtime probe used legacy
+  `ModelDependencyRequest` flow and was removed instead of being preserved as a
+  Tauri-owned diagnostic path.

@@ -298,11 +298,11 @@ cleanup.
     any future cleanup must move business policy behind backend-owned service
     boundaries rather than connecting these paths to graph execution.
   - Tooling/probe surfaces:
-    `src-tauri/src/bin/pumas_dependency_runtime_probe.rs` still builds
-    `ModelDependencyRequest` directly and uses the embedded-runtime resolver.
-    It must become diagnostic/tooling-only, be moved behind a backend-owned
-    inventory/readiness boundary, or be retired; it must not feed successful
-    workflow execution.
+    2026-05-31 update: `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`
+    was retired instead of preserving a Tauri-owned tool that built
+    `ModelDependencyRequest` directly and used the embedded-runtime resolver.
+    Future dependency/runtime probes must live behind backend-owned diagnostic
+    contracts or dedicated backend test fixtures.
   - Canonical guardrails and negative tests:
     `crates/pantograph-scheduler/**`, `crates/pantograph-runtime-host-contracts/**`,
     `crates/pantograph-dependency-environment-service/**`,
@@ -412,8 +412,9 @@ cleanup.
   that hub and forwards bounded `dependency-activity` transport events only;
   it no longer attaches activity emitters to the resolver or owns resolver
   lifecycle/policy. Remaining follow-up: classify or retire retained resolver
-  commands/probes/tests, including `pumas_dependency_runtime_probe`, and keep
-  any retained surface diagnostic/tooling-only until deletion is possible.
+  commands/tests and keep any retained surface diagnostic/tooling-only until
+  deletion is possible. `pumas_dependency_runtime_probe` was retired as the
+  first probe cleanup slice.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not

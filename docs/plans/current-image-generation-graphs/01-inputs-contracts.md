@@ -43,9 +43,9 @@ throughput decisions.
   `task_kind = image_generation`.
 - The Tiny SD Turbo template already uses the current graph shape and should be
   used as the local reference pattern.
-- `src-tauri/src/bin/pumas_dependency_runtime_probe.rs` still maps diffusion
-  model records to `diffusion-inference`, which conflicts with current
-  standards.
+- 2026-05-31 update: the Tauri-side Pumas dependency runtime probe was retired
+  instead of preserving its legacy `ModelDependencyRequest` and
+  `diffusion-inference` mapping as a diagnostic path.
 - The saved Juggernaut workflow files contain stale Puma model facts. One file
   has only a display-style model name and empty path; the other has a stale raw
   model path outside the current Pumas repository root.
@@ -229,7 +229,6 @@ throughput decisions.
 - `crates/inference`
 - `crates/pantograph-embedded-runtime`
 - `src-tauri/src/workflow`
-- `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`
 - `src/templates/workflows`
 - `.pantograph/workflows`
 - `src/components/workbench/IoInspectorPage.svelte`

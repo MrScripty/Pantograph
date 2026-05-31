@@ -3195,10 +3195,9 @@ defining an image-only inference-node interface.
       by runtime-host dispatch and Pumas artifact resolution, not graph
       authoring. They must not be deleted as part of frontend/node registry
       cleanup.
-    - Tooling/probe decision required: `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`
-      still uses `ModelDependencyRequest`; decide whether to retire the probe,
-      move it behind a non-workflow diagnostic boundary, or rewrite it to the
-      canonical dependency action/descriptor contracts.
+    - 2026-05-31 update: the Tauri-side Pumas dependency runtime probe was
+      retired in Milestone 5b because it still used `ModelDependencyRequest`
+      and placed dependency/runtime business logic in the Tauri crate.
   - Options before implementation continues:
     1. Delete `expand-settings` first as a narrow registry slice, update the
        registry inventory count/tests, and remove its frontend-owned dynamic

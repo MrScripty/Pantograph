@@ -20652,11 +20652,36 @@ Worker rules:
     crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`
     returning no hits. `cargo check` still reports pre-existing dead-code
     warnings in `pantograph-workflow-service` and Tauri workflow modules.
-  - Remaining follow-up: classify or retire retained resolver
-    commands/probes/tests, including `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`,
+  - Remaining follow-up: classify or retire retained resolver commands/tests
     and keep any retained surface diagnostic/tooling-only until deletion is
     possible after canonical scheduler/runtime-host task-result response
-    coverage.
+    coverage. The Tauri-side Pumas dependency runtime probe is handled by the
+    next slice.
+- 2026-05-31 Tauri probe retirement slice:
+  - Smallest useful slice: retire the Tauri-side Pumas dependency runtime
+    probe instead of preserving its legacy `ModelDependencyRequest` behavior as
+    a diagnostic path.
+  - Allowed files touched: `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`,
+    `src-tauri/src/bin/README.md`, and current plan files that still tracked
+    the probe as an active decision.
+  - Implementation: deleted the probe binary and updated Tauri helper-binary
+    documentation to state that no helper binaries are currently active and
+    that future dependency/runtime probes must move behind backend-owned
+    diagnostic contracts or dedicated backend test fixtures.
+  - No-fallback/no-legacy result: the retired probe can no longer construct
+    `ModelDependencyRequest`, call `TauriModelDependencyResolver`, map
+    diffusion records to retired `diffusion-inference`, or place
+    dependency/runtime business logic in the Tauri crate.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+    `cargo check -p pantograph --bins`; `rg -n
+    "pumas_dependency_runtime_probe" src-tauri/src src-tauri/Cargo.toml`
+    returning no hits; and `git diff --check`. `cargo check` still reports
+    pre-existing dead-code warnings in `pantograph-workflow-service` and Tauri
+    workflow modules.
+  - Remaining follow-up: classify or retire retained resolver commands/tests
+    and delete `TauriModelDependencyResolver`/`ModelRefV2`-producing modules
+    once canonical scheduler/runtime-host task-result response coverage allows
+    broad resolver deletion.
 
 ### Traceability Links
 
