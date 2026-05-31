@@ -150,7 +150,12 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   add the runtime-host full Pumas package-facts source, carry explicit selected
   backend facts through dispatch instead of long-term runtime-id recognition,
   extend runtime-host inputs for typed float image options when exposed, and
-  implement path-free media artifact output projection.
+  implement path-free media artifact output projection. 2026-05-31 update: the
+  runtime-host full Pumas package-facts source guardrail is now complete in
+  `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`; it
+  resolves only from the scheduler-selected model ref and fails closed for
+  missing dispatch decisions, Pumas lookup errors, decode failures, stale
+  package-facts contracts, and selected-artifact mismatches.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
@@ -1080,3 +1085,21 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   follow-up: wire the owner-approved full Pumas package-facts source, explicit
   selected backend facts, typed float input options, path-free media output
   projection, and the gateway call behind the runtime-host port.
+- 2026-05-31 runtime-host Pumas package-facts resolver slice completed.
+  Smallest useful vertical slice: add host-only package-facts resolution from
+  validated runtime-host requests while keeping successful execution unwired.
+  Allowed write set: embedded-runtime package-facts resolver module, module
+  index, README, this milestone, runtime-host handoff plan, and
+  execution-management ledger. No-fallback/no-legacy result: package facts are
+  resolved only through owner Pumas API using the scheduler-selected model ref;
+  the resolver does not read graph paths, reduced execution plans, `ModelRefV2`,
+  node-engine preflight output, planned-inference hosts, Tauri state, selector
+  summaries, or display metadata. Verification passed: `cargo fmt
+  --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`; `cargo test
+  -p pantograph-embedded-runtime runtime_host_package_facts -- --nocapture`.
+  Verification caveat: the focused test command still reports the known
+  workflow-service `set_active_run_execution_plan` warning. Remaining
+  follow-up: compose package facts, load-target resolution, and image planning
+  projection inside `EmbeddedRuntimeHostExecutionPort`; add path-free media
+  artifact output projection; plan explicit selected-backend and typed float
+  input contracts.

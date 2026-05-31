@@ -19905,6 +19905,38 @@ Worker rules:
     yet represent float image options such as `guidance_scale` or `strength`;
     result projection must write or reference media artifacts and return only
     path-free runtime-host outputs.
+- 2026-05-31 runtime-host Pumas package-facts resolver slice:
+  - Smallest useful slice: add the host-only package-facts resolver needed by
+    runtime-host image execution while still leaving gateway execution unwired.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: added `RuntimeHostPumasPackageFactsResolver`, which reads
+    the scheduler-selected model ref from a validated runtime-host request,
+    calls owner Pumas package-facts resolution, decodes Pumas facts into the
+    inference contract, strips Pumas-only model-ref contract-version fields,
+    rejects stale package-facts contracts, and rejects selected-artifact
+    mismatches.
+  - No-fallback/no-legacy result: the resolver does not read graph paths,
+    reduced execution plans, `ModelRefV2`, node-engine preflight output,
+    planned-inference hosts, Tauri state, selector summaries, or display
+    metadata. Missing dispatch decisions, decode failures, stale facts, Pumas
+    lookup errors, and artifact mismatches return typed errors.
+  - Focused tests added: selected model ref is taken from scheduler dispatch,
+    Pumas package facts decode into the inference contract after stripping
+    Pumas-only model-ref contract versions, stale contracts fail closed, and
+    selected-artifact mismatches fail closed.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml`; `cargo test -p
+    pantograph-embedded-runtime runtime_host_package_facts -- --nocapture`.
+    The test command still reports the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up before successful execution: compose the package-facts
+    resolver with load-target resolution and the image projection in
+    `EmbeddedRuntimeHostExecutionPort`, add path-free media artifact output
+    projection, and plan the longer-term explicit selected-backend dispatch
+    field plus typed float input values.
 
 ### Traceability Links
 

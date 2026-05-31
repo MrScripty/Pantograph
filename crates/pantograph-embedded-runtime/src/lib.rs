@@ -78,6 +78,8 @@ mod runtime_host_execution_port;
 #[allow(dead_code)]
 mod runtime_host_image_execution;
 mod runtime_host_load_target;
+#[allow(dead_code)]
+mod runtime_host_package_facts;
 pub mod runtime_recovery;
 pub mod runtime_registry;
 mod runtime_registry_controller;

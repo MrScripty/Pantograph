@@ -1864,6 +1864,19 @@ dispatch, extend the runtime-host input contract for typed float image options
 when those ports are exposed, and implement path-free media artifact result
 projection.
 
+Completed 2026-05-31 for the full Pumas package-facts source guardrail:
+embedded-runtime now has `runtime_host_package_facts.rs`, which resolves full
+Pumas package facts only from the scheduler-selected model ref in a validated
+runtime-host request. It decodes Pumas facts into the inference contract,
+strips Pumas-only model-ref contract-version fields, and fails closed for
+missing dispatch decisions, Pumas lookup errors, decode failures, stale
+package-facts contracts, and selected-artifact mismatches. This removes the
+package-facts source blocker for the next runtime-host composition slice, but
+does not wire a successful gateway call. Remaining before execution: compose
+package facts plus load target plus image projection in the runtime-host port,
+add path-free media artifact output projection, and plan durable selected
+backend and float input contracts.
+
 Standards alignment: this decision follows the simplicity/complection rule by
 separating validation and runtime side effects, transport mapping and domain
 execution, lifecycle ownership and request handling, and diagnostics policy and
