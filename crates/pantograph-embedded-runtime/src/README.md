@@ -200,11 +200,11 @@ Pumas-specific dependency resolution.
   through Pumas only when a canonical `model_id`/model ref is present. Display
   names such as `modelName` are not a lookup contract and must not trigger
   full-library scans.
-- Dependency preflight may ask Pumas to resolve a path into a canonical model
-  ref, but it must not scan the full library and hydrate every execution
-  descriptor to guess a model from path-only workflow data.
-- Keep dependency preflight deterministic because it can block workflow
-  execution before node runtime starts.
+- Retired dependency preflight must remain diagnostic-only for runtime
+  execution paths. It must not ask Pumas or the legacy dependency resolver to
+  create executable request/model-ref shapes, and it must fail before Python
+  runtime adapter dispatch until scheduler task-result/runtime-host response
+  coverage replaces that path.
 - App-global runtime residency, admission, retention, and eviction policy must
   stay outside this crate even though it exposes Pantograph-specific runtime
   capabilities.
@@ -222,13 +222,14 @@ Keep this crate as the application/infrastructure integration layer for
 Pantograph-owned runtime behavior. `model_dependencies.rs` is responsible for
 mapping workflow dependency requests onto Pumas contracts, and it should prefer
 `ModelExecutionDescriptor` when a request can resolve a model id. The crate
-preserves the existing workflow-facing `model_path`, `model_type`, and
-`task_type_primary` facades while the exported dependency DTOs are being
-replaced by Pumas model references. `puma-lib` task execution is no longer a
-model-path producer, and embedded-runtime dependency preflight no longer uses
-`model_path` as successful request identity: both emit or consume
-`pumas_model_ref` plus bounded planning facts and leave executable
-path/load-target resolution to the scheduler-owned dependency planning path.
+keeps remaining path-shaped dependency DTO helpers only as transitional
+cleanup/test targets while they are replaced by scheduler task results and
+runtime-host responses. `puma-lib` task execution is no longer a model-path
+producer, and embedded-runtime dependency preflight no longer has a successful
+runtime-launch branch: it fails closed before legacy resolver lookup,
+`ModelDependencyRequest`, `ModelRefV2`, path repair, or Python adapter
+dispatch. Executable path/load-target resolution belongs to the
+scheduler-owned runtime-host path.
 Lower-level descriptor helpers still contain the remaining path-shaped DTO
 fields until the typed request/result contract replacement removes them.
 Python package checks, binding installation, install stream
@@ -274,14 +275,15 @@ requests from scheduler-selected model/artifact identity and maps missing,
 stale, invalid, or unavailable Pumas states into typed host diagnostics instead
 of falling back to graph paths.
 Dependency-environment preflight ignores legacy `runtime_hint` as a backend
-preference input, and canonical Python-backed execution no longer derives
+preference input, and retired Python-backed runtime execution no longer derives
 backend selection from explicit `backend_key` fields, Pumas package hints,
-dependency requirements, or node-type defaults. The explicit
-`dependency-environment` node may still pass an authored backend key for
-diagnostic/tooling workflows, but backend requirements must arrive through
+dependency requirements, node-type defaults, or resolved model refs. The
+explicit `dependency-environment` node may still pass an authored backend key
+for diagnostic/tooling workflows, but backend requirements must arrive through
 typed scheduler/admission decisions before they can influence canonical
-inference execution. Python runtime adapter dispatch strips legacy backend-key
-inputs and records runtime identity from the resolved model ref or node family.
+inference execution. Python runtime adapter dispatch is not a successful
+runtime graph launch path until scheduler/runtime-host task-result ownership is
+wired.
 Embedded host llama.cpp model-path detection follows the same rule and does
 not accept `runtime_hint` as evidence that an inference node targets llama.cpp.
 Embedding workflow helpers also detect non-embedding llama.cpp inference nodes

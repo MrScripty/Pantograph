@@ -20493,6 +20493,53 @@ Worker rules:
     embedded-runtime task-executor dependency preflight and production resolver
     composition before scheduler/runtime-host task-result integration or broad
     deletion.
+- 2026-05-31 embedded-runtime task-executor dependency-preflight
+  diagnostic-only guardrail:
+  - Smallest useful slice: make embedded-runtime Python-backed runtime
+    dependency preflight diagnostic-only before it can produce legacy runtime
+    execution payloads.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_preflight.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_fail_closed.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/README.md`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/README.md`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: `enforce_dependency_preflight` still returns `Ok(None)`
+    for node types outside embedded-runtime Python runtime handling and still
+    blocks non-ready `environment_ref` values through the existing gate
+    diagnostic. All still-reachable Python runtime preflight paths now fail
+    closed with bounded diagnostics before resolver lookup,
+    `ModelDependencyRequest` construction, `ModelRefV2` emission, path repair,
+    or Python adapter dispatch. Retired request-projection helpers are marked
+    as transitional cleanup-only helpers so production checks stay clean until
+    the deletion slice removes them.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness facts
+    are adapted back into old dependency request or model-ref shapes, and a
+    ready `environment_ref` no longer preserves Python adapter launch as an
+    alternate successful branch.
+  - Focused tests updated: dependency-preflight, dependency-fail-closed, and
+    recorder/stream tests now assert diagnostic-only failure, retained
+    environment-ref gate behavior, zero resolver calls, zero Python adapter
+    requests, no runtime recorder snapshots, and no stream events.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime dependency_preflight -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime dependency_fail_closed --
+    --nocapture`; `cargo test -p pantograph-embedded-runtime
+    task_executor::tests -- --nocapture`; `cargo check -p
+    pantograph-embedded-runtime`; and `rg -n
+    "get::<Arc<dyn ModelDependencyResolver|resolve_model_dependency_requirements|check_dependencies|resolve_model_ref|build_model_dependency_request\\("
+    crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`
+    returning no hits. `cargo check` still reports the pre-existing
+    workflow-service `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: production embedded-runtime resolver composition,
+    model-dependency commands/probes, and `ModelRefV2` helper tests remain
+    classified replacement targets. Do not delete them until canonical
+    scheduler/runtime-host task-result response coverage is complete or a
+    focused diagnostic/tooling-only slice isolates them.
 
 ### Traceability Links
 

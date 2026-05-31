@@ -356,6 +356,16 @@ adapter.
   guardrail work: apply the same diagnostic-only rule to embedded-runtime
   task-executor dependency preflight and production resolver composition before
   scheduler/runtime-host task-result integration or broad deletion.
+  2026-05-31 progress: embedded-runtime task-executor dependency preflight is
+  now diagnostic-only for Python-backed runtime nodes. It still skips node
+  types that are not handled by the host Python runtime and still blocks
+  non-ready `environment_ref` values with the existing gate diagnostic, but
+  every still-reachable Python runtime preflight path now fails closed before
+  `ModelDependencyResolver` lookup, `ModelDependencyRequest` construction,
+  `ModelRefV2` emission, path repair, or Python adapter dispatch. Remaining
+  guardrail work: production resolver composition and any retained commands/
+  probes must be made diagnostic/tooling-only or removed after canonical
+  scheduler/runtime-host task-result coverage is wired.
 - [ ] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths after the
   diagnostic-only guardrail and canonical runtime-host task-result response

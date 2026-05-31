@@ -11,8 +11,8 @@ hold execution families that need host resources.
 
 | File | Description |
 | ---- | ----------- |
-| `dependency_environment.rs` | Dependency preflight gates for Python-backed runtime nodes and model-ref resolution. |
-| `dependency_environment/` | Helper modules for dependency preflight input projection and stable runtime environment keys. |
+| `dependency_environment.rs` | Diagnostic-only dependency preflight guardrail for retired Python-backed runtime node execution. |
+| `dependency_environment/` | Transitional dependency-preflight input projection helpers retained for cleanup tests plus stable runtime environment key helpers. |
 | `puma_lib.rs` | Puma-Lib selected-model lookup through explicit selector-access roles, model-reference projection, display metadata normalization, and fail-closed removal of graph-authored executable paths/settings. |
 | `python_execution.rs` | Python runtime input normalization, runtime instance metadata, adapter invocation, failure health recording, and stream replay. |
 | `rag_search.rs` | RAG search execution against the host-provided RAG backend. |
@@ -31,7 +31,8 @@ changes to one execution family without touching the rest.
 - Core node fallthrough behavior stays in the parent `TaskExecutor`
   implementation.
 - Dependency preflight remains backend-owned and must not move into Tauri or
-  frontend code.
+  frontend code. Retired runtime preflight paths are diagnostic-only until
+  scheduler task-result/runtime-host response coverage replaces them.
 - Python runtime execution continues through the adapter boundary and remains
   out-of-process.
 
@@ -61,16 +62,17 @@ same behavior without exposing helper paths outside this module boundary.
 - Dependency environment actions are not executable tasks in embedded-runtime.
   Workflow-service owns action intent validation and calls the dependency
   environment service with canonical dependency-planning DTOs.
-- Dependency preflight request construction may carry Pumas model/task
-  evidence, but canonical Python-backed execution must not derive executable
-  backend selection from explicit `backend_key` fields, package hints,
-  dependency requirements, or node-type defaults. Runtime selection for
-  canonical inference belongs to the scheduler/admission path.
+- Embedded-runtime dependency preflight must fail closed before
+  `ModelDependencyResolver` lookup, `ModelDependencyRequest` construction,
+  `ModelRefV2` emission, or Python adapter dispatch for retired runtime
+  execution. Runtime selection for canonical inference belongs to the
+  scheduler/admission path.
 - Python runtime execution strips legacy backend-key inputs before adapter
-  dispatch and derives lifecycle runtime identity from the resolved model ref
-  or node family, not graph-authored backend hints.
+  dispatch and derives lifecycle runtime identity from scheduler/runtime-host
+  task state after that path is wired, not graph-authored backend hints.
 - Python execution helpers may normalize runtime inputs and record health facts,
-  but dependency gating must remain in dependency preflight helpers.
+  but they must not recreate dependency readiness, model-ref, or executable
+  path ownership.
 - Puma-Lib helpers prepare model-reference and display metadata outputs and
   must not own dependency installation decisions or inference option defaults.
 - Puma-Lib selected `model_id` refresh must use `PUMAS_SELECTOR_ACCESS`.

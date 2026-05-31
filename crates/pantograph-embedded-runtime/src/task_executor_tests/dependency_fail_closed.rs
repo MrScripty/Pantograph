@@ -52,12 +52,8 @@ async fn python_nodes_block_when_no_dependency_bindings_are_available() {
         response: HashMap::new(),
     });
 
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Unresolved, Some("no_dependency_bindings")),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let resolver = Arc::new(CountingDependencyResolver::new());
+    let (executor, extensions) = test_executor(adapter, resolver.clone());
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -78,10 +74,12 @@ async fn python_nodes_block_when_no_dependency_bindings_are_available() {
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Dependency preflight blocked execution"));
-            assert!(message.contains("no_dependency_bindings"));
+            assert!(message.contains("dependency_preflight_retired"));
+            assert!(message.contains("diagnostic-only"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
+    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
@@ -93,12 +91,8 @@ async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
         response: HashMap::new(),
     });
 
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_missing_binding_status("requirements_missing"),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let resolver = Arc::new(CountingDependencyResolver::new());
+    let (executor, extensions) = test_executor(adapter, resolver.clone());
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -119,9 +113,11 @@ async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Dependency preflight blocked execution"));
-            assert!(message.contains("requirements_missing"));
+            assert!(message.contains("dependency_preflight_retired"));
+            assert!(message.contains("ModelDependencyResolver"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
+    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }

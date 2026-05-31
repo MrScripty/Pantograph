@@ -7,12 +7,8 @@ async fn onnx_nodes_block_when_dependency_preflight_is_not_ready() {
         requests: requests.clone(),
         response: HashMap::new(),
     });
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::InvalidProfile),
-        status: make_status(DependencyState::Invalid, Some("invalid_profile")),
-        model_ref: None,
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let resolver = Arc::new(CountingDependencyResolver::new());
+    let (executor, extensions) = test_executor(adapter, resolver.clone());
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -25,20 +21,26 @@ async fn onnx_nodes_block_when_dependency_preflight_is_not_ready() {
     let err = executor
         .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
         .await
-        .expect_err("preflight should block non-ready dependency state");
+        .expect_err("preflight should block retired embedded-runtime path");
 
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Dependency preflight blocked execution"));
-            assert!(message.contains("invalid_profile"));
+            assert!(message.contains("dependency_preflight_retired"));
+            assert!(message.contains("diagnostic-only"));
+            assert!(message.contains("ModelDependencyResolver"));
+            assert!(message.contains("ModelDependencyRequest"));
+            assert!(message.contains("ModelRefV2"));
+            assert!(message.contains("python_runtime_adapter"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
+    assert_eq!(resolver.call_count(), 0);
     assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
 #[tokio::test]
-async fn onnx_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
+async fn onnx_nodes_fail_closed_before_resolved_model_ref_preflight() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let mut adapter_response = HashMap::new();
     adapter_response.insert("response".to_string(), serde_json::json!("ok"));
@@ -47,35 +49,8 @@ async fn onnx_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
         response: adapter_response,
     });
 
-    let resolved_model_ref = ModelRefV2 {
-        contract_version: 2,
-        engine: "onnx-runtime".to_string(),
-        model_id: "model-a".to_string(),
-        model_path: "/tmp/model-ready".to_string(),
-        task_type_primary: "text-to-audio".to_string(),
-        dependency_bindings: vec![ModelDependencyBinding {
-            binding_id: "binding-a".to_string(),
-            profile_id: "profile-a".to_string(),
-            profile_version: 1,
-            profile_hash: Some("hash".to_string()),
-            backend_key: Some("onnx-runtime".to_string()),
-            platform_selector: Some("linux-x86_64".to_string()),
-            environment_kind: Some("python".to_string()),
-            env_id: Some("venv:test".to_string()),
-            python_executable_override: None,
-            validation_state: DependencyValidationState::Resolved,
-            validation_errors: Vec::new(),
-            requirements: Vec::new(),
-        }],
-        dependency_requirements_id: Some("requirements-test".to_string()),
-    };
-
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        status: make_status(DependencyState::Ready, None),
-        model_ref: Some(resolved_model_ref),
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let resolver = Arc::new(CountingDependencyResolver::new());
+    let (executor, extensions) = test_executor(adapter, resolver.clone());
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -85,22 +60,24 @@ async fn onnx_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
     inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
-    let outputs = executor
+    let error = executor
         .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
         .await
-        .expect("ready preflight should allow adapter execution");
-    assert_eq!(outputs.get("response"), Some(&serde_json::json!("ok")));
+        .expect_err("retired preflight must fail before model_ref resolution");
 
-    let recorded = requests.lock().expect("recording lock");
-    assert_eq!(recorded.len(), 1);
-    let request = &recorded[0];
-    assert_eq!(request.node_type, "onnx-inference");
-    assert_eq!(request.env_ids, vec!["venv:test".to_string()]);
-    assert!(request.inputs.contains_key("model_ref"));
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency_preflight_retired"));
+            assert!(message.contains("pumas://models/model-ready"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert_eq!(resolver.call_count(), 0);
+    assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
 #[tokio::test]
-async fn onnx_nodes_route_through_python_adapter_with_preflight() {
+async fn onnx_nodes_with_ready_environment_ref_fail_closed_before_adapter() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let mut adapter_response = HashMap::new();
     adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
@@ -109,38 +86,8 @@ async fn onnx_nodes_route_through_python_adapter_with_preflight() {
         response: adapter_response,
     });
 
-    let resolved_model_ref = ModelRefV2 {
-        contract_version: 2,
-        engine: "onnx-runtime".to_string(),
-        model_id: "kitten-tts".to_string(),
-        model_path: "/tmp/model.onnx".to_string(),
-        task_type_primary: "text-to-audio".to_string(),
-        dependency_bindings: vec![ModelDependencyBinding {
-            binding_id: "binding-onnx".to_string(),
-            profile_id: "profile-onnx".to_string(),
-            profile_version: 1,
-            profile_hash: Some("hash".to_string()),
-            backend_key: Some("onnx-runtime".to_string()),
-            platform_selector: Some("linux-x86_64".to_string()),
-            environment_kind: Some("python".to_string()),
-            env_id: Some("venv:onnx".to_string()),
-            python_executable_override: None,
-            validation_state: DependencyValidationState::Resolved,
-            validation_errors: Vec::new(),
-            requirements: Vec::new(),
-        }],
-        dependency_requirements_id: Some("requirements-onnx".to_string()),
-    };
-
-    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-        requirements: ModelDependencyRequirements {
-            backend_key: Some("onnx-runtime".to_string()),
-            ..make_requirements(DependencyValidationState::Resolved)
-        },
-        status: make_status(DependencyState::Ready, None),
-        model_ref: Some(resolved_model_ref),
-    });
-    let (executor, extensions) = test_executor(adapter, resolver);
+    let resolver = Arc::new(CountingDependencyResolver::new());
+    let (executor, extensions) = test_executor(adapter, resolver.clone());
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -148,20 +95,27 @@ async fn onnx_nodes_route_through_python_adapter_with_preflight() {
         serde_json::json!({"model_id": "pumas://models/model-onnx"}),
     );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
-
-    let outputs = executor
-        .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
-        .await
-        .expect("onnx preflight should allow adapter execution");
-    assert_eq!(
-        outputs.get("audio"),
-        Some(&serde_json::json!("base64-audio"))
+    inputs.insert(
+        "environment_ref".to_string(),
+        serde_json::json!({
+            "state": "ready",
+            "env_id": "venv:onnx"
+        }),
     );
 
-    let recorded = requests.lock().expect("recording lock");
-    assert_eq!(recorded.len(), 1);
-    let request = &recorded[0];
-    assert_eq!(request.node_type, "onnx-inference");
-    assert_eq!(request.env_ids, vec!["venv:onnx".to_string()]);
-    assert!(request.inputs.contains_key("model_ref"));
+    let error = executor
+        .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
+        .await
+        .expect_err("ready environment_ref must not preserve legacy adapter launch");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency_preflight_retired"));
+            assert!(message.contains("\"environment_ref_gate\":true"));
+            assert!(message.contains("pumas://models/model-onnx"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert_eq!(resolver.call_count(), 0);
+    assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }

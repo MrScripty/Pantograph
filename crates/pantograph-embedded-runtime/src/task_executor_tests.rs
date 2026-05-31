@@ -1,9 +1,8 @@
 use super::*;
 use node_engine::{
     extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
-    ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
-    ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
-    ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
+    ModelDependencyInstallResult, ModelDependencyRequest, ModelDependencyRequirements,
+    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
 };
 use std::sync::Mutex;
 
@@ -277,26 +276,6 @@ fn make_status(state: DependencyState, code: Option<&str>) -> ModelDependencySta
         message: code.map(|s| format!("status={}", s)),
         requirements: make_requirements(DependencyValidationState::Resolved),
         bindings: Vec::new(),
-        checked_at: None,
-    }
-}
-
-fn make_missing_binding_status(binding_code: &str) -> ModelDependencyStatus {
-    ModelDependencyStatus {
-        state: DependencyState::Missing,
-        code: None,
-        message: None,
-        requirements: make_requirements(DependencyValidationState::Resolved),
-        bindings: vec![ModelDependencyBindingStatus {
-            binding_id: "binding-a".to_string(),
-            env_id: Some("python-venv:test".to_string()),
-            state: DependencyState::Missing,
-            code: Some(binding_code.to_string()),
-            message: None,
-            missing_requirements: vec!["diffusers".to_string()],
-            installed_requirements: Vec::new(),
-            failed_requirements: Vec::new(),
-        }],
         checked_at: None,
     }
 }

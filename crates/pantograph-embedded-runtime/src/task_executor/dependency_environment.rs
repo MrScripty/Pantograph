@@ -7,7 +7,7 @@ impl TauriTaskExecutor {
         &self,
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
-        extensions: &ExecutorExtensions,
+        _extensions: &ExecutorExtensions,
     ) -> Result<Option<node_engine::ModelRefV2>> {
         if !Self::python_runtime_handles_node(node_type) {
             return Ok(None);
@@ -35,100 +35,42 @@ impl TauriTaskExecutor {
             }
         }
 
-        let Some(resolver) = extensions
-            .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
-        else {
-            if environment_gate_enabled {
-                return Ok(None);
-            }
-            return Err(NodeEngineError::ExecutionFailed(
-                "Dependency preflight blocked execution: dependency resolver is not configured"
-                    .to_string(),
-            ));
-        };
-
-        let request = Self::build_model_dependency_request(node_type, inputs);
-        let request_model_id = match request.model_id.as_deref() {
-            Some(model_id) if !model_id.trim().is_empty() => model_id.to_string(),
-            _ => {
-                return Err(NodeEngineError::ExecutionFailed(
-                    "Missing pumas_model_ref/model_id input. Connect Puma-Lib pumas_model_ref output."
-                        .to_string(),
-                ));
-            }
-        };
-        if environment_gate_enabled {
-            let resolved = resolver
-                .resolve_model_ref(request, None)
-                .await
-                .map_err(|e| {
-                    NodeEngineError::ExecutionFailed(format!(
-                        "Dependency preflight failed to resolve model_ref from ready environment_ref: {}",
-                        e
-                    ))
-                })?;
-            if let Some(ref model_ref) = resolved {
-                model_ref
-                    .validate()
-                    .map_err(NodeEngineError::ExecutionFailed)?;
-            }
-            return Ok(resolved);
+        let mut payload = serde_json::json!({
+            "kind": "dependency_preflight_retired",
+            "node_type": node_type,
+            "environment_ref_gate": environment_gate_enabled,
+            "message": "embedded-runtime dependency_preflight is diagnostic-only for retired Python runtime execution paths; runtime execution requires scheduler task state/results and runtime-host readiness",
+            "blocked_before": [
+                "ModelDependencyResolver",
+                "ModelDependencyRequest",
+                "ModelRefV2",
+                "python_runtime_adapter"
+            ],
+        });
+        if let Some(model_id) = Self::dependency_preflight_model_id(inputs) {
+            payload["model_id"] = serde_json::Value::String(model_id);
         }
+        Err(NodeEngineError::ExecutionFailed(format!(
+            "Dependency preflight blocked execution: {}",
+            payload
+        )))
+    }
 
-        let requirements = resolver
-            .resolve_model_dependency_requirements(request.clone())
-            .await
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Dependency preflight requirements resolution failed for '{}': {}",
-                    node_type, e
-                ))
-            })?;
-
-        let status = resolver
-            .check_dependencies(request.clone())
-            .await
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Dependency preflight check failed for '{}': {}",
-                    node_type, e
-                ))
-            })?;
-
-        if status.state != DependencyState::Ready {
-            let payload = serde_json::json!({
-                "kind": "dependency_preflight",
-                "node_type": node_type,
-                "model_id": request_model_id,
-                "validation_state": requirements.validation_state,
-                "validation_errors": requirements.validation_errors,
-                "selected_binding_ids": requirements.selected_binding_ids,
-                "state": status.state,
-                "code": status.code,
-                "bindings": status.bindings,
-                "message": status.message,
-            });
-            return Err(NodeEngineError::ExecutionFailed(format!(
-                "Dependency preflight blocked execution: {}",
-                payload
-            )));
-        }
-
-        let resolved = resolver
-            .resolve_model_ref(request, Some(requirements))
-            .await
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Dependency preflight failed to resolve model_ref: {}",
-                    e
-                ))
-            })?;
-        if let Some(ref model_ref) = resolved {
-            model_ref
-                .validate()
-                .map_err(NodeEngineError::ExecutionFailed)?;
-        }
-
-        Ok(resolved)
+    fn dependency_preflight_model_id(
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Option<String> {
+        Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]).or_else(|| {
+            Self::read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"])
+                .and_then(|model_ref| {
+                    ["model_id", "modelId"].iter().find_map(|key| {
+                        model_ref
+                            .get(*key)
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            .map(ToOwned::to_owned)
+                    })
+                })
+        })
     }
 }

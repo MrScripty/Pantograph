@@ -1,6 +1,7 @@
 use super::*;
 
 impl TauriTaskExecutor {
+    #[allow(dead_code)]
     pub(in crate::task_executor) fn parse_dependency_requirements_input(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Option<node_engine::ModelDependencyRequirements> {
@@ -11,6 +12,7 @@ impl TauriTaskExecutor {
         serde_json::from_value(raw).ok()
     }
 
+    #[allow(dead_code)]
     pub(in crate::task_executor) fn read_input_dependency_override_patches(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Vec<node_engine::DependencyOverridePatchV1> {
@@ -38,6 +40,7 @@ impl TauriTaskExecutor {
             .unwrap_or_default()
     }
 
+    #[allow(dead_code)]
     pub(in crate::task_executor) fn platform_context_from_requirement_key(
         platform_key: &str,
     ) -> Option<serde_json::Value> {
@@ -56,6 +59,7 @@ impl TauriTaskExecutor {
         Some(serde_json::json!({ "os": os, "arch": arch }))
     }
 
+    #[allow(dead_code)]
     pub(in crate::task_executor) fn read_input_selected_binding_ids(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Vec<String> {
@@ -74,6 +78,7 @@ impl TauriTaskExecutor {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub(in crate::task_executor) fn infer_task_type_primary(
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
@@ -104,6 +109,7 @@ impl TauriTaskExecutor {
         }
     }
 
+    #[allow(dead_code)]
     pub(in crate::task_executor) fn build_model_dependency_request(
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
@@ -153,6 +159,7 @@ impl TauriTaskExecutor {
         }
     }
 
+    #[allow(dead_code)]
     fn model_id_from_pumas_model_ref_input(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Option<String> {
@@ -169,6 +176,7 @@ impl TauriTaskExecutor {
             })
     }
 
+    #[allow(dead_code)]
     fn read_resolved_model_package_facts_for_preflight(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Option<inference::ResolvedModelPackageFacts> {
@@ -185,6 +193,7 @@ impl TauriTaskExecutor {
         .and_then(|raw| serde_json::from_value(raw).ok())
     }
 
+    #[allow(dead_code)]
     fn task_type_primary_from_package_facts(
         facts: Option<&inference::ResolvedModelPackageFacts>,
     ) -> Option<String> {
