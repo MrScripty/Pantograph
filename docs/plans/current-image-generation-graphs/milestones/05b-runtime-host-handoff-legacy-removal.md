@@ -465,8 +465,12 @@ cleanup.
   scheduler-selected runtime-host dispatch coverage existed for session
   runtime tasks. 2026-05-31 progress: the node-engine `build_model_ref_v2`
   constructor and its path-shaped unit test were deleted after dependency
-  preflight stopped returning `Option<ModelRefV2>`. Remaining cleanup in this
-  task is the broader `ModelDependencyRequest`/`ModelDependencyResolver`/
+  preflight stopped returning `Option<ModelRefV2>`. 2026-05-31 progress: the
+  node-engine `build_model_dependency_request` constructor and its
+  builder-specific tests were deleted after canonical dependency planning was
+  already owned by `planning_projection.rs` and shared
+  `pantograph-dependency-planning` contracts. Remaining cleanup in this task
+  is the broader `ModelDependencyRequest`/`ModelDependencyResolver`/
   `ModelRefV2` contract, path-repair helper, and fixture removal.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the

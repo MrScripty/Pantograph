@@ -2176,6 +2176,13 @@ model-dependency/model-ref contracts are diagnostic test stubs or pending
 replacement/deletion surfaces; they must not be used as successful runtime
 identity.
 
+Completed 2026-05-31 for node-engine `ModelDependencyRequest` builder
+deletion: the dependency-preflight input projection no longer constructs
+legacy `ModelDependencyRequest` payloads, and the builder-specific tests were
+removed. Canonical dependency planning remains in `planning_projection.rs`
+using shared `pantograph-dependency-planning` contracts; the deleted builder
+must not be restored as a compatibility path.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

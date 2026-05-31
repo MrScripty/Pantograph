@@ -11,7 +11,11 @@ execution path. If old runtime preflight is reached, the guardrail in
 failure and cannot hand a legacy model-ref payload back to callers. The
 remaining helpers are retained temporarily for diagnostic tests and the planned
 legacy-contract deletion slice. The old `build_model_ref_v2` constructor has
-been deleted and must not be recreated as a compatibility bridge.
+been deleted and must not be recreated as a compatibility bridge. The old
+`build_model_dependency_request` constructor has also been deleted; canonical
+dependency planning must use `planning_projection.rs` and shared
+`pantograph-dependency-planning` contracts instead of rebuilding
+`ModelDependencyRequest`.
 
 `input_projection.rs` contains legacy graph-input projection helpers that are
 no longer allowed to feed successful node-engine runtime execution. It does

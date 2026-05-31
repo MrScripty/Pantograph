@@ -11,13 +11,10 @@ use inference::{
     ResolvedModelPackageFacts, TaskRegistryEntry,
 };
 
-use crate::model_dependencies::ModelDependencyBinding;
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use crate::model_dependencies::ModelDependencyRequest;
-
 use super::super::read_optional_input_value;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use super::super::{read_optional_input_string_aliases, read_optional_input_value_aliases};
+use crate::model_dependencies::ModelDependencyBinding;
 
 pub(crate) fn read_input_dependency_bindings(
     inputs: &HashMap<String, serde_json::Value>,
@@ -166,45 +163,6 @@ pub(crate) fn canonical_backend_key(value: Option<&str>) -> Option<String> {
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-pub(crate) fn infer_backend_key(
-    node_type: &str,
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Option<String> {
-    match node_type {
-        "audio-generation" => Some("stable_audio".to_string()),
-        "llm-inference" => {
-            #[cfg(feature = "inference-nodes")]
-            if matches!(
-                canonical_inference_task_id(inputs),
-                Some(InferenceTaskId::Embedding | InferenceTaskId::Rerank)
-            ) {
-                return Some("llamacpp".to_string());
-            }
-            let model_type =
-                read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
-                    .or_else(|| {
-                        inputs.get("pumas_model_ref").and_then(|model_ref| {
-                            read_optional_string_aliases_from_value(
-                                model_ref,
-                                &["model_type", "modelType"],
-                            )
-                        })
-                    })
-                    .unwrap_or_default()
-                    .to_ascii_lowercase();
-            if model_type == "embedding" || model_type == "reranker" {
-                Some("llamacpp".to_string())
-            } else {
-                Some("pytorch".to_string())
-            }
-        }
-        "onnx-inference" => Some("onnx-runtime".to_string()),
-        "embedding" | "reranker" | "llamacpp-inference" | "pytorch-inference" => None,
-        _ => Some("pytorch".to_string()),
-    }
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 pub(crate) fn preferred_backend_key(
     _node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
@@ -217,47 +175,6 @@ pub(crate) fn preferred_backend_key(
     }
 
     None
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-pub(crate) fn build_model_dependency_request(
-    node_type: &str,
-    inputs: &HashMap<String, serde_json::Value>,
-) -> ModelDependencyRequest {
-    let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
-    let backend_key =
-        preferred_backend_key(node_type, inputs).or_else(|| infer_backend_key(node_type, inputs));
-
-    let task_type_primary =
-        read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
-            .filter(|s| !s.trim().is_empty())
-            .or_else(|| task_type_primary_from_package_facts(package_facts.as_ref()))
-            .unwrap_or_else(|| infer_task_type_primary(node_type, inputs));
-
-    ModelDependencyRequest {
-        node_type: node_type.to_string(),
-        model_path: String::new(),
-        model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
-            .or_else(|| model_id_from_pumas_model_ref_input(inputs)),
-        model_type: read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
-        task_type_primary: Some(task_type_primary),
-        backend_key,
-        platform_context: read_optional_input_value_aliases(
-            inputs,
-            &["platform_context", "platformContext"],
-        ),
-        selected_binding_ids: read_input_selected_binding_ids(inputs),
-        dependency_override_patches: Vec::new(),
-    }
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-fn model_id_from_pumas_model_ref_input(
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Option<String> {
-    read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"]).and_then(
-        |model_ref| read_optional_string_aliases_from_value(&model_ref, &["model_id", "modelId"]),
-    )
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -304,20 +221,6 @@ fn model_artifact_kind_label(kind: &ModelArtifactKind) -> &'static str {
         ModelArtifactKind::Shard => "shard",
         ModelArtifactKind::Unknown => "unknown",
     }
-}
-
-#[cfg(feature = "inference-nodes")]
-fn task_type_primary_from_package_facts(
-    facts: Option<&ResolvedModelPackageFacts>,
-) -> Option<String> {
-    facts
-        .and_then(|facts| facts.task.task_type_primary.clone())
-        .filter(|task| !task.trim().is_empty())
-}
-
-#[cfg(not(feature = "inference-nodes"))]
-fn task_type_primary_from_package_facts(_facts: Option<&()>) -> Option<String> {
-    None
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

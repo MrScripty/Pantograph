@@ -3160,51 +3160,6 @@ fn test_canonical_backend_key_normalizes_common_aliases() {
     );
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_uses_canonical_backend_key() {
-    let mut inputs = HashMap::new();
-    inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
-    assert_eq!(request.model_path, "");
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_uses_canonical_llamacpp_hint() {
-    let mut inputs = HashMap::new();
-    inputs.insert("backend_key".to_string(), serde_json::json!("llama.cpp"));
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
-    assert_eq!(
-        request.task_type_primary.as_deref(),
-        Some("text-generation")
-    );
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_ignores_legacy_runtime_hint() {
-    let mut inputs = HashMap::new();
-    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_does_not_infer_retired_backend_node() {
-    let inputs = HashMap::new();
-
-    let request = build_model_dependency_request("llamacpp-inference", &inputs);
-    assert_eq!(request.backend_key, None);
-}
-
 #[cfg(feature = "inference-nodes")]
 #[test]
 fn test_inputs_with_model_path_rejects_resolved_model_source_entry_path() {
@@ -3329,45 +3284,6 @@ fn test_inputs_with_model_path_rejects_unresolved_model_source() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_model_dependency_request_ignores_resolved_model_source_identity() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-
-    assert_eq!(request.model_id, None);
-    assert_eq!(request.model_path, "");
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
-fn test_build_model_dependency_request_uses_package_facts_for_model_and_task_only() {
-    let fixture = include_str!(
-        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
-    );
-    let package_facts: inference::ResolvedModelPackageFacts =
-        serde_json::from_str(fixture).expect("text package facts fixture");
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-    assert_eq!(
-        request.task_type_primary.as_deref(),
-        Some("text_generation")
-    );
-    assert_eq!(request.model_id, None);
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
 fn test_build_dependency_planning_request_uses_typed_pumas_identity() {
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -3479,117 +3395,6 @@ fn test_build_dependency_planning_request_rejects_selected_artifact_path() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_model_dependency_request_ignores_recommended_backend() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "recommended_backend".to_string(),
-        serde_json::json!("llamacpp"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
-fn test_build_model_dependency_request_keeps_explicit_backend_before_package_facts() {
-    let fixture = include_str!(
-        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
-    );
-    let package_facts: inference::ResolvedModelPackageFacts =
-        serde_json::from_str(fixture).expect("text package facts fixture");
-    let mut inputs = HashMap::new();
-    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-    assert_eq!(
-        request.task_type_primary.as_deref(),
-        Some("text_generation")
-    );
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
-fn test_build_model_dependency_request_uses_embedding_package_facts() {
-    let fixture = include_str!(
-        "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
-    );
-    let package_facts: inference::ResolvedModelPackageFacts =
-        serde_json::from_str(fixture).expect("embedding package facts fixture");
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-    assert_eq!(request.task_type_primary.as_deref(), Some("embedding"));
-    assert_eq!(request.model_id, None);
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
-fn test_build_model_dependency_request_uses_rerank_package_facts() {
-    let fixture = include_str!(
-        "../../../inference/tests/fixtures/inference_package_facts/rerank_package_facts.json"
-    );
-    let package_facts: inference::ResolvedModelPackageFacts =
-        serde_json::from_str(fixture).expect("rerank package facts fixture");
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "resolved_model_package_facts".to_string(),
-        serde_json::to_value(&package_facts).expect("package facts json"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-    assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
-    assert_eq!(request.model_id, None);
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_maps_canonical_embedding_task() {
-    let mut inputs = HashMap::new();
-    inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
-    assert_eq!(
-        request.task_type_primary.as_deref(),
-        Some("feature-extraction")
-    );
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_maps_embedding_alias_task() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "task_kind".to_string(),
-        serde_json::json!("sentence-similarity"),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
-    assert_eq!(
-        request.task_type_primary.as_deref(),
-        Some("feature-extraction")
-    );
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
 fn test_canonical_inference_input_kind_uses_task_request_contract() {
     let mut inputs = HashMap::new();
     inputs.insert("task_kind".to_string(), serde_json::json!("text-to-image"));
@@ -3695,38 +3500,6 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
     assert!(events[2].option_diagnostics.is_empty());
     assert!(events[0].artifact_refs.is_empty());
     assert!(events[2].artifact_refs.is_empty());
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_maps_canonical_rerank_task() {
-    let mut inputs = HashMap::new();
-    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
-    assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-#[test]
-fn test_build_model_dependency_request_maps_pumas_rerank_alias_task() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "pumas_model_ref".to_string(),
-        serde_json::json!({
-            "model_id": "pumas://models/tiny-reranker",
-            "pipeline_tag": "text-ranking"
-        }),
-    );
-
-    let request = build_model_dependency_request("llm-inference", &inputs);
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
-    assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
-    assert_eq!(
-        request.model_id.as_deref(),
-        Some("pumas://models/tiny-reranker")
-    );
 }
 
 #[cfg(feature = "inference-nodes")]

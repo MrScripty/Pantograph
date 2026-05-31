@@ -20848,6 +20848,37 @@ Worker rules:
     `build_model_dependency_request`, path-repair helpers, and diagnostic-only
     tests once canonical scheduler task-state/results and runtime-host
     responses cover the final inference path.
+- 2026-05-31 node-engine `ModelDependencyRequest` builder deletion slice:
+  - Smallest useful slice: delete node-engine's legacy
+    `build_model_dependency_request` constructor and builder-specific tests
+    after canonical dependency planning had moved to `planning_projection.rs`
+    and shared `pantograph-dependency-planning` contracts.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/dependency_preflight/input_projection.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight/README.md`,
+    and these plan files.
+  - Implementation: removed the request builder, its private legacy backend/
+    model-id/task projection helpers, and tests that asserted
+    `ModelDependencyRequest` construction behavior. Retained helpers are only
+    those still used by canonical dependency-planning projection or runtime
+    validation.
+  - No-fallback/no-legacy result: node-engine dependency preflight can no
+    longer construct a legacy `ModelDependencyRequest` payload. Canonical
+    planning continues through shared dependency-planning DTOs and no
+    scheduler/runtime-host/readiness facts were adapted back into the retired
+    request shape.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes dependency_preflight
+    -- --nocapture`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; and targeted `rg -n
+    "build_model_dependency_request|infer_backend_key|model_id_from_pumas_model_ref_input|task_type_primary_from_package_facts"
+    crates/node-engine/src -g "*.rs"` returning no source hits.
+  - Remaining follow-up: delete or replace remaining node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contracts,
+    path-repair helpers, and diagnostic-only tests once canonical scheduler
+    task-state/results and runtime-host responses cover the final inference
+    path.
 
 ### Traceability Links
 
