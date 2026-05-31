@@ -22,6 +22,8 @@ use crate::runtime_dispatch_source_snapshot::{
 };
 use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
 use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
+use crate::runtime_host_media_artifact_sink::WorkflowServiceRuntimeHostMediaArtifactSink;
+use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 use crate::SharedExtensions;
 use crate::{
@@ -306,9 +308,15 @@ impl EmbeddedWorkflowServiceComposition {
                 )));
             }
         };
+        let artifact_writer = input.workflow_service.artifact_writer()?;
         let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_load_target_resolver(
-                RuntimeHostPumasLoadTargetResolver::new(pumas_api),
+            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+                Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+                    artifact_writer,
+                )),
+                input.gateway.clone(),
             ));
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             input.runtime_registry.clone(),
@@ -356,9 +364,21 @@ impl EmbeddedWorkflowServiceComposition {
         let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
         let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
         let factory_input = input.factory_input;
+        let artifact_writer =
+            factory_input
+                .workflow_service
+                .artifact_writer()
+                .map_err(|error| EmbeddedRuntimeError::Initialization {
+                    message: error.to_string(),
+                })?;
         let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_load_target_resolver(
-                RuntimeHostPumasLoadTargetResolver::new(pumas_api),
+            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+                Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+                    artifact_writer,
+                )),
+                factory_input.gateway.clone(),
             ));
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             factory_input.runtime_registry.clone(),
@@ -556,6 +576,7 @@ mod tests {
     use pantograph_workflow_service::workflow::{
         WorkflowRuntimeDispatchSourceRefreshError, WorkflowSchedulerTask,
     };
+    use pantograph_workflow_service::{ArtifactPolicy, ArtifactStore};
 
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
@@ -706,12 +727,46 @@ mod tests {
             Some(1),
             1_000,
         )
-        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
 
         let shared = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input)
             .expect("hosted resource-backed workflow service should build");
 
         drop(shared);
+    }
+
+    #[tokio::test]
+    async fn hosted_resource_backed_factory_requires_artifact_writer_before_sharing() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+
+        let error = match EmbeddedWorkflowServiceComposition::resource_backed_hosted(input) {
+            Ok(_) => panic!("missing artifact writer cannot build full runtime-host wiring"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, WorkflowServiceError::Internal(_)));
+        assert!(error
+            .to_string()
+            .contains("artifact store is not configured"));
     }
 
     #[tokio::test]
@@ -774,7 +829,7 @@ mod tests {
             Some(1),
             1_000,
         )
-        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
         let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
             factory_input,
             tokio::runtime::Handle::current(),
@@ -810,7 +865,8 @@ mod tests {
             Arc::new(PumasSelectorAccess::Owner(pumas_api)),
             Some(1),
             1_000,
-        );
+        )
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
         let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
             factory_input,
             tokio::runtime::Handle::current(),
@@ -858,7 +914,7 @@ mod tests {
             Some(1),
             1_000,
         )
-        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
 
         let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input)
             .await
@@ -996,7 +1052,11 @@ mod tests {
             tokio::runtime::Handle::current(),
             Some(0),
             1_000,
-        );
+        )
+        .with_workflow_service(workflow_service_with_store(
+            &temp_dir,
+            WorkflowService::with_capacity_limits(2, 2),
+        ));
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1006,5 +1066,34 @@ mod tests {
 
         assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
         assert!(error.to_string().contains("invalid"));
+    }
+
+    fn workflow_service_with_artifact_store(temp_dir: &tempfile::TempDir) -> WorkflowService {
+        workflow_service_with_store(temp_dir, WorkflowService::with_capacity_limits(2, 2))
+    }
+
+    fn workflow_service_with_store(
+        temp_dir: &tempfile::TempDir,
+        workflow_service: WorkflowService,
+    ) -> WorkflowService {
+        let artifact_store = ArtifactStore::open(
+            temp_dir.path().join("workflow-artifacts"),
+            artifact_policy(),
+        )
+        .expect("open artifact store");
+        workflow_service.with_artifact_store(artifact_store)
+    }
+
+    fn artifact_policy() -> ArtifactPolicy {
+        ArtifactPolicy {
+            policy_id: "workflow-service-composition-test".to_string(),
+            policy_version: 1,
+            ttl_seconds: None,
+            max_disk_bytes: None,
+            max_memory_bytes: None,
+            max_single_artifact_bytes: None,
+            spill_threshold_bytes: None,
+            delete_on_consume: false,
+        }
     }
 }

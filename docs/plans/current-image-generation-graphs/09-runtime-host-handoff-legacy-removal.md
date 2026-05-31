@@ -2047,6 +2047,21 @@ composition, build the runtime-host port with package-facts resolver,
 load-target resolver, inference gateway, and writer-backed sink, and add
 session-level task-result coverage.
 
+Completed 2026-05-31 for hosted production runtime-host composition:
+`EmbeddedWorkflowServiceComposition::resource_backed_hosted` and
+`resource_backed_hosted_bundle` now require a configured
+`WorkflowArtifactWriter` before `WorkflowService` is wrapped in `Arc`, then
+build `EmbeddedRuntimeHostExecutionPort` with the Pumas load-target resolver,
+Pumas package-facts resolver, inference gateway, and writer-backed
+`WorkflowServiceRuntimeHostMediaArtifactSink`. This keeps artifact persistence
+business logic backend-owned, avoids a `WorkflowService` self-reference, and
+keeps Tauri as an app-shell caller. Focused composition tests prove successful
+hosted construction requires explicit artifact-store setup and missing writer
+wiring fails closed with typed diagnostics. Remaining follow-up: add
+session-level coverage that scheduler task execution records completed
+runtime-host image responses through the hosted composition path, then remove
+the remaining planned-inference/node-engine launch branches.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

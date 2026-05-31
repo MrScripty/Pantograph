@@ -171,7 +171,17 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   backend artifact writer handle created before `WorkflowService` is wrapped,
   injected into both workflow-service artifact operations and the runtime-host
   media sink. Tauri must remain an app-shell/composition caller and must not
-  own artifact persistence policy.
+  own artifact persistence policy. 2026-05-31 progress: hosted
+  resource-backed embedded-runtime composition now requires a configured
+  backend artifact writer before sharing `WorkflowService`, injects that
+  writer through `WorkflowServiceRuntimeHostMediaArtifactSink`, and constructs
+  `EmbeddedRuntimeHostExecutionPort` with Pumas load-target resolution, full
+  Pumas package-facts resolution, the inference gateway, and the writer-backed
+  media sink. Partial hosted composition without artifact persistence fails
+  closed with typed initialization diagnostics. Remaining before this task is
+  fully complete: add session-level scheduler task-result coverage for the
+  production runtime-host response path and then remove the remaining
+  node-engine/planned-inference launch paths.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing

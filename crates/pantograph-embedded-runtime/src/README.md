@@ -109,7 +109,7 @@ packages.
 | `workflow_runtime_tests/` | Focused workflow-runtime helper tests for diagnostics snapshot assembly, event projection, metrics/model-target helpers, and registry reconciliation behavior. |
 | `workflow_execution_plan_projection.rs` | Projects workflow-service run execution-plan node decisions, including reduced dependency-readiness proof, into inference `BackendExecutionDecision` contracts at the embedded-runtime composition boundary. |
 | `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
-| `workflow_service_composition.rs` | Owns embedded-runtime workflow-service and hosted startup construction before the service is shared, attaching dependency-readiness components, hosted resource-backed runtime dispatch dependencies, scheduler diagnostics, executor extensions, model dependency resolver wiring, dependency-readiness lifecycle handles, and capacity limits at the composition boundary so runtime dispatch wiring does not require mutable post-share service mutation. |
+| `workflow_service_composition.rs` | Owns embedded-runtime workflow-service and hosted startup construction before the service is shared, attaching dependency-readiness components, hosted resource-backed runtime dispatch dependencies, shared artifact-writer-backed runtime-host media output, scheduler diagnostics, executor extensions, model dependency resolver wiring, dependency-readiness lifecycle handles, and capacity limits at the composition boundary so runtime dispatch wiring does not require mutable post-share service mutation. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,
@@ -162,6 +162,13 @@ Pumas-specific dependency resolution.
   composition keeps those bindings not implemented unless a source is injected.
   Unmapped explicit probe environments publish typed diagnostics instead of
   falling back to graph data, paths, inferred package names, or host Python.
+- Hosted resource-backed workflow-service composition must receive a
+  configured backend artifact writer before the service is wrapped in `Arc`.
+  The runtime-host execution port is composed with Pumas package-facts
+  resolution, Pumas load-target resolution, the inference gateway, and the
+  writer-backed media sink at this boundary. Missing artifact persistence must
+  fail closed with typed initialization diagnostics instead of installing a
+  partial production runtime-host port.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

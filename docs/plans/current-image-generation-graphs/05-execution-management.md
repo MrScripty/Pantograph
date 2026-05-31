@@ -20154,6 +20154,43 @@ Worker rules:
     scheduler-dispatch runtime-host port with package-facts/load-target/
     gateway dependencies, and add session-level completed task-result
     coverage.
+- 2026-05-31 hosted production runtime-host composition slice:
+  - Smallest useful slice: wire hosted resource-backed embedded-runtime
+    workflow-service composition to use the full runtime-host dependency set
+    with the shared backend artifact writer.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: `resource_backed_hosted` and
+    `resource_backed_hosted_bundle` now require
+    `WorkflowService::artifact_writer()` before `WorkflowService` is shared,
+    build `EmbeddedRuntimeHostExecutionPort` with
+    `RuntimeHostPumasLoadTargetResolver`,
+    `RuntimeHostPumasPackageFactsResolver`,
+    `WorkflowServiceRuntimeHostMediaArtifactSink`, and the shared
+    `InferenceGateway`, then install that port into workflow-service runtime
+    dispatch dependencies.
+  - No-fallback/no-legacy result: hosted production composition no longer
+    installs the load-target-only runtime-host port. Missing artifact-store
+    wiring fails closed with typed workflow-service or embedded-runtime
+    initialization diagnostics; no Tauri persistence policy, graph path,
+    `ModelRefV2`, planned-inference branch, reduced-plan handoff synthesis,
+    inline media output, or fake artifact ref was introduced.
+  - Focused tests updated: hosted resource-backed construction and hosted
+    bundle construction now provide explicit artifact-store-backed services,
+    invalid producer config remains validated after writer setup, hosted
+    startup success uses the same writer-backed service, and a new factory
+    test proves missing artifact persistence rejects before sharing.
+  - Verification passed: `cargo fmt --package pantograph-embedded-runtime`;
+    `cargo check -p pantograph-embedded-runtime`; `cargo test -p
+    pantograph-embedded-runtime workflow_service_composition --
+    --nocapture`. These commands still report the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up before production image path completion: add
+    session-level scheduler task-result coverage that exercises the hosted
+    composition path through a completed runtime-host image response, then
+    retire the remaining node-engine/planned-inference successful launch
+    branches.
 
 ### Traceability Links
 
