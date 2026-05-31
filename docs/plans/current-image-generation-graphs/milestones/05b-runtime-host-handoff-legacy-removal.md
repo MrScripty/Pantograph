@@ -91,6 +91,22 @@ simplicity/complection rules by separating runtime execution, backend
 diagnostics/activity lifecycle, app-shell transport, and legacy tooling
 cleanup.
 
+Selected production inference-path sequencing re-plan as of 2026-05-31: use
+option 1 now, then option 2, then option 3. First complete the minimal
+production image inference path through the existing scheduler session runner,
+runtime-host port, embedded image execution, artifact sink, and scheduler task
+result persistence. This slice may assume canonical readiness/load proof facts
+already exist and must fail closed with typed diagnostics when they are missing,
+stale, or invalid. After that path is verified, implement the backend-owned
+dependency-readiness and runtime-load proof producer lifecycles. Durable
+scheduler leases, retry/defer, cancellation, reservation release, replay, and
+recovery remain the next hardening phase before broad production workloads.
+This sequencing follows the standards' simplicity/complection rule by keeping
+runtime execution, producer lifecycle, scheduler lifecycle, persistence,
+diagnostics, and Tauri transport as separate ownership boundaries. Do not use
+this ordering to add graph-path fallback, node-engine planned-inference launch,
+`ModelRefV2`, Tauri-owned business policy, or a temporary compatibility branch.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -236,7 +252,16 @@ cleanup.
   runtime-host composition. Remaining before this task is fully complete: add
   session-level scheduler task-result coverage for the production runtime-host
   response path and then remove the remaining node-engine/planned-inference
-  launch paths.
+  launch paths. 2026-05-31 sequencing update: the next implementation slice
+  must complete the minimal production inference path by proving a scheduler
+  session runner can dispatch through the production-composed runtime-host port,
+  execute embedded image generation, persist generated media through the
+  backend artifact writer, map the completed runtime-host response into
+  `WorkflowSchedulerTaskResult`, and return requested workflow outputs. Missing
+  or stale dependency-readiness/runtime-load proof facts must remain typed
+  fail-closed diagnostics in this slice. The producer lifecycles and durable
+  scheduler lease/retry/cancellation hardening follow after this complete-path
+  proof; they must not be folded into the same implementation slice.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing

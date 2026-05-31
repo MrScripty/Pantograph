@@ -21344,6 +21344,36 @@ Worker rules:
     production runtime-host responses, complete gateway-backed
     image-generation execution, and continue deleting or converting remaining
     legacy node-engine/planned-inference launch surfaces.
+- 2026-05-31 production inference-path sequencing re-plan update:
+  - Decision: use option 1 now, then option 2, then option 3. Complete the
+    minimal production image inference path first; implement production
+    dependency-readiness/runtime-load proof producers second; add durable
+    leases, retry/defer, cancellation, reservation release, replay, and
+    recovery third.
+  - Standards alignment: the sequence keeps runtime execution, producer
+    lifecycle, scheduler lifecycle, persistence, diagnostics, and Tauri
+    transport as separate reasoning axes. It follows the coding standards'
+    simplicity/complection guidance, executable contract guidance, and
+    composition-root ownership rules.
+  - Next implementation slice: use the existing scheduler session runner,
+    dispatch selection, production-composed runtime-host port, embedded image
+    execution, artifact sink, and runtime-host response mapper to persist a
+    completed `WorkflowSchedulerTaskResult` and return requested workflow
+    outputs. The slice may require canonical readiness/load proof facts to
+    already exist, and must fail closed with typed diagnostics when they are
+    missing, stale, or invalid.
+  - Explicitly out of the next slice: dependency-readiness producer loops,
+    runtime-load proof producer loops, durable execution leases, retry/defer,
+    cancellation, replay, recovery, Tauri-owned business logic, graph-path
+    fallback, node-engine planned-inference launch, `ModelRefV2`, and any
+    compatibility branch.
+  - Verification required for the next slice: focused workflow-service session
+    test proving scheduler runtime dispatch persists a completed task result
+    and projects requested outputs; embedded-runtime hosted composition test
+    proving the production-composed runtime-host port completes image execution
+    through the artifact sink; negative tests for missing/stale readiness or
+    load proof diagnostics; `cargo fmt`, crate checks, focused tests, and
+    `git diff --check`.
 
 ### Traceability Links
 

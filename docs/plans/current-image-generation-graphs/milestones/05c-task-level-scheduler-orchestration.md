@@ -305,6 +305,18 @@ durable task orchestration path.
   of hiding it as unused staging code. Remaining runtime follow-ups are still
   production proof producers, complete image-generation runtime-host execution,
   retry/defer/cancellation leases, and stale test cleanup.
+  2026-05-31 sequencing re-plan decision: complete the minimal production
+  inference path before building the full producer and lease lifecycle. The next
+  implementation slice should use the already-composed scheduler session runner,
+  dispatch selection, runtime-host port, embedded image execution, artifact
+  sink, and runtime-host response mapper to persist a completed
+  `WorkflowSchedulerTaskResult` and project requested outputs. It may depend on
+  pre-existing canonical readiness/load proof facts, but missing or invalid
+  facts must remain typed fail-closed diagnostics. Do not combine this with
+  dependency-readiness producer loops, runtime-load proof producer loops,
+  durable execution leases, retry/defer, cancellation, replay, or recovery in
+  the same slice; those follow after the complete path proves the canonical
+  boundaries work.
   2026-05-25 replan decision for production dispatch selection: use option 2
   with option 3 discipline. The next scheduler slice must add a minimal
   scheduler-owned dispatch-selection contract rather than letting
