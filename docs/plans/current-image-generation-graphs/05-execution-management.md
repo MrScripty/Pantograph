@@ -20780,6 +20780,44 @@ Worker rules:
     node-engine `ModelDependencyRequest`/`ModelRefV2` test-only contracts and
     path-repair helpers once their diagnostic-only coverage has been replaced
     by scheduler task-state/results and runtime-host response tests.
+- 2026-05-31 dependency-preflight output narrowing slice:
+  - Smallest useful slice: remove the legacy `Option<ModelRefV2>` return shape
+    from node-engine and embedded-runtime dependency-preflight helpers, and
+    remove the embedded-runtime Python execution branch that could inject a
+    serialized legacy `model_ref` into runtime inputs.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight/README.md`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/python_execution.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/README.md`,
+    and these plan files.
+  - Implementation: changed both dependency-preflight helper APIs to return
+    `Result<()>`; non-preflighted node shapes still succeed as a skip/no-op,
+    while retired runtime preflight paths still fail closed with typed
+    diagnostics before resolver lookup, `ModelDependencyRequest`
+    construction, path repair, runtime-host dispatch, Python adapter dispatch,
+    or `ModelRefV2` output.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness facts
+    were adapted back into `ModelRefV2`, and Python execution can no longer
+    receive a preflight-produced legacy `model_ref` payload. Remaining
+    `ModelRefV2`/resolver hits in this area are diagnostic test stubs and
+    transitional helper contracts pending the explicit deletion slice.
+  - Verification passed: `cargo fmt -p node-engine -p
+    pantograph-embedded-runtime`; `cargo test -p node-engine --features
+    inference-nodes,pytorch-nodes dependency_preflight -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime dependency_preflight --
+    --nocapture`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; `cargo check -p
+    pantograph-embedded-runtime`; `git diff --check`; and targeted `rg` for
+    `Result<Option<.*ModelRefV2`, preflight-produced `model_ref`
+    serialization, and preflight `Option` return shapes.
+  - Remaining follow-up: delete or replace the node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2`
+    contracts, `build_model_ref_v2`, path-repair helpers, and diagnostic-only
+    tests once scheduler task-state/results and runtime-host responses cover
+    the final inference path.
 
 ### Traceability Links
 

@@ -26,7 +26,6 @@ use crate::error::{NodeEngineError, Result};
 use crate::extensions::extension_keys;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::extensions::ExecutorExtensions;
-use crate::model_dependencies::ModelRefV2;
 
 mod input_projection;
 pub(crate) use input_projection::*;
@@ -157,7 +156,7 @@ pub(crate) async fn enforce_dependency_preflight(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
-) -> Result<Option<ModelRefV2>> {
+) -> Result<()> {
     enforce_dependency_preflight_inner(node_type, inputs, extensions, None).await
 }
 
@@ -167,7 +166,7 @@ pub(crate) async fn enforce_dependency_preflight_with_lifecycle(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
-) -> Result<Option<ModelRefV2>> {
+) -> Result<()> {
     enforce_dependency_preflight_inner(node_type, inputs, extensions, lifecycle_context).await
 }
 
@@ -178,12 +177,12 @@ async fn enforce_dependency_preflight_inner(
     extensions: &ExecutorExtensions,
     #[cfg_attr(not(feature = "inference-nodes"), allow(unused_variables))]
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
-) -> Result<Option<ModelRefV2>> {
+) -> Result<()> {
     let llm_backend_key = preferred_backend_key(node_type, inputs);
     let should_preflight = node_type == "audio-generation"
         || (node_type == "llm-inference" && llm_backend_key.as_deref() == Some("pytorch"));
     if !should_preflight {
-        return Ok(None);
+        return Ok(());
     }
 
     let model_suffix = dependency_preflight_diagnostic_model_id(lifecycle_context)

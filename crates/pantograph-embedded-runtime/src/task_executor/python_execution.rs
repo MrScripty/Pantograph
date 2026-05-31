@@ -341,18 +341,8 @@ impl TauriTaskExecutor {
         runtime_inputs.remove("backendKey");
         Self::apply_inference_setting_defaults(&mut runtime_inputs);
         Self::promote_runtime_metadata(&mut runtime_inputs);
-        if let Some(model_ref) = self
-            .enforce_dependency_preflight(node_type, inputs, extensions)
-            .await?
-        {
-            let value = serde_json::to_value(model_ref).map_err(|err| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Failed to serialize resolved model_ref for python runtime adapter: {}",
-                    err
-                ))
-            })?;
-            runtime_inputs.insert("model_ref".to_string(), value);
-        }
+        self.enforce_dependency_preflight(node_type, inputs, extensions)
+            .await?;
 
         let request = PythonNodeExecutionRequest {
             node_type: node_type.to_string(),

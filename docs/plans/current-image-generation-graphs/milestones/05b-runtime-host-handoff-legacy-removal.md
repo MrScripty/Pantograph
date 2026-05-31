@@ -386,7 +386,13 @@ cleanup.
   `ModelRefV2` emission, path repair, or Python adapter dispatch. Remaining
   guardrail work: production resolver composition and any retained commands/
   probes must be made diagnostic/tooling-only or removed after canonical
-  scheduler/runtime-host task-result coverage is wired.
+  scheduler/runtime-host task-result coverage is wired. 2026-05-31 progress:
+  node-engine and embedded-runtime dependency-preflight helper APIs no longer
+  return `Option<ModelRefV2>`, and embedded-runtime Python execution no longer
+  has a branch that can inject a resolved legacy `model_ref` payload into
+  runtime inputs. The remaining resolver/model-ref references in this area are
+  diagnostic-only tests and transitional helper contracts pending the
+  model-dependency/model-ref deletion slice.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition
@@ -435,7 +441,12 @@ cleanup.
   executable launch inputs. The immediate transition step is not a new
   readiness adapter; it is a fail-closed diagnostic guardrail that prevents the
   old output shape from being used while canonical task-result coverage is
-  completed.
+  completed. 2026-05-31 progress: the preflight helper signatures were narrowed
+  to success/typed diagnostic failure, so callers can no longer receive
+  `ModelRefV2` output from dependency preflight. This does not add a readiness
+  adapter or scheduler/runtime-host fallback; the remaining work is to replace
+  or delete the legacy request/helper contracts after canonical task-result
+  coverage is complete.
 - [x] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
   paths after runtime host load-target resolution, diagnostic-only legacy
   guardrails, and scheduler task-result/runtime-host response coverage are

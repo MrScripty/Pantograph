@@ -8,7 +8,8 @@ runtime metadata. Its legacy dependency-preflight request projection helpers
 are retained only for transitional cleanup tests; production retired runtime
 preflight must fail closed before `ModelDependencyRequest`,
 `ModelDependencyResolver`, `ModelRefV2`, path repair, or Python adapter
-dispatch.
+dispatch. The preflight gate returns only success/diagnostic failure, so it
+cannot inject a legacy `model_ref` payload into Python runtime inputs.
 
 Dependency-environment actions are resolved by workflow-service through the
 dependency environment service; this module must not rebuild

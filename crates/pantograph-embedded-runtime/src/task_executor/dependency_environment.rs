@@ -8,9 +8,9 @@ impl TauriTaskExecutor {
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
         _extensions: &ExecutorExtensions,
-    ) -> Result<Option<node_engine::ModelRefV2>> {
+    ) -> Result<()> {
         if !Self::python_runtime_handles_node(node_type) {
-            return Ok(None);
+            return Ok(());
         }
 
         let environment_ref =

@@ -2509,10 +2509,9 @@ async fn test_dependency_preflight_skips_canonical_llamacpp() {
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("llama_cpp"));
     let extensions = ExecutorExtensions::new();
-    let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
+    enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
         .expect("canonical llama.cpp preflight should be skipped");
-    assert!(resolved.is_none());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -2521,10 +2520,9 @@ async fn test_dependency_preflight_skips_retired_direct_diffusion_node() {
     let mut inputs = HashMap::new();
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
     let extensions = ExecutorExtensions::new();
-    let resolved = enforce_dependency_preflight("diffusion-inference", &inputs, &extensions)
+    enforce_dependency_preflight("diffusion-inference", &inputs, &extensions)
         .await
         .expect("retired direct diffusion shape should not enter dependency preflight");
-    assert!(resolved.is_none());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

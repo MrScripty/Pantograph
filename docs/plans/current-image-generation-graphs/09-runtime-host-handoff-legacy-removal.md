@@ -2161,6 +2161,14 @@ node-engine launch attempts cannot become successful execution. The
 workflow-service scheduler session runner and runtime-host task-result mapping
 remain the successful state/result path.
 
+Completed 2026-05-31 for dependency-preflight output narrowing: node-engine
+and embedded-runtime dependency-preflight helpers now return only
+success/typed diagnostic failure and cannot return `Option<ModelRefV2>` to
+callers. Embedded-runtime Python execution no longer serializes or injects a
+legacy `model_ref` payload after preflight. This keeps the existing
+diagnostic-only fail-closed behavior while removing the remaining reachable
+preflight output shape that could carry legacy runtime identity.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

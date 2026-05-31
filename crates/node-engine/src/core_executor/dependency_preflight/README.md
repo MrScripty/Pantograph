@@ -7,8 +7,10 @@ Production runtime launch must not enter this directory as a successful
 execution path. If old runtime preflight is reached, the guardrail in
 `dependency_preflight.rs` fails closed before resolver lookup,
 `ModelDependencyRequest` construction, path repair, runtime-host dispatch, or
-`ModelRefV2` output. The remaining helpers are retained temporarily for
-diagnostic tests and the planned legacy-contract deletion slice.
+`ModelRefV2` output. Its public helper now returns only success/diagnostic
+failure and cannot hand a legacy model-ref payload back to callers. The
+remaining helpers are retained temporarily for diagnostic tests and the planned
+legacy-contract deletion slice.
 
 `input_projection.rs` contains legacy graph-input projection helpers that are
 no longer allowed to feed successful node-engine runtime execution. It does
