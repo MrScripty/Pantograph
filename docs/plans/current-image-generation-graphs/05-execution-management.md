@@ -19618,6 +19618,33 @@ Worker rules:
     complete inference path as a backend-owned service boundary for scheduler
     task-result materialization or runtime-host output projection, with Tauri
     limited to infrastructure injection.
+- 2026-05-31 hosted startup migration re-plan boundary:
+  - Attempted next slice: migrate `src-tauri/src/app_setup.rs` and
+    `src-tauri/src/workflow/headless_runtime.rs` onto the embedded-runtime
+    hosted composition bundle.
+  - Boundary found before source edits: the bundle requires owner
+    `PumasSelectorAccess`, runtime registry, gateway/controller, an unshared
+    configured `WorkflowService`, and a runtime handle before the service is
+    shared. Current Tauri startup creates and manages
+    `Arc<WorkflowService>` before `setup`, creates the gateway inside `setup`,
+    and initializes Pumas selector access later in the asynchronous
+    `executor-extension-init` task. Current headless runtime construction then
+    receives the already shared workflow service and calls
+    `EmbeddedRuntime::hosted_with_default_python_runtime`.
+  - Standards concern: directly wiring the bundle at those call sites would
+    require either post-share runtime-dispatch mutation or moving Pumas
+    extension setup, dependency-readiness sidecar ownership, runtime-registry
+    policy, and workflow-service construction sequencing into an ad hoc Tauri
+    flow. Tauri may host infrastructure and returned handles, but it must not
+    become the owner of runtime dispatch business logic.
+  - Re-plan required before implementation continues: decide the startup
+    ownership transition for Pumas selector initialization and hosted
+    lifecycle handles. The plan must specify whether Tauri synchronously
+    initializes the required infrastructure before managing workflow state,
+    whether embedded-runtime receives a higher-level host setup source that
+    owns Pumas selector acquisition, and how the returned
+    dependency-readiness producer handle is managed and shut down without
+    duplicating `EmbeddedRuntime` lifecycle ownership.
 
 ### Traceability Links
 

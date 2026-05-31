@@ -1740,6 +1740,19 @@ Next staged implementation sequence:
    infrastructure inputs and manages returned handles, but does not own Pumas
    fact resolution, runtime-registry policy, dependency-readiness production,
    or runtime-host dispatch decisions.
+   Re-plan boundary reached 2026-05-31 before source edits: current Tauri
+   startup shares and manages `WorkflowService` before `setup`, creates the
+   gateway inside `setup`, and initializes Pumas selector access in the
+   asynchronous `executor-extension-init` task. The hosted bundle needs owner
+   Pumas selector access, gateway/controller, runtime registry, configured
+   unshared workflow-service stores, and a runtime handle before sharing.
+   Migrating this safely requires a concrete startup ownership transition:
+   either synchronous infrastructure initialization before workflow-service
+   state is managed, or a higher-level embedded-runtime host setup source that
+   acquires Pumas selector access and returns lifecycle handles. The plan must
+   also define how Tauri stores and shuts down the returned
+   dependency-readiness producer handle without making Tauri the business owner
+   of dependency-readiness production.
 4. Narrow or replace `EmbeddedRuntime::hosted_with_default_python_runtime`.
    It must not remain the successful resource-backed hosted path while it
    accepts an already shared `WorkflowService`. During migration it may remain
