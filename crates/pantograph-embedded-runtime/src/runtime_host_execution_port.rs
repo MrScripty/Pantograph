@@ -322,7 +322,23 @@ fn image_projection_error_message(error: RuntimeHostImageGenerationProjectionErr
 }
 
 fn gateway_error_message(error: inference::GatewayError) -> String {
-    format!("embedded runtime-host image gateway execution failed: {error}")
+    match error {
+        inference::GatewayError::ImageGenerationPlanning {
+            diagnostic_count,
+            diagnostics,
+        } => {
+            let details = diagnostics
+                .iter()
+                .take(4)
+                .map(|diagnostic| format!("{:?}: {}", diagnostic.code, diagnostic.message))
+                .collect::<Vec<_>>()
+                .join("; ");
+            format!(
+                "embedded runtime-host image gateway execution failed: image generation planning failed with {diagnostic_count} diagnostic(s): {details}"
+            )
+        }
+        other => format!("embedded runtime-host image gateway execution failed: {other}"),
+    }
 }
 
 fn media_artifact_sink_error_message(error: RuntimeHostMediaArtifactSinkError) -> String {
@@ -347,8 +363,8 @@ mod tests {
         ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowArtifactWriter, WorkflowService,
     };
     use pumas_library::models::{
-        AssetValidationState, PackageArtifactKind, PumasArtifactLoadPathKind,
-        PumasArtifactLoadTarget, StorageKind,
+        AssetValidationState, BundleFormat, ImportState, ModelMetadata, PackageArtifactKind,
+        PumasArtifactLoadPathKind, PumasArtifactLoadTarget, StorageKind,
     };
     use std::pin::Pin;
 
@@ -356,6 +372,7 @@ mod tests {
         RuntimeHostImageArtifactWriteRequest, RuntimeHostMediaArtifactSinkError,
         WorkflowServiceRuntimeHostMediaArtifactSink,
     };
+    use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 
     #[tokio::test]
     async fn fail_closed_port_rejects_without_load_target_resolver() {
@@ -519,11 +536,217 @@ mod tests {
         assert_eq!(body.response.media_type, "image/png");
     }
 
+    #[tokio::test]
+    async fn port_completes_image_execution_with_pumas_resolvers_and_sink_backed_media_ref() {
+        const MODEL_ID: &str = "diffusion/stable-diffusion/tiny-sd-runtime-host";
+        const SELECTED_ARTIFACT_ID: &str = "diffusers-bundle";
+
+        let temp = tempfile::TempDir::new().expect("temp artifact dir");
+        let artifact_writer = artifact_writer(&temp);
+        let workflow_service = WorkflowService::new().with_artifact_writer(artifact_writer.clone());
+        let pumas_root = temp.path().join("pumas");
+        std::fs::create_dir_all(&pumas_root).expect("pumas launcher root");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(pumas_root)
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        seed_pumas_diffusers_model(&pumas_api, MODEL_ID, SELECTED_ARTIFACT_ID).await;
+        pumas_api
+            .resolve_model_package_facts(MODEL_ID)
+            .await
+            .expect("package facts should seed Pumas load-target cache");
+        let mut request = runtime_host_request_fixture();
+        set_request_model_ref(&mut request, MODEL_ID, SELECTED_ARTIFACT_ID);
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("fixture has dispatch decision")
+            .runtime_trait_settings
+            .clear();
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
+            Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+            Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+                artifact_writer,
+            )),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(MockImageBackend),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request)
+            .await
+            .expect("image execution should complete through production Pumas resolvers");
+
+        assert_eq!(
+            response.state,
+            RuntimeHostExecutionState::Completed,
+            "{response:#?}"
+        );
+        assert_eq!(response.outputs.len(), 1);
+        let RuntimeHostExecutionOutputValue::MediaArtifactRef(artifact_ref) =
+            &response.outputs[0].value
+        else {
+            panic!("image output should be a media artifact ref");
+        };
+        assert_eq!(response.outputs[0].port_id, "image");
+        assert_eq!(artifact_ref.media_type.as_deref(), Some("image_png"));
+        let body = workflow_service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: artifact_ref.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("image artifact body should be retained");
+        assert_eq!(body.body, b"hello");
+        assert_eq!(body.response.media_type, "image/png");
+    }
+
     fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
         serde_json::from_str(include_str!(
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
         ))
         .expect("runtime host request fixture should deserialize")
+    }
+
+    async fn seed_pumas_diffusers_model(
+        pumas_api: &pumas_library::PumasApi,
+        model_id: &str,
+        selected_artifact_id: &str,
+    ) {
+        let library = pumas_api.model_library();
+        let model_dir =
+            library.build_model_path("diffusion", "stable-diffusion", "tiny-sd-runtime-host");
+        create_diffusers_bundle(&model_dir);
+        let metadata = ModelMetadata {
+            schema_version: Some(2),
+            model_id: Some(model_id.to_string()),
+            family: Some("stable-diffusion".to_string()),
+            model_type: Some("diffusion".to_string()),
+            official_name: Some("tiny-sd-runtime-host".to_string()),
+            cleaned_name: Some("tiny-sd-runtime-host".to_string()),
+            storage_kind: Some(StorageKind::LibraryOwned),
+            bundle_format: Some(BundleFormat::DiffusersDirectory),
+            pipeline_class: Some("StableDiffusionPipeline".to_string()),
+            import_state: Some(ImportState::Ready),
+            validation_state: Some(AssetValidationState::Valid),
+            task_type_primary: Some("text-to-image".to_string()),
+            input_modalities: Some(vec!["text".to_string()]),
+            output_modalities: Some(vec!["image".to_string()]),
+            recommended_backend: Some("diffusers".to_string()),
+            runtime_engine_hints: Some(vec!["diffusers".to_string(), "pytorch".to_string()]),
+            selected_artifact_id: Some(selected_artifact_id.to_string()),
+            ..Default::default()
+        };
+        library
+            .save_metadata(&model_dir, &metadata)
+            .await
+            .expect("model metadata should save");
+        library
+            .index_model_dir(&model_dir)
+            .await
+            .expect("model metadata should index");
+    }
+
+    fn create_diffusers_bundle(model_dir: &std::path::Path) {
+        std::fs::create_dir_all(model_dir.join("unet")).expect("unet dir");
+        std::fs::create_dir_all(model_dir.join("vae")).expect("vae dir");
+        std::fs::create_dir_all(model_dir.join("scheduler")).expect("scheduler dir");
+        std::fs::create_dir_all(model_dir.join("text_encoder")).expect("text encoder dir");
+        std::fs::create_dir_all(model_dir.join("tokenizer")).expect("tokenizer dir");
+        write_min_safetensors(&model_dir.join("unet/diffusion_pytorch_model.safetensors"));
+        write_min_safetensors(&model_dir.join("vae/diffusion_pytorch_model.safetensors"));
+        write_min_safetensors(&model_dir.join("text_encoder/model.safetensors"));
+        std::fs::write(
+            model_dir.join("unet/config.json"),
+            r#"{"model_type":"unet"}"#,
+        )
+        .expect("unet config fixture");
+        std::fs::write(model_dir.join("vae/config.json"), r#"{"model_type":"vae"}"#)
+            .expect("vae config fixture");
+        std::fs::write(
+            model_dir.join("text_encoder/config.json"),
+            r#"{"model_type":"clip_text_model"}"#,
+        )
+        .expect("text encoder config fixture");
+        std::fs::write(
+            model_dir.join("scheduler/scheduler_config.json"),
+            r#"{"scheduler":"euler"}"#,
+        )
+        .expect("scheduler fixture");
+        std::fs::write(
+            model_dir.join("tokenizer/tokenizer_config.json"),
+            r#"{"model_type":"clip_tokenizer"}"#,
+        )
+        .expect("tokenizer config fixture");
+        std::fs::write(
+            model_dir.join("tokenizer/tokenizer.json"),
+            r#"{"tokenizer":"tiny-sd-runtime-host"}"#,
+        )
+        .expect("tokenizer fixture");
+        std::fs::write(
+            model_dir.join("model_index.json"),
+            r#"{
+  "_class_name": "StableDiffusionPipeline",
+  "scheduler": ["diffusers", "EulerDiscreteScheduler"],
+  "unet": ["diffusers", "UNet2DConditionModel"],
+  "vae": ["diffusers", "AutoencoderKL"],
+  "text_encoder": ["transformers", "CLIPTextModel"],
+  "tokenizer": ["transformers", "CLIPTokenizer"]
+}"#,
+        )
+        .expect("model index fixture");
+    }
+
+    fn write_min_safetensors(path: &std::path::Path) {
+        let header = b"{}";
+        let header_size = header.len() as u64;
+        let mut content = header_size.to_le_bytes().to_vec();
+        content.extend_from_slice(header);
+        content.extend_from_slice(&[0; 64]);
+        std::fs::write(path, content).expect("minimal safetensors fixture");
+    }
+
+    fn set_request_model_ref(
+        request: &mut RuntimeHostExecutionRequest,
+        model_id: &str,
+        selected_artifact_id: &str,
+    ) {
+        request.handoff.task_intent.model_ref.model_id = model_id.to_string();
+        request.handoff.task_intent.model_ref.selected_artifact_id =
+            Some(selected_artifact_id.to_string());
+        request.handoff.task_intent.model_ref.selected_artifact_path = None;
+        request
+            .handoff
+            .readiness_proof
+            .preflight_result
+            .identity_key
+            .model_ref = request.handoff.task_intent.model_ref.clone();
+        if let Some(dispatch_decision) = request.handoff.dispatch_decision.as_mut() {
+            dispatch_decision.task_intent.model_ref.model_id = model_id.to_string();
+            dispatch_decision.task_intent.model_ref.selected_artifact_id =
+                Some(selected_artifact_id.to_string());
+            dispatch_decision
+                .task_intent
+                .model_ref
+                .selected_artifact_path = None;
+            dispatch_decision.selected_model_ref.model_id = model_id.to_string();
+            dispatch_decision.selected_model_ref.selected_artifact_id =
+                Some(selected_artifact_id.to_string());
+            dispatch_decision.selected_model_ref.selected_artifact_path = None;
+            dispatch_decision
+                .readiness_proof
+                .preflight_result
+                .identity_key
+                .model_ref = dispatch_decision.task_intent.model_ref.clone();
+        }
     }
 
     struct ReadyLoadTargetResolver;

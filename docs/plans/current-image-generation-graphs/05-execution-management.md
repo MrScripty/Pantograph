@@ -21374,6 +21374,39 @@ Worker rules:
     through the artifact sink; negative tests for missing/stale readiness or
     load proof diagnostics; `cargo fmt`, crate checks, focused tests, and
     `git diff --check`.
+- 2026-05-31 Milestone 5b Pumas-backed runtime-host image execution slice:
+  - Smallest useful slice: prove `EmbeddedRuntimeHostExecutionPort` can execute
+    an image request through production Pumas load-target resolution,
+    production Pumas package-facts resolution, the inference gateway, and the
+    workflow-service artifact writer sink.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`,
+    and these plan files.
+  - Implementation: added a Pumas-seeded diffusers fixture test that
+    precomputes package facts, dispatches through the real runtime-host Pumas
+    resolvers, writes the generated image via
+    `WorkflowServiceRuntimeHostMediaArtifactSink`, and verifies the retained
+    artifact body. Runtime-host package-facts projection now removes
+    Pumas owner-local executable entry paths before handing facts to the
+    path-free inference planner; executable load authority remains solely in
+    the Pumas load-target response. Gateway planning failures now include
+    bounded planner diagnostic details in the runtime-host diagnostic message.
+  - No-fallback/no-legacy result: this slice does not introduce a graph-path,
+    `ModelRefV2`, node-engine planned-inference, or Tauri-owned execution
+    route. Missing Pumas facts still fail closed through typed runtime-host
+    diagnostics.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime runtime_host_package_fact_identity --
+    --nocapture`; `cargo test -p pantograph-embedded-runtime
+    port_completes_image_execution_with_pumas_resolvers_and_sink_backed_media_ref
+    -- --nocapture`; `cargo test -p pantograph-embedded-runtime
+    port_completes_image_execution_with_sink_backed_media_ref -- --nocapture`;
+    and `cargo check -p pantograph-embedded-runtime`.
+  - Remaining follow-up: add session-level scheduler coverage that dispatches
+    through the production-composed runtime-host port from scheduler task state,
+    persists the completed `WorkflowSchedulerTaskResult`, and returns requested
+    workflow outputs.
 
 ### Traceability Links
 

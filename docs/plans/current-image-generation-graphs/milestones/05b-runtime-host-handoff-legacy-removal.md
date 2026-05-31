@@ -262,6 +262,17 @@ this ordering to add graph-path fallback, node-engine planned-inference launch,
   fail-closed diagnostics in this slice. The producer lifecycles and durable
   scheduler lease/retry/cancellation hardening follow after this complete-path
   proof; they must not be folded into the same implementation slice.
+  2026-05-31 progress: embedded-runtime now has focused coverage proving
+  `EmbeddedRuntimeHostExecutionPort` can complete image execution with the
+  production Pumas load-target resolver, production Pumas package-facts
+  resolver, inference gateway, and backend artifact writer sink. The slice
+  also normalizes runtime-host package facts into the path-free inference
+  planner contract so Pumas owner-local executable entry paths remain confined
+  to the Pumas load-target response. Gateway planning diagnostics now include
+  bounded planner diagnostic details in the runtime-host failure message.
+  Remaining before the complete minimal inference path is fully proven: add
+  session-level coverage that dispatches through the production-composed port
+  from scheduler task state and verifies task-result/output projection.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
