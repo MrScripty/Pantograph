@@ -2987,7 +2987,7 @@ fn test_inputs_with_model_path_rejects_resolved_model_source_entry_path() {
         resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
     );
 
-    let err = inputs_with_model_path_from_ref(&inputs)
+    let err = reject_retired_model_reference_inputs(&inputs)
         .expect_err("retired resolved model source should fail explicitly");
 
     match err {
@@ -3000,34 +3000,6 @@ fn test_inputs_with_model_path_rejects_resolved_model_source_entry_path() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_inputs_with_model_path_preserves_explicit_mmproj_companion() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/models/tiny-vlm/model.gguf"),
-    );
-    inputs.insert(
-        "mmproj_path".to_string(),
-        serde_json::json!("/models/tiny-vlm/mmproj-model-f16.mmproj"),
-    );
-
-    let canonical = inputs_with_model_path_from_ref(&inputs)
-        .expect("explicit model and companion paths should pass through");
-
-    assert_eq!(
-        canonical.get("model_path").and_then(|value| value.as_str()),
-        Some("/models/tiny-vlm/model.gguf")
-    );
-    assert_eq!(
-        canonical
-            .get("mmproj_path")
-            .and_then(|value| value.as_str()),
-        Some("/models/tiny-vlm/mmproj-model-f16.mmproj")
-    );
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
 fn test_inputs_with_model_path_rejects_malformed_retired_resolved_model_source() {
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -3035,7 +3007,7 @@ fn test_inputs_with_model_path_rejects_malformed_retired_resolved_model_source()
         serde_json::json!({"source_contract_version": 1}),
     );
 
-    let err = inputs_with_model_path_from_ref(&inputs)
+    let err = reject_retired_model_reference_inputs(&inputs)
         .expect_err("retired resolved model source should fail explicitly");
 
     match err {
@@ -3063,7 +3035,7 @@ fn test_inputs_with_model_path_rejects_unresolved_pumas_model_ref() {
         }),
     );
 
-    let err = inputs_with_model_path_from_ref(&inputs)
+    let err = reject_retired_model_reference_inputs(&inputs)
         .expect_err("unresolved Pumas model reference should fail explicitly");
 
     match err {
@@ -3089,7 +3061,7 @@ fn test_inputs_with_model_path_rejects_unresolved_model_source() {
         }),
     );
 
-    let err = inputs_with_model_path_from_ref(&inputs)
+    let err = reject_retired_model_reference_inputs(&inputs)
         .expect_err("retired model source should fail explicitly before serde parsing");
 
     match err {

@@ -21037,6 +21037,35 @@ Worker rules:
     path-shaped fixtures once the next slice proves their retained behavior is
     diagnostic-only or replaces them with scheduler task-state/results and
     runtime-host responses.
+- 2026-05-31 node-engine path-repair helper deletion slice:
+  - Smallest useful slice: delete the `inputs_with_model_path_from_ref`
+    repair helper from the canonical `llm-inference` path while preserving
+    the retired resolved/unresolved model-reference diagnostics.
+  - Allowed files touched: `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and these plan
+    files.
+  - Implementation: replaced canonical-input repair with
+    `reject_retired_model_reference_inputs`, stopped copying `model_path` and
+    `mmproj_path` aliases into a cloned input map, removed the private path/
+    companion-path readers, and removed the test that asserted explicit path
+    pass-through.
+  - No-fallback/no-legacy result: node-engine no longer repairs graph path
+    fields into executable launch input before `llm-inference` dispatch. No
+    scheduler/runtime-host/readiness facts were adapted back into path-shaped
+    launch payloads.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes dependency_preflight
+    -- --nocapture`; `cargo test -p node-engine --features
+    inference-nodes,pytorch-nodes canonical_llm -- --nocapture`; `cargo check
+    -p node-engine --features inference-nodes,pytorch-nodes`; `git diff
+    --check`; and targeted `rg` confirming no source hit remains for
+    `inputs_with_model_path_from_ref`, `read_model_path_from_inputs`, or
+    `read_mmproj_path_from_inputs`.
+  - Remaining follow-up: classify or remove remaining path-shaped test
+    fixtures and retired `model_path` surfaces that are not app
+    configuration, embedding/RAG configuration, or diagnostic-only stale graph
+    coverage.
 
 ### Traceability Links
 

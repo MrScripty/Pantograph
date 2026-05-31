@@ -246,21 +246,21 @@ impl TaskExecutor for CoreTaskExecutor {
             "vision-analysis" => retired_inference_node_error("vision-analysis"),
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
-                let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
+                reject_retired_model_reference_inputs(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
-                let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
+                let preferred_backend = preferred_backend_key("llm-inference", &inputs);
                 reject_contract_only_inference_task(
-                    &canonical_inputs,
+                    &inputs,
                     extensions,
                     task_id,
                     exec_id,
                     preferred_backend.as_deref(),
                 )?;
-                match canonical_inference_input_kind(&canonical_inputs) {
+                match canonical_inference_input_kind(&inputs) {
                     Some(InferenceExecutionInputKind::TextGeneration) => {
                         execute_llm_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             task_id,
                             self.event_sink.as_ref(),
                             exec_id,
@@ -271,7 +271,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     Some(InferenceExecutionInputKind::Embedding) => {
                         execute_embedding_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             extensions,
                             task_id,
                             exec_id,
@@ -281,7 +281,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     Some(InferenceExecutionInputKind::Rerank) => {
                         execute_rerank_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             extensions,
                             task_id,
                             exec_id,
@@ -291,7 +291,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     Some(InferenceExecutionInputKind::AudioTranscription) => {
                         execute_audio_transcription_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             extensions,
                             task_id,
                             exec_id,
@@ -301,22 +301,22 @@ impl TaskExecutor for CoreTaskExecutor {
                     Some(InferenceExecutionInputKind::ImageGeneration) => {
                         execute_image_generation_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             extensions,
                             task_id,
                             exec_id,
                         )
                         .await
                     }
-                    _ if has_resolved_model_package_facts(&canonical_inputs)
-                        && canonical_inputs
+                    _ if has_resolved_model_package_facts(&inputs)
+                        && inputs
                             .get("prompt")
                             .and_then(serde_json::Value::as_str)
                             .is_some_and(|prompt| !prompt.trim().is_empty()) =>
                     {
                         execute_llm_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             task_id,
                             self.event_sink.as_ref(),
                             exec_id,
@@ -333,7 +333,7 @@ impl TaskExecutor for CoreTaskExecutor {
                         #[cfg(feature = "pytorch-nodes")]
                         {
                             let _preflight_context = dependency_preflight_lifecycle_context(
-                                &canonical_inputs,
+                                &inputs,
                                 task_id,
                                 exec_id,
                                 preferred_backend.as_deref(),
@@ -346,7 +346,7 @@ impl TaskExecutor for CoreTaskExecutor {
                         {
                             execute_llm_inference(
                                 self.gateway.as_ref(),
-                                &canonical_inputs,
+                                &inputs,
                                 task_id,
                                 self.event_sink.as_ref(),
                                 exec_id,
@@ -358,7 +358,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     _ => {
                         execute_llm_inference(
                             self.gateway.as_ref(),
-                            &canonical_inputs,
+                            &inputs,
                             task_id,
                             self.event_sink.as_ref(),
                             exec_id,

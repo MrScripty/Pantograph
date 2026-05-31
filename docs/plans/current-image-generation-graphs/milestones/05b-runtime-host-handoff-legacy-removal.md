@@ -495,7 +495,11 @@ cleanup.
   dependency override parsing now uses the shared
   `pantograph-dependency-planning` DTO instead of a node-engine legacy
   re-export. Remaining source hits for retired contract names are diagnostic
-  strings/tests only.
+  strings/tests only. 2026-05-31 progress: the node-engine
+  `inputs_with_model_path_from_ref` path-repair helper was removed. Canonical
+  `llm-inference` still rejects retired resolved/unresolved model-reference
+  inputs, but it no longer copies `model_path` or `mmproj_path` aliases into a
+  repaired launch input map before dispatch.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.
@@ -568,8 +572,8 @@ cleanup.
 - Deletion/search checks proving successful production paths no longer contain
   `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
   `model_dependencies`, `build_model_ref_v2`, `PlannedInferenceExecutionHost`,
-  frontend `modelPath` dependency actions, direct old runtime task success
-  fixtures, or path-shaped success fixtures.
+  path-repair helpers, frontend `modelPath` dependency actions, direct old
+  runtime task success fixtures, or path-shaped success fixtures.
 - Classification/search checks proving every retained `model_path`,
   `modelPath`, `ModelDependencyRequest`, `ModelDependencyResolver`,
   `ModelRefV2`, and `build_model_ref_v2` hit is recorded as non-execution,

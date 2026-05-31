@@ -16,8 +16,6 @@ use inference::{
     InferenceRequestLifecycleEventSink,
 };
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use super::read_optional_input_string_aliases;
 #[cfg(feature = "inference-nodes")]
 use super::read_optional_input_value_aliases;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -58,32 +56,12 @@ struct DependencyPreflightCompatibilityDiagnostics {
 pub(crate) struct DependencyPreflightLifecycleContext;
 
 #[cfg(feature = "inference-nodes")]
-pub(crate) fn inputs_with_model_path_from_ref(
+pub(crate) fn reject_retired_model_reference_inputs(
     inputs: &HashMap<String, serde_json::Value>,
-) -> Result<HashMap<String, serde_json::Value>> {
+) -> Result<()> {
     reject_retired_resolved_model_source_inputs(inputs)?;
     reject_unresolved_model_reference_inputs(inputs)?;
-
-    let mut canonical_inputs = inputs.clone();
-    if canonical_inputs
-        .get("model_path")
-        .and_then(|value| value.as_str())
-        .is_none_or(|value| value.trim().is_empty())
-    {
-        if let Some(model_path) = read_model_path_from_inputs(inputs) {
-            canonical_inputs.insert("model_path".to_string(), serde_json::json!(model_path));
-        }
-    }
-    if canonical_inputs
-        .get("mmproj_path")
-        .and_then(|value| value.as_str())
-        .is_none_or(|value| value.trim().is_empty())
-    {
-        if let Some(mmproj_path) = read_mmproj_path_from_inputs(inputs) {
-            canonical_inputs.insert("mmproj_path".to_string(), serde_json::json!(mmproj_path));
-        }
-    }
-    Ok(canonical_inputs)
+    Ok(())
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -131,24 +109,6 @@ fn model_reference_status_is_unresolved(value: &serde_json::Value) -> bool {
         .get("status")
         .and_then(serde_json::Value::as_str)
         .is_some_and(|status| status.eq_ignore_ascii_case("unresolved"))
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-fn read_model_path_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
-    read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-}
-
-#[cfg(feature = "inference-nodes")]
-fn read_mmproj_path_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
-    read_optional_input_string_aliases(
-        inputs,
-        &[
-            "mmproj_path",
-            "mmprojPath",
-            "selected_mmproj_path",
-            "selectedMmprojPath",
-        ],
-    )
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
