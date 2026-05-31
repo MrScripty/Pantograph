@@ -1848,6 +1848,22 @@ Options disposition for this re-plan:
    runtime-host port must continue returning typed unavailable diagnostics
    until the execution call is wired.
 
+Completed 2026-05-31 for the option 4 guardrail: embedded-runtime now has
+`runtime_host_image_execution.rs`, a backend-only projection from validated
+runtime-host image requests, scheduler dispatch decisions, full Pumas package
+facts, and Pumas load targets into canonical image-generation planning input.
+It rejects unsupported task kinds, unsupported materialized input ports,
+unsupported runtime ids, invalid device ids, missing prompt, and invalid launch
+handoff facts with typed errors. `EmbeddedRuntimeHostExecutionPort` still
+fails closed after Pumas load-target resolution, so this slice does not create
+a successful execution branch or preserve planned-inference behavior.
+Remaining before enabling the gateway call: add or select the runtime-host
+source for full Pumas package facts, avoid long-term backend-id inference from
+runtime ids by carrying explicit selected backend facts through scheduler
+dispatch, extend the runtime-host input contract for typed float image options
+when those ports are exposed, and implement path-free media artifact result
+projection.
+
 Standards alignment: this decision follows the simplicity/complection rule by
 separating validation and runtime side effects, transport mapping and domain
 execution, lifecycle ownership and request handling, and diagnostics policy and

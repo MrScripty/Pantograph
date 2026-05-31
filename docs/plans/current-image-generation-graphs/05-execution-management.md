@@ -19867,6 +19867,44 @@ Worker rules:
     by moving useful behavior into the canonical runtime-host owner, never as a
     compatibility branch; keep the projection-only option available only as a
     guarded preparatory slice.
+- 2026-05-31 runtime-host image projection guardrail slice:
+  - Smallest useful slice: add a backend-owned projection module for validated
+    runtime-host image-generation requests without wiring successful execution
+    into `EmbeddedRuntimeHostExecutionPort` yet.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_image_execution.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: added `runtime_host_image_execution.rs`, which projects a
+    validated `RuntimeHostExecutionRequest`, scheduler dispatch decision, full
+    Pumas package facts, and Pumas-approved load target into canonical
+    `inference::ImageGenerationPlanningInput`. It builds the canonical image
+    request, PyTorch image backend decision, selected runtime/device facts,
+    selected model ref, dependency-readiness facts, and launch handoff without
+    calling the gateway.
+  - No-fallback/no-legacy result: unsupported task kinds, unsupported
+    materialized input ports, unsupported runtime ids, invalid device ids,
+    missing prompt, and mismatched launch handoff facts fail closed with typed
+    projection errors. The runtime-host port remains fail-closed after Pumas
+    load-target resolution; no Tauri, node-engine, planned-inference, reduced
+    execution-plan, path, or compatibility branch was added.
+  - Focused tests added: projection of a valid dispatch-selected image request
+    into canonical planning input, rejection of non-image tasks, missing
+    prompt, unsupported materialized ports such as `guidance_scale`, and
+    non-PyTorch runtime decisions.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml`; `cargo test -p
+    pantograph-embedded-runtime runtime_host_image_execution -- --nocapture`.
+    The test command still reports the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Discovered follow-ups before enabling execution: runtime-host execution
+    still needs an owner-approved full Pumas package-facts source at this
+    boundary; scheduler dispatch should eventually carry an explicit selected
+    backend key rather than requiring the image projection to recognize the
+    current PyTorch runtime ids; the runtime-host input value contract does not
+    yet represent float image options such as `guidance_scale` or `strength`;
+    result projection must write or reference media artifacts and return only
+    path-free runtime-host outputs.
 
 ### Traceability Links
 

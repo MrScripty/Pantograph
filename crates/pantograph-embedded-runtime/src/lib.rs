@@ -75,6 +75,8 @@ mod runtime_extensions;
 pub mod runtime_health;
 #[allow(dead_code)]
 mod runtime_host_execution_port;
+#[allow(dead_code)]
+mod runtime_host_image_execution;
 mod runtime_host_load_target;
 pub mod runtime_recovery;
 pub mod runtime_registry;

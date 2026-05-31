@@ -138,6 +138,19 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   execution fail-closed. Unsupported task kinds must return typed diagnostics.
   Do not put this business logic in Tauri, frontend, graph editor,
   node-engine, scheduler policy, or the legacy planned-inference contract.
+  2026-05-31 progress: the projection-only guardrail is complete in
+  `crates/pantograph-embedded-runtime/src/runtime_host_image_execution.rs`.
+  It maps validated runtime-host image requests, scheduler dispatch decisions,
+  full Pumas package facts, and Pumas load targets into canonical
+  image-generation planning input, and fails closed for unsupported task kinds,
+  unsupported materialized ports, unsupported runtime ids, invalid devices,
+  missing prompt, and invalid launch handoff facts. The runtime-host port
+  remains fail-closed after load-target resolution; successful gateway
+  execution is not wired yet. Remaining before completing this task: select or
+  add the runtime-host full Pumas package-facts source, carry explicit selected
+  backend facts through dispatch instead of long-term runtime-id recognition,
+  extend runtime-host inputs for typed float image options when exposed, and
+  implement path-free media artifact output projection.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
@@ -1049,3 +1062,21 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   a future Pumas/package-facts producer may become the canonical payload source
   if it emits the same validated payload contract; that replacement must not
   require producer-side reconstruction or legacy/path adapters.
+- 2026-05-31 runtime-host image projection guardrail slice completed.
+  Smallest useful vertical slice: add the backend-owned projection module for
+  validated image-generation runtime-host requests while keeping
+  `EmbeddedRuntimeHostExecutionPort` fail-closed. Allowed write set:
+  embedded-runtime runtime-host image projection module, module index, README,
+  this milestone, runtime-host handoff plan, and execution-management ledger.
+  No-fallback/no-legacy result: the slice does not call node-engine,
+  planned-inference, reduced workflow execution plans, graph paths, Tauri, or a
+  compatibility shim; unsupported tasks, unsupported ports, unsupported
+  runtimes, invalid devices, missing prompt, and invalid launch handoff facts
+  return typed projection errors. Verification passed: `cargo fmt
+  --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`; `cargo test
+  -p pantograph-embedded-runtime runtime_host_image_execution -- --nocapture`.
+  Verification caveat: the focused test command still reports the known
+  workflow-service `set_active_run_execution_plan` warning. Remaining
+  follow-up: wire the owner-approved full Pumas package-facts source, explicit
+  selected backend facts, typed float input options, path-free media output
+  projection, and the gateway call behind the runtime-host port.
