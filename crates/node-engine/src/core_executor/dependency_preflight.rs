@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 use std::sync::Arc;
 #[cfg(feature = "inference-nodes")]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,23 +17,21 @@ use inference::{
 };
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use crate::error::{NodeEngineError, Result};
+use super::read_optional_input_string_aliases;
+#[cfg(feature = "inference-nodes")]
+use super::read_optional_input_value_aliases;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use crate::error::{NodeEngineError, Result};
+#[cfg(feature = "inference-nodes")]
 use crate::extensions::extension_keys;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::extensions::ExecutorExtensions;
 use crate::model_dependencies::ModelRefV2;
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use crate::model_dependencies::{DependencyState, ModelDependencyResolver};
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use super::read_optional_input_string_aliases;
-#[cfg(feature = "inference-nodes")]
-use super::read_optional_input_value_aliases;
 
 mod input_projection;
 pub(crate) use input_projection::*;
 mod planning_projection;
+#[allow(unused_imports)]
 pub(crate) use planning_projection::*;
 
 #[cfg(feature = "pytorch-nodes")]
@@ -188,103 +186,28 @@ async fn enforce_dependency_preflight_inner(
         return Ok(None);
     }
 
-    let Some(resolver) = extensions
-        .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
-    else {
-        let message =
-            "Dependency preflight blocked execution: dependency resolver is not configured"
-                .to_string();
-        record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
-        return Err(NodeEngineError::ExecutionFailed(message));
-    };
-
-    let planning_request = match build_dependency_planning_request(node_type, inputs) {
-        Ok(request) => request,
-        Err(error) => {
-            let message = format!("Dependency planning request validation failed: {error}");
-            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
-            return Err(NodeEngineError::ExecutionFailed(message));
-        }
-    };
-    let request_model_id = planning_request.model_ref.model_id.clone();
-    let request = build_model_dependency_request(node_type, inputs);
-    let requirements = match resolver
-        .resolve_model_dependency_requirements(request.clone())
-        .await
-    {
-        Ok(requirements) => requirements,
-        Err(error) => {
-            let message = format!(
-                "Dependency preflight requirements resolution failed for '{}': {}",
-                node_type, error
-            );
-            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
-            return Err(NodeEngineError::ExecutionFailed(message));
-        }
-    };
-
-    let status = match resolver.check_dependencies(request.clone()).await {
-        Ok(status) => status,
-        Err(error) => {
-            let message = format!(
-                "Dependency preflight check failed for '{}': {}",
-                node_type, error
-            );
-            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
-            return Err(NodeEngineError::ExecutionFailed(message));
-        }
-    };
-
-    if status.state != DependencyState::Ready {
-        let payload = serde_json::json!({
-            "kind": "dependency_preflight",
-            "node_type": node_type,
-            "model_id": request_model_id,
-            "validation_state": requirements.validation_state,
-            "validation_errors": requirements.validation_errors,
-            "selected_binding_ids": requirements.selected_binding_ids,
-            "state": status.state,
-            "code": status.code,
-            "bindings": status.bindings,
-            "message": status.message,
-        });
-        let message = format!("Dependency preflight blocked execution: {}", payload);
-        record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
-        return Err(NodeEngineError::ExecutionFailed(message));
-    }
-
-    let resolved = match resolver
-        .resolve_model_ref(request, Some(requirements))
-        .await
-    {
-        Ok(resolved) => resolved,
-        Err(error) => {
-            let message = format!(
-                "Dependency preflight failed to resolve model_ref: {}",
-                error
-            );
-            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
-            return Err(NodeEngineError::ExecutionFailed(message));
-        }
-    };
-    if let Some(ref model_ref) = resolved {
-        if let Err(error) = model_ref.validate() {
-            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &error);
-            return Err(NodeEngineError::ExecutionFailed(error));
-        }
-    }
-
-    #[cfg(feature = "inference-nodes")]
-    let compatibility_diagnostics =
-        dependency_preflight_compatibility_diagnostics(inputs, lifecycle_context);
-    #[cfg(not(feature = "inference-nodes"))]
-    let compatibility_diagnostics = ();
-    record_dependency_preflight_success_lifecycle(
-        extensions,
-        lifecycle_context,
-        &compatibility_diagnostics,
+    let model_suffix = dependency_preflight_diagnostic_model_id(lifecycle_context)
+        .map(|model_id| format!(" Model id: {model_id}."))
+        .unwrap_or_default();
+    let message = format!(
+        "Node-engine dependency_preflight is diagnostic-only for retired runtime execution path '{node_type}'. Runtime execution requires scheduler task state/results and runtime-host readiness; legacy ModelDependencyRequest/ModelRefV2 preflight is retired.{model_suffix}"
     );
-    Ok(resolved)
+    record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+    Err(NodeEngineError::ExecutionFailed(message))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn dependency_preflight_diagnostic_model_id(
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) -> Option<&str> {
+    lifecycle_context.and_then(|context| context.model_id.as_deref())
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn dependency_preflight_diagnostic_model_id(
+    _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) -> Option<&str> {
+    None
 }
 
 #[cfg(feature = "inference-nodes")]

@@ -73,23 +73,24 @@ stable public facade and dispatch owner.
 - Boolean settings readers in `settings.rs` are an inference-family helper
   contract; audio-only feature builds may compile the module, but they must not
   treat those inference-only readers as live production paths.
-- Dependency preflight and model-reference construction stay in
-  `dependency_preflight.rs` so runtime adapters share backend-key and
-  dependency-state validation without growing dispatch code. Explicit
-  workflow/backend inputs are the only graph-owned backend signal here;
-  resolved package facts may provide factual task/model inputs, but
-  `recommended_backend` and package backend hints must not become executable
-  backend selection in node-engine.
+- Dependency preflight and model-reference construction are retired as
+  successful node-engine runtime execution paths. `dependency_preflight.rs`
+  remains temporarily as a diagnostic-only guardrail and tested cleanup target:
+  if reached for old runtime preflight it must fail closed before resolver
+  lookup, `ModelDependencyRequest` construction, path repair, runtime-host
+  dispatch, or `ModelRefV2` output. Explicit workflow/backend inputs are the
+  only graph-owned backend signal here; resolved package facts may provide
+  factual task/model inputs, but `recommended_backend` and package backend
+  hints must not become executable backend selection in node-engine.
 - Dependency preflight must not special-case retired direct inference node
   shapes such as `diffusion-inference`. Image-generation preflight enters
   through canonical `llm-inference` task metadata and resolved package facts.
 - Dependency preflight lifecycle events are bounded model-package-resolution
-  observations. Successful canonical PyTorch preflight emits
-  started/completed/cleanup facts with request, task, backend/runtime, and
-  model identity plus the resolved artifact-kind label when known. The terminal
-  completed event may also carry bounded backend compatibility summaries when
-  resolved package facts are present; started and cleanup events stay free of
-  usage, cache, artifact refs, option, tensor, prompt, and local-path payloads.
+  diagnostics. The retired node-engine preflight guardrail may emit
+  started/failed/cleanup observations with request, task, backend/runtime, and
+  model identity plus the resolved artifact-kind label when known, but it must
+  not emit successful preflight completion or compatibility acceptance for
+  runtime launch.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`. Node-engine
   PyTorch launch has been retired; successful PyTorch execution must come from
   scheduler task state/results and runtime-host responses, not this directory.
@@ -103,10 +104,9 @@ stable public facade and dispatch owner.
   Resolved Pumas package facts may be forwarded as host/planning facts for
   compatibility reporting, but they must not be promoted into graph model
   identity when a model reference was not explicitly wired.
-- Canonical dependency preflight in `dependency_preflight.rs` builds host
-  resolver requests from explicit `pumas_model_ref`/`model_id` identity and
-  leaves executable path resolution to the host resolver. Path-only graph data
-  is not a successful preflight identity.
+- Canonical runtime readiness must come from scheduler task state and
+  runtime-host readiness proofs, not node-engine dependency preflight.
+  Path-only graph data is not a successful preflight identity.
 - Canonical image-generation execution exposes the first generated image body on
   the graph-visible `image` output and compact per-image summaries in
   `results`. `results` must not duplicate generated image base64 bodies; the

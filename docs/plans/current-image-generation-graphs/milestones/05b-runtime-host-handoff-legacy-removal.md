@@ -347,7 +347,15 @@ adapter.
   can build `ModelDependencyRequest`, emit `ModelRefV2`, repair `model_path`,
   or hand executable inputs to runtime-host dispatch. This guardrail must be
   verified before broader deletion or scheduler/runtime-host task-result
-  integration continues.
+  integration continues. 2026-05-31 progress: the node-engine
+  dependency-preflight guardrail is complete. Direct calls to node-engine
+  runtime dependency preflight for retired PyTorch/audio paths now fail closed
+  before resolver lookup, `ModelDependencyRequest` construction, path repair,
+  runtime-host dispatch, or `ModelRefV2` output, while non-runtime/retired
+  direct node shapes still return diagnostic skip/no-op behavior. Remaining
+  guardrail work: apply the same diagnostic-only rule to embedded-runtime
+  task-executor dependency preflight and production resolver composition before
+  scheduler/runtime-host task-result integration or broad deletion.
 - [ ] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths after the
   diagnostic-only guardrail and canonical runtime-host task-result response

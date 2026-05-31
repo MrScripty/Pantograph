@@ -2539,10 +2539,13 @@ async fn test_dependency_preflight_blocks_canonical_pytorch_without_resolver() {
     let extensions = ExecutorExtensions::new();
     let err = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
-        .expect_err("canonical PyTorch preflight should require resolver");
+        .expect_err("canonical PyTorch preflight should be diagnostic-only");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("dependency resolver is not configured"));
+            assert!(message.contains("dependency_preflight is diagnostic-only"));
+            assert!(
+                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
+            );
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2584,11 +2587,14 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
         Some(&context),
     )
     .await
-    .expect_err("missing dependency resolver should fail");
+    .expect_err("node-engine dependency preflight should fail before resolver use");
 
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("dependency resolver is not configured"));
+            assert!(message.contains("dependency_preflight is diagnostic-only"));
+            assert!(
+                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
+            );
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2607,7 +2613,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
     assert!(events[1]
         .detail
         .as_deref()
-        .is_some_and(|detail| detail.contains("dependency resolver is not configured")));
+        .is_some_and(|detail| detail.contains("dependency_preflight is diagnostic-only")));
     assert_eq!(
         events[2].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
@@ -2616,7 +2622,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
 
 #[cfg(feature = "pytorch-nodes")]
 #[tokio::test]
-async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
+async fn test_dependency_preflight_fails_closed_before_resolver_request() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
     );
@@ -2628,8 +2634,9 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
             events: lifecycle_events.clone(),
         });
     let captured_requests = Arc::new(Mutex::new(Vec::new()));
-    let resolver: Arc<dyn ModelDependencyResolver> =
-        Arc::new(CapturingDependencyResolver { captured_requests });
+    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(CapturingDependencyResolver {
+        captured_requests: captured_requests.clone(),
+    });
     let mut extensions = ExecutorExtensions::new();
     extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
     extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
@@ -2660,18 +2667,30 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
         resolved_artifact_kind: Some("hf_compatible_directory".to_string()),
     };
 
-    let resolved = enforce_dependency_preflight_with_lifecycle(
+    let err = enforce_dependency_preflight_with_lifecycle(
         "llm-inference",
         &inputs,
         &extensions,
         Some(&context),
     )
     .await
-    .expect("dependency resolver should allow canonical PyTorch preflight")
-    .expect("resolver should return a model_ref");
-
-    assert_eq!(resolved.engine, "pytorch");
-    assert_eq!(resolved.model_id, "llm/example/tiny-transformers");
+    .expect_err("dependency preflight must fail before legacy resolver request");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency_preflight is diagnostic-only"));
+            assert!(
+                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
+            );
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert!(
+        captured_requests
+            .lock()
+            .expect("captured dependency requests lock")
+            .is_empty(),
+        "diagnostic-only preflight must not build ModelDependencyRequest or call resolver"
+    );
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
     assert_eq!(events.len(), 3);
@@ -2691,18 +2710,12 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
     assert_eq!(events[0].detail, None);
     assert!(events[0].compatibility_report.is_none());
     assert!(events[0].compatibility_issues.is_empty());
-    assert_eq!(
-        events[1].kind,
-        InferenceRequestLifecycleEventKind::Completed
-    );
-    assert_eq!(events[1].detail, None);
-    let report = events[1]
-        .compatibility_report
-        .as_ref()
-        .expect("completed preflight should carry compatibility report");
-    assert!(report.compatible);
-    assert_eq!(report.status, "accepted");
-    assert_eq!(report.model_source, "supported");
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert!(events[1]
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("dependency_preflight is diagnostic-only")));
+    assert!(events[1].compatibility_report.is_none());
     assert!(events[1].compatibility_issues.is_empty());
     assert_eq!(
         events[2].kind,
@@ -2755,9 +2768,10 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
         Some(&context),
     )
     .await
-    .expect_err("not-ready dependencies should block execution");
+    .expect_err("diagnostic-only dependency preflight should block before resolver");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency_preflight is diagnostic-only"));
             assert!(message.contains("pumas://models/tiny-hf"));
             assert!(!message.contains("/tmp/private/tiny-hf"));
         }
@@ -3078,7 +3092,7 @@ fn model_dependency_requirements_for_request(
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_dependency_preflight_maps_explicit_hf_transformers_request() {
+async fn test_dependency_preflight_rejects_explicit_hf_transformers_before_request() {
     let captured_requests = Arc::new(Mutex::new(Vec::new()));
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(CapturingDependencyResolver {
         captured_requests: captured_requests.clone(),
@@ -3101,31 +3115,25 @@ async fn test_dependency_preflight_maps_explicit_hf_transformers_request() {
         serde_json::json!({"model_id": "pumas://models/tiny-hf"}),
     );
 
-    let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
+    let err = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
-        .expect("HF-compatible Transformers/PyTorch preflight should resolve")
-        .expect("resolver should return a model_ref");
-
-    assert_eq!(resolved.engine, "pytorch");
-    assert_eq!(resolved.model_id, "pumas://models/tiny-hf");
-    assert_eq!(
-        resolved.model_path,
-        "pumas-resolved://pumas://models/tiny-hf"
-    );
-    assert_eq!(resolved.task_type_primary, "text-generation");
+        .expect_err("node-engine dependency preflight should fail before legacy request");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency_preflight is diagnostic-only"));
+            assert!(
+                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
+            );
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
 
     let requests = captured_requests
         .lock()
         .expect("captured dependency requests lock");
-    assert_eq!(requests.len(), 1);
-    let request = &requests[0];
-    assert_eq!(request.node_type, "llm-inference");
-    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
-    assert_eq!(request.model_id.as_deref(), Some("pumas://models/tiny-hf"));
-    assert_eq!(request.model_path, "");
-    assert_eq!(
-        request.task_type_primary.as_deref(),
-        Some("text-generation")
+    assert!(
+        requests.is_empty(),
+        "diagnostic-only preflight must not build ModelDependencyRequest or call resolver"
     );
 }
 

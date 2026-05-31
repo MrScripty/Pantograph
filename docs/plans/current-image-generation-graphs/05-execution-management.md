@@ -20456,6 +20456,43 @@ Worker rules:
     and single-state-owner guidance; reviewed `PLAN-STANDARDS.md` re-plan and
     worktree hygiene guidance; updated this execution note and Milestone 5b
     sequencing.
+- 2026-05-31 node-engine dependency-preflight diagnostic-only guardrail:
+  - Smallest useful slice: make the remaining node-engine
+    dependency-preflight/model-ref path diagnostic-only before it can build
+    legacy runtime execution payloads.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/README.md`,
+    `crates/node-engine/src/core_executor/dependency_preflight/README.md`,
+    `crates/node-engine/src/README.md`, and these plan files.
+  - Implementation: `enforce_dependency_preflight` now still returns `Ok(None)`
+    for node types that never enter runtime dependency preflight, but retired
+    runtime preflight requests fail closed immediately with a typed diagnostic.
+    The diagnostic path records bounded lifecycle failure events when context
+    is present and stops before resolver lookup, `ModelDependencyRequest`
+    construction, path repair, runtime-host dispatch, or `ModelRefV2` output.
+    The old successful preflight body was deleted rather than retained as an
+    unused compatibility helper.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness facts
+    are adapted back into old dependency request or model-ref shapes. The
+    remaining projection helpers are transitional tested cleanup targets only.
+  - Focused tests updated: dependency-preflight tests now assert
+    diagnostic-only failure, no captured resolver requests, lifecycle failure
+    emission, path redaction, and skip behavior for non-runtime/retired direct
+    node shapes.
+  - Verification passed: `cargo fmt --package node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes dependency_preflight
+    -- --nocapture`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; `cargo check -p node-engine --features
+    audio-nodes`; `cargo check -p node-engine`; `rg -n
+    "get::<Arc<dyn ModelDependencyResolver|resolve_model_dependency_requirements|check_dependencies|resolve_model_ref|build_model_dependency_request\\("
+    crates/node-engine/src/core_executor/dependency_preflight.rs` returning
+    no hits; and `git diff --check`.
+  - Remaining follow-up: apply the same diagnostic-only rule to
+    embedded-runtime task-executor dependency preflight and production resolver
+    composition before scheduler/runtime-host task-result integration or broad
+    deletion.
 
 ### Traceability Links
 

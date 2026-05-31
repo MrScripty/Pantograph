@@ -108,13 +108,15 @@ before constructing a single-task request.
 - Core executor settings expansion and optional-input readers stay in
   `core_executor/settings.rs` so runtime-backed adapters share one schema
   default and port-override normalization path.
-- Core executor dependency preflight stays in
-  `core_executor/dependency_preflight.rs` so model-reference construction,
-  backend-key normalization, and resolver readiness checks remain separate from
-  dispatch and runtime request execution. Explicit workflow/backend inputs are
-  the only graph-owned backend signal; resolved Pumas package facts may supply
-  factual compatibility context, but node-engine must not treat retired package
-  facts or path fields as an alternate graph model-selection contract.
+- Core executor dependency preflight is retired as a successful runtime
+  execution path. `core_executor/dependency_preflight.rs` remains temporarily
+  as a diagnostic-only guardrail and tested cleanup target; if reached, it
+  must fail closed before resolver lookup, `ModelDependencyRequest`
+  construction, path repair, runtime-host dispatch, or `ModelRefV2` output.
+  Explicit workflow/backend inputs are the only graph-owned backend signal;
+  resolved Pumas package facts may supply factual compatibility context, but
+  node-engine must not treat retired package facts or path fields as an
+  alternate graph model-selection contract.
 - Retired backend-specific inference node types in `core_executor.rs` must
   remain outside the live executor path. Saved graph upgrades are owned by
   workflow-service canonicalization; new runtime-backed behavior must enter via
