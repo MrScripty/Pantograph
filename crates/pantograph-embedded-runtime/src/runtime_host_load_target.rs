@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
 use pumas_library::models::{
     PumasArtifactConsumer, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
@@ -17,13 +18,24 @@ pub(crate) struct RuntimeHostPumasLoadTargetResolver {
     pumas_api: Arc<pumas_library::PumasApi>,
 }
 
+#[async_trait]
+pub(crate) trait RuntimeHostLoadTargetResolver: Send + Sync {
+    async fn resolve(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError>;
+}
+
 #[allow(dead_code)]
 impl RuntimeHostPumasLoadTargetResolver {
     pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
         Self { pumas_api }
     }
+}
 
-    pub(crate) async fn resolve(
+#[async_trait]
+impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
+    async fn resolve(
         &self,
         request: &ValidatedRuntimeHostExecutionRequest,
     ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {

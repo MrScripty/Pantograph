@@ -1940,6 +1940,24 @@ artifact id validation. Remaining before execution: inject the sink into
 runtime-host diagnostics, call the image gateway, and project completed image
 results into path-free media artifact outputs.
 
+Completed 2026-05-31 for the execution port dependency-seam slice:
+`EmbeddedRuntimeHostExecutionPort` now depends on narrow load-target and
+media-artifact sink boundaries. The existing Pumas load-target resolver
+implements the new `RuntimeHostLoadTargetResolver` trait, and the port stores
+trait-object dependencies so tests and future composition can exercise the
+runtime-host boundary without exposing workflow-service persistence internals
+or Pumas implementation details. After load-target resolution, missing media
+sink configuration now fails closed with a typed rejected runtime-host
+response; when both dependencies exist, the port still stops at the existing
+runtime-unavailable guardrail because gateway execution remains unwired.
+Verification passed: `cargo fmt --package pantograph-embedded-runtime`; `cargo
+test -p pantograph-embedded-runtime runtime_host_execution_port --
+--nocapture`. Verification caveat: the focused test command still reports the
+known workflow-service `set_active_run_execution_plan` warning. Remaining
+before execution: compose package facts, image projection, gateway execution,
+sink-backed output writing, and typed gateway/write diagnostics inside the
+port.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

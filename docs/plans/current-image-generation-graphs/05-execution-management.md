@@ -20004,6 +20004,37 @@ Worker rules:
     `EmbeddedRuntimeHostExecutionPort`, map missing sink/write failures into
     typed runtime-host diagnostics, call the image gateway, and project
     completed results into path-free media artifact outputs.
+- 2026-05-31 runtime-host execution port dependency-seam slice:
+  - Smallest useful slice: make `EmbeddedRuntimeHostExecutionPort` depend on
+    narrow runtime-host load-target and media-artifact sink contracts before
+    enabling the image gateway call.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_load_target.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: introduced a `RuntimeHostLoadTargetResolver` trait,
+    implemented it for the existing Pumas load-target resolver, changed the
+    port to store trait-object dependencies, added a constructor for the full
+    runtime dependency pair, and added a fail-closed missing-media-sink guard
+    after load-target resolution.
+  - No-fallback/no-legacy result: the port still does not call the gateway or
+    emit successful outputs. Missing load-target resolver, missing media sink,
+    Pumas load-target errors, and still-unwired runtime execution all return
+    typed rejected runtime-host responses; no planned-inference branch,
+    node-engine launch, graph path, Tauri persistence logic, or fake artifact
+    ref was added.
+  - Focused tests added: missing load-target resolver remains rejected,
+    invalid requests remain port errors, successful fake load-target
+    resolution without a sink rejects with the media-sink diagnostic, and the
+    presence of both dependencies advances only to the existing runtime
+    unavailable guardrail.
+  - Verification passed: `cargo fmt --package pantograph-embedded-runtime`;
+    `cargo test -p pantograph-embedded-runtime runtime_host_execution_port --
+    --nocapture`. The focused test command still reports the known
+    workflow-service `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up before successful execution: compose package-facts
+    resolution, image projection, gateway execution, sink-backed output
+    writing, and typed gateway/write diagnostics inside the port.
 
 ### Traceability Links
 

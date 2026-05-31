@@ -1153,3 +1153,23 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   map missing sink/write failures into typed runtime-host diagnostics, call
   the image gateway, and project completed image results into path-free media
   artifact outputs.
+- 2026-05-31 runtime-host execution port dependency-seam slice completed.
+  Smallest useful vertical slice: make `EmbeddedRuntimeHostExecutionPort`
+  depend on narrow load-target and media-artifact sink boundaries while still
+  failing closed before successful gateway execution. Allowed write set:
+  embedded-runtime execution port, load-target module, README, this milestone,
+  runtime-host handoff plan, and execution-management ledger. Implementation:
+  added `RuntimeHostLoadTargetResolver`, implemented it for the existing Pumas
+  resolver, stored trait-object dependencies in the port, added a full
+  dependency-pair constructor, and added a missing-media-sink rejection after
+  load-target resolution. No-fallback/no-legacy result: the port still emits
+  only typed rejected responses for missing dependencies, load-target errors,
+  and unwired runtime execution; no gateway call, planned-inference branch,
+  node-engine launch, Tauri persistence logic, graph path, or fake artifact ref
+  was added. Verification passed: `cargo fmt --package
+  pantograph-embedded-runtime`; `cargo test -p pantograph-embedded-runtime
+  runtime_host_execution_port -- --nocapture`. Verification caveat: the
+  focused test command still reports the known workflow-service
+  `set_active_run_execution_plan` warning. Remaining follow-up: compose
+  package-facts resolution, image projection, gateway execution, sink-backed
+  output writing, and typed gateway/write diagnostics inside the port.

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
@@ -8,18 +10,23 @@ use pantograph_runtime_host_contracts::{
 };
 
 use crate::runtime_host_load_target::{
-    RuntimeHostPumasLoadTargetError, RuntimeHostPumasLoadTargetResolver,
+    RuntimeHostLoadTargetResolver, RuntimeHostPumasLoadTargetError,
+    RuntimeHostPumasLoadTargetResolver,
 };
+use crate::runtime_host_media_artifact_sink::RuntimeHostMediaArtifactSink;
 
 const MISSING_LOAD_TARGET_RESOLVER_HINT: &str =
     "embedded_runtime_host_execution_port.missing_load_target_resolver";
 const LOAD_TARGET_UNAVAILABLE_HINT: &str =
     "embedded_runtime_host_execution_port.pumas_load_target_unavailable";
+const MISSING_MEDIA_ARTIFACT_SINK_HINT: &str =
+    "embedded_runtime_host_execution_port.missing_media_artifact_sink";
 const RUNTIME_EXECUTION_UNAVAILABLE_HINT: &str =
     "embedded_runtime_host_execution_port.runtime_execution_unavailable";
 
 pub(crate) struct EmbeddedRuntimeHostExecutionPort {
-    load_target_resolver: Option<RuntimeHostPumasLoadTargetResolver>,
+    load_target_resolver: Option<Arc<dyn RuntimeHostLoadTargetResolver>>,
+    media_artifact_sink: Option<Arc<dyn RuntimeHostMediaArtifactSink>>,
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
@@ -27,6 +34,7 @@ impl EmbeddedRuntimeHostExecutionPort {
     pub(crate) fn fail_closed() -> Self {
         Self {
             load_target_resolver: None,
+            media_artifact_sink: None,
         }
     }
 
@@ -35,7 +43,29 @@ impl EmbeddedRuntimeHostExecutionPort {
         load_target_resolver: RuntimeHostPumasLoadTargetResolver,
     ) -> Self {
         Self {
+            load_target_resolver: Some(Arc::new(load_target_resolver)),
+            media_artifact_sink: None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_runtime_dependencies(
+        load_target_resolver: Arc<dyn RuntimeHostLoadTargetResolver>,
+        media_artifact_sink: Arc<dyn RuntimeHostMediaArtifactSink>,
+    ) -> Self {
+        Self {
             load_target_resolver: Some(load_target_resolver),
+            media_artifact_sink: Some(media_artifact_sink),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_load_target_resolver_only_for_test(
+        load_target_resolver: Arc<dyn RuntimeHostLoadTargetResolver>,
+    ) -> Self {
+        Self {
+            load_target_resolver: Some(load_target_resolver),
+            media_artifact_sink: None,
         }
     }
 }
@@ -63,12 +93,22 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
         };
 
         match load_target_resolver.resolve(&validated_request).await {
-            Ok(_load_target) => Ok(rejected_response(
-                validated_request.as_ref(),
-                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
-                "embedded runtime-host execution has resolved the Pumas load target, but runtime-specific execution is not wired yet",
-                RUNTIME_EXECUTION_UNAVAILABLE_HINT,
-            )),
+            Ok(_load_target) => {
+                let Some(_media_artifact_sink) = self.media_artifact_sink.as_ref() else {
+                    return Ok(rejected_response(
+                        validated_request.as_ref(),
+                        RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                        "embedded runtime-host execution requires a media artifact sink before generated media can be returned",
+                        MISSING_MEDIA_ARTIFACT_SINK_HINT,
+                    ));
+                };
+                Ok(rejected_response(
+                    validated_request.as_ref(),
+                    RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                    "embedded runtime-host execution has resolved the Pumas load target and media artifact sink, but runtime-specific execution is not wired yet",
+                    RUNTIME_EXECUTION_UNAVAILABLE_HINT,
+                ))
+            }
             Err(error) => Ok(rejected_response(
                 validated_request.as_ref(),
                 RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
@@ -112,6 +152,14 @@ fn load_target_error_message(error: RuntimeHostPumasLoadTargetError) -> String {
 mod tests {
     use super::*;
     use pantograph_runtime_host_contracts::RuntimeHostExecutionContractError;
+    use pumas_library::models::{
+        AssetValidationState, PackageArtifactKind, PumasArtifactLoadPathKind,
+        PumasArtifactLoadTarget, StorageKind,
+    };
+
+    use crate::runtime_host_media_artifact_sink::{
+        RuntimeHostImageArtifactWriteRequest, RuntimeHostMediaArtifactSinkError,
+    };
 
     #[tokio::test]
     async fn fail_closed_port_rejects_without_load_target_resolver() {
@@ -164,10 +212,102 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn port_rejects_after_load_target_when_media_sink_is_missing() {
+        let request = runtime_host_request_fixture();
+        let port = EmbeddedRuntimeHostExecutionPort::with_load_target_resolver_only_for_test(
+            Arc::new(ReadyLoadTargetResolver),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request)
+            .await
+            .expect("missing media sink should be a typed rejected response");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert!(response.outputs.is_empty());
+        let diagnostic = response.diagnostics.first().expect("diagnostic");
+        assert_eq!(
+            diagnostic.code,
+            RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable
+        );
+        assert_eq!(
+            diagnostic.hint.as_deref(),
+            Some(MISSING_MEDIA_ARTIFACT_SINK_HINT)
+        );
+    }
+
+    #[tokio::test]
+    async fn port_rejects_runtime_unavailable_after_required_dependencies_exist() {
+        let request = runtime_host_request_fixture();
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(UnusedMediaArtifactSink),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request)
+            .await
+            .expect("unwired runtime execution should be a typed rejected response");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert!(response.outputs.is_empty());
+        let diagnostic = response.diagnostics.first().expect("diagnostic");
+        assert_eq!(
+            diagnostic.code,
+            RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable
+        );
+        assert_eq!(
+            diagnostic.hint.as_deref(),
+            Some(RUNTIME_EXECUTION_UNAVAILABLE_HINT)
+        );
+    }
+
     fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
         serde_json::from_str(include_str!(
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
         ))
         .expect("runtime host request fixture should deserialize")
+    }
+
+    struct ReadyLoadTargetResolver;
+
+    #[async_trait]
+    impl RuntimeHostLoadTargetResolver for ReadyLoadTargetResolver {
+        async fn resolve(
+            &self,
+            _request: &ValidatedRuntimeHostExecutionRequest,
+        ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
+            Ok(PumasArtifactLoadTarget {
+                model_ref: pumas_library::models::PumasModelRef {
+                    model_id: "pumas://models/juggernaut-xl-v10".to_string(),
+                    selected_artifact_id: Some("diffusers-bundle".to_string()),
+                    selected_artifact_path: Some("juggernaut-xl-v10/diffusers".to_string()),
+                    ..Default::default()
+                },
+                artifact_kind: PackageArtifactKind::DiffusersBundle,
+                local_load_path: "/host-only/pumas/juggernaut-xl-v10".to_string(),
+                load_path_kind: PumasArtifactLoadPathKind::Directory,
+                library_root_id: Some("default".to_string()),
+                storage_kind: StorageKind::LibraryOwned,
+                validation_state: AssetValidationState::Valid,
+                content_fingerprint: Some("sha256:abc".to_string()),
+                package_facts_contract_version: Some(2),
+            })
+        }
+    }
+
+    struct UnusedMediaArtifactSink;
+
+    impl RuntimeHostMediaArtifactSink for UnusedMediaArtifactSink {
+        fn write_image_output(
+            &self,
+            _request: RuntimeHostImageArtifactWriteRequest<'_>,
+        ) -> Result<
+            pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef,
+            RuntimeHostMediaArtifactSinkError,
+        > {
+            panic!("media sink must not be called before runtime execution is wired")
+        }
     }
 }
