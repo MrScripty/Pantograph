@@ -20359,6 +20359,43 @@ Worker rules:
     inference-nodes,pytorch-nodes`; `cargo check -p node-engine`; and `rg -n
     "pytorch_nodes|kv_cache_pytorch|execute_pytorch_inference|pytorch_typed_generation_settings|PyTorchTypedGenerationSettings|capture_pytorch_output_handle|restore_pytorch_input_handle"
     crates/node-engine/src` returning no hits.
+- 2026-05-31 node-engine llama.cpp execution fail-closed slice:
+  - Smallest useful slice: retire node-engine successful llama.cpp launch for
+    canonical `llm-inference` with `backend_key=llama_cpp`.
+  - Allowed files touched: `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/kv_cache.rs`,
+    `crates/node-engine/src/core_executor/kv_cache_tests.rs`,
+    `crates/node-engine/src/core_executor/kv_cache_llamacpp.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/llamacpp_nodes.rs`,
+    `crates/node-engine/src/core_executor/README.md`,
+    `crates/node-engine/src/README.md`, and these plan files.
+  - Implementation: the llama.cpp backend-key branch now returns a typed
+    scheduler-owned task-state/result diagnostic before dependency preflight,
+    graph `model_path` loading, gateway startup, completion requests, KV
+    restore/capture, or `ModelRefV2` output construction. The node-engine
+    llama.cpp launch module and old live llama.cpp KV restore/capture helper
+    source were deleted.
+  - No-fallback/no-legacy result: no scheduler/runtime-host/readiness facts
+    were adapted back into `ModelDependencyRequest`, `ModelRefV2`, or
+    graph-path execution. Explicit KV-cache save/load/truncate node handlers
+    remain and are not a successful runtime launch branch.
+  - Focused test added:
+    `test_canonical_llm_llamacpp_backend_key_fails_closed_before_dependency_preflight`
+    asserts the scheduler-owned fail-closed diagnostic.
+  - Verification passed: `cargo fmt --package node-engine`; `cargo test -p
+    node-engine --features inference-nodes
+    test_canonical_llm_llamacpp_backend_key_fails_closed_before_dependency_preflight
+    -- --nocapture`; `cargo check -p node-engine --features
+    inference-nodes`; `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`; `cargo check -p node-engine`; and `rg -n
+    "llamacpp_nodes|kv_cache_llamacpp|execute_llamacpp_inference|capture_llamacpp_output_handle|restore_llamacpp_input_handle|llama_cpp_backend_config|parse_llamacpp_sse_content|kv_slot_temp_path|resolve_gguf_path"
+    crates/node-engine/src` returning no hits.
+  - Discovered issue recorded/deferred: retiring both PyTorch and llama.cpp
+    launch branches leaves the old dependency-preflight/model-ref module as a
+    transitional tested cleanup target. It is marked as temporary retired
+    code in the module declaration to keep checks clean until the planned
+    dependency/preflight removal slice deletes or replaces it.
 
 ### Traceability Links
 

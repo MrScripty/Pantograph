@@ -9,50 +9,6 @@ mod test_support;
 use test_support::{MockKvBackend, MockKvProcessSpawner};
 
 #[tokio::test]
-async fn capture_llamacpp_output_handle_saves_slot_into_store() {
-    let restored = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockKvBackend {
-            bytes: vec![1, 2, 3, 4],
-            restored: restored.clone(),
-        }),
-        "mock-kv",
-    ));
-    gateway.set_spawner(Arc::new(MockKvProcessSpawner)).await;
-
-    let mut extensions = ExecutorExtensions::new();
-    let store = Arc::new(KvCacheStore::memory_only());
-    extensions.set(crate::extension_keys::KV_CACHE_STORE, store.clone());
-
-    let handle_value =
-        capture_llamacpp_output_handle("task-a", "exec-a", &gateway, &extensions, None)
-            .await
-            .expect("capture should succeed");
-    let handle: KvCacheHandle =
-        serde_json::from_value(handle_value).expect("capture should return a typed handle");
-    let entry = store
-        .load(
-            &handle.cache_id,
-            &ModelFingerprint {
-                model_id: "model".to_string(),
-                config_hash: "cfg".to_string(),
-            },
-        )
-        .await
-        .expect("captured handle should resolve through the store");
-
-    assert_eq!(entry.data, vec![1, 2, 3, 4]);
-    assert_eq!(
-        entry
-            .metadata
-            .runtime_fingerprint
-            .as_ref()
-            .map(|fp| fp.runtime_id.as_str()),
-        Some("mock")
-    );
-}
-
-#[tokio::test]
 async fn execute_save_clones_handle_backed_entry() {
     let mut extensions = ExecutorExtensions::new();
     let store = Arc::new(KvCacheStore::memory_only());
@@ -189,75 +145,6 @@ async fn execute_load_returns_typed_handle_when_runtime_matches() {
     )
     .expect("load should return a typed handle");
     assert_eq!(handle.compatibility.runtime_fingerprint.runtime_id, "mock");
-}
-
-#[tokio::test]
-async fn restore_llamacpp_input_handle_restores_saved_slot_bytes() {
-    let restored = Arc::new(Mutex::new(Vec::new()));
-    let gateway = Arc::new(InferenceGateway::with_backend(
-        Box::new(MockKvBackend {
-            bytes: vec![9, 9, 9],
-            restored: restored.clone(),
-        }),
-        "mock-kv",
-    ));
-    gateway.set_spawner(Arc::new(MockKvProcessSpawner)).await;
-
-    let mut extensions = ExecutorExtensions::new();
-    let store = Arc::new(KvCacheStore::memory_only());
-    let entry = KvCacheEntry {
-        metadata: KvCacheMetadata {
-            cache_id: String::new(),
-            label: Some("saved".to_string()),
-            model_fingerprint: ModelFingerprint {
-                model_id: "model".to_string(),
-                config_hash: "cfg".to_string(),
-            },
-            runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
-                runtime_id: "mock".to_string(),
-                backend_key: "mock".to_string(),
-                tokenizer_fingerprint: "tok".to_string(),
-                prompt_format_fingerprint: Some("prompt".to_string()),
-                runtime_build_fingerprint: Some("build".to_string()),
-            }),
-            backend_hint: "mock".to_string(),
-            token_count: 0,
-            markers: Vec::new(),
-            created_at: 0,
-            updated_at: 0,
-            compressed: false,
-            extra: serde_json::json!({}),
-        },
-        data: vec![7, 8, 9],
-    };
-    let cache_id = store
-        .save(entry, Some(StoragePolicy::MemoryOnly))
-        .await
-        .expect("fixture save should succeed");
-    let metadata = store
-        .get_metadata(&cache_id)
-        .await
-        .expect("metadata should be available");
-    let handle = metadata
-        .executable_handle()
-        .expect("metadata should produce an executable handle");
-    extensions.set(crate::extension_keys::KV_CACHE_STORE, store);
-
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "kv_cache_in".to_string(),
-        serde_json::to_value(handle).expect("handle should serialize"),
-    );
-
-    let restored_slot =
-        restore_llamacpp_input_handle(&inputs, &gateway, &extensions, "task-a", "exec-a", None)
-            .await
-            .expect("restore should succeed");
-    assert!(restored_slot);
-    assert_eq!(
-        restored.lock().expect("lock should succeed").as_slice(),
-        [vec![7, 8, 9]]
-    );
 }
 
 #[tokio::test]

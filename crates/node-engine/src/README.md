@@ -129,9 +129,6 @@ before constructing a single-task request.
   host extensions, or caller-constructed graph-flow context. The single-task API
   must fail closed if explicit node-type authority is missing or contradicted
   by core resolution.
-- Llama.cpp completion execution stays in `core_executor/llamacpp_nodes.rs` so
-  completion streaming and KV-cache capture are isolated from the remaining
-  gateway-backed inference adapters.
 - Retrieval inference execution stays in `core_executor/retrieval_nodes.rs` so
   reranking document parsing and embedding compatibility checks remain separate
   from text/chat adapters.
@@ -139,6 +136,9 @@ before constructing a single-task request.
   `core_executor/audio_nodes.rs`. Node-engine PyTorch launch is retired:
   successful PyTorch execution must come from scheduler task state/results and
   runtime-host responses, not a node-engine Python-worker adapter.
+- Node-engine llama.cpp launch is retired: successful llama.cpp execution must
+  come from scheduler task state/results and runtime-host responses, not direct
+  graph `model_path` server startup or node-engine `ModelRefV2` output.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.

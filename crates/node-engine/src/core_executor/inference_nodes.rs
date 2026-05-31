@@ -70,39 +70,6 @@ fn inference_request_id(task_id: &str, execution_id: &str, task_label: &str) -> 
     format!("{execution_id}:{task_id}:{task_label}")
 }
 
-/// Resolve a model path that may be a directory to the actual `.gguf` file inside.
-///
-/// pumas-library stores directory paths; llama.cpp needs the `.gguf` file.
-#[cfg(feature = "inference-nodes")]
-pub(crate) fn resolve_gguf_path(path: &str) -> Result<String> {
-    let p = std::path::Path::new(path);
-    if p.is_dir() {
-        let gguf = std::fs::read_dir(p)
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Cannot read model directory '{}': {}",
-                    path, e
-                ))
-            })?
-            .filter_map(|entry| entry.ok())
-            .find(|entry| {
-                entry
-                    .path()
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
-            })
-            .ok_or_else(|| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "No .gguf file found in model directory '{}'",
-                    path
-                ))
-            })?;
-        Ok(gguf.path().to_string_lossy().into_owned())
-    } else {
-        Ok(path.to_string())
-    }
-}
-
 #[cfg(feature = "inference-nodes")]
 pub(crate) async fn execute_llm_inference(
     gateway: Option<&Arc<InferenceGateway>>,

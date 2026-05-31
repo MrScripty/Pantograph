@@ -17,12 +17,10 @@ into frontend, transport, or descriptor crates.
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
 | `inference_nodes.rs` | Feature-gated shared canonical inference request builders, graph result projection, and unload-model handling. |
 | `inference_tests.rs` | Focused tests for dependency preflight, backend-key normalization, embedding failure behavior, and reranker parsing. |
-| `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
-| `kv_cache_llamacpp.rs` | llama.cpp KV-cache slot restore/capture helpers and temporary slot-file handling. |
+| `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `kv_cache_parsing_tests.rs` | Focused tests for KV-cache storage-policy and marker parsing helpers. |
 | `kv_cache_test_support.rs` | Mock inference backend and process fixtures shared by KV-cache behavior tests. |
 | `kv_cache_tests.rs` | Focused KV-cache store, handle restore/capture, and backend-owned truncation tests. |
-| `llamacpp_nodes.rs` | Feature-gated llama.cpp completion execution, streaming response parsing, and KV-cache integration. |
 | `model_nodes.rs` | Pure model-provider and Puma library payload projection handlers. |
 | `processing_nodes.rs` | Pure processing handlers for code validation and JSON path extraction. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
@@ -130,8 +128,7 @@ stable public facade and dispatch owner.
 - Canonical text/chat usage projection in `inference_nodes.rs` is bounded
   graph metadata copied from typed gateway results or terminal stream chunks.
   It must not be recomputed from prompt or generated text.
-- Llama.cpp completion execution stays in `llamacpp_nodes.rs`; reranking and
-  embedding execution stay in `retrieval_nodes.rs`.
+- Reranking and embedding execution stay in `retrieval_nodes.rs`.
 - PyTorch lifecycle operations invoked from shared canonical handlers, such as
   model unload in `inference_nodes.rs`, must go through the inference crate's
   typed worker-envelope helpers instead of importing the embedded Python worker
@@ -140,6 +137,13 @@ stable public facade and dispatch owner.
   generation helpers, capture PyTorch KV-cache snapshots, or emit PyTorch
   `ModelRefV2` outputs. Unsupported or missing scheduler task state/results
   must fail closed with typed diagnostics.
+- Node-engine llama.cpp launch has been retired; successful llama.cpp
+  execution must come from scheduler task state/results and runtime-host
+  responses. Node-engine must not start a llama.cpp server from graph
+  `model_path`, call completion endpoints as the runtime-launch owner, or emit
+  llama.cpp `ModelRefV2` outputs. The old live llama.cpp KV restore/capture
+  helpers were removed with that launch path; explicit KV-cache nodes may
+  still save, load, and truncate typed cache handles through `kv_cache.rs`.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.

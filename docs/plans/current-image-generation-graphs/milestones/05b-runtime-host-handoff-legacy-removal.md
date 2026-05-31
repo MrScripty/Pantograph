@@ -296,10 +296,18 @@ adapter.
   host-owned facts in later runtime-host slices. The node-engine PyTorch
   launch module and PyTorch KV-cache source were deleted in the same slice so
   the retired branch does not leave unused successful-launch helpers behind.
-- [ ] Replace llama.cpp execution so successful model loading consumes
+- [x] Replace llama.cpp execution so successful model loading consumes
   scheduler-dispatched runtime-host requests plus host-owned executable facts
   and no longer reads graph `model_path`, reduced execution-plan projections,
-  or emits `ModelRefV2`.
+  or emits `ModelRefV2`. 2026-05-31 progress: canonical `llm-inference` with
+  `backend_key=llama_cpp` now fails closed inside node-engine before
+  dependency preflight, gateway startup, graph `model_path` loading,
+  completion requests, KV restore/capture, or `ModelRefV2` output. The
+  diagnostic states that llama.cpp runtime execution is scheduler-owned and
+  requires scheduler task state/results. The old llama.cpp node-engine launch
+  module and the old live llama.cpp KV restore/capture helper source were
+  deleted in the same slice; explicit KV-cache save/load/truncate node
+  handlers remain because they do not launch runtime inference.
 - [ ] Replace audio execution so successful model loading consumes host-owned
   executable facts and no longer reads graph `model_path`, reduced
   execution-plan projections, or emits `ModelRefV2`.

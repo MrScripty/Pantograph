@@ -2401,6 +2401,42 @@ async fn test_canonical_llm_pytorch_backend_key_fails_closed_before_dependency_p
     }
 }
 
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_llamacpp_backend_key_fails_closed_before_dependency_preflight() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("llama_cpp"));
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/tmp/model.gguf"),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-gguf"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("canonical llama.cpp inference should require scheduler task state");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("llama.cpp runtime execution is scheduler-owned"));
+            assert!(message.contains("requires scheduler task state/results"));
+            assert!(message.contains("node-engine llama.cpp launch is retired"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
 #[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
 #[tokio::test]
 async fn test_canonical_llm_package_facts_do_not_dispatch_to_dependency_preflight() {

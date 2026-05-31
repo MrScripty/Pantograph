@@ -8,7 +8,6 @@ use inference::kv_cache::{
     ModelFingerprint, StoragePolicy,
 };
 use inference::InferenceGateway;
-use uuid::Uuid;
 
 use crate::core_executor::require_gateway;
 use crate::error::{NodeEngineError, Result};
@@ -79,10 +78,6 @@ fn truncate_option_diagnostics(
     }
     diagnostics
 }
-
-#[path = "kv_cache_llamacpp.rs"]
-mod llamacpp;
-pub(super) use llamacpp::{capture_llamacpp_output_handle, restore_llamacpp_input_handle};
 
 pub(super) async fn execute_save(
     inputs: &HashMap<String, serde_json::Value>,
@@ -438,15 +433,6 @@ fn parse_token_position(value: &serde_json::Value) -> Result<usize> {
         ));
     }
     Ok(position as usize)
-}
-
-fn kv_slot_temp_path(stage: &str, discriminator: &str) -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "pantograph-llamacpp-kv-{}-{}-{}.bin",
-        stage,
-        discriminator,
-        Uuid::new_v4()
-    ))
 }
 
 #[cfg(test)]

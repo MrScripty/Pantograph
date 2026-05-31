@@ -33,14 +33,13 @@ mod audio_nodes;
     feature = "pytorch-nodes",
     feature = "audio-nodes"
 ))]
+#[allow(dead_code)]
 mod dependency_preflight;
 mod file_io;
 #[cfg(feature = "inference-nodes")]
 mod inference_nodes;
 #[cfg(feature = "inference-nodes")]
 mod kv_cache;
-#[cfg(feature = "inference-nodes")]
-mod llamacpp_nodes;
 mod model_nodes;
 mod processing_nodes;
 mod pure_nodes;
@@ -58,8 +57,6 @@ pub(crate) use dependency_preflight::*;
 pub(crate) use file_io::*;
 #[cfg(feature = "inference-nodes")]
 pub(crate) use inference_nodes::*;
-#[cfg(feature = "inference-nodes")]
-pub(crate) use llamacpp_nodes::*;
 pub(crate) use model_nodes::*;
 pub(crate) use processing_nodes::*;
 pub(crate) use pure_nodes::*;
@@ -331,22 +328,9 @@ impl TaskExecutor for CoreTaskExecutor {
                         .await
                     }
                     _ if preferred_backend.as_deref() == Some("llamacpp") => {
-                        let resolved_model_ref = enforce_dependency_preflight(
-                            "llm-inference",
-                            &canonical_inputs,
-                            extensions,
-                        )
-                        .await?;
-                        execute_llamacpp_inference(
-                            self.gateway.as_ref(),
-                            &canonical_inputs,
-                            task_id,
-                            self.event_sink.as_ref(),
-                            exec_id,
-                            resolved_model_ref,
-                            extensions,
-                        )
-                        .await
+                        Err(NodeEngineError::ExecutionFailed(format!(
+                            "llama.cpp runtime execution is scheduler-owned and requires scheduler task state/results; node-engine llama.cpp launch is retired for workflow run '{exec_id}', node '{task_id}'"
+                        )))
                     }
                     _ if preferred_backend.as_deref() == Some("pytorch") => {
                         #[cfg(feature = "pytorch-nodes")]
