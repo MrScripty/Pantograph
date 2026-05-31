@@ -1327,6 +1327,11 @@ Next implementation sequence:
 5. Join Pumas package facts with runtime-registry capability facts to produce
    candidate fact drafts with typed compatibility diagnostics, but no resource
    leases yet.
+   Completed 2026-05-30: the provider now joins projected Pumas accepted
+   backend hints with runtime-registry backend keys into internal path-free
+   candidate drafts and returns typed incompatible-runtime diagnostics when no
+   runtime capability matches. It still emits no scheduler candidates until
+   reservation facts are supplied.
 6. Add runtime-registry reservation through
    `RuntimeDispatchResourceFactsSource`, project returned leases into
    `SchedulerResourceReservation`, and emit candidates only when reservation
@@ -1390,6 +1395,25 @@ source-snapshot before dispatch selection, then join projected Pumas package
 facts with runtime capability facts into candidate drafts. Resource-backed
 candidates remain disabled until reservation acquisition and lifecycle pairing
 are implemented.
+
+2026-05-30 dispatch provider candidate-draft slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Implementation notes: added internal
+`EmbeddedRuntimeDispatchCandidateDraft` assembly that matches Pumas accepted
+backend hints to runtime-registry backend keys after normalization. The
+provider reports a typed `IncompatibleRuntimeRequirement` diagnostic when
+projected source facts are available but no runtime capability matches. Drafts
+are not emitted as scheduler candidates yet because reservation facts and
+release lifecycle coverage are still required.
+
+Remaining follow-up: add runtime-registry reservation through
+`RuntimeDispatchResourceFactsSource`, project reservation leases into scheduler
+resource facts, and only then emit validated scheduler candidate bundles.
 
 ## Verification Strategy
 

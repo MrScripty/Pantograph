@@ -19028,6 +19028,34 @@ Worker rules:
     remain blocked until reservation acquisition and lifecycle pairing are
     implemented.
 
+- 2026-05-30 dispatch provider candidate-draft slice
+  - Smallest useful vertical slice: join already-projected Pumas package facts
+    with runtime-registry capability facts into internal candidate drafts while
+    keeping scheduler candidate emission disabled until resource reservation is
+    wired.
+  - Allowed write set: `runtime_dispatch_candidate_provider.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and plan logs.
+  - Implementation notes: added internal path-free
+    `EmbeddedRuntimeDispatchCandidateDraft` assembly, normalized Pumas accepted
+    backend hints and runtime backend keys, and returned typed
+    `IncompatibleRuntimeRequirement` diagnostics when no runtime capability
+    matches projected package facts.
+  - Test coverage: added focused provider tests for successful backend-hint to
+    runtime-capability draft matching and typed mismatch diagnostics.
+  - No-fallback/no-legacy result: drafts are derived only from staged Pumas and
+    runtime-registry facts. The provider still emits no scheduler candidates,
+    still requires resource facts before candidate emission, and does not read
+    graph paths, reduced execution plans, display strings, `ModelRefV2`, or
+    compatibility preflight state.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: call `RuntimeDispatchResourceFactsSource` for matched
+    drafts, project reservation leases into scheduler resource facts, and only
+    then emit validated scheduler candidate bundles with lifecycle coverage.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module
