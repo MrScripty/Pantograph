@@ -62,6 +62,18 @@ state/results, or the canonical inference-interface descriptor, stop and
 re-plan a shared contract extension before editing manifests, lockfiles, or
 production source. Do not create an adapter-local bridge as a shortcut.
 
+2026-05-31 production resolver-composition re-plan decision: use option 2, the
+backend diagnostic/activity split. Production workflow executor extensions and
+runtime extension snapshots must stop carrying `ModelDependencyResolver`
+because runtime execution no longer owns legacy dependency/model-ref
+resolution. Any retained dependency activity or diagnostic resolver behavior
+must be exposed through a backend-owned diagnostic/activity boundary that Tauri
+can subscribe to or forward as transport. Tauri must not manage
+`TauriModelDependencyResolver` as business state or attach activity policy
+directly to the resolver. Retained resolver commands/probes/tests must be
+classified as diagnostic/tooling-only or pending deletion and must be isolated
+from scheduler/runtime-host execution.
+
 ## Problem
 
 Milestone 5a established scheduler-owned readiness admission and runtime
@@ -185,10 +197,15 @@ Use the clean replacement path:
    translate canonical readiness back into `ModelDependencyRequest`,
    `ModelRefV2`, or path-shaped request fields.
 11. Remove production composition of `ModelDependencyResolver` and
-   `ModelRefV2`-producing paths after the scheduler/runtime-host response path
-   covers the relevant caller. Remaining resolver commands, probes, or tests
-   must be diagnostic-only or explicitly classified as non-execution
-   configuration/tooling before they are retained.
+   `ModelRefV2`-producing paths through the option 2 backend
+   diagnostic/activity split. First stop installing `MODEL_DEPENDENCY_RESOLVER`
+   into production workflow executor extensions and stop snapshotting/applying
+   the resolver into runtime execution. Then introduce or reuse a backend-owned
+   dependency diagnostic/activity handle for bounded event subscription so
+   Tauri only forwards activity events and does not own resolver lifecycle,
+   dependency policy, or event attachment policy. Remaining resolver commands,
+   probes, or tests must be diagnostic-only or explicitly classified as
+   non-execution configuration/tooling before they are retained.
 12. Delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
    `build_model_ref_v2`, path repair helpers, direct old runtime task success
    fixtures, and path-shaped tests once their successful production callers are
@@ -212,6 +229,12 @@ typed diagnostics.
   launch branches after scheduler-to-runtime-host dispatch is wired.
 - Do not leave old resolver calls as alternate successful branches after the
   host handoff is wired.
+- Do not install `ModelDependencyResolver` into production workflow executor
+  extensions or runtime extension snapshots after the resolver-composition
+  guardrail slice.
+- Do not let Tauri manage `TauriModelDependencyResolver` as business state or
+  attach dependency activity policy directly to the resolver. Tauri may only
+  subscribe to or forward backend-owned diagnostic activity.
 - Do not let runtime adapters choose scheduler runtime/device policy.
 - Do not preserve tests or fixtures that validate path-shaped success behavior.
 

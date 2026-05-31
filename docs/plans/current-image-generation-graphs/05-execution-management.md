@@ -20540,6 +20540,38 @@ Worker rules:
     classified replacement targets. Do not delete them until canonical
     scheduler/runtime-host task-result response coverage is complete or a
     focused diagnostic/tooling-only slice isolates them.
+- 2026-05-31 production resolver-composition re-plan:
+  - Decision: use option 2, the backend diagnostic/activity split. Production
+    runtime execution must stop installing or snapshotting
+    `ModelDependencyResolver` into workflow executor extensions. Dependency
+    activity emission and retained diagnostic/tooling resolver behavior must
+    move behind a backend-owned diagnostic/activity boundary that Tauri can
+    subscribe to or forward as transport only.
+  - Standards alignment: this follows the coding standards' simplicity and
+    complection guidance by separating runtime execution, backend diagnostic
+    lifecycle, app-shell transport, and legacy tooling cleanup. It also follows
+    backend-owned data and layered architecture rules: Tauri must not own
+    dependency policy, resolver lifecycle, install/check decisions, or activity
+    attachment policy.
+  - No-fallback/no-legacy result: runtime execution must not see the legacy
+    resolver as an alternate successful branch. Retained resolver/probe/test
+    surfaces must be diagnostic/tooling-only or pending deletion and must not
+    produce executable launch inputs, `ModelRefV2`, runtime-host dispatch
+    facts, or path-shaped success payloads.
+  - Next implementation slice: stop applying `MODEL_DEPENDENCY_RESOLVER` to
+    production workflow executor extensions/runtime extension snapshots, add
+    or reuse a backend-owned dependency activity subscription handle, adjust
+    hosted startup/Tauri composition so Tauri forwards only that activity
+    stream, and add guardrail tests proving no runtime execution path can call
+    the resolver.
+  - Verification for this plan update: reviewed
+    `Coding-Standards/CODING-STANDARDS.md` simplicity/complection,
+    backend-owned data, and layering guidance; reviewed
+    `PLAN-STANDARDS.md` complection/re-plan requirements; reviewed
+    `ARCHITECTURE-PATTERNS.md` app/contracts/domain dependency direction and
+    view-model/app-shell business-logic limits; searched current resolver
+    composition hits in embedded-runtime and Tauri to identify the affected
+    blast radius.
 
 ### Traceability Links
 
