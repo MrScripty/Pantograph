@@ -19078,6 +19078,28 @@ Worker rules:
     ownership, avoids dropped claims, and prevents fallback or special-case
     candidate construction.
 
+- 2026-05-30 reservation-vector contract decision
+  - Decision: use option 2 from
+    `09-runtime-host-handoff-legacy-removal.md`. Update workflow-service and
+    scheduler dispatch contracts so candidates and selected decisions carry all
+    `SchedulerResourceReservation` rows for the selected runtime-registry
+    lease.
+  - Standards result: this is a contract-first change that keeps one candidate
+    equal to one runtime execution, keeps runtime-registry as the resource
+    source of truth, and avoids complecting resource claims with candidate
+    identity. It avoids fallback shapes such as first-reservation wins,
+    per-claim candidate duplication, aggregate strings, or provider-invented
+    device ids.
+  - Next implementation order: scheduler contract tests and vector validation,
+    scheduler DTO/selection updates, workflow-service candidate fact
+    projection updates, fixture updates, then embedded-runtime resource-backed
+    candidate emission.
+  - Remaining device constraint: provider emission for unconstrained tasks
+    stays blocked until runtime capability facts expose selected device
+    candidates. Explicit-device support may land first only if it uses the
+    same reservation-vector contract and returns typed diagnostics when device
+    facts are missing.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

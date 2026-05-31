@@ -1458,6 +1458,65 @@ avoids special-case fallbacks, and separates concerns: runtime-registry owns
 claims and leases, provider projects all claim reservations, scheduler selects
 one candidate, and runtime-host lifecycle releases the selected lease.
 
+Selected decision: use option 2. Before the provider emits resource-backed
+candidates, update the workflow-service and scheduler dispatch contracts so a
+candidate and selected decision carry all resource reservations for the chosen
+runtime-registry lease. The contract must remain explicit and validated:
+
+- `WorkflowRuntimeDispatchCandidateFact` must carry
+  `Vec<SchedulerResourceReservation>` instead of one reservation.
+- `SchedulerDispatchCandidate` must carry the same reservation vector. Empty
+  reservation vectors are invalid for eligible candidates and must produce
+  typed `MissingReservation` diagnostics.
+- `SchedulerDispatchDecision` must preserve the selected lease id and carry the
+  selected reservation vector so diagnostics and task state can explain every
+  claim. All reservations in the vector must belong to the same workflow run,
+  task, and reservation lease id.
+- Validation must reject mixed workflow runs, mixed tasks, mixed lease ids,
+  duplicate resource claims for the same device/resource kind, empty vectors,
+  and path-carrying model refs.
+- Runtime-host lifecycle still releases by the selected lease id. It must not
+  release per resource claim or invent additional release semantics.
+- The provider must not emit candidates for unconstrained tasks until runtime
+  capability facts expose selected device candidates. It may support explicit
+  device tasks first only if that path uses the same reservation-vector
+  contract and returns typed diagnostics for missing device facts.
+
+Standards alignment for the selected option:
+
+- Simplicity/complection: one candidate represents one runtime execution and
+  one runtime-registry lease, while the reservation vector represents the
+  concrete resource claims for that execution. This avoids splitting a single
+  runtime decision across fake per-resource candidates.
+- Source of truth: runtime-registry remains the owner of resource claims,
+  reservation ids, retention, and release. Scheduler and workflow-service only
+  carry validated facts needed for selection, diagnostics, and task state.
+- Contract-first boundary: update scheduler/workflow-service contracts and
+  tests before changing embedded-runtime provider emission.
+- No fallback/legacy: do not collapse multiple reservations to the first row,
+  synthesize aggregate strings, duplicate candidates per claim, or infer device
+  ids from graph/runtime names.
+
+Next implementation sequence:
+
+1. Add scheduler contract tests for multi-reservation candidates and selected
+   decisions, including same lease/task/run validation and rejection of mixed
+   lease/task/run or duplicate device/resource claims.
+2. Update `SchedulerDispatchCandidate`, `SchedulerDispatchDecision`, selection
+   policy, and dispatch-selection validation to use reservation vectors while
+   preserving typed `MissingReservation` diagnostics for empty vectors.
+3. Update workflow-service `WorkflowRuntimeDispatchCandidateFact` and
+   `dispatch_candidate` projection to carry reservation vectors one-to-one
+   into scheduler candidates.
+4. Update workflow-service tests and fixtures that build candidate facts,
+   scheduler candidates, or selected dispatch decisions.
+5. Only after the vector contract passes, update
+   `EmbeddedRuntimeDispatchCandidateProvider` to call
+   `RuntimeDispatchResourceFactsSource` for matched drafts, pass through every
+   returned reservation, and emit validated scheduler candidate bundles.
+6. Add a follow-on device-source slice so unconstrained tasks receive selected
+   device candidates from runtime capability facts instead of provider guesses.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
