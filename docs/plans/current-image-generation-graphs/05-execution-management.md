@@ -18998,6 +18998,36 @@ Worker rules:
     runtime-host execution port needed to pass a complete production dependency
     bundle; otherwise hosted composition must stay on fail-closed defaults.
 
+- 2026-05-30 dispatch provider source-snapshot slice
+  - Smallest useful vertical slice: add a synchronous source-input contract to
+    `EmbeddedRuntimeDispatchCandidateProvider` for already-collected Pumas
+    package-facts and runtime capability-facts outcomes.
+  - Allowed write set: `runtime_dispatch_candidate_provider.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and plan logs.
+  - Implementation notes: added
+    `EmbeddedRuntimeDispatchCandidateSourceSnapshot`, allowed the provider to
+    be constructed with that snapshot, and projected staged Pumas/runtime
+    source diagnostics into scheduler dispatch diagnostics while keeping the
+    candidate set empty until runtime resource facts are wired.
+  - Test coverage: added focused provider coverage proving staged source
+    diagnostics replace generic missing-source diagnostics and resource facts
+    remain required before any candidate can be emitted.
+  - No-fallback/no-legacy result: the provider still performs no async Pumas
+    lookup, does not block scheduler selection, emits no candidates without
+    resource facts, and rejects path-carrying model refs. It does not read
+    graph paths, reduced execution plans, display strings, `ModelRefV2`, or
+    compatibility preflight state.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: wire the source lifecycle that produces the snapshot
+    before dispatch selection, then join projected Pumas package facts with
+    runtime capability facts into candidate drafts. Resource-backed candidates
+    remain blocked until reservation acquisition and lifecycle pairing are
+    implemented.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

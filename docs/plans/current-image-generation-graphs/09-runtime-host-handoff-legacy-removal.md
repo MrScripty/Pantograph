@@ -1318,6 +1318,12 @@ Next implementation sequence:
    that package facts can only be fetched asynchronously at selection time,
    stop and re-plan the provider trait or snapshot lifecycle instead of
    blocking in scheduler selection.
+   Completed 2026-05-30: `EmbeddedRuntimeDispatchCandidateProvider` now
+   accepts an `EmbeddedRuntimeDispatchCandidateSourceSnapshot` containing
+   already-collected Pumas package and runtime capability outcomes. The
+   provider maps those typed source diagnostics into scheduler dispatch
+   diagnostics synchronously and still emits no candidates while runtime
+   resource facts are unavailable.
 5. Join Pumas package facts with runtime-registry capability facts to produce
    candidate fact drafts with typed compatibility diagnostics, but no resource
    leases yet.
@@ -1360,6 +1366,30 @@ test ports and does not change hosted production composition. The next
 production slice still needs a real runtime-host port or a selected
 standards-compliant fail-closed embedded-runtime runtime-host port before
 hosted construction can pass a complete bundle.
+
+2026-05-30 dispatch provider source-snapshot slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Implementation notes: added a synchronous
+`EmbeddedRuntimeDispatchCandidateSourceSnapshot` input contract for
+already-collected Pumas package-facts and runtime capability-facts outcomes.
+The provider projects typed source diagnostics into scheduler dispatch
+diagnostics and keeps returning an empty candidate set until runtime resource
+reservation facts are supplied. This preserves the no-fallback rule: the
+provider does not perform async Pumas lookups, does not block in scheduler
+selection, and does not recover candidate evidence from graph paths, reduced
+plans, display strings, `ModelRefV2`, or dependency-preflight compatibility
+state.
+
+Remaining follow-up: add source lifecycle wiring that produces the
+source-snapshot before dispatch selection, then join projected Pumas package
+facts with runtime capability facts into candidate drafts. Resource-backed
+candidates remain disabled until reservation acquisition and lifecycle pairing
+are implemented.
 
 ## Verification Strategy
 
