@@ -26,7 +26,7 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimate,
     WorkflowTechnicalFitResourceEstimateKind,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -149,6 +149,36 @@ async fn runtime_extensions_apply_pumas_selector_access() {
         PumasSelectorAccess::Owner(applied_api) => assert!(Arc::ptr_eq(applied_api, &pumas_api)),
         _ => panic!("unexpected selector access role"),
     }
+}
+
+#[tokio::test]
+async fn runtime_extensions_do_not_apply_model_dependency_resolver() {
+    let shared = Arc::new(RwLock::new(ExecutorExtensions::new()));
+    let resolver: Arc<dyn node_engine::ModelDependencyResolver> = Arc::new(
+        TauriModelDependencyResolver::new(shared.clone(), PathBuf::from(".")),
+    );
+    shared.write().await.set(
+        node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+        resolver,
+    );
+    let snapshot = RuntimeExtensionsSnapshot::from_shared(&shared).await;
+    let mut executor = WorkflowExecutor::new(
+        "runtime-extension-test",
+        node_engine::WorkflowGraph::new("runtime-extension-test", "Runtime Extension Test"),
+        Arc::new(NullEventSink),
+    );
+
+    apply_runtime_extensions(&mut executor, &snapshot);
+
+    assert!(
+        executor
+            .extensions()
+            .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
+                node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+            )
+            .is_none(),
+        "legacy dependency resolver must not be visible to runtime execution"
+    );
 }
 
 struct MockMediaPythonRuntime {

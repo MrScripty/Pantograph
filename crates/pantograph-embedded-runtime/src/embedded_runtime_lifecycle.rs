@@ -21,7 +21,6 @@ use crate::{
 #[cfg(feature = "standalone")]
 use crate::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedRuntimeError, StandaloneRuntimeConfig,
-    TauriModelDependencyResolver,
 };
 
 impl EmbeddedRuntime {
@@ -198,9 +197,6 @@ impl EmbeddedRuntime {
                 message: error.to_string(),
             })?;
         let extensions: SharedExtensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
-        let dependency_resolver: Arc<dyn node_engine::ModelDependencyResolver> = Arc::new(
-            TauriModelDependencyResolver::new(extensions.clone(), config.project_root.clone()),
-        );
 
         {
             let mut guard = extensions.write().await;
@@ -209,10 +205,6 @@ impl EmbeddedRuntime {
                 config.pumas_library_path.as_deref(),
             )
             .await;
-            guard.set(
-                node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-                dependency_resolver,
-            );
             guard.set(
                 node_engine::extension_keys::KV_CACHE_STORE,
                 Arc::new(inference::kv_cache::KvCacheStore::new(

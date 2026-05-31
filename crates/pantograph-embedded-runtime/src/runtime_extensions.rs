@@ -13,7 +13,6 @@ pub struct RuntimeExtensionsSnapshot {
     pub pumas_api: Option<Arc<pumas_library::PumasApi>>,
     pub pumas_selector_access: Option<Arc<PumasSelectorAccess>>,
     pub kv_cache_store: Option<Arc<inference::kv_cache::KvCacheStore>>,
-    pub dependency_resolver: Option<Arc<dyn node_engine::ModelDependencyResolver>>,
     pub workflow_service: Option<SharedWorkflowService>,
 }
 
@@ -43,11 +42,6 @@ impl RuntimeExtensionsSnapshot {
             kv_cache_store: shared
                 .get::<Arc<inference::kv_cache::KvCacheStore>>(
                     node_engine::extension_keys::KV_CACHE_STORE,
-                )
-                .cloned(),
-            dependency_resolver: shared
-                .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
-                    node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
                 )
                 .cloned(),
             workflow_service: shared
@@ -90,12 +84,6 @@ pub fn apply_runtime_extensions_for_execution(
         executor
             .extensions_mut()
             .set(node_engine::extension_keys::KV_CACHE_STORE, store.clone());
-    }
-    if let Some(resolver) = &snapshot.dependency_resolver {
-        executor.extensions_mut().set(
-            node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-            resolver.clone(),
-        );
     }
     if let Some(workflow_service) = &snapshot.workflow_service {
         executor.extensions_mut().set(

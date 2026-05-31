@@ -442,17 +442,11 @@ impl EmbeddedWorkflowServiceComposition {
             TauriModelDependencyResolver::new(shared_extensions.clone(), input.project_root),
         );
         {
-            let resolver_trait: Arc<dyn node_engine::ModelDependencyResolver> =
-                model_dependency_resolver.clone();
             let kv_store = Arc::new(inference::kv_cache::KvCacheStore::new(
                 input.kv_cache_dir,
                 inference::kv_cache::StoragePolicy::MemoryAndDisk,
             ));
             let mut guard = shared_extensions.write().await;
-            guard.set(
-                node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-                resolver_trait,
-            );
             guard.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
         }
 
@@ -935,8 +929,8 @@ mod tests {
                     .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
                         node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
                     )
-                    .is_some(),
-                "dependency resolver should be installed"
+                    .is_none(),
+                "dependency resolver must not be installed into runtime execution extensions"
             );
             assert!(
                 extensions

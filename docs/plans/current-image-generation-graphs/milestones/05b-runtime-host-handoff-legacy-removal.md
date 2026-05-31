@@ -398,7 +398,15 @@ cleanup.
   `ModelRefV2`, runtime-host dispatch facts, or path-shaped success payloads.
   Full deletion of resolver modules and old tests remains gated on canonical
   scheduler/runtime-host task-result response coverage unless a focused
-  deletion slice proves the surface has no production consumers.
+  deletion slice proves the surface has no production consumers. 2026-05-31
+  progress: production runtime extension snapshots and runtime extension
+  application no longer carry `ModelDependencyResolver`, hosted resource-backed
+  startup no longer installs `MODEL_DEPENDENCY_RESOLVER` into shared runtime
+  execution extensions, and standalone embedded runtime construction no longer
+  seeds the resolver into execution extensions. Remaining follow-up: replace
+  Tauri-managed resolver activity wiring with a backend-owned diagnostic/
+  activity subscription handle, then classify or retire retained resolver
+  commands/probes/tests.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not

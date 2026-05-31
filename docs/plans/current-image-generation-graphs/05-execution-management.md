@@ -20572,6 +20572,49 @@ Worker rules:
     view-model/app-shell business-logic limits; searched current resolver
     composition hits in embedded-runtime and Tauri to identify the affected
     blast radius.
+- 2026-05-31 runtime extension resolver-composition guardrail:
+  - Smallest useful slice: remove legacy `ModelDependencyResolver` visibility
+    from production runtime execution extensions without deleting the retained
+    diagnostic/tooling resolver object yet.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/runtime_extensions.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: `RuntimeExtensionsSnapshot` no longer captures
+    `ModelDependencyResolver`, runtime extension application no longer installs
+    `MODEL_DEPENDENCY_RESOLVER`, hosted resource-backed startup no longer
+    seeds the resolver into shared runtime execution extensions, and standalone
+    embedded runtime construction no longer installs the resolver into
+    execution extensions. Hosted startup still returns the resolver object for
+    the remaining diagnostic/activity wiring, which is explicitly the next
+    cleanup slice rather than runtime execution authority.
+  - No-fallback/no-legacy result: runtime execution can no longer receive the
+    legacy resolver through the standard embedded-runtime extension snapshot
+    path. No scheduler/runtime-host/readiness facts were adapted into
+    `ModelDependencyRequest`, `ModelRefV2`, or path-shaped launch payloads.
+  - Focused tests updated: runtime extension tests now prove a resolver present
+    in shared extensions is not applied to a workflow executor; hosted startup
+    tests now expect the shared runtime execution extensions to omit the
+    resolver while preserving selector access and KV cache wiring.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime runtime_extensions -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime hosted_startup -- --nocapture`;
+    `cargo check -p pantograph-embedded-runtime`; `rg -n
+    "MODEL_DEPENDENCY_RESOLVER|ModelDependencyResolver|dependency_resolver"
+    crates/pantograph-embedded-runtime/src/runtime_extensions.rs` returning no
+    hits; and `rg -n
+    "guard\\.set\\(\\s*node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER|set\\(\\s*node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER|set\\(\\s*extension_keys::MODEL_DEPENDENCY_RESOLVER"
+    crates/pantograph-embedded-runtime/src/workflow_service_composition.rs
+    crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs
+    crates/pantograph-embedded-runtime/src/runtime_extensions.rs` returning no
+    hits. `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: introduce or reuse a backend-owned dependency
+    diagnostic/activity subscription handle and adjust Tauri hosted startup so
+    Tauri forwards activity events without managing `TauriModelDependencyResolver`
+    as business state.
 
 ### Traceability Links
 
