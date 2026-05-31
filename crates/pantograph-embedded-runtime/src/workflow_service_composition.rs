@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use pantograph_workflow_service::{WorkflowDependencyReadinessComponents, WorkflowServiceError};
+use pantograph_workflow_service::{
+    WorkflowDependencyReadinessComponents, WorkflowService, WorkflowServiceError,
+};
 
 use crate::SharedWorkflowService;
 
@@ -30,7 +32,17 @@ impl EmbeddedWorkflowServiceComposition {
         self,
         max_loaded_sessions: Option<usize>,
     ) -> Result<SharedWorkflowService, WorkflowServiceError> {
-        let service = self.dependency_readiness.workflow_service();
+        self.into_shared_configured_workflow_service(WorkflowService::new(), max_loaded_sessions)
+    }
+
+    pub(crate) fn into_shared_configured_workflow_service(
+        self,
+        service: WorkflowService,
+        max_loaded_sessions: Option<usize>,
+    ) -> Result<SharedWorkflowService, WorkflowServiceError> {
+        let service = self
+            .dependency_readiness
+            .configure_workflow_service(service);
         service.set_loaded_runtime_capacity_limit(max_loaded_sessions)?;
         Ok(Arc::new(service))
     }
@@ -69,5 +81,20 @@ mod tests {
             };
 
         assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn builds_from_host_customized_unshared_service() {
+        let composition = EmbeddedWorkflowServiceComposition::new();
+        let snapshot_provider = composition.dependency_readiness().snapshot_provider();
+        let service = WorkflowService::with_capacity_limits(4, 2);
+
+        let shared = composition
+            .into_shared_configured_workflow_service(service, Some(3))
+            .expect("composition should accept host-customized service");
+
+        assert!(Arc::strong_count(&snapshot_provider) > 1);
+        drop(shared);
+        assert_eq!(Arc::strong_count(&snapshot_provider), 1);
     }
 }

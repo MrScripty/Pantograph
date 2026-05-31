@@ -1154,6 +1154,11 @@ Next implementation sequence:
 3. Add hosted construction support that accepts runtime-registry/gateway
    inputs early enough to configure the reservation lifecycle port before the
    service is wrapped in `Arc`.
+   Started 2026-05-30: the composition module now accepts a host-customized
+   unshared `WorkflowService` and applies dependency-readiness wiring plus
+   loaded-runtime capacity configuration before returning `Arc<WorkflowService>`.
+   The remaining hosted work is to pass runtime-registry/gateway dispatch
+   dependencies into this boundary and reject partial production wiring.
 4. Wire the final runtime dispatch candidate provider and reservation
    lifecycle port through the same composition path. The plan still forbids
    enabling non-empty resource-backed candidates until both dependencies are
@@ -1175,6 +1180,19 @@ Discovered follow-up: hosted construction still receives an already shared
 workflow service. The next slice must add hosted construction support that
 accepts runtime-registry/gateway inputs before service sharing, then wire the
 final dispatch candidate provider and reservation lifecycle port together.
+
+2026-05-30 hosted-service composition helper slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Discovered follow-up: this slice proves hosted callers can preserve their
+store/ledger/artifact customization without sharing the service first, but it
+does not yet move Tauri/UniFFI startup through the factory or configure the
+runtime-registry-backed lifecycle port. Those remain blocked until the
+production dispatch dependency pair is represented explicitly.
 
 ## Verification Strategy
 

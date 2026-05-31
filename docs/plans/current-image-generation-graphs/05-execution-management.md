@@ -18842,6 +18842,34 @@ Worker rules:
     runtime-registry/gateway dependencies before workflow-service sharing, then
     require the final dispatch candidate provider and reservation lifecycle
     port to be configured as a pair.
+- 2026-05-30 hosted-service composition helper slice:
+  - Slice scope: embedded-runtime workflow-service composition module and plan
+    logs only.
+  - Implementation: extended `EmbeddedWorkflowServiceComposition` with
+    `into_shared_configured_workflow_service`, allowing hosted callers to
+    build artifact-store, attribution-store, diagnostics-ledger, and
+    artifact-format settings onto an unshared `WorkflowService` before the
+    embedded-runtime composition boundary attaches dependency-readiness
+    components and capacity configuration.
+  - Test coverage: added a focused composition test proving host-customized
+    unshared services can be accepted by the factory and retain the
+    composition-owned dependency-readiness provider lifetime.
+  - No-fallback/no-legacy result: the slice still uses default fail-closed
+    runtime dispatch dependencies and does not enable resource-backed
+    candidates, synthesize handoffs, or adapt canonical facts into legacy
+    model/path contracts.
+  - Standards result: this keeps Tauri/UniFFI-specific store creation separate
+    from embedded-runtime workflow-service dependency wiring while moving
+    shared-service creation into the composition root.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: represent the production runtime dispatch dependency
+    pair explicitly so hosted startup can pass runtime-registry/gateway
+    dependencies to the factory and reject partial candidate-provider or
+    lifecycle-port wiring.
 
 ### Traceability Links
 
