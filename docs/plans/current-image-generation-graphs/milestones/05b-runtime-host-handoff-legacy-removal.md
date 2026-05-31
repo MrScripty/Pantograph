@@ -509,7 +509,12 @@ cleanup.
   `pumas_model_ref` targets. 2026-05-31 progress: typed rerank execution no
   longer emits successful graph outputs named `model_path` or `model_ref`
   carrying `modelPath`; it now returns only canonical rerank result and
-  diagnostic outputs.
+  diagnostic outputs. 2026-05-31 re-plan boundary: the next remaining
+  successful path behavior is embedded-runtime workflow-host lifecycle
+  resolution, which reads graph node `model_path`/`modelPath` and active
+  gateway descriptors by path. Replacing it requires a backend-owned runtime
+  session state/readiness contract rather than another node-engine-local
+  deletion.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

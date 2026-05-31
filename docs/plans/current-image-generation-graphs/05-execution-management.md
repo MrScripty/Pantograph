@@ -21135,6 +21135,36 @@ Worker rules:
   - Remaining follow-up: continue separating diagnostic-only rerank/input
     fixtures from successful runtime graph output surfaces in the remaining
     source search results.
+- 2026-05-31 Milestone 5b re-plan boundary after node-engine path cleanup:
+  - Discovered issue: the remaining successful `model_path`/`modelPath`
+    behavior is concentrated in embedded-runtime workflow-host lifecycle
+    helpers. `embedded_workflow_host_helpers` resolves llama.cpp workflow
+    runtime state by reading saved workflow node data and connected source
+    nodes for `model_path`/`modelPath`, resolving Pumas nodes back to local
+    paths or entry paths, comparing the active gateway descriptor by path, and
+    returning path-shaped active model diagnostics.
+  - Why this is a re-plan trigger: deleting these reads in the same cleanup
+    style would change backend runtime lifecycle ownership, active gateway
+    matching, session runtime tests, and edit-session workflow execution. The
+    replacement must be designed around backend-owned scheduler task
+    state/results, runtime-host readiness, and Pumas artifact/load-target
+    decisions rather than direct graph node path reads.
+  - No-fallback/no-legacy confirmation for completed work: node-engine no
+    longer provides the public legacy dependency contract, path repair helper,
+    core `puma-lib` path output, direct dependency `model_path` propagation, or
+    typed rerank model path outputs. The remaining path lifecycle behavior must
+    not be preserved through compatibility shims; it needs a canonical backend
+    runtime lifecycle replacement.
+  - Required next design decision: define the embedded-runtime host lifecycle
+    replacement contract for "which model/runtime is active for this workflow"
+    without reading graph-authored `model_path`/`modelPath`. Candidate
+    direction is a backend-owned runtime session state keyed by workflow/task
+    identity and populated from canonical inference planning, Pumas
+    artifact/load-target decisions, and runtime-host readiness results.
+  - Verification supporting the boundary: post-slice source search shows the
+    remaining non-diagnostic path-shaped successful execution reads are in
+    embedded-runtime lifecycle helpers and app/embedding configuration, while
+    node-engine retained hits are diagnostic or rejection tests.
 
 ### Traceability Links
 
