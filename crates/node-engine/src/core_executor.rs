@@ -216,7 +216,9 @@ impl TaskExecutor for CoreTaskExecutor {
 
             // Model/provider nodes
             "model-provider" => execute_model_provider(&inputs),
-            "puma-lib" => execute_puma_lib(&inputs),
+            "puma-lib" => Err(NodeEngineError::failed(
+                "puma-lib requires host-specific Pumas selector execution; node-engine core model_path output is retired",
+            )),
 
             // Control flow nodes
             "conditional" => execute_conditional(&inputs),

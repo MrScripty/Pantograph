@@ -298,8 +298,8 @@ fn test_model_provider() {
     assert_eq!(result["model_name"], "phi-3");
 }
 
-#[test]
-fn test_puma_lib() {
+#[tokio::test]
+async fn test_puma_lib_requires_host_specific_selector_execution() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -329,57 +329,24 @@ fn test_puma_lib() {
             ]
         }),
     );
-    let result = execute_puma_lib(&inputs).unwrap();
-    assert_eq!(result["model_path"], "/models/test.gguf");
-    assert_eq!(result["model_id"], "llm/example/test");
-    assert_eq!(result["model_type"], "llm");
-    assert_eq!(result["task_type_primary"], "text-generation");
-    assert_eq!(result["backend_key"], "pytorch");
-    assert_eq!(result["recommended_backend"], "transformers");
-    assert_eq!(
-        result["selected_binding_ids"],
-        serde_json::json!(["binding-a", "binding-b"])
-    );
-    assert_eq!(
-        result["platform_context"],
-        serde_json::json!({"os":"linux","arch":"x86_64"})
-    );
-    assert_eq!(
-        result["dependency_bindings"],
-        serde_json::json!([{"binding_id":"binding-a"}])
-    );
-    assert_eq!(
-        result["dependency_requirements"],
-        serde_json::json!({
-            "model_id": "llm/example/test",
-            "platform_key": "linux-x86_64",
-            "dependency_contract_version": 1,
-            "validation_state": "resolved",
-            "validation_errors": [],
-            "bindings": [],
-            "selected_binding_ids": []
-        })
-    );
-    assert_eq!(result["dependency_requirements_id"], "requirements-1");
-    assert_eq!(
-        result["inference_settings"],
-        serde_json::json!([
-            {"key": "temperature", "default": 0.6},
-            {"key": "top_p", "default": 0.95}
-        ])
-    );
-}
 
-#[test]
-fn test_puma_lib_missing_inference_settings_defaults_to_empty_array() {
-    let mut inputs = HashMap::new();
-    inputs.insert(
-        "_data".to_string(),
-        serde_json::json!({"modelPath": "/models/test.gguf"}),
-    );
-    let result = execute_puma_lib(&inputs).unwrap();
-    assert_eq!(result["model_path"], "/models/test.gguf");
-    assert_eq!(result["inference_settings"], serde_json::json!([]));
+    let error = CoreTaskExecutor::new()
+        .execute_task(
+            "puma-lib-1",
+            inputs,
+            &crate::Context::new(),
+            &ExecutorExtensions::new(),
+        )
+        .await
+        .expect_err("node-engine core puma-lib execution must fail closed");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("requires host-specific Pumas selector execution"));
+            assert!(message.contains("model_path output is retired"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
 }
 
 #[test]

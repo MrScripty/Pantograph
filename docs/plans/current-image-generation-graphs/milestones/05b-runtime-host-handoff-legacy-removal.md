@@ -499,7 +499,11 @@ cleanup.
   `inputs_with_model_path_from_ref` path-repair helper was removed. Canonical
   `llm-inference` still rejects retired resolved/unresolved model-reference
   inputs, but it no longer copies `model_path` or `mmproj_path` aliases into a
-  repaired launch input map before dispatch.
+  repaired launch input map before dispatch. 2026-05-31 progress: the
+  node-engine core `puma-lib` executor helper was deleted and `puma-lib` now
+  fails closed in `CoreTaskExecutor` with a host-specific Pumas selector
+  diagnostic instead of emitting graph-visible `model_path`,
+  `inference_settings`, dependency payloads, backend hints, or load facts.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

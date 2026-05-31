@@ -21066,6 +21066,32 @@ Worker rules:
     fixtures and retired `model_path` surfaces that are not app
     configuration, embedding/RAG configuration, or diagnostic-only stale graph
     coverage.
+- 2026-05-31 node-engine core `puma-lib` path-output retirement slice:
+  - Smallest useful slice: retire the node-engine core `puma-lib` executor
+    branch that still produced graph-visible `model_path`,
+    `inference_settings`, dependency facts, backend hints, and Pumas package
+    metadata from `_data`.
+  - Allowed files touched: `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/model_nodes.rs`,
+    `crates/node-engine/src/core_executor/tests.rs`, and these plan files.
+  - Implementation: deleted the core `execute_puma_lib` helper, changed
+    `CoreTaskExecutor` to fail closed for `puma-lib` with a typed
+    `ExecutionFailed` diagnostic requiring host-specific Pumas selector
+    execution, and replaced path-output fixture assertions with a diagnostic
+    test.
+  - No-fallback/no-legacy result: node-engine core no longer provides a
+    successful `puma-lib` execution path that can emit `model_path`,
+    `inference_settings`, dependency readiness payloads, or backend/load facts
+    into graph execution. Canonical Pumas selection remains host/runtime owned.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine test_puma_lib -- --nocapture`; `cargo check -p node-engine
+    --features inference-nodes,pytorch-nodes`; and targeted `rg` confirming
+    `execute_puma_lib` was removed and retained `model_path`/`inference_settings`
+    hits in the touched node-engine core files are diagnostic/test input only.
+  - Remaining follow-up: continue classifying remaining `model_path`/
+    `modelPath` fixtures outside this slice and remove only the surfaces that
+    still represent successful runtime graph execution rather than app config,
+    embedding/RAG config, or stale-graph diagnostic coverage.
 
 ### Traceability Links
 
