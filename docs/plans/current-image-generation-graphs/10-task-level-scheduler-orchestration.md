@@ -2227,6 +2227,16 @@ Implementation order:
    with explicit selected device/resource requirements and release ownership,
    or a dedicated scheduler resource-reservation service. Do not emit
    placeholder reservations from dry-run checks or snapshots.
+   2026-05-30 decision: use runtime-registry as the immediate resource owner,
+   but only through an embedded-runtime resource source that receives explicit
+   selected runtime, selected scheduler device, workflow/run/task ids, typed
+   resource requirements, and reservation owner id from final-provider
+   assembly. The source must acquire/reuse a real lease, map only owned claims
+   into scheduler reservation rows, return typed fit diagnostics on admission
+   failure, and wire session-runner release/retention cleanup before any
+   non-empty dispatch candidates can be emitted. A dedicated scheduler
+   resource-reservation service remains the long-term target when resource
+   policy needs to move beyond runtime-registry admission.
 5. Map the validated bundle into `SchedulerDispatchCandidate` values only when
    every required source fact is present and valid.
 
