@@ -1546,6 +1546,12 @@ Next implementation sequence:
    embedded runtime composition boundary that owns the runtime registry,
    runtime-host port, reservation lifecycle port, validated dispatch
    source-fact snapshot, and runtime-registry resource source.
+   Completed 2026-05-30: `EmbeddedWorkflowServiceDispatchDependencies` now has
+   a resource-backed constructor that builds the snapshot store, dispatch
+   candidate provider, runtime-registry resource source, runtime-host port, and
+   reservation lifecycle port as one paired dependency bundle. Hosted
+   production wiring remains blocked until the canonical embedded runtime-host
+   execution port and snapshot refresh lifecycle are available together.
 10. Follow-on: add the canonical embedded runtime-host execution port needed
    for a complete inference path.
 11. After the first complete inference path works end-to-end, implement option

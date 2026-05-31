@@ -19292,6 +19292,42 @@ Worker rules:
     the validated snapshot plus runtime-registry resource source through the
     paired composition dependency bundle, then add the canonical embedded
     runtime-host execution port needed for a complete inference path.
+- 2026-05-30 resource-backed dispatch dependency bundle slice:
+  - Smallest useful slice: wire resource-backed provider construction through
+    the existing paired embedded-runtime dispatch dependency bundle without
+    enabling hosted production runtime dispatch yet.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+    and this execution log.
+  - Implementation: added
+    `EmbeddedWorkflowServiceDispatchDependencies::resource_backed`, which
+    constructs one complete dependency bundle from `PumasDispatchPackageFactsSource`,
+    `RuntimeDispatchCapabilityFactsSource`,
+    `RuntimeDispatchResourceFactsSource`, a versioned dispatch source-fact
+    snapshot store, runtime-host execution port, and reservation lifecycle
+    port. The candidate provider now supports reading source facts from the
+    snapshot store at dispatch time.
+  - Test coverage: added provider coverage proving missing snapshot-store
+    facts surface as typed no-candidate diagnostics, and composition coverage
+    proving the resource-backed provider, runtime-host port, and reservation
+    lifecycle port are built as one dependency bundle.
+  - No-fallback/no-legacy result: this remains composition wiring only. It
+    does not fabricate a static production snapshot, execute async Pumas
+    access inside scheduler selection, install a runtime-host fallback,
+    synthesize candidates from graph paths/reduced plans, or expose
+    `ModelRefV2`. Missing snapshots still fail closed before candidate
+    emission.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: add or select the canonical embedded runtime-host
+    execution port, then connect hosted embedded-runtime startup to the paired
+    resource-backed dependency bundle only when that port and snapshot refresh
+    lifecycle are both available.
 
 ### Traceability Links
 

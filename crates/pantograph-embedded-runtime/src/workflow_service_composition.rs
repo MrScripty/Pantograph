@@ -6,6 +6,11 @@ use pantograph_workflow_service::{
     WorkflowDependencyReadinessComponents, WorkflowService, WorkflowServiceError,
 };
 
+use crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource;
+use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
+use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
+use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
+use crate::runtime_dispatch_source_snapshot::EmbeddedRuntimeDispatchSourceFactSnapshotStore;
 use crate::SharedWorkflowService;
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
@@ -39,6 +44,30 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
             runtime_host_execution_port,
             reservation_lifecycle_port,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn resource_backed(
+        pumas_source: PumasDispatchPackageFactsSource,
+        runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
+        resource_facts_source: RuntimeDispatchResourceFactsSource,
+        max_snapshot_age_ms: u64,
+        runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
+        reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
+    ) -> Self {
+        let snapshot_store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
+            pumas_source,
+            runtime_capability_source,
+            max_snapshot_age_ms,
+        );
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(snapshot_store)
+                .with_resource_facts_source(resource_facts_source);
+        Self::new(
+            Arc::new(provider),
+            runtime_host_execution_port,
+            reservation_lifecycle_port,
+        )
     }
 
     #[must_use]
@@ -97,12 +126,12 @@ impl EmbeddedWorkflowServiceComposition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
     use async_trait::async_trait;
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
         RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     };
+    use pantograph_runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
 
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
@@ -192,6 +221,26 @@ mod tests {
             .with_runtime_dispatch_dependencies(dependencies)
             .into_shared_workflow_service(Some(1))
             .expect("paired dependencies should build workflow service");
+
+        drop(shared);
+    }
+
+    #[test]
+    fn builds_resource_backed_dispatch_dependencies_as_pair() {
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
+            PumasDispatchPackageFactsSource::new(None),
+            RuntimeDispatchCapabilityFactsSource::new(registry.clone()),
+            RuntimeDispatchResourceFactsSource::new(registry),
+            1_000,
+            Arc::new(RejectingRuntimeHostPort),
+            Arc::new(RejectingReservationLifecyclePort),
+        );
+
+        let shared = EmbeddedWorkflowServiceComposition::new()
+            .with_runtime_dispatch_dependencies(dependencies)
+            .into_shared_workflow_service(Some(1))
+            .expect("resource-backed dependency bundle should build workflow service");
 
         drop(shared);
     }

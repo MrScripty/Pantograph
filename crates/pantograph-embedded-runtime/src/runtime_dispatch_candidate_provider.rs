@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_dependency_planning::{
     DependencyReadinessProofEnvelope, PumasModelRef, RuntimeIntentId,
@@ -31,7 +32,7 @@ use crate::runtime_dispatch_resource_facts::{
     RuntimeDispatchResourceFactsRequest, RuntimeDispatchResourceFactsSource,
 };
 use crate::runtime_dispatch_source_snapshot::{
-    EmbeddedRuntimeDispatchCandidateSourceSnapshot,
+    EmbeddedRuntimeDispatchCandidateSourceSnapshot, EmbeddedRuntimeDispatchSourceFactSnapshotStore,
     EmbeddedRuntimeDispatchSourceSnapshotDiagnostic,
     EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode,
 };
@@ -51,10 +52,31 @@ const PATH_CARRYING_MODEL_REF_HINT: &str =
 const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.incompatible_runtime_backend";
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
-    source_snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
+    source_snapshot: EmbeddedRuntimeDispatchCandidateSource,
     resource_facts_source: Option<RuntimeDispatchResourceFactsSource>,
+}
+
+#[derive(Clone)]
+enum EmbeddedRuntimeDispatchCandidateSource {
+    Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot),
+    Store(EmbeddedRuntimeDispatchSourceFactSnapshotStore),
+}
+
+impl Default for EmbeddedRuntimeDispatchCandidateSource {
+    fn default() -> Self {
+        Self::Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot::default())
+    }
+}
+
+impl Default for EmbeddedRuntimeDispatchCandidateProvider {
+    fn default() -> Self {
+        Self {
+            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::default(),
+            resource_facts_source: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,7 +98,17 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
         source_snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     ) -> Self {
         Self {
-            source_snapshot,
+            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Snapshot(source_snapshot),
+            resource_facts_source: None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_source_snapshot_store(
+        source_snapshot_store: EmbeddedRuntimeDispatchSourceFactSnapshotStore,
+    ) -> Self {
+        Self {
+            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Store(source_snapshot_store),
             resource_facts_source: None,
         }
     }
@@ -99,9 +131,12 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
         readiness_proof: &DependencyReadinessProofEnvelope,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
+        let source_snapshot = self
+            .source_snapshot
+            .snapshot_for_dispatch(&readiness_proof.preflight_result.identity_key.model_ref);
         if let Some(resource_facts_source) = &self.resource_facts_source {
             return resource_backed_candidate_set(
-                &self.source_snapshot,
+                &source_snapshot,
                 resource_facts_source,
                 task,
                 readiness_proof,
@@ -110,11 +145,30 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
         Ok(WorkflowRuntimeDispatchCandidateSet {
             candidates: Vec::new(),
             diagnostics: fail_closed_diagnostics(
-                &self.source_snapshot,
+                &source_snapshot,
                 &readiness_proof.preflight_result.identity_key.model_ref,
             ),
         })
     }
+}
+
+impl EmbeddedRuntimeDispatchCandidateSource {
+    fn snapshot_for_dispatch(
+        &self,
+        model_ref: &PumasModelRef,
+    ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+        match self {
+            Self::Snapshot(snapshot) => snapshot.clone(),
+            Self::Store(store) => store.snapshot_for_dispatch(model_ref, current_time_ms()),
+        }
+    }
+}
+
+fn current_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 fn resource_backed_candidate_set(
@@ -754,6 +808,33 @@ mod tests {
         assert!(diagnostics.iter().any(|diagnostic| {
             diagnostic.hint.as_deref()
                 == Some("embedded_runtime_dispatch_candidate_provider.source_snapshot.stale")
+                && diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+        }));
+    }
+
+    #[test]
+    fn provider_reads_snapshot_store_at_dispatch_time() {
+        let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
+            crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource::new(None),
+            crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource::new(
+                Arc::new(RuntimeRegistry::new()),
+            ),
+            100,
+        );
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(store);
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("missing source snapshot should be a typed diagnostic");
+
+        assert!(candidate_set.candidates.is_empty());
+        assert!(candidate_set.diagnostics.iter().any(|diagnostic| {
+            diagnostic.hint.as_deref()
+                == Some("embedded_runtime_dispatch_candidate_provider.source_snapshot.missing")
                 && diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
         }));
     }
