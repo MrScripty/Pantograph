@@ -18900,6 +18900,26 @@ Worker rules:
     dispatch candidate provider and runtime-host execution port, then pass
     them with the embedded runtime-registry reservation lifecycle port through
     this bundle.
+- 2026-05-30 final provider assembly re-plan trigger:
+  - Finding: implementation cannot safely continue to production
+    resource-backed candidate wiring because the plan has staged Pumas package
+    facts, runtime capability facts, and resource reservation facts, but has
+    not selected the owner that joins them into validated
+    `WorkflowRuntimeDispatchCandidateFactBundle` values for the
+    workflow-service provider trait.
+  - Standards issue: putting that assembly inside
+    `EmbeddedWorkflowServiceComposition` would complect construction with
+    dispatch fact policy; putting it in workflow-service would pull
+    embedded-runtime/Pumas/runtime-registry source ownership into the
+    scheduler-facing service.
+  - Options recorded in `09-runtime-host-handoff-legacy-removal.md`: focused
+    embedded-runtime provider module; runtime-registry-owned assembly after
+    adapting Pumas facts into registry input; or a fail-closed provider-only
+    placeholder.
+  - Recommendation recorded: add a focused embedded-runtime
+    `runtime_dispatch_candidate_provider` module that joins staged embedded
+    fact sources into workflow-service candidate bundles while the composition
+    factory remains a wiring boundary.
 
 ### Traceability Links
 

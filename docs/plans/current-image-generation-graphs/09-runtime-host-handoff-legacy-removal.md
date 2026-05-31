@@ -1213,6 +1213,43 @@ provider and runtime-host execution port are not yet supplied. Keep
 resource-backed candidate sets disabled until those concrete implementations
 are wired through this bundle.
 
+2026-05-30 re-plan trigger: final resource-backed provider assembly has no
+selected owner. The embedded-runtime sources for Pumas package facts,
+runtime-registry capability facts, and runtime-registry resource reservation
+facts are staged independently, and workflow-service has the provider trait
+that consumes validated `WorkflowRuntimeDispatchCandidateFactBundle` values.
+The missing boundary is the assembler that joins those facts for one scheduler
+task, validates freshness and compatibility, reserves resources, and returns
+typed workflow-service provider diagnostics. Implementing that assembler
+inside `EmbeddedWorkflowServiceComposition` would violate the factory's
+selected responsibility because it would move dispatch fact policy and
+resource-fit assembly into construction code. Implementing it inside
+workflow-service would violate source ownership because workflow-service would
+need embedded-runtime/Pumas/runtime-registry facts. Stop before wiring
+production candidates until this owner is selected.
+
+Standards-aligned options:
+
+1. Add a focused embedded-runtime `runtime_dispatch_candidate_provider` module.
+   This provider owns joining embedded-runtime fact sources into
+   `WorkflowRuntimeDispatchCandidateFactBundle`, while the composition factory
+   only wires the provider as part of the paired dependency bundle. This keeps
+   policy out of construction and keeps embedded/Pumas/registry facts out of
+   workflow-service.
+2. Put candidate assembly in the runtime-registry layer and make
+   embedded-runtime adapt Pumas/package facts into registry input first. This
+   centralizes runtime/resource policy but risks complecting model-library
+   evidence with runtime residency/admission ownership.
+3. Keep the current staged sources and add only a fail-closed production
+   provider that emits typed "provider not implemented" diagnostics. This is
+   safe and small, but it does not progress real inference dispatch and would
+   leave resource-backed candidate wiring blocked.
+
+Recommendation: option 1. It is the cleanest composition-root split: a
+dedicated embedded-runtime provider owns fact assembly; workflow-service owns
+the provider trait and scheduler selection; runtime-registry owns resource
+reservation/release; and the composition factory only enforces paired wiring.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
