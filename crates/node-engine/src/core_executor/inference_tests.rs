@@ -2072,6 +2072,8 @@ async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
     assert_eq!(outputs.get("top_document"), Some(&serde_json::json!("b")));
     assert_eq!(outputs.get("top_score"), Some(&serde_json::json!(0.9_f32)));
     assert_eq!(outputs.get("scores"), Some(&serde_json::json!([0.9_f32])));
+    assert_eq!(outputs.get("model_path"), None);
+    assert_eq!(outputs.get("model_ref"), None);
     let diagnostics = outputs
         .get("diagnostics")
         .and_then(|value| value.as_array())

@@ -21113,6 +21113,28 @@ Worker rules:
     resolution and remaining runtime lifecycle fixtures separately because
     those touch backend host lifecycle ownership rather than node-engine graph
     dependency input projection.
+- 2026-05-31 node-engine typed rerank legacy model-output removal slice:
+  - Smallest useful slice: remove the typed rerank executor's compatibility
+    output projection that still emitted graph-visible `model_path` and a
+    `model_ref` object containing `modelPath`.
+  - Allowed files touched:
+    `crates/node-engine/src/core_executor/inference_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and these plan
+    files.
+  - Implementation: deleted the rerank output `model_path` and `model_ref`
+    construction while leaving canonical `results`, `scores`, `top_document`,
+    `top_score`, and option diagnostics intact. Updated the typed rerank
+    gateway-boundary test to assert the retired outputs are absent.
+  - No-fallback/no-legacy result: successful typed rerank execution no longer
+    publishes a path-shaped model identity or `ModelRefV2`-style output object
+    back into graph outputs.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine --features inference-nodes,pytorch-nodes canonical_llm_rerank
+    -- --nocapture`; and `cargo check -p node-engine --features
+    inference-nodes,pytorch-nodes`.
+  - Remaining follow-up: continue separating diagnostic-only rerank/input
+    fixtures from successful runtime graph output surfaces in the remaining
+    source search results.
 
 ### Traceability Links
 

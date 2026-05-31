@@ -506,7 +506,10 @@ cleanup.
   `inference_settings`, dependency payloads, backend hints, or load facts.
   2026-05-31 progress: node-engine dependency input projection now rejects
   direct graph `model_path` targets and only merges model intent through typed
-  `pumas_model_ref` targets.
+  `pumas_model_ref` targets. 2026-05-31 progress: typed rerank execution no
+  longer emits successful graph outputs named `model_path` or `model_ref`
+  carrying `modelPath`; it now returns only canonical rerank result and
+  diagnostic outputs.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

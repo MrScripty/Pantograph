@@ -525,16 +525,6 @@ pub(crate) async fn execute_rerank_inference(
     let mut request = build_rerank_execution_request(inputs)?;
     assign_typed_request_id(&mut request, task_id, execution_id);
     let expected_result_kind = expected_typed_result_kind(&request)?;
-    let output_model_ref = request.model_ref.clone();
-    let output_model = request
-        .model_name
-        .clone()
-        .or_else(|| {
-            output_model_ref
-                .as_ref()
-                .map(|model_ref| model_ref.model_id.clone())
-        })
-        .unwrap_or_default();
     let result = execute_typed_gateway(gw, request, extensions)
         .await
         .map_err(|error| {
@@ -570,21 +560,6 @@ pub(crate) async fn execute_rerank_inference(
         serde_json::to_value(&response.results).unwrap_or(serde_json::Value::Null),
     );
     outputs.insert("scores".to_string(), serde_json::json!(scores));
-    outputs.insert(
-        "model_path".to_string(),
-        serde_json::json!(output_model.clone()),
-    );
-    outputs.insert(
-        "model_ref".to_string(),
-        serde_json::json!({
-            "contractVersion": 2,
-            "engine": "typed",
-            "modelId": output_model,
-            "modelPath": output_model,
-            "pumasModelRef": output_model_ref,
-            "taskTypePrimary": "reranking"
-        }),
-    );
     outputs.insert(
         "top_document".to_string(),
         top_document
