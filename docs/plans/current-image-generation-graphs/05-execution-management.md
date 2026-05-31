@@ -19848,6 +19848,25 @@ Worker rules:
     modules.
   - Remaining follow-up: continue from the runtime-host handoff milestone with
     the first complete inference path behind `EmbeddedRuntimeHostExecutionPort`.
+- 2026-05-31 first complete inference path re-plan decision:
+  - Selected direction: use option 1 now, an image-generation-first
+    embedded-runtime executor behind `EmbeddedRuntimeHostExecutionPort`.
+  - Standards rationale: this is the thinnest useful vertical slice and keeps
+    validation/correlation/Pumas load-target resolution, image execution
+    mapping, lifecycle ownership, scheduler policy, Tauri infrastructure
+    wiring, and diagnostics recovery as separate reasoning axes.
+  - Implementation guardrails: the port remains the host-facing boundary; a
+    focused backend-owned module maps validated runtime-host requests,
+    materialized task inputs, and resolved Pumas load targets into the
+    canonical `inference::InferenceGateway` image API, then maps results back
+    to path-free media artifact refs and typed diagnostics. Unsupported task
+    kinds fail closed. If the projection is unclear, add a projection-only
+    micro-slice before enabling execution.
+  - Options disposition: defer a generic task-kind/modality router until
+    multiple handlers prove the abstraction; reuse planned-inference code only
+    by moving useful behavior into the canonical runtime-host owner, never as a
+    compatibility branch; keep the projection-only option available only as a
+    guarded preparatory slice.
 
 ### Traceability Links
 

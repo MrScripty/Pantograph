@@ -126,6 +126,18 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   must not be used to launch inference or build handoff. Runtime requests must
   include the canonical dependency readiness proof and workflow-service-owned
   materialized runtime inputs derived from validated upstream task results.
+- [ ] Add the first complete image-generation inference path behind
+  `EmbeddedRuntimeHostExecutionPort`. Selected 2026-05-31 direction: implement
+  an image-generation-first embedded-runtime executor as the smallest useful
+  vertical slice. Keep the port responsible only for request validation,
+  correlation, Pumas load-target resolution, and response shaping; put the
+  image-specific mapping from validated runtime-host request, materialized task
+  inputs, and resolved Pumas load target into a focused backend-owned module
+  that calls the canonical `inference::InferenceGateway` image API. If that
+  mapping is unclear, first add a tested projection-only micro-slice and keep
+  execution fail-closed. Unsupported task kinds must return typed diagnostics.
+  Do not put this business logic in Tauri, frontend, graph editor,
+  node-engine, scheduler policy, or the legacy planned-inference contract.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
@@ -196,6 +208,11 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   and scheduler handoff payloads reject executable path fields.
 - Runtime-host tests proving Pumas load targets are resolved only at the host
   boundary and unavailable states produce typed diagnostics.
+- Image runtime-host executor tests proving validated image-generation runtime
+  requests project into the canonical inference gateway call, gateway failures
+  project into typed runtime-host diagnostics, successful execution emits
+  path-free media artifact refs, and unsupported task kinds fail closed without
+  invoking node-engine or planned-inference launch paths.
 - Queue admission and scheduler dispatch tests proving readiness proof
   freshness is checked before enqueue/materialization and again before
   runtime-host dispatch, and that stale/missing proof fails closed before any

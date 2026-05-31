@@ -1813,6 +1813,48 @@ Next staged implementation sequence:
    `#[allow(dead_code)]` on `workflow_service_composition` and continue to the
    first complete inference path behind `EmbeddedRuntimeHostExecutionPort`.
 
+2026-05-31 first complete inference path re-plan decision: use the
+image-generation-first runtime-host executor path. The next implementation
+slice must keep `EmbeddedRuntimeHostExecutionPort` as the thin
+validation/correlation/Pumas load-target boundary, then delegate successful
+image-generation execution to a focused embedded-runtime module. That module
+owns only the projection from a validated `RuntimeHostExecutionRequest`,
+workflow-service-owned materialized task inputs, and the resolved Pumas load
+target into the canonical `inference::InferenceGateway` image execution API,
+plus the projection from inference results into
+`RuntimeHostExecutionResponse` media-artifact outputs and typed diagnostics.
+If the input/output projection is still ambiguous at implementation time, add
+a projection-only micro-slice first and keep the port fail-closed until the
+projection is verified.
+
+Options disposition for this re-plan:
+
+1. Selected now: add the image-generation-first embedded-runtime executor as
+   the smallest useful vertical slice. Unsupported task kinds must return
+   typed unsupported/runtime-unavailable diagnostics and must not call legacy
+   execution paths.
+2. Deferred: add a generic runtime-host execution router with handlers keyed
+   by task kind or modality. This remains valid when multiple concrete
+   modality handlers exist, but it is not the first slice because it adds
+   abstraction before a second handler proves the boundary.
+3. Allowed only as a replacement refactor: reuse code from
+   `PlannedInferenceExecutionHost` or `planned_inference_host` only by moving
+   the useful behavior into the canonical runtime-host executor owner. Do not
+   preserve the planned-inference contract as an alternate successful launch
+   branch or compatibility shim.
+4. Allowed only as a preparatory guardrail: add a typed projection-only slice
+   before execution if the canonical gateway input/output mapping is unclear.
+   The projection must remain path-free, backend-owned, and tested, and the
+   runtime-host port must continue returning typed unavailable diagnostics
+   until the execution call is wired.
+
+Standards alignment: this decision follows the simplicity/complection rule by
+separating validation and runtime side effects, transport mapping and domain
+execution, lifecycle ownership and request handling, and diagnostics policy and
+recovery behavior. Tauri remains an infrastructure/app-shell composition
+caller only; scheduler keeps dispatch policy only; graph editor and node-engine
+do not own Pumas load targets or runtime execution business logic.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
