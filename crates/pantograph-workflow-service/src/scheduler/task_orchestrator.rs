@@ -1,19 +1,30 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
 use pantograph_runtime_host_contracts::{
-    RuntimeHostDispatchError, RuntimeHostExecutionInput, SchedulerRuntimeHostDispatcher,
+    ReservationLifecycleApplicationState, ReservationLifecycleContractError,
+    ReservationLifecycleDiagnostic, ReservationLifecycleDiagnosticCode,
+    ReservationLifecycleDiagnosticSeverity, ReservationLifecycleEvent, ReservationLifecycleOutcome,
+    ReservationLifecyclePort, ReservationLifecyclePortError, RuntimeHostDispatchError,
+    RuntimeHostExecutionInput, SchedulerRuntimeHostDispatcher,
+    ValidatedReservationLifecycleApplication, ValidatedReservationLifecycleEvent,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
-    SchedulerDispatchSelectionDecision, SchedulerDispatchSelectionDiagnostic,
-    SchedulerDispatchSelectionDiagnosticSeverity, SchedulerDispatchSelectionState,
+    SchedulerDispatchCandidateId, SchedulerDispatchDecision, SchedulerDispatchSelectionDecision,
+    SchedulerDispatchSelectionDiagnostic, SchedulerDispatchSelectionDiagnosticSeverity,
+    SchedulerDispatchSelectionRequest, SchedulerDispatchSelectionState,
     SchedulerNonRuntimeTaskIntent, SchedulerNonRuntimeTaskKind,
     SchedulerReadinessAdmissionDecision, SchedulerReadinessAdmissionDiagnostic,
     SchedulerReadinessAdmissionDiagnosticCode, SchedulerReadinessAdmissionRequest,
-    SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState, SchedulerRuntimeHandoff,
-    SchedulerRuntimeHandoffState, SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind,
-    SchedulerTaskExecutionIntent, SchedulerTaskState, SchedulerTaskStateDiagnostic,
-    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
-    SchedulerTaskStateRecord, SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
+    SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState,
+    SchedulerReservationLeaseId, SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState,
+    SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent,
+    SchedulerTaskState, SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
+    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
     ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
     SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
@@ -43,6 +54,7 @@ use super::WorkflowExecutionSessionStore;
 #[must_use]
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
+    reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +78,24 @@ impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) fn new(runtime_host_dispatcher: SchedulerRuntimeHostDispatcher) -> Self {
         Self {
             runtime_host_dispatcher,
+            reservation_lifecycle_port: Arc::new(UnavailableReservationLifecyclePort),
         }
+    }
+
+    pub(crate) fn with_runtime_host_dispatcher(
+        mut self,
+        runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
+    ) -> Self {
+        self.runtime_host_dispatcher = runtime_host_dispatcher;
+        self
+    }
+
+    pub(crate) fn with_reservation_lifecycle_port(
+        mut self,
+        port: Arc<dyn ReservationLifecyclePort>,
+    ) -> Self {
+        self.reservation_lifecycle_port = port;
+        self
     }
 
     #[allow(dead_code)]
@@ -93,14 +122,154 @@ impl WorkflowSchedulerTaskOrchestrator {
         materialized_results: &[WorkflowSchedulerTaskResult],
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
-        let selection = select_scheduler_dispatch(selection_request)
-            .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
-            .into_inner();
+        let selection_request = selection_request.into_inner();
+        let selection = select_scheduler_dispatch(
+            ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone())
+                .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?,
+        )
+        .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
+        .into_inner();
+        if selection.state != SchedulerDispatchSelectionState::Selected {
+            self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
+                .await?;
+            return Err(
+                WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
+                    selection,
+                ),
+            );
+        }
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
+        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or_else(|| {
+            WorkflowSchedulerTaskOrchestratorError::SchedulerContract(
+                SchedulerContractError::MissingField {
+                    field: "dispatch_decision",
+                },
+            )
+        })?;
+        let reservation_lease_id = dispatch_decision.reservation_lease_id.clone();
+        let candidate_id = selected_candidate_id(&selection_request, dispatch_decision);
+        let _ = self
+            .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+                task,
+                reservation_lease_id.clone(),
+                candidate_id.clone(),
+                ReservationLifecycleOutcome::DispatchStarted,
+                vec![reservation_lifecycle_diagnostic(
+                    ReservationLifecycleDiagnosticSeverity::Info,
+                    ReservationLifecycleDiagnosticCode::DispatchStarted,
+                    "runtime dispatch started for selected scheduler reservation",
+                )],
+            )?)
+            .await?;
         let materialized_inputs = materialize_runtime_host_inputs(task, materialized_results)
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskInputMapping)?;
-        self.dispatch_runtime_handoff(execution_request_id, handoff, materialized_inputs)
+        let dispatch_result = self
+            .dispatch_runtime_handoff(execution_request_id, handoff, materialized_inputs)
+            .await;
+        match dispatch_result {
+            Ok(result) => {
+                let _ = self
+                    .apply_reservation_lifecycle_event(runtime_host_terminal_lifecycle_event(
+                        task,
+                        reservation_lease_id.clone(),
+                        candidate_id,
+                        &result,
+                    )?)
+                    .await?;
+                Ok(result)
+            }
+            Err(error) => {
+                let _ = self
+                    .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+                        task,
+                        reservation_lease_id,
+                        candidate_id,
+                        ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
+                        vec![reservation_lifecycle_diagnostic(
+                            ReservationLifecycleDiagnosticSeverity::Error,
+                            ReservationLifecycleDiagnosticCode::RuntimeHostRejected,
+                            format!("runtime-host dispatch failed: {error}"),
+                        )],
+                    )?)
+                    .await?;
+                Err(error)
+            }
+        }
+    }
+
+    async fn apply_unselected_candidate_lifecycle_events(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: &SchedulerDispatchSelectionRequest,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        for candidate in &selection_request.candidates {
+            let Some(reservation) = &candidate.reservation else {
+                continue;
+            };
+            let _ = self
+                .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+                    task,
+                    reservation.reservation_lease_id.clone(),
+                    Some(candidate.candidate_id.clone()),
+                    ReservationLifecycleOutcome::CandidateUnselected,
+                    vec![reservation_lifecycle_diagnostic(
+                        ReservationLifecycleDiagnosticSeverity::Info,
+                        ReservationLifecycleDiagnosticCode::CandidateUnselected,
+                        "scheduler dispatch selection did not select this reserved candidate",
+                    )],
+                )?)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn apply_reservation_lifecycle_event(
+        &self,
+        event: ReservationLifecycleEvent,
+    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    {
+        let validated_event = ValidatedReservationLifecycleEvent::try_from(event)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::ReservationLifecycleContract)?;
+        let expected_event_id = validated_event.as_ref().lifecycle_event_id.clone();
+        let expected_reservation_lease_id = validated_event.as_ref().reservation_lease_id.clone();
+        let application = self
+            .reservation_lifecycle_port
+            .apply_reservation_lifecycle(validated_event.into_inner())
             .await
+            .map_err(WorkflowSchedulerTaskOrchestratorError::ReservationLifecyclePort)?;
+        let validated_application = ValidatedReservationLifecycleApplication::try_from(application)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::ReservationLifecycleContract)?;
+        let application = validated_application.as_ref();
+        if application.lifecycle_event_id != expected_event_id {
+            return Err(
+                WorkflowSchedulerTaskOrchestratorError::ReservationLifecycleContract(
+                    ReservationLifecycleContractError::InvalidField {
+                        field: "lifecycle_event_id",
+                        reason: "reservation lifecycle application must match event id",
+                    },
+                ),
+            );
+        }
+        if application.reservation_lease_id != expected_reservation_lease_id {
+            return Err(
+                WorkflowSchedulerTaskOrchestratorError::ReservationLifecycleContract(
+                    ReservationLifecycleContractError::InvalidField {
+                        field: "reservation_lease_id",
+                        reason: "reservation lifecycle application must match reservation lease id",
+                    },
+                ),
+            );
+        }
+        if application.state == ReservationLifecycleApplicationState::Failed {
+            return Err(
+                WorkflowSchedulerTaskOrchestratorError::ReservationLifecyclePort(
+                    ReservationLifecyclePortError::Failed {
+                        message: "reservation lifecycle application failed".to_string(),
+                    },
+                ),
+            );
+        }
+        Ok(validated_application)
     }
 
     pub(crate) fn initial_task_state_records(
@@ -899,6 +1068,162 @@ fn dispatch_selected_handoff_from_selection(
     })
 }
 
+fn selected_candidate_id(
+    selection_request: &SchedulerDispatchSelectionRequest,
+    dispatch_decision: &SchedulerDispatchDecision,
+) -> Option<SchedulerDispatchCandidateId> {
+    selection_request
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.reservation.as_ref().is_some_and(|reservation| {
+                reservation.reservation_lease_id == dispatch_decision.reservation_lease_id
+            })
+        })
+        .map(|candidate| candidate.candidate_id.clone())
+}
+
+fn runtime_host_terminal_lifecycle_event(
+    task: &WorkflowSchedulerTask,
+    reservation_lease_id: SchedulerReservationLeaseId,
+    candidate_id: Option<SchedulerDispatchCandidateId>,
+    result: &WorkflowSchedulerTaskResult,
+) -> Result<ReservationLifecycleEvent, WorkflowSchedulerTaskOrchestratorError> {
+    match result.status {
+        WorkflowSchedulerTaskResultStatus::Completed => reservation_lifecycle_event(
+            task,
+            reservation_lease_id,
+            candidate_id,
+            ReservationLifecycleOutcome::RuntimeHostCompleted,
+            vec![reservation_lifecycle_diagnostic(
+                ReservationLifecycleDiagnosticSeverity::Info,
+                ReservationLifecycleDiagnosticCode::RuntimeHostCompleted,
+                "runtime host completed scheduler reservation",
+            )],
+        ),
+        WorkflowSchedulerTaskResultStatus::Failed
+        | WorkflowSchedulerTaskResultStatus::Unavailable
+        | WorkflowSchedulerTaskResultStatus::Invalid => {
+            let diagnostics = if result.diagnostics.is_empty() {
+                vec![reservation_lifecycle_diagnostic(
+                    ReservationLifecycleDiagnosticSeverity::Error,
+                    ReservationLifecycleDiagnosticCode::RuntimeHostFailed,
+                    "runtime host returned a failed scheduler task result",
+                )]
+            } else {
+                result
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| {
+                        reservation_lifecycle_diagnostic(
+                            ReservationLifecycleDiagnosticSeverity::Error,
+                            ReservationLifecycleDiagnosticCode::RuntimeHostFailed,
+                            diagnostic.message.clone(),
+                        )
+                    })
+                    .collect()
+            };
+            reservation_lifecycle_event(
+                task,
+                reservation_lease_id,
+                candidate_id,
+                ReservationLifecycleOutcome::RuntimeHostFailed,
+                diagnostics,
+            )
+        }
+    }
+}
+
+fn reservation_lifecycle_event(
+    task: &WorkflowSchedulerTask,
+    reservation_lease_id: SchedulerReservationLeaseId,
+    candidate_id: Option<SchedulerDispatchCandidateId>,
+    outcome: ReservationLifecycleOutcome,
+    diagnostics: Vec<ReservationLifecycleDiagnostic>,
+) -> Result<ReservationLifecycleEvent, WorkflowSchedulerTaskOrchestratorError> {
+    Ok(ReservationLifecycleEvent {
+        contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+        lifecycle_event_id: reservation_lifecycle_event_id(
+            task,
+            &reservation_lease_id,
+            candidate_id.as_ref(),
+            &outcome,
+        ),
+        reservation_lease_id,
+        workflow_id: task.workflow_id.clone(),
+        workflow_run_id: task.workflow_run_id.clone(),
+        node_id: task.node_id.clone(),
+        task_id: task.task_id.clone(),
+        outcome,
+        candidate_id,
+        diagnostics,
+    })
+}
+
+fn reservation_lifecycle_event_id(
+    task: &WorkflowSchedulerTask,
+    reservation_lease_id: &SchedulerReservationLeaseId,
+    candidate_id: Option<&SchedulerDispatchCandidateId>,
+    outcome: &ReservationLifecycleOutcome,
+) -> String {
+    let hash = stable_lifecycle_hash(&[
+        task.workflow_run_id.as_str(),
+        task.task_id.as_str(),
+        reservation_lease_id.as_str(),
+        candidate_id
+            .map(SchedulerDispatchCandidateId::as_str)
+            .unwrap_or(""),
+        reservation_lifecycle_outcome_key(outcome),
+    ]);
+    format!(
+        "reservation.lifecycle.{:016x}.{}",
+        hash,
+        reservation_lifecycle_outcome_key(outcome)
+    )
+}
+
+fn stable_lifecycle_hash(parts: &[&str]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for part in parts {
+        for byte in part.as_bytes().iter().copied().chain([0xff]) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    hash
+}
+
+fn reservation_lifecycle_outcome_key(outcome: &ReservationLifecycleOutcome) -> &'static str {
+    match outcome {
+        ReservationLifecycleOutcome::CandidateUnselected => "candidate_unselected",
+        ReservationLifecycleOutcome::CandidateRequestRejected => "candidate_request_rejected",
+        ReservationLifecycleOutcome::DispatchStarted => "dispatch_started",
+        ReservationLifecycleOutcome::RuntimeHostDispatchRejected => {
+            "runtime_host_dispatch_rejected"
+        }
+        ReservationLifecycleOutcome::RuntimeHostCompleted => "runtime_host_completed",
+        ReservationLifecycleOutcome::RuntimeHostFailed => "runtime_host_failed",
+        ReservationLifecycleOutcome::WorkflowCancelled => "workflow_cancelled",
+        ReservationLifecycleOutcome::RetryDeferred => "retry_deferred",
+        ReservationLifecycleOutcome::SessionClosed => "session_closed",
+        ReservationLifecycleOutcome::DuplicateReplay => "duplicate_replay",
+        _ => "unknown",
+    }
+}
+
+fn reservation_lifecycle_diagnostic(
+    severity: ReservationLifecycleDiagnosticSeverity,
+    code: ReservationLifecycleDiagnosticCode,
+    message: impl Into<String>,
+) -> ReservationLifecycleDiagnostic {
+    ReservationLifecycleDiagnostic {
+        severity,
+        code,
+        message: message.into(),
+        hint: None,
+    }
+}
+
 fn initial_task_state(
     task: &WorkflowSchedulerTask,
 ) -> Result<SchedulerTaskState, WorkflowSchedulerTaskOrchestratorError> {
@@ -1018,6 +1343,12 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[allow(dead_code)]
     #[error("scheduler dispatch selection did not select a runtime task")]
     RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
+    #[allow(dead_code)]
+    #[error("reservation lifecycle contract validation failed: {0}")]
+    ReservationLifecycleContract(ReservationLifecycleContractError),
+    #[allow(dead_code)]
+    #[error("reservation lifecycle port failed: {0}")]
+    ReservationLifecyclePort(ReservationLifecyclePortError),
     #[error("scheduler contract validation failed")]
     SchedulerContract(SchedulerContractError),
     #[error("workflow service operation failed")]
@@ -1026,6 +1357,25 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     ExternalInputMaterialization(WorkflowExternalInputMaterializationError),
     #[error("non-runtime scheduler task execution failed")]
     NonRuntimeTaskAdapter(WorkflowSchedulerNonRuntimeTaskAdapterError),
+}
+
+#[derive(Debug)]
+struct UnavailableReservationLifecyclePort;
+
+#[async_trait]
+impl ReservationLifecyclePort for UnavailableReservationLifecyclePort {
+    async fn apply_reservation_lifecycle(
+        &self,
+        _event: ReservationLifecycleEvent,
+    ) -> Result<
+        pantograph_runtime_host_contracts::ReservationLifecycleApplication,
+        ReservationLifecyclePortError,
+    > {
+        Err(ReservationLifecyclePortError::Failed {
+            message: "reservation lifecycle port is not configured for workflow-service"
+                .to_string(),
+        })
+    }
 }
 
 fn ready_non_runtime_execution_intent(

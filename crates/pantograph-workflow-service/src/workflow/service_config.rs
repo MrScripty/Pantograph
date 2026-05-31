@@ -9,8 +9,8 @@ use pantograph_dependency_environment_service::{
 };
 use pantograph_dependency_planning::ValidatedDependencyEnvironmentResult;
 use pantograph_runtime_host_contracts::{
-    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
-    RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
+    ReservationLifecyclePort, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
 };
 
 use crate::graph::GraphSessionStore;
@@ -74,8 +74,20 @@ impl WorkflowService {
         mut self,
         port: Arc<dyn RuntimeHostExecutionPort>,
     ) -> Self {
-        self.scheduler_task_orchestrator =
-            WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port));
+        self.scheduler_task_orchestrator = self
+            .scheduler_task_orchestrator
+            .with_runtime_host_dispatcher(SchedulerRuntimeHostDispatcher::new(port));
+        self
+    }
+
+    #[must_use]
+    pub fn with_reservation_lifecycle_port(
+        mut self,
+        port: Arc<dyn ReservationLifecyclePort>,
+    ) -> Self {
+        self.scheduler_task_orchestrator = self
+            .scheduler_task_orchestrator
+            .with_reservation_lifecycle_port(port);
         self
     }
 

@@ -18726,6 +18726,40 @@ Worker rules:
   - Remaining follow-up: wire workflow-service lifecycle emission with a
     fail-closed unavailable default before embedded-runtime implements the
     runtime-registry release/reconcile port.
+- 2026-05-30 workflow-service reservation lifecycle emission slice:
+  - Slice scope: workflow-service scheduler orchestration, service
+    configuration, focused session execution tests, scheduler/workflow READMEs,
+    and plan logs only.
+  - Implementation: added an injected reservation lifecycle port to the
+    scheduler task orchestrator, preserved lifecycle-port configuration across
+    runtime-host port injection, emitted typed dispatch-started,
+    candidate-unselected, runtime-host-dispatch-rejected, runtime-host-completed,
+    and runtime-host-failed lifecycle events, and added a default unavailable
+    lifecycle port that fails closed before runtime-host dispatch.
+  - Test coverage: extended the scheduler-selected runtime dispatch test to
+    assert lifecycle events around successful dispatch and added a missing-port
+    fail-closed test proving runtime-host execution is not called without the
+    lifecycle owner.
+  - No-fallback/no-legacy result: workflow-service emits only typed scheduler
+    lease lifecycle facts through the shared port. It does not release leases
+    directly, synthesize cleanup from graph paths or reduced execution plans,
+    invoke node-engine planned inference, or adapt handoff state into
+    `ModelRefV2`.
+  - Standards result: lifecycle side effects stay behind a port implemented by
+    embedded-runtime/runtime-registry, service composition is explicit,
+    application code validates event/application DTOs, and missing production
+    wiring fails closed rather than creating hidden provider-local cleanup
+    state.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service reservation_lifecycle --lib`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+    `cargo check -p pantograph-workflow-service`, and `git diff --check`.
+    `cargo check` still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: implement the embedded-runtime lifecycle port backed
+    by runtime-registry release/retention/reconcile APIs and wire production
+    candidate provider plus lifecycle port together before enabling real
+    resource-backed candidates.
 
 ### Traceability Links
 

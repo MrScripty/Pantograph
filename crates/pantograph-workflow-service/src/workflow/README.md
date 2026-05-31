@@ -126,6 +126,11 @@ and project requested outputs from scheduler task results. The provider must
 supply typed runtime, device, model, reservation, and resource-fit facts; the
 session runner must not synthesize those facts from graph paths, frontend
 state, reduced execution plans, `ModelRefV2`, or runtime-host load targets.
+Successful runtime dispatch now also requires a configured reservation
+lifecycle port. `service_config.rs` exposes that port as a workflow-service
+composition dependency, and the default fails closed before runtime-host
+dispatch so tests and production wiring cannot leak reservations by omitting
+the embedded-runtime lifecycle owner.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and

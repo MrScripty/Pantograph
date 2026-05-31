@@ -19,9 +19,12 @@ use pantograph_inference_interface_contracts::{
     WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
 use pantograph_runtime_host_contracts::{
-    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
-    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    ReservationLifecycleApplication, ReservationLifecycleApplicationState,
+    ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
+    ReservationLifecyclePortError, RuntimeHostExecutionMediaArtifactRef,
+    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
@@ -408,6 +411,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
         .with_dependency_environment_provider(std::sync::Arc::new(
@@ -417,7 +421,8 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         .with_runtime_dispatch_candidate_provider(Arc::new(
             SingleCanonicalRuntimeDispatchCandidateProvider,
         ))
-        .with_runtime_host_execution_port(runtime_host_port.clone());
+        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
     let workflow_id = "wf-runtime-selected-dispatch";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -505,6 +510,105 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         .expect("dependency-readiness work item should be queued after seed");
     assert_eq!(work_item.provenance.session_id.as_str(), session_id);
     assert_eq!(work_item.provenance.task_id.as_str(), "infer");
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+    let lifecycle_events = reservation_lifecycle_port.events();
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .map(|event| &event.outcome)
+            .collect::<Vec<_>>(),
+        vec![
+            &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::RuntimeHostCompleted,
+        ]
+    );
+    assert!(lifecycle_events
+        .iter()
+        .all(|event| event.reservation_lease_id.as_str() == "reservation.runtime_session_test"));
+}
+
+#[tokio::test]
+async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing() {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone());
+    let workflow_id = "wf-runtime-lifecycle-missing";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("missing reservation lifecycle port must fail before runtime dispatch");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(
+        error
+            .message()
+            .contains("reservation lifecycle port is not configured"),
+        "unexpected error: {error}"
+    );
+    assert!(runtime_host_port.requests().is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
@@ -2588,6 +2692,40 @@ impl RuntimeInferenceSessionHost {
             runtime_load_attempts: Arc::new(AtomicUsize::new(0)),
             run_attempts: Arc::new(AtomicUsize::new(0)),
         }
+    }
+}
+
+#[derive(Default)]
+struct RecordingReservationLifecyclePort {
+    events: Mutex<Vec<ReservationLifecycleEvent>>,
+}
+
+impl RecordingReservationLifecyclePort {
+    fn events(&self) -> Vec<ReservationLifecycleEvent> {
+        self.events
+            .lock()
+            .expect("reservation lifecycle event lock")
+            .clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
+    async fn apply_reservation_lifecycle(
+        &self,
+        event: ReservationLifecycleEvent,
+    ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+        self.events
+            .lock()
+            .expect("reservation lifecycle event lock")
+            .push(event.clone());
+        Ok(ReservationLifecycleApplication {
+            contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+            lifecycle_event_id: event.lifecycle_event_id,
+            reservation_lease_id: event.reservation_lease_id,
+            state: ReservationLifecycleApplicationState::Applied,
+            diagnostics: Vec::new(),
+        })
     }
 }
 

@@ -1028,6 +1028,12 @@ Staged implementation:
 2. Add workflow-service lifecycle emission around dispatch selection and
    runtime-host dispatch using the shared port with a typed unavailable
    default that fails closed when production lifecycle wiring is absent.
+   Completed 2026-05-30 in `pantograph-workflow-service`: the scheduler task
+   orchestrator now emits `dispatch_started`, unselected-candidate, terminal
+   completion/failure, and dispatch-rejected lifecycle events through the
+   shared reservation lifecycle port; service construction exposes explicit
+   lifecycle-port injection while the default port fails closed before
+   runtime-host dispatch.
 3. Add the embedded-runtime lifecycle port implementation backed by
    runtime-registry release/retention/reconcile APIs.
 4. Wire embedded-runtime composition to provide both the final dispatch
@@ -1036,6 +1042,21 @@ Staged implementation:
 5. Only after lifecycle verification passes, join Pumas package facts, runtime
    capability facts, and runtime resource facts into real resource-backed
    candidate bundles.
+
+2026-05-30 workflow-service lifecycle emission slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-workflow-service reservation_lifecycle --lib`
+- `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+- `cargo check -p pantograph-workflow-service` (passes with existing
+  `set_active_run_execution_plan` dead-code warning)
+- `git diff --check`
+
+Discovered follow-up: production embedded-runtime composition must inject the
+reservation lifecycle port together with the final resource-backed dispatch
+candidate provider. Workflow-service now fails closed if that lifecycle owner
+is absent, so the next slice must implement the embedded-runtime port before
+real resource-backed candidates can be enabled.
 
 ## Verification Strategy
 

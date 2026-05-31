@@ -132,6 +132,12 @@ the shared runtime-host execution port and persist typed scheduler task
 results, but candidate assembly remains outside the scheduler task
 orchestrator and must not be synthesized from graph/editor state or legacy
 runtime contracts.
+The scheduler task orchestrator now also emits reservation lifecycle events
+around dispatch selection and runtime-host dispatch through the shared
+runtime-host contracts port. Workflow-service owns event emission only; the
+default lifecycle port fails closed before runtime-host dispatch, and
+production reservation release/retention side effects remain embedded-runtime
+or runtime-registry responsibilities.
 The scheduler task orchestrator also owns the workflow-service bridge from
 `WaitingDependencyReadiness` into scheduler readiness admission. It consumes
 only a path-free `DependencyPreflightResult`, applies
