@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use node_engine::{
-    core_executor::resolve_node_type, Context, EventSink, ExecutorExtensions,
-    ModelDependencyRequest, NodeEngineError, Result, TaskExecutor, WorkflowEvent,
+    core_executor::resolve_node_type, Context, EventSink, ExecutorExtensions, NodeEngineError,
+    Result, TaskExecutor, WorkflowEvent,
 };
 use pantograph_runtime_identity::canonical_engine_backend_key;
 

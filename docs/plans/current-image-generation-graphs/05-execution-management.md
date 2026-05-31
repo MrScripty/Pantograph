@@ -20879,6 +20879,36 @@ Worker rules:
     path-repair helpers, and diagnostic-only tests once canonical scheduler
     task-state/results and runtime-host responses cover the final inference
     path.
+- 2026-05-31 embedded-runtime `ModelDependencyRequest` builder deletion slice:
+  - Smallest useful slice: delete embedded-runtime's private
+    `build_model_dependency_request` helper and builder-specific tests after
+    Python runtime dependency preflight became diagnostic-only and stopped
+    injecting legacy `model_ref` outputs.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment/README.md`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/input_helpers.rs`,
+    and these plan files.
+  - Implementation: removed the private request builder, private model-id/
+    package-facts/task projection helpers used only by that builder, the
+    `ModelDependencyRequest` import from the task executor module, and tests
+    asserting legacy request construction behavior.
+  - No-fallback/no-legacy result: embedded-runtime Python preflight can no
+    longer construct `ModelDependencyRequest` payloads. Runtime execution still
+    fails closed before resolver lookup, `ModelRefV2` emission, path repair,
+    Python adapter dispatch, or scheduler/runtime-host fallback synthesis.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime input_helpers -- --nocapture`;
+    `cargo check -p pantograph-embedded-runtime`; and targeted `rg -n
+    "build_model_dependency_request|model_id_from_pumas_model_ref_input|task_type_primary_from_package_facts|read_resolved_model_package_facts_for_preflight"
+    crates/pantograph-embedded-runtime/src -g "*.rs"` returning no source
+    hits.
+  - Remaining follow-up: delete or replace remaining node-engine
+    `ModelDependencyRequest`/`ModelDependencyResolver`/`ModelRefV2` contracts,
+    path-repair helpers, and diagnostic-only tests once canonical scheduler
+    task-state/results and runtime-host responses cover the final inference
+    path.
 
 ### Traceability Links
 

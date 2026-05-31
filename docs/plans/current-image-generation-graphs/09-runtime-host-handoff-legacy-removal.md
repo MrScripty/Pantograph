@@ -2183,6 +2183,12 @@ removed. Canonical dependency planning remains in `planning_projection.rs`
 using shared `pantograph-dependency-planning` contracts; the deleted builder
 must not be restored as a compatibility path.
 
+Completed 2026-05-31 for embedded-runtime `ModelDependencyRequest` builder
+deletion: the private Python-runtime dependency preflight helper no longer
+constructs legacy request payloads, and the builder-specific tests were
+removed. Python runtime preflight remains diagnostic-only and must not recreate
+the request builder as a compatibility bridge.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
