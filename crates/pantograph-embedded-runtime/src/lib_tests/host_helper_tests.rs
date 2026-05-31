@@ -1,5 +1,4 @@
 use super::*;
-use crate::embedded_workflow_host_helpers::unresolved_llamacpp_device_decision_error;
 
 const MIB: u64 = 1024 * 1024;
 
@@ -109,17 +108,4 @@ fn runtime_registry_resource_accounting_errors_map_to_internal() {
         underflow.code(),
         pantograph_workflow_service::WorkflowErrorCode::InternalError
     );
-}
-
-#[test]
-fn unresolved_llamacpp_device_decision_blocks_host_owned_auto_start() {
-    let error = unresolved_llamacpp_device_decision_error(Path::new("/models/model.gguf"));
-
-    assert_eq!(
-        error.code(),
-        pantograph_workflow_service::WorkflowErrorCode::RuntimeNotReady
-    );
-    assert!(error
-        .to_string()
-        .contains("no canonical runtime/device decision"));
 }

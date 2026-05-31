@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use pantograph_runtime_registry::SharedRuntimeRegistry;
-use pantograph_workflow_service::{WorkflowRuntimeCapability, WorkflowService};
+use pantograph_workflow_service::{
+    WorkflowRuntimeCapability, WorkflowService, WorkflowSessionRuntimeLoadProof,
+};
 #[cfg(test)]
 use pantograph_workflow_service::{
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
@@ -167,6 +169,7 @@ pub struct EmbeddedRuntime {
     dependency_readiness_snapshot_producer:
         Option<dependency_readiness_lifecycle::EmbeddedDependencyReadinessSnapshotProducerHandle>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
+    session_runtime_load_proofs: Arc<Mutex<HashMap<String, WorkflowSessionRuntimeLoadProof>>>,
     session_executions:
         Arc<workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore>,
     rag_backend: Option<Arc<dyn RagBackend>>,
@@ -183,6 +186,7 @@ pub(crate) struct EmbeddedWorkflowHost {
     workflow_service: SharedWorkflowService,
     runtime_registry: Option<SharedRuntimeRegistry>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
+    session_runtime_load_proofs: Arc<Mutex<HashMap<String, WorkflowSessionRuntimeLoadProof>>>,
     session_executions:
         Arc<workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore>,
     rag_backend: Option<Arc<dyn RagBackend>>,

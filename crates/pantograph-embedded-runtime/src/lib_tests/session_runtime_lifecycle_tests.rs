@@ -229,15 +229,87 @@ async fn session_runtime_load_blocks_llamacpp_model_without_device_decision() {
             WorkflowExecutionSessionRetentionHint::Ephemeral,
         )
         .await
-        .expect_err("load session runtime should require a canonical device decision");
+        .expect_err("load session runtime should require a backend-owned load proof");
 
     assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
     assert!(error
         .to_string()
-        .contains("no canonical runtime/device decision"));
+        .contains("requires a backend-owned runtime load proof"));
+    assert_eq!(
+        error.runtime_diagnostic_phase_hint(),
+        Some(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad)
+    );
 
     let starts = starts.lock().expect("starts lock");
     assert!(starts.is_empty());
+}
+
+#[tokio::test]
+async fn session_runtime_load_consumes_backend_owned_llamacpp_load_proof() {
+    let temp = TempDir::new().expect("temp dir");
+    let model_path = temp.path().join("maid-model.gguf");
+    std::fs::write(&model_path, b"gguf").expect("write model");
+    write_llamacpp_puma_workflow(temp.path(), "runtime-llama", &model_path);
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let starts = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(RecordingLlamaBackend {
+            ready: false,
+            starts,
+        }),
+        "llama.cpp",
+    ));
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        gateway,
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        Arc::new(WorkflowService::new()),
+        None,
+    )
+    .with_additional_runtime_capabilities(vec![llama_runtime_capability()]);
+
+    runtime
+        .record_workflow_session_runtime_load_proof(
+            "runtime-llama",
+            WorkflowSessionRuntimeLoadProof {
+                backend_key: "llama_cpp".to_string(),
+                runtime_id: Some("llama_cpp".to_string()),
+                model_id: Some("pumas://models/maid".to_string()),
+                active_model_path: None,
+                requested_model_active: true,
+            },
+        )
+        .expect("record load proof");
+
+    let host = runtime.host();
+    host.load_session_runtime(
+        "session-llama",
+        "runtime-llama",
+        None,
+        WorkflowExecutionSessionRetentionHint::Ephemeral,
+    )
+    .await
+    .expect("backend-owned load proof should satisfy session runtime load");
+
+    let proof = host
+        .session_runtime_load_proof("session-llama", "runtime-llama")
+        .await
+        .expect("load proof query succeeds")
+        .expect("load proof should be present");
+    assert_eq!(proof.backend_key, "llama_cpp");
+    assert_eq!(proof.active_model_path, None);
+    assert!(proof.requested_model_active);
 }
 
 #[tokio::test]

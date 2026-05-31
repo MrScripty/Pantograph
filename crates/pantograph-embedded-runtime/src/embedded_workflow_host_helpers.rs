@@ -1,9 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use inference::runtime_load::LlamaCppRuntimeMode;
 use node_engine::WorkflowGraph;
 use pantograph_runtime_identity::canonical_engine_backend_key;
 use pantograph_runtime_registry::{
@@ -125,207 +123,47 @@ impl EmbeddedWorkflowHost {
         &self,
         workflow_id: &str,
     ) -> Result<(), WorkflowServiceError> {
-        let Some(model_path) = self
-            .resolve_llamacpp_workflow_model_path(workflow_id)
+        if !self
+            .workflow_requires_llamacpp_runtime_load_proof(workflow_id)
             .await?
-        else {
+        {
             return Ok(());
         };
 
-        if !self
-            .llamacpp_gateway_matches_requested_model(&model_path)
-            .await
-        {
-            return Err(unresolved_llamacpp_device_decision_error(&model_path));
-        }
+        let Some(proof) = self
+            .workflow_session_runtime_load_proof(workflow_id)
+            .await?
+        else {
+            return Err(missing_runtime_load_proof_error(workflow_id));
+        };
 
-        if self
-            .llamacpp_gateway_matches_requested_model(&model_path)
-            .await
-        {
-            Ok(())
-        } else {
-            Err(WorkflowServiceError::RuntimeNotReady(format!(
-                "llama.cpp reported ready but active model does not match '{}'",
-                model_path.display()
-            ))
-            .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad))
-        }
+        validate_llamacpp_runtime_load_proof(workflow_id, &proof)
     }
 
     pub(crate) async fn workflow_session_runtime_load_proof(
         &self,
         workflow_id: &str,
     ) -> Result<Option<WorkflowSessionRuntimeLoadProof>, WorkflowServiceError> {
-        let Some(model_path) = self
-            .resolve_llamacpp_workflow_model_path(workflow_id)
-            .await?
-        else {
-            return Ok(None);
-        };
+        let proofs = self.session_runtime_load_proofs.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session runtime load proof lock poisoned".to_string())
+        })?;
 
-        let Some(descriptor) = self
-            .active_llamacpp_descriptor_matching_requested_model(&model_path)
-            .await
-        else {
-            return Ok(None);
-        };
-
-        Ok(Some(WorkflowSessionRuntimeLoadProof {
-            backend_key: "llama_cpp".to_string(),
-            runtime_id: None,
-            model_id: None,
-            active_model_path: Some(descriptor.model_path.display().to_string()),
-            requested_model_active: true,
-        }))
+        Ok(proofs.get(workflow_id).cloned())
     }
 
-    async fn llamacpp_gateway_matches_requested_model(&self, model_path: &Path) -> bool {
-        if !self.gateway.is_ready().await
-            || self.gateway.is_embedding_mode().await
-            || self.gateway.is_reranking_mode().await
-        {
-            return false;
-        }
-
-        let backend_key =
-            canonical_engine_backend_key(Some(self.gateway.current_backend_name().await.as_str()));
-        if backend_key.as_deref() != Some("llamacpp") {
-            return false;
-        }
-
-        if self
-            .active_llamacpp_descriptor_matching_requested_model(model_path)
-            .await
-            .is_some()
-        {
-            return true;
-        }
-
-        let Some(config) = self.gateway.restart_runtime_config().await else {
-            return false;
-        };
-        if config.external_url.is_some() {
-            return true;
-        }
-        let Some(active_model_path) = config.model_path.as_deref() else {
-            return false;
-        };
-        paths_refer_to_same_file(active_model_path, model_path)
-    }
-
-    async fn active_llamacpp_descriptor_matching_requested_model(
-        &self,
-        model_path: &Path,
-    ) -> Option<inference::runtime_load::LlamaCppActiveRuntimeDescriptor> {
-        let descriptor = self.gateway.active_llamacpp_runtime_descriptor().await?;
-        if descriptor.mode != LlamaCppRuntimeMode::Inference {
-            return None;
-        }
-        if !paths_refer_to_same_file(descriptor.model_path.as_path(), model_path) {
-            return None;
-        }
-        Some(descriptor)
-    }
-
-    async fn resolve_llamacpp_workflow_model_path(
+    async fn workflow_requires_llamacpp_runtime_load_proof(
         &self,
         workflow_id: &str,
-    ) -> Result<Option<PathBuf>, WorkflowServiceError> {
+    ) -> Result<bool, WorkflowServiceError> {
         let stored = pantograph_workflow_service::capabilities::load_and_validate_workflow(
             workflow_id,
             &self.workflow_roots,
         )?;
         let graph = stored.to_workflow_graph(workflow_id);
-        let Some(llamacpp_node) = graph
+        Ok(graph
             .nodes
             .iter()
-            .find(|node| is_canonical_llamacpp_inference_node(&node.node_type, &node.data))
-        else {
-            return Ok(None);
-        };
-
-        if let Some(model_path) = model_path_from_node_data(&llamacpp_node.data) {
-            return resolve_gguf_path(&model_path).map(Some);
-        }
-
-        let Some(model_edge) = graph.edges.iter().find(|edge| {
-            edge.target == llamacpp_node.id
-                && matches!(
-                    edge.target_handle.as_str(),
-                    "pumas_model_ref" | "model_path"
-                )
-        }) else {
-            return Err(WorkflowServiceError::RuntimeNotReady(format!(
-                "llama.cpp workflow '{}' has an inference node without a pumas_model_ref input",
-                workflow_id
-            )));
-        };
-        let Some(source_node) = graph.find_node(&model_edge.source) else {
-            return Err(WorkflowServiceError::RuntimeNotReady(format!(
-                "llama.cpp workflow '{}' references missing model source node '{}'",
-                workflow_id, model_edge.source
-            )));
-        };
-
-        let model_path = if source_node.node_type == "puma-lib" {
-            self.resolve_puma_lib_node_model_path(&source_node.data)
-                .await?
-        } else {
-            model_path_from_node_data(&source_node.data)
-        };
-
-        let Some(model_path) = model_path else {
-            return Err(WorkflowServiceError::RuntimeNotReady(format!(
-                "llama.cpp workflow '{}' could not resolve a model path from node '{}'",
-                workflow_id, source_node.id
-            )));
-        };
-
-        resolve_gguf_path(&model_path).map(Some)
-    }
-
-    async fn resolve_puma_lib_node_model_path(
-        &self,
-        data: &serde_json::Value,
-    ) -> Result<Option<String>, WorkflowServiceError> {
-        let mut model_path = model_path_from_node_data(data);
-        let model_id = read_optional_string_aliases(data, &["model_id", "modelId"]);
-        let Some(api) = self.pumas_api().await else {
-            return Ok(model_path);
-        };
-
-        let model = if let Some(model_id) = model_id.as_deref() {
-            api.get_model(model_id).await.map_err(|error| {
-                WorkflowServiceError::RuntimeNotReady(format!(
-                    "failed to query Puma-Lib model '{model_id}': {error}"
-                ))
-                .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
-            })?
-        } else {
-            None
-        };
-
-        if let Some(model) = model {
-            if !model.path.trim().is_empty() {
-                model_path = Some(model.path.clone());
-            }
-            match api.resolve_model_execution_descriptor(&model.id).await {
-                Ok(descriptor) if !descriptor.entry_path.trim().is_empty() => {
-                    model_path = Some(descriptor.entry_path);
-                }
-                Ok(_) => {}
-                Err(error) => {
-                    log::warn!(
-                        "Puma-Lib execution descriptor lookup failed during model preload for '{}': {}",
-                        model.id,
-                        error
-                    );
-                }
-            }
-        }
-
-        Ok(model_path)
+            .any(|node| is_canonical_llamacpp_inference_node(&node.node_type, &node.data)))
     }
 
     pub(crate) fn record_session_runtime_reservation(
@@ -743,68 +581,32 @@ fn read_inference_backend_hint(data: &serde_json::Value) -> Option<String> {
     .and_then(|value| canonical_engine_backend_key(Some(&value)))
 }
 
-fn model_path_from_node_data(data: &serde_json::Value) -> Option<String> {
-    read_optional_string_aliases(data, &["model_path", "modelPath"]).or_else(|| {
-        data.get("pumas_model_ref").and_then(|model_ref| {
-            read_optional_string_aliases(
-                model_ref,
-                &[
-                    "model_path",
-                    "modelPath",
-                    "selected_artifact_path",
-                    "selectedArtifactPath",
-                    "entry_path",
-                    "entryPath",
-                ],
-            )
-        })
-    })
-}
-
-fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {
-    let path = PathBuf::from(path);
-    if !path.is_dir() {
-        return Ok(path);
-    }
-
-    std::fs::read_dir(&path)
-        .map_err(|error| {
-            WorkflowServiceError::RuntimeNotReady(format!(
-                "cannot read model directory '{}': {error}",
-                path.display()
-            ))
-            .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
-        })?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .find(|path| {
-            path.extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
-        })
-        .ok_or_else(|| {
-            WorkflowServiceError::RuntimeNotReady(format!(
-                "no .gguf file found in model directory '{}'",
-                path.display()
-            ))
-            .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
-        })
-}
-
-pub(crate) fn unresolved_llamacpp_device_decision_error(model_path: &Path) -> WorkflowServiceError {
+fn missing_runtime_load_proof_error(workflow_id: &str) -> WorkflowServiceError {
     WorkflowServiceError::RuntimeNotReady(format!(
-        "llama.cpp model '{}' is not active and no canonical runtime/device decision was provided",
-        model_path.display()
+        "workflow '{workflow_id}' requires a backend-owned runtime load proof before session runtime load"
     ))
-    .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch)
+    .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad)
 }
 
-fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
-    if left == right {
-        return true;
+fn validate_llamacpp_runtime_load_proof(
+    workflow_id: &str,
+    proof: &WorkflowSessionRuntimeLoadProof,
+) -> Result<(), WorkflowServiceError> {
+    if canonical_engine_backend_key(Some(proof.backend_key.as_str())).as_deref() != Some("llamacpp")
+    {
+        return Err(WorkflowServiceError::RuntimeNotReady(format!(
+            "workflow '{workflow_id}' runtime load proof backend '{}' does not satisfy required llama.cpp runtime",
+            proof.backend_key
+        ))
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad));
     }
 
-    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => false,
+    if !proof.requested_model_active {
+        return Err(WorkflowServiceError::RuntimeNotReady(format!(
+            "workflow '{workflow_id}' runtime load proof does not mark the requested model active"
+        ))
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad));
     }
+
+    Ok(())
 }

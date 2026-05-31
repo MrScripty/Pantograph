@@ -21211,6 +21211,46 @@ Worker rules:
     and `model_path_from_node_data` from embedded workflow host helpers, and
     update session/edit workflow fixtures to store typed model intent rather
     than executable paths.
+- 2026-05-31 Milestone 5b embedded-runtime lifecycle load-proof slice:
+  - Smallest useful slice: add embedded-runtime-owned runtime session
+    load-proof state for llama.cpp workflow lifecycle checks and remove the
+    old graph path lifecycle resolver helpers once the proof path was
+    validated.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`,
+    `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/host_helper_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/session_runtime_lifecycle_tests.rs`,
+    and these plan files.
+  - Implementation: added a shared `session_runtime_load_proofs` store to
+    `EmbeddedRuntime`/`EmbeddedWorkflowHost`, exposed
+    `EmbeddedRuntime::record_workflow_session_runtime_load_proof` for backend
+    producers, rewired `ensure_workflow_inference_model_loaded` and
+    `workflow_session_runtime_load_proof` to consume typed proofs, and fail
+    closed with `RuntimeModelLoad` diagnostics when a llama.cpp workflow has no
+    proof, a mismatched backend proof, or a proof that does not mark the
+    requested model active.
+  - Legacy deletion: removed the embedded workflow-host helpers that resolved
+    runtime lifecycle from graph-authored `model_path`/`modelPath`, nested
+    Pumas selected artifact paths, Pumas entry paths, local GGUF paths, or
+    active gateway descriptor path comparison. Removed the obsolete unit test
+    for the retired device-decision/path diagnostic.
+  - No-fallback/no-legacy result: saved graph paths, Pumas entry paths, and
+    active gateway path comparisons can no longer satisfy session runtime load
+    readiness. A llama.cpp workflow must have a backend-owned typed load proof
+    or lifecycle load fails closed with typed diagnostics.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime session_runtime_load -- --nocapture`;
+    `cargo check -p pantograph-embedded-runtime`; and targeted `rg` confirming
+    the retired embedded-runtime graph path lifecycle resolver names and
+    selected-artifact/entry-path authority reads are absent from the touched
+    lifecycle helper/test files.
+  - Remaining follow-up: populate the proof store from the canonical planning,
+    Pumas artifact/load-target, and runtime-host readiness producer path rather
+    than test code, then promote the stable proof DTOs into the shared
+    executable contract area with stale/missing proof diagnostics.
 
 ### Traceability Links
 

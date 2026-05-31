@@ -20,11 +20,11 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionStatusRequest, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
     WorkflowHost, WorkflowIoArtifactQueryRequest, WorkflowOutputTarget, WorkflowPortBinding,
     WorkflowPreflightRequest, WorkflowRunDetailQueryRequest, WorkflowRunOptions,
-    WorkflowRunResponse, WorkflowRuntimeInstallState, WorkflowRuntimeRequirements,
-    WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowRunResponse, WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeInstallState,
+    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
     WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
-    WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimate,
-    WorkflowTechnicalFitResourceEstimateKind,
+    WorkflowSessionRuntimeLoadProof, WorkflowTechnicalFitOverride,
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitResourceEstimateKind,
 };
 use std::path::{Path, PathBuf};
 use std::pin::Pin;

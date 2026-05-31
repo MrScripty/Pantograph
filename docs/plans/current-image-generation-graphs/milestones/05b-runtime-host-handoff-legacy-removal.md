@@ -521,22 +521,29 @@ cleanup.
   resulting diagnostics, but must not own lifecycle decisions, infer model
   identity from `modelPath`, resolve Pumas artifacts, or repair missing backend
   proofs.
-- [ ] Add backend-owned runtime session/load-proof state in
+- [x] Add backend-owned runtime session/load-proof state in
   `pantograph-embedded-runtime` keyed by workflow/task identity and populated
   from canonical inference planning, Pumas artifact/load-target decisions, and
-  runtime-host readiness results.
-- [ ] Rewire embedded-runtime lifecycle checks to consume typed load proofs and
+  runtime-host readiness results. 2026-05-31 progress: added the
+  embedded-runtime proof store and public producer hook; production producer
+  wiring remains a follow-up before shared-contract promotion.
+- [x] Rewire embedded-runtime lifecycle checks to consume typed load proofs and
   fail closed with diagnostics when proofs are stale, missing, backend
   mismatched, or runtime-not-ready; do not read graph node `model_path`,
   `modelPath`, selected artifact path, or Pumas entry path as executable
-  authority.
+  authority. 2026-05-31 progress: lifecycle checks now require typed proofs
+  for llama.cpp workflows and fail closed with `RuntimeModelLoad` diagnostics
+  for missing, backend-mismatched, or inactive-model proofs.
 - [ ] Promote proven lifecycle/load-proof DTOs into the shared executable
   contract area with validation/normalization for workflow id, task id,
   backend/runtime identity, model id, artifact/load-target identity, readiness
   state, diagnostic phase, and stale/missing proof errors.
-- [ ] Delete embedded-runtime workflow-host graph path resolver helpers and
+- [x] Delete embedded-runtime workflow-host graph path resolver helpers and
   update session/edit workflow fixtures to store typed model intent rather than
   executable paths after the typed lifecycle proof vertical slice passes.
+  2026-05-31 progress: deleted the embedded workflow-host graph path resolver
+  helpers and active gateway path matching; fixture migration remains as part
+  of the producer/shared-contract follow-up.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.

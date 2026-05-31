@@ -48,6 +48,7 @@ impl EmbeddedRuntime {
             runtime_registry: None,
             dependency_readiness_snapshot_producer: None,
             session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
+            session_runtime_load_proofs: Arc::new(Mutex::new(HashMap::new())),
             session_executions: Arc::new(
                 workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore::new(),
             ),
@@ -111,6 +112,7 @@ impl EmbeddedRuntime {
             runtime_registry,
             dependency_readiness_snapshot_producer: None,
             session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
+            session_runtime_load_proofs: Arc::new(Mutex::new(HashMap::new())),
             session_executions: Arc::new(
                 workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore::new(),
             ),
@@ -262,6 +264,23 @@ impl EmbeddedRuntime {
         self
     }
 
+    pub fn record_workflow_session_runtime_load_proof(
+        &self,
+        workflow_id: &str,
+        proof: pantograph_workflow_service::WorkflowSessionRuntimeLoadProof,
+    ) -> Result<
+        Option<pantograph_workflow_service::WorkflowSessionRuntimeLoadProof>,
+        pantograph_workflow_service::WorkflowServiceError,
+    > {
+        let mut proofs = self.session_runtime_load_proofs.lock().map_err(|_| {
+            pantograph_workflow_service::WorkflowServiceError::Internal(
+                "session runtime load proof lock poisoned".to_string(),
+            )
+        })?;
+
+        Ok(proofs.insert(workflow_id.to_string(), proof))
+    }
+
     pub fn workflow_service(&self) -> &SharedWorkflowService {
         &self.workflow_service
     }
@@ -314,6 +333,7 @@ impl EmbeddedRuntime {
             workflow_service: self.workflow_service.clone(),
             runtime_registry: self.runtime_registry.clone(),
             session_runtime_reservations: self.session_runtime_reservations.clone(),
+            session_runtime_load_proofs: self.session_runtime_load_proofs.clone(),
             session_executions: self.session_executions.clone(),
             rag_backend: self.rag_backend.clone(),
             python_runtime: self.python_runtime.clone(),
