@@ -154,9 +154,8 @@ async fn runtime_extensions_apply_pumas_selector_access() {
 #[tokio::test]
 async fn runtime_extensions_do_not_apply_model_dependency_resolver() {
     let shared = Arc::new(RwLock::new(ExecutorExtensions::new()));
-    let resolver: Arc<dyn node_engine::ModelDependencyResolver> = Arc::new(
-        TauriModelDependencyResolver::new(shared.clone(), PathBuf::from(".")),
-    );
+    let resolver: Arc<dyn node_engine::ModelDependencyResolver> =
+        Arc::new(RejectedDependencyResolver);
     shared.write().await.set(
         node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
         resolver,
@@ -179,6 +178,40 @@ async fn runtime_extensions_do_not_apply_model_dependency_resolver() {
             .is_none(),
         "legacy dependency resolver must not be visible to runtime execution"
     );
+}
+
+struct RejectedDependencyResolver;
+
+#[async_trait::async_trait]
+impl node_engine::ModelDependencyResolver for RejectedDependencyResolver {
+    async fn resolve_model_dependency_requirements(
+        &self,
+        _request: node_engine::ModelDependencyRequest,
+    ) -> std::result::Result<node_engine::ModelDependencyRequirements, String> {
+        Err("test resolver must not be called".to_string())
+    }
+
+    async fn check_dependencies(
+        &self,
+        _request: node_engine::ModelDependencyRequest,
+    ) -> std::result::Result<node_engine::ModelDependencyStatus, String> {
+        Err("test resolver must not be called".to_string())
+    }
+
+    async fn install_dependencies(
+        &self,
+        _request: node_engine::ModelDependencyRequest,
+    ) -> std::result::Result<node_engine::ModelDependencyInstallResult, String> {
+        Err("test resolver must not be called".to_string())
+    }
+
+    async fn resolve_model_ref(
+        &self,
+        _request: node_engine::ModelDependencyRequest,
+        _requirements: Option<node_engine::ModelDependencyRequirements>,
+    ) -> std::result::Result<Option<node_engine::ModelRefV2>, String> {
+        Err("test resolver must not be called".to_string())
+    }
 }
 
 struct MockMediaPythonRuntime {

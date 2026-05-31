@@ -27,7 +27,7 @@ use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 use crate::SharedExtensions;
 use crate::{
-    model_dependencies::DependencyActivityHub, runtime_registry::HostRuntimeRegistryController,
+    runtime_registry::HostRuntimeRegistryController, DependencyActivityHub,
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
 };
@@ -950,7 +950,7 @@ mod tests {
         }));
         output
             .dependency_activity
-            .emit(crate::model_dependencies::DependencyActivityEvent {
+            .emit(crate::DependencyActivityEvent {
                 timestamp: "2026-05-31T00:00:00Z".to_string(),
                 node_type: "diagnostic".to_string(),
                 model_path: "diagnostic-only".to_string(),

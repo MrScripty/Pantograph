@@ -280,10 +280,14 @@ cleanup.
     task state/results plus runtime-host responses or typed fail-closed
     diagnostics.
   - Production resolver/removal targets:
-    `crates/pantograph-embedded-runtime/src/{workflow_service_composition.rs,embedded_runtime_lifecycle.rs,runtime_extensions.rs,model_dependencies.rs,model_dependency_operations.rs,model_dependency_descriptors.rs,model_dependency_activity.rs,model_dependency_python.rs,model_dependencies_tests.rs}`.
-    These still compose or test `ModelDependencyResolver` and `ModelRefV2`
-    infrastructure; remove production composition after canonical runtime-host
-    response coverage exists, then delete tests with the old contract.
+    2026-05-31 update: embedded-runtime resolver composition, resolver
+    modules, descriptor/requirements/Python helpers, and resolver tests were
+    deleted after production composition and Tauri probe/facade consumers were
+    removed. Remaining production replacement targets are the task-executor
+    dependency-environment helpers/tests and node-engine contracts that still
+    mention `ModelDependencyRequest`, `ModelDependencyResolver`, or
+    `ModelRefV2`; these must stay fail-closed until scheduler/runtime-host
+    task-result coverage replaces them.
   - Host/backend runtime-internal load target consumers:
     `crates/inference/src/{gateway.rs,server.rs,types.rs,embedding_runtime.rs,runtime_load.rs,backend/mod.rs,backend/pytorch.rs,backend/llamacpp.rs,backend/llamacpp_support.rs,backend/pytorch_worker_contract.rs}`,
     `crates/inference/{torch,audio,onnx,depth}/`, and inference backend
@@ -383,7 +387,7 @@ cleanup.
   guardrail work: production resolver composition and any retained commands/
   probes must be made diagnostic/tooling-only or removed after canonical
   scheduler/runtime-host task-result coverage is wired.
-- [ ] Remove production embedded-runtime composition of
+- [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition
   slice must stop installing `MODEL_DEPENDENCY_RESOLVER` into production
@@ -417,7 +421,11 @@ cleanup.
   first probe cleanup slice. 2026-05-31 progress: the stale Tauri workflow
   `model_dependencies.rs` facade was deleted after the probe removal, so Tauri
   no longer re-exports embedded-runtime resolver internals as a workflow-owned
-  module.
+  module. 2026-05-31 progress: embedded-runtime deleted the retained
+  `TauriModelDependencyResolver` stack and no longer ships resolver,
+  descriptor, requirements, Python install/check, model-ref, or resolver test
+  modules. `DependencyActivityHub` remains the only public dependency activity
+  boundary.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
@@ -428,7 +436,7 @@ cleanup.
   readiness adapter; it is a fail-closed diagnostic guardrail that prevents the
   old output shape from being used while canonical task-result coverage is
   completed.
-- [ ] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
+- [x] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
   paths after runtime host load-target resolution, diagnostic-only legacy
   guardrails, and scheduler task-result/runtime-host response coverage are
   wired.

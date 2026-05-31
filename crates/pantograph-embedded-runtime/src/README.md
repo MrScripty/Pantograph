@@ -50,13 +50,7 @@ packages.
 | `lib_tests/session_runtime_lifecycle_tests.rs` | Embedded workflow-session runtime lifecycle integration tests split out of the legacy root test module. |
 | `lib_tests/workflow_run_execution_tests.rs` | Embedded scheduler session-run execution integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
-| `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
-| `model_dependency_activity.rs` | Defines dependency activity event payloads, backend-owned activity subscription hub, emitters, and request context projection shared by diagnostic resolver phases and install streams. |
-| `model_dependency_descriptors.rs` | Resolves stable model identity, cache keys, Pumas execution descriptors, backend aliases, task tags, and requirements ids for dependency preflight. |
-| `model_dependency_operations.rs` | Owns the current async resolve/check/install/model-ref operation flow for the dependency resolver while the resolver boundary is migrated to shared typed contracts. |
-| `model_dependency_python.rs` | Owns Python environment lookup, pip package checks, package install stream capture, binding checks, and per-environment install locks for the dependency resolver. |
-| `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
-| `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
+| `model_dependency_activity.rs` | Defines dependency activity event payloads, backend-owned activity subscription hub, and emitters for app-shell forwarding. |
 | `node_execution.rs` | Defines runtime-created node execution context, cancellation/progress handles, output summaries, composed-parent lineage projection, and guarantee classification. |
 | `node_execution_capabilities.rs` | Defines managed capability route contracts and typed capability wrappers for model, resource, cache, progress, diagnostics, and external-tool access. |
 | `node_execution_diagnostics.rs` | Adapts node-engine workflow events into enriched transient runtime-owned node diagnostics with attribution, contract, lineage, and guarantee context, plus an event-sink recorder for collecting adapted diagnostics along execution paths. |
@@ -219,23 +213,15 @@ Pumas-specific dependency resolution.
 
 ## Decision
 Keep this crate as the application/infrastructure integration layer for
-Pantograph-owned runtime behavior. `model_dependencies.rs` is responsible for
-mapping workflow dependency requests onto Pumas contracts, and it should prefer
-`ModelExecutionDescriptor` when a request can resolve a model id. The crate
-keeps remaining path-shaped dependency DTO helpers only as transitional
-cleanup/test targets while they are replaced by scheduler task results and
-runtime-host responses. `puma-lib` task execution is no longer a model-path
-producer, and embedded-runtime dependency preflight no longer has a successful
-runtime-launch branch: it fails closed before legacy resolver lookup,
-`ModelDependencyRequest`, `ModelRefV2`, path repair, or Python adapter
-dispatch. Executable path/load-target resolution belongs to the
-scheduler-owned runtime-host path.
-Lower-level descriptor helpers still contain the remaining path-shaped DTO
-fields until the typed request/result contract replacement removes them.
-Python package checks, binding installation, install stream
-capture, and per-environment install locks stay in `model_dependency_python.rs`
-so the resolver facade remains focused on API orchestration, cache lookup, and
-Pumas contract projection. The runtime registry may consume this crate's
+Pantograph-owned runtime behavior. The retired embedded-runtime
+`ModelDependencyResolver` stack has been deleted; dependency readiness and
+runtime execution must come from scheduler task state/results, backend-owned
+readiness facts, and runtime-host responses. `puma-lib` task execution is no
+longer a model-path producer, and embedded-runtime dependency preflight no
+longer has a successful runtime-launch branch: it fails closed before legacy
+resolver lookup, `ModelDependencyRequest`, `ModelRefV2`, path repair, or Python
+adapter dispatch. Executable path/load-target resolution belongs to the
+scheduler-owned runtime-host path. The runtime registry may consume this crate's
 capability and execution facts, and this crate may emit reservation lifecycle
 signals into that registry when a host injects one. Registry ownership still
 belongs to a higher Pantograph application-layer coordinator rather than to this
@@ -750,30 +736,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Workflow technical-fit calls may also reuse this crate's request-projection
   helpers, but transport adapters must not build registry selector input or
   project selector reasons on their own.
-- `model_dependencies.rs` accepts workflow dependency requests and returns
-  machine-consumable dependency status or validation errors suitable for
-  preflight blocking.
 - `model_dependency_activity.rs` owns dependency activity event payloads and
-  request context projection while `model_dependencies.rs` remains the public
-  re-export surface used by Tauri event emitters.
-- `model_dependency_descriptors.rs` owns descriptor/cache/model identity
-  resolution so model ids, executable paths, backend aliases, selected binding
-  ids, and task tags are normalized before dependency requirement and model-ref
-  projection.
-- `model_dependency_descriptors.rs` must not preserve backend defaults for
-  retired direct inference node shapes. Diffusers and image-generation package
-  facts use canonical dependency requests with explicit backend/task facts.
-- `model_dependency_requirements.rs` owns Pumas dependency-contract mapping,
-  binding selection, runtime-state aggregation, install-target normalization,
-  and override patch validation so the resolver facade can focus on API,
-  cache, Python process, and Pumas lookup orchestration.
-- `model_dependency_python.rs` owns Python environment lookup, package version
-  checks, pip install invocation, output stream capture, binding install
-  checks, and per-environment install locks so dependency-resolution API flow
-  stays separate from process orchestration.
-- Model dependency resolver tests and Pumas descriptor fixture helpers stay in
-  `model_dependencies_tests.rs` so production resolver changes are not coupled
-  to integration-fixture churn.
+  subscription; `DependencyActivityHub` is the only crate-level re-export
+  needed for app-shell activity forwarding.
 - Embedded workflow and data-graph runtime tests must not construct retired
   direct `diffusion-inference` workflows. Python-sidecar scheduler and
   registry coverage uses audio/ONNX fixtures while image generation remains on
@@ -785,25 +750,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   response envelopes unless an explicit Pantograph API break is approved.
 
 ## Structured Producer Contract
-- `model_dependencies.rs` produces resolved dependency requirements and
-  normalized model descriptors for Pantograph workflow execution.
 - `model_dependency_activity.rs` preserves the serialized dependency activity
   event shape emitted to Tauri so frontend listeners keep receiving stable
   phase, binding, requirement, stream, and model-path fields.
-- `model_dependency_descriptors.rs` preserves stable cache keys,
-  requirements-id shape, Pumas descriptor fallback semantics, backend-key
-  canonicalization, and the remaining exported `ModelDependencyRequest` local
-  path fields before the typed request/result replacement lands. Task
-  execution and dependency preflight should provide Pumas identity, not
-  graph-authored executable paths, to this lower-level resolver boundary.
-- `model_dependency_requirements.rs` preserves stable dependency error codes,
-  binding ids, validation scopes, selected binding order, install targets, and
-  user override validation before those facts are cached or returned by the
-  resolver facade.
-- `model_dependency_python.rs` preserves dependency package check/install
-  semantics, pip output projection, binding installation status, and
-  per-environment install serialization before those results are cached or
-  returned by the resolver facade.
 - When Pumas descriptor resolution succeeds, the executable path contract is the
   descriptor `entry_path`; projected metadata fields such as `entry_path`,
   `storage_kind`, and `bundle_format` are compatibility fallbacks only.

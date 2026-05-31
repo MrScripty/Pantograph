@@ -45,7 +45,7 @@ pub mod embedding_workflow;
 pub mod host_runtime;
 pub mod managed_runtime_manager;
 mod media_base64;
-pub mod model_dependencies;
+mod model_dependency_activity;
 mod node_execution;
 mod node_execution_diagnostics;
 mod node_execution_ledger;
@@ -112,9 +112,7 @@ pub use managed_runtime_manager::{
     select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
     ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
 };
-pub use model_dependencies::{
-    DependencyActivityHub, SharedModelDependencyResolver, TauriModelDependencyResolver,
-};
+pub use model_dependency_activity::{DependencyActivityEvent, DependencyActivityHub};
 pub use node_execution::{
     CacheCapability, DiagnosticsCapability, ExternalToolCapability, ManagedCapabilityKind,
     ManagedCapabilityRoute, ModelExecutionCapability, NodeCancellationToken, NodeExecutionContext,

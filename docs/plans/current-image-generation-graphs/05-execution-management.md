@@ -20700,6 +20700,45 @@ Worker rules:
     src-tauri/src src-tauri/Cargo.toml` returning no hits; and `git diff
     --check`. `cargo check` still reports pre-existing dead-code warnings in
     `pantograph-workflow-service` and Tauri workflow modules.
+- 2026-05-31 embedded-runtime resolver deletion slice:
+  - Smallest useful slice: delete the retained embedded-runtime
+    `TauriModelDependencyResolver` stack after proving no production consumer
+    remained, while keeping `DependencyActivityHub` as the only dependency
+    activity boundary.
+  - Allowed files touched: `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_operations.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_python.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependency_requirements.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: removed the embedded-runtime legacy resolver facade,
+    descriptor mapper, async resolve/check/install/model-ref operations,
+    Python install/check helper, requirements mapper, and resolver tests.
+    `lib_tests` now uses a local never-called stub only to prove runtime
+    extensions do not apply a resolver if one is present in a synthetic shared
+    extension set. Activity event forwarding remains in
+    `model_dependency_activity.rs`.
+  - No-fallback/no-legacy result: embedded-runtime no longer ships a resolver
+    that can produce `ModelDependencyRequest`, `ModelRefV2`, dependency
+    install/check results, or path-shaped launch payloads. No
+    scheduler/runtime-host/readiness facts were adapted back into the retired
+    contracts.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    test -p pantograph-embedded-runtime runtime_extensions -- --nocapture`;
+    `cargo test -p pantograph-embedded-runtime hosted_startup -- --nocapture`;
+    `cargo check -p pantograph-embedded-runtime`; `rg -n
+    "TauriModelDependencyResolver|SharedModelDependencyResolver|pub mod model_dependencies|pub use model_dependencies|model_dependency_descriptors|model_dependency_operations|model_dependency_python|model_dependency_requirements|model_dependencies_tests"
+    crates/pantograph-embedded-runtime/src src-tauri/src -g "*.rs"` returning
+    no retained resolver/export hits, only node-engine trait method names in
+    test stubs; `rg --files crates/pantograph-embedded-runtime/src | rg
+    "model_dependenc(y|ies)"` returning only
+    `model_dependency_activity.rs`; and `git diff --check`. `cargo check`
+    still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` warning.
 
 ### Traceability Links
 
