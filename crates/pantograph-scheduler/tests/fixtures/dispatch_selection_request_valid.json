@@ -80,14 +80,16 @@
           }
         }
       ],
-      "reservation": {
-        "reservation_lease_id": "reservation.001",
-        "workflow_run_id": "run.001",
-        "task_id": "task.001",
-        "device_id": "cuda:0",
-        "resource_kind": "device_vram",
-        "reserved_bytes": 8589934592
-      },
+      "reservations": [
+        {
+          "reservation_lease_id": "reservation.001",
+          "workflow_run_id": "run.001",
+          "task_id": "task.001",
+          "device_id": "cuda:0",
+          "resource_kind": "device_vram",
+          "reserved_bytes": 8589934592
+        }
+      ],
       "resource_fit_assessment": {
         "workflow_run_id": "run.001",
         "task_id": "task.001",

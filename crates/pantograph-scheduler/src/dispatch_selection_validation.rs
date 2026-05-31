@@ -68,37 +68,58 @@ pub(crate) fn validate_candidate_selected_model_ref(
     Ok(())
 }
 
-pub(crate) fn validate_reservation(
+pub(crate) fn validate_reservations(
     candidate: &SchedulerDispatchCandidate,
     intent: &SchedulableTaskIntent,
-    reservation: &SchedulerResourceReservation,
+    reservations: &[SchedulerResourceReservation],
 ) -> Result<(), SchedulerContractError> {
-    if reservation.workflow_run_id != intent.workflow_run_id {
-        return Err(SchedulerContractError::InvalidField {
-            field: "dispatch_candidate.reservation.workflow_run_id",
-            reason: "reservation workflow run id must match task intent",
-        });
-    }
-    if reservation.task_id != intent.task_id {
-        return Err(SchedulerContractError::InvalidField {
-            field: "dispatch_candidate.reservation.task_id",
-            reason: "reservation task id must match task intent",
-        });
-    }
-    if reservation.reserved_bytes == 0 {
-        return Err(SchedulerContractError::InvalidField {
-            field: "dispatch_candidate.reservation.reserved_bytes",
-            reason: "reserved bytes must be greater than zero",
-        });
-    }
-    if !candidate
-        .selected_device_ids
-        .contains(&reservation.device_id)
-    {
-        return Err(SchedulerContractError::InvalidField {
-            field: "dispatch_candidate.reservation.device_id",
-            reason: "reservation device must be selected by the candidate",
-        });
+    let Some(first_reservation) = reservations.first() else {
+        return Ok(());
+    };
+    let mut reservation_claims = BTreeSet::new();
+    for reservation in reservations {
+        if reservation.reservation_lease_id != first_reservation.reservation_lease_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_candidate.reservations.reservation_lease_id",
+                reason: "candidate reservations must share one lease id",
+            });
+        }
+        if reservation.workflow_run_id != intent.workflow_run_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_candidate.reservations.workflow_run_id",
+                reason: "reservation workflow run id must match task intent",
+            });
+        }
+        if reservation.task_id != intent.task_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_candidate.reservations.task_id",
+                reason: "reservation task id must match task intent",
+            });
+        }
+        if reservation.reserved_bytes == 0 {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_candidate.reservations.reserved_bytes",
+                reason: "reserved bytes must be greater than zero",
+            });
+        }
+        if !candidate
+            .selected_device_ids
+            .contains(&reservation.device_id)
+        {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_candidate.reservations.device_id",
+                reason: "reservation device must be selected by the candidate",
+            });
+        }
+        if !reservation_claims.insert((
+            reservation.device_id.as_str(),
+            reservation.resource_kind.clone(),
+        )) {
+            return Err(SchedulerContractError::InvalidField {
+                field: "dispatch_candidate.reservations",
+                reason: "candidate reservations must not duplicate device resource claims",
+            });
+        }
     }
     Ok(())
 }

@@ -237,6 +237,10 @@ fn matching_dispatch_decision_for(handoff: &SchedulerRuntimeHandoff) -> Schedule
     decision.task_id = handoff.task_id.clone();
     decision.task_intent = handoff.task_intent.clone();
     decision.selected_model_ref = handoff.task_intent.model_ref.clone();
+    for reservation in &mut decision.reservations {
+        reservation.workflow_run_id = handoff.workflow_run_id.clone();
+        reservation.task_id = handoff.task_id.clone();
+    }
     decision.readiness_proof = handoff.readiness_proof.clone();
     decision.environment_ref = handoff.environment_ref.clone();
     decision

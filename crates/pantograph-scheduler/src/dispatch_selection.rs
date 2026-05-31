@@ -13,8 +13,8 @@ use crate::dispatch::{
 use crate::dispatch_selection_validation::{
     default_scheduler_dispatch_selection_contract_version, map_dependency_error,
     validate_candidate_selected_model_ref, validate_contract_version, validate_environment_ref,
-    validate_identifier, validate_reservation, validate_resource_fit, validate_selected_device_ids,
-    validate_text,
+    validate_identifier, validate_reservations, validate_resource_fit,
+    validate_selected_device_ids, validate_text,
 };
 use crate::error::SchedulerContractError;
 use crate::intent::{SchedulableTaskIntent, SchedulerTraitSetting};
@@ -188,8 +188,8 @@ pub struct SchedulerDispatchCandidate {
     pub selected_model_ref: PumasModelRef,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runtime_trait_settings: Vec<SchedulerTraitSetting>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reservation: Option<SchedulerResourceReservation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reservations: Vec<SchedulerResourceReservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource_fit_assessment: Option<SchedulerResourceFitAssessment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -214,9 +214,7 @@ impl SchedulerDispatchCandidate {
                     reason: "runtime trait setting is invalid",
                 })?;
         }
-        if let Some(reservation) = &self.reservation {
-            validate_reservation(self, intent, reservation)?;
-        }
+        validate_reservations(self, intent, &self.reservations)?;
         if let Some(resource_fit_assessment) = &self.resource_fit_assessment {
             validate_resource_fit(intent, resource_fit_assessment)?;
         }

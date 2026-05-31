@@ -200,6 +200,16 @@
       },
       "batching_group_id": "batch.image_generation.001",
       "reservation_lease_id": "reservation.001",
+      "reservations": [
+        {
+          "reservation_lease_id": "reservation.001",
+          "workflow_run_id": "run.2026-05-22.001",
+          "task_id": "task.image_generation.001",
+          "device_id": "cuda:0",
+          "resource_kind": "device_vram",
+          "reserved_bytes": 8589934592
+        }
+      ],
       "runtime_trait_settings": [
         {
           "trait_id": "denoising_scheduler",

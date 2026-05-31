@@ -1499,23 +1499,27 @@ Standards alignment for the selected option:
 
 Next implementation sequence:
 
-1. Add scheduler contract tests for multi-reservation candidates and selected
-   decisions, including same lease/task/run validation and rejection of mixed
-   lease/task/run or duplicate device/resource claims.
-2. Update `SchedulerDispatchCandidate`, `SchedulerDispatchDecision`, selection
-   policy, and dispatch-selection validation to use reservation vectors while
-   preserving typed `MissingReservation` diagnostics for empty vectors.
-3. Update workflow-service `WorkflowRuntimeDispatchCandidateFact` and
-   `dispatch_candidate` projection to carry reservation vectors one-to-one
-   into scheduler candidates.
-4. Update workflow-service tests and fixtures that build candidate facts,
-   scheduler candidates, or selected dispatch decisions.
-5. Only after the vector contract passes, update
+1. Completed 2026-05-30: add scheduler contract tests for
+   multi-reservation candidates and selected decisions, including same
+   lease/task/run validation and rejection of mixed lease ids or duplicate
+   device/resource claims.
+2. Completed 2026-05-30: update `SchedulerDispatchCandidate`,
+   `SchedulerDispatchDecision`, selection policy, and dispatch-selection
+   validation to use reservation vectors while preserving typed
+   `MissingReservation` diagnostics for empty vectors.
+3. Completed 2026-05-30: update workflow-service
+   `WorkflowRuntimeDispatchCandidateFact` and `dispatch_candidate` projection
+   to carry reservation vectors one-to-one into scheduler candidates.
+4. Completed 2026-05-30: update workflow-service tests and scheduler/runtime
+   host fixtures that build candidate facts, scheduler candidates, or selected
+   dispatch decisions.
+5. Next: update
    `EmbeddedRuntimeDispatchCandidateProvider` to call
    `RuntimeDispatchResourceFactsSource` for matched drafts, pass through every
    returned reservation, and emit validated scheduler candidate bundles.
-6. Add a follow-on device-source slice so unconstrained tasks receive selected
-   device candidates from runtime capability facts instead of provider guesses.
+6. Follow-on: add a device-source slice so unconstrained tasks receive
+   selected device candidates from runtime capability facts instead of provider
+   guesses.
 
 ## Verification Strategy
 

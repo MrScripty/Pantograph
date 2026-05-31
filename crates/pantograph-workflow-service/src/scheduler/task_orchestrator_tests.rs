@@ -8,9 +8,12 @@ use pantograph_dependency_planning::{
     DependencyReadinessValidationSessionId, DependencyRequirementsId,
 };
 use pantograph_runtime_host_contracts::{
+    ReservationLifecycleApplication, ReservationLifecycleApplicationState,
+    ReservationLifecycleEvent, ReservationLifecyclePort, ReservationLifecyclePortError,
     RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionInputValue,
     RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
     RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     select_scheduler_dispatch, SchedulableTaskIntent, SchedulerDispatchSelectionRequest,
@@ -69,6 +72,25 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
             .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
                 message: "missing test response".to_string(),
             })
+    }
+}
+
+#[derive(Default)]
+struct AcceptingReservationLifecyclePort;
+
+#[async_trait]
+impl ReservationLifecyclePort for AcceptingReservationLifecyclePort {
+    async fn apply_reservation_lifecycle(
+        &self,
+        event: ReservationLifecycleEvent,
+    ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+        Ok(ReservationLifecycleApplication {
+            contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+            lifecycle_event_id: event.lifecycle_event_id,
+            reservation_lease_id: event.reservation_lease_id,
+            state: ReservationLifecycleApplicationState::Applied,
+            diagnostics: Vec::new(),
+        })
     }
 }
 
@@ -147,7 +169,8 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
     response.task_id = task_intent.task_id.clone();
     let port = Arc::new(RecordingRuntimeHostPort::with_response(response));
     let orchestrator =
-        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()))
+            .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
     let mut task = task_from_intent(task_intent);
     task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
     task.input_bindings = vec![text_binding("prompt", task.task_id.as_str())];
@@ -203,7 +226,8 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
         runtime_host_response_fixture(),
     ));
     let orchestrator =
-        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()))
+            .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
     let task = task_from_intent(selection_request.task_intent.clone());
 
     let error = orchestrator
@@ -235,7 +259,8 @@ async fn orchestrator_rejects_missing_runtime_input_before_runtime_host_port() {
         runtime_host_response_fixture(),
     ));
     let orchestrator =
-        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()));
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()))
+            .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
 
     let error = orchestrator
         .select_and_dispatch_runtime_task(

@@ -19100,6 +19100,50 @@ Worker rules:
     same reservation-vector contract and returns typed diagnostics when device
     facts are missing.
 
+- 2026-05-30 reservation-vector contract implementation slice
+  - Smallest useful slice: propagate reservation vectors through scheduler
+    dispatch-selection candidates, selected dispatch decisions,
+    workflow-service candidate fact projection, task-orchestrator lifecycle
+    lookup, and affected contract fixtures.
+  - Allowed files touched: scheduler dispatch-selection/decision contract code
+    and tests, workflow-service dispatch-selection projection/orchestrator
+    tests, runtime-host dispatch-selected fixture, and this plan.
+  - No-fallback/no-legacy result: the old singular `reservation` candidate
+    field is removed from the typed contract instead of preserved as a
+    compatibility shim. Empty reservation vectors produce the existing typed
+    `MissingReservation` no-selection diagnostic; selected dispatch decisions
+    require a non-empty reservation vector and reject mixed lease/run/task or
+    duplicate device/resource claims.
+  - Tests added/updated: scheduler dispatch-selection tests for multi-claim
+    vectors, mixed lease rejection, duplicate claim rejection, and
+    `MissingReservation`; dispatch-decision tests for required vectors, mixed
+    lease rejection, and duplicate claims; workflow-service fact bundle tests
+    for missing/mixed reservations; task-orchestrator tests configured a
+    lifecycle port for scheduler-selected runtime dispatch.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo check -p pantograph-scheduler`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-runtime-host-contracts`,
+    `cargo test -p pantograph-scheduler --test dispatch_selection`,
+    `cargo test -p pantograph-scheduler --test dispatch_decision`,
+    `cargo test -p pantograph-scheduler --test runtime_handoff`,
+    `cargo test -p pantograph-workflow-service runtime_dispatch_selection`,
+    `cargo test -p pantograph-workflow-service task_orchestrator`,
+    `cargo test -p pantograph-workflow-service reservation_lifecycle`, and
+    `cargo test -p pantograph-runtime-host-contracts runtime_host_execution`.
+  - Verification deviation recorded: broad
+    `cargo test -p pantograph-workflow-service session_execution` still fails
+    outside this slice with pre-existing saved-snapshot, external source-input
+    materialization, and runtime-load diagnostic expectation failures. The
+    scheduler-selection runtime session tests in that filter pass, including
+    dispatch through scheduler selection and fail-closed missing lifecycle
+    coverage.
+  - Known unrelated warning: `pantograph-workflow-service` still reports the
+    pre-existing unused `set_active_run_execution_plan` method.
+  - Remaining follow-up: implement the embedded-runtime provider emission
+    slice that calls `RuntimeDispatchResourceFactsSource`, passes through every
+    returned reservation, and emits validated scheduler candidate bundles.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

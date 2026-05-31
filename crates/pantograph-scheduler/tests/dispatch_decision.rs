@@ -18,6 +18,72 @@ fn valid_dispatch_decision_fixture_decodes_and_validates() {
         SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION
     );
     assert_eq!(validated.as_ref().selected_device_ids.len(), 1);
+    assert_eq!(validated.as_ref().reservations.len(), 1);
+}
+
+#[test]
+fn dispatch_decision_requires_reservation_vector() {
+    let mut decision: SchedulerDispatchDecision =
+        serde_json::from_str(include_str!("fixtures/dispatch_decision_valid.json"))
+            .expect("fixture must decode");
+    decision.reservations.clear();
+
+    let error = ValidatedSchedulerDispatchDecision::try_from(decision)
+        .expect_err("dispatch decisions must carry selected reservations");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::MissingField {
+            field: "reservations"
+        }
+    );
+}
+
+#[test]
+fn dispatch_decision_rejects_mixed_reservation_lease_ids() {
+    let mut decision: SchedulerDispatchDecision =
+        serde_json::from_str(include_str!("fixtures/dispatch_decision_valid.json"))
+            .expect("fixture must decode");
+    let mut reservation = decision.reservations[0].clone();
+    reservation.reservation_lease_id = "reservation.002"
+        .parse()
+        .expect("reservation id must parse");
+    reservation.device_id = "cuda:1".parse().expect("device id must parse");
+    decision
+        .selected_device_ids
+        .push(reservation.device_id.clone());
+    decision.reservations.push(reservation);
+
+    let error = ValidatedSchedulerDispatchDecision::try_from(decision)
+        .expect_err("dispatch decision reservations must share selected lease id");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::InvalidField {
+            field: "reservations.reservation_lease_id",
+            reason: "dispatch decision reservations must share the selected lease id"
+        }
+    );
+}
+
+#[test]
+fn dispatch_decision_rejects_duplicate_reservation_claims() {
+    let mut decision: SchedulerDispatchDecision =
+        serde_json::from_str(include_str!("fixtures/dispatch_decision_valid.json"))
+            .expect("fixture must decode");
+    let reservation = decision.reservations[0].clone();
+    decision.reservations.push(reservation);
+
+    let error = ValidatedSchedulerDispatchDecision::try_from(decision)
+        .expect_err("dispatch decision reservations must not duplicate claims");
+
+    assert_eq!(
+        error,
+        SchedulerContractError::InvalidField {
+            field: "reservations",
+            reason: "dispatch decision reservations must not duplicate device resource claims"
+        }
+    );
 }
 
 #[test]

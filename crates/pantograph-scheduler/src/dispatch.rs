@@ -11,6 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::error::SchedulerContractError;
 use crate::intent::{SchedulableTaskIntent, SchedulerTraitSetting};
 use crate::readiness::validate_ready_proof_for_intent;
+use crate::resource::SchedulerResourceReservation;
 
 const MAX_ID_LEN: usize = 128;
 const MAX_TEXT_LEN: usize = 1024;
@@ -163,6 +164,8 @@ pub struct SchedulerDispatchDecision {
     pub batching_group_id: Option<SchedulerBatchingGroupId>,
     pub reservation_lease_id: SchedulerReservationLeaseId,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reservations: Vec<SchedulerResourceReservation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runtime_trait_settings: Vec<SchedulerTraitSetting>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<SchedulerDispatchDiagnostic>,
@@ -184,6 +187,7 @@ impl SchedulerDispatchDecision {
         validate_selected_runtime_and_devices(self)?;
         validate_selected_model_ref(self)?;
         validate_environment_ref(self)?;
+        validate_reservations(self)?;
         validate_runtime_trait_settings(self)?;
         for diagnostic in &self.diagnostics {
             diagnostic.validate()?;
@@ -329,6 +333,62 @@ fn validate_environment_ref(
             field: "environment_ref",
             reason: "dispatch decision environment ref must match readiness proof",
         });
+    }
+    Ok(())
+}
+
+fn validate_reservations(
+    decision: &SchedulerDispatchDecision,
+) -> Result<(), SchedulerContractError> {
+    if decision.reservations.is_empty() {
+        return Err(SchedulerContractError::MissingField {
+            field: "reservations",
+        });
+    }
+    let mut reservation_claims = BTreeSet::new();
+    for reservation in &decision.reservations {
+        if reservation.reservation_lease_id != decision.reservation_lease_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "reservations.reservation_lease_id",
+                reason: "dispatch decision reservations must share the selected lease id",
+            });
+        }
+        if reservation.workflow_run_id != decision.workflow_run_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "reservations.workflow_run_id",
+                reason: "dispatch decision reservation workflow run id must match decision",
+            });
+        }
+        if reservation.task_id != decision.task_id {
+            return Err(SchedulerContractError::InvalidField {
+                field: "reservations.task_id",
+                reason: "dispatch decision reservation task id must match decision",
+            });
+        }
+        if reservation.reserved_bytes == 0 {
+            return Err(SchedulerContractError::InvalidField {
+                field: "reservations.reserved_bytes",
+                reason: "reserved bytes must be greater than zero",
+            });
+        }
+        if !decision
+            .selected_device_ids
+            .contains(&reservation.device_id)
+        {
+            return Err(SchedulerContractError::InvalidField {
+                field: "reservations.device_id",
+                reason: "reservation device must be selected by the dispatch decision",
+            });
+        }
+        if !reservation_claims.insert((
+            reservation.device_id.as_str(),
+            reservation.resource_kind.clone(),
+        )) {
+            return Err(SchedulerContractError::InvalidField {
+                field: "reservations",
+                reason: "dispatch decision reservations must not duplicate device resource claims",
+            });
+        }
     }
     Ok(())
 }

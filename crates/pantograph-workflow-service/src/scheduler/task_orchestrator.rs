@@ -203,7 +203,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         selection_request: &SchedulerDispatchSelectionRequest,
     ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
         for candidate in &selection_request.candidates {
-            let Some(reservation) = &candidate.reservation else {
+            let Some(reservation) = candidate.reservations.first() else {
                 continue;
             };
             let _ = self
@@ -1076,7 +1076,7 @@ fn selected_candidate_id(
         .candidates
         .iter()
         .find(|candidate| {
-            candidate.reservation.as_ref().is_some_and(|reservation| {
+            candidate.reservations.iter().any(|reservation| {
                 reservation.reservation_lease_id == dispatch_decision.reservation_lease_id
             })
         })

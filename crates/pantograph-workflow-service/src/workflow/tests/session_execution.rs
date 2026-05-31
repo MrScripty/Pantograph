@@ -2829,7 +2829,7 @@ impl WorkflowRuntimeDispatchCandidateProvider for SingleCanonicalRuntimeDispatch
                 selected_device_ids: vec![selected_device_id.clone()],
                 selected_model_ref: intent.model_ref.clone(),
                 runtime_trait_settings: Vec::new(),
-                reservation: Some(SchedulerResourceReservation {
+                reservations: vec![SchedulerResourceReservation {
                     reservation_lease_id: SchedulerReservationLeaseId::parse(
                         "reservation.runtime_session_test",
                     )
@@ -2843,7 +2843,7 @@ impl WorkflowRuntimeDispatchCandidateProvider for SingleCanonicalRuntimeDispatch
                     device_id: selected_device_id,
                     resource_kind: SchedulerResourceKind::DeviceVram,
                     reserved_bytes: 1,
-                }),
+                }],
                 resource_fit_assessment: Some(SchedulerResourceFitAssessment {
                     workflow_run_id: intent.workflow_run_id.clone(),
                     task_id: intent.task_id.clone(),

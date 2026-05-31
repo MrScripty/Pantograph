@@ -66,7 +66,7 @@ fn selected_decision(
     request: SchedulerDispatchSelectionRequest,
     candidate: &SchedulerDispatchCandidate,
 ) -> SchedulerDispatchSelectionDecision {
-    let Some(reservation) = candidate.reservation.as_ref() else {
+    let Some(reservation) = candidate.reservations.first() else {
         return no_selection_decision(
             request.task_intent,
             vec![SchedulerDispatchSelectionDiagnostic::error(
@@ -91,6 +91,7 @@ fn selected_decision(
         environment_ref: request.environment_ref,
         batching_group_id: candidate.batching_group_id.clone(),
         reservation_lease_id: reservation.reservation_lease_id.clone(),
+        reservations: candidate.reservations.clone(),
         runtime_trait_settings: candidate.runtime_trait_settings.clone(),
         diagnostics: Vec::new(),
     };
@@ -148,21 +149,33 @@ fn candidate_eligibility(
             ));
         }
     }
-    let Some(reservation) = &candidate.reservation else {
+    let Some(reservation) = candidate.reservations.first() else {
         return Err(SchedulerDispatchSelectionDiagnostic::error(
             SchedulerDispatchSelectionDiagnosticCode::MissingReservation,
             Some(&candidate.candidate_id),
             "Dispatch candidate is missing a resource reservation fact.",
         ));
     };
-    if !candidate
-        .selected_device_ids
-        .contains(&reservation.device_id)
-    {
+    if candidate.reservations.iter().any(|reservation| {
+        !candidate
+            .selected_device_ids
+            .contains(&reservation.device_id)
+    }) {
         return Err(SchedulerDispatchSelectionDiagnostic::error(
             SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
             Some(&candidate.candidate_id),
             "Dispatch candidate reservation device is not selected by the candidate.",
+        ));
+    }
+    if candidate
+        .reservations
+        .iter()
+        .any(|other| other.reservation_lease_id != reservation.reservation_lease_id)
+    {
+        return Err(SchedulerDispatchSelectionDiagnostic::error(
+            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+            Some(&candidate.candidate_id),
+            "Dispatch candidate reservations do not share one lease id.",
         ));
     }
     let Some(resource_fit_assessment) = &candidate.resource_fit_assessment else {

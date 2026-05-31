@@ -52,6 +52,7 @@ fn valid_dispatch_selection_fixture_decodes_validates_and_selects_candidate() {
         dispatch_decision.reservation_lease_id.as_str(),
         "reservation.001"
     );
+    assert_eq!(dispatch_decision.reservations.len(), 1);
 }
 
 #[test]
@@ -165,8 +166,8 @@ fn explicit_device_constraint_is_a_hard_requirement() {
     request.candidates[0].selected_device_ids =
         vec!["cuda:1".parse().expect("test device id must parse")];
     request.candidates[0]
-        .reservation
-        .as_mut()
+        .reservations
+        .first_mut()
         .expect("fixture carries reservation")
         .device_id = "cuda:1".parse().expect("test device id must parse");
 
@@ -225,7 +226,7 @@ fn request_source_diagnostics_are_preserved_when_no_candidate_is_available() {
 #[test]
 fn missing_reservation_fact_fails_closed_without_placeholder_lease() {
     let mut request = valid_request();
-    request.candidates[0].reservation = None;
+    request.candidates[0].reservations.clear();
 
     let decision = select(request);
 
@@ -235,6 +236,71 @@ fn missing_reservation_fact_fails_closed_without_placeholder_lease() {
         SchedulerDispatchSelectionDiagnosticCode::MissingReservation
     );
     assert!(decision.dispatch_decision.is_none());
+}
+
+#[test]
+fn selection_carries_multi_resource_reservation_vector() {
+    let mut request = valid_request();
+    request.candidates[0]
+        .selected_device_ids
+        .push("cuda:1".parse().expect("device id must parse"));
+    let mut reservation = request.candidates[0].reservations[0].clone();
+    reservation.device_id = "cuda:1".parse().expect("device id must parse");
+    request.candidates[0].reservations.push(reservation);
+
+    let decision = select(request);
+
+    let dispatch_decision = decision
+        .dispatch_decision
+        .expect("selected candidate should carry a dispatch decision");
+    assert_eq!(
+        dispatch_decision.reservation_lease_id.as_str(),
+        "reservation.001"
+    );
+    assert_eq!(dispatch_decision.reservations.len(), 2);
+}
+
+#[test]
+fn candidate_reservations_must_share_one_lease_id() {
+    let mut request = valid_request();
+    let mut reservation = request.candidates[0].reservations[0].clone();
+    reservation.reservation_lease_id = "reservation.002"
+        .parse()
+        .expect("reservation id must parse");
+    reservation.device_id = "cuda:1".parse().expect("device id must parse");
+    request.candidates[0]
+        .selected_device_ids
+        .push("cuda:1".parse().expect("device id must parse"));
+    request.candidates[0].reservations.push(reservation);
+
+    let error = ValidatedSchedulerDispatchSelectionRequest::try_from(request)
+        .expect_err("candidate reservations must share one lease id");
+
+    assert_eq!(
+        error,
+        pantograph_scheduler::SchedulerContractError::InvalidField {
+            field: "dispatch_candidate.reservations.reservation_lease_id",
+            reason: "candidate reservations must share one lease id"
+        }
+    );
+}
+
+#[test]
+fn candidate_reservations_must_not_duplicate_device_resource_claims() {
+    let mut request = valid_request();
+    let reservation = request.candidates[0].reservations[0].clone();
+    request.candidates[0].reservations.push(reservation);
+
+    let error = ValidatedSchedulerDispatchSelectionRequest::try_from(request)
+        .expect_err("candidate reservations must not duplicate resource claims");
+
+    assert_eq!(
+        error,
+        pantograph_scheduler::SchedulerContractError::InvalidField {
+            field: "dispatch_candidate.reservations",
+            reason: "candidate reservations must not duplicate device resource claims"
+        }
+    );
 }
 
 #[test]
@@ -275,15 +341,15 @@ fn multiple_eligible_candidates_do_not_fall_back_to_candidate_id_ordering() {
         .expect("candidate id must parse");
     second.selected_device_ids = vec!["cuda:1".parse().expect("device id must parse")];
     second
-        .reservation
-        .as_mut()
+        .reservations
+        .first_mut()
         .expect("fixture carries reservation")
         .reservation_lease_id = "reservation.002"
         .parse()
         .expect("reservation id must parse");
     second
-        .reservation
-        .as_mut()
+        .reservations
+        .first_mut()
         .expect("fixture carries reservation")
         .device_id = "cuda:1".parse().expect("device id must parse");
     request.task_intent.constraints.requested_device_id = None;
@@ -302,7 +368,7 @@ fn multiple_eligible_candidates_do_not_fall_back_to_candidate_id_ordering() {
 #[test]
 fn candidate_source_diagnostics_do_not_make_missing_facts_authoritative() {
     let mut request = valid_request();
-    request.candidates[0].reservation = None;
+    request.candidates[0].reservations.clear();
     let candidate_id = request.candidates[0].candidate_id.clone();
     request.candidates[0].candidate_source_diagnostics.push(
         pantograph_scheduler::SchedulerDispatchSelectionDiagnostic {

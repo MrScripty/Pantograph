@@ -62,7 +62,7 @@ pub struct WorkflowRuntimeDispatchCandidateFact {
     pub selected_model_ref: PumasModelRef,
     pub runtime_trait_settings: Vec<SchedulerTraitSetting>,
     pub environment_ref: DependencyEnvironmentRef,
-    pub reservation: SchedulerResourceReservation,
+    pub reservations: Vec<SchedulerResourceReservation>,
     pub resource_fit_assessment: SchedulerResourceFitAssessment,
     pub batching_group_id: Option<SchedulerBatchingGroupId>,
 }
@@ -159,6 +159,28 @@ pub enum WorkflowRuntimeDispatchCandidateFactBundleError {
         candidate_id: String,
         device_id: String,
     },
+    #[error("runtime dispatch candidate fact '{candidate_id}' has no reservations")]
+    MissingReservation { candidate_id: String },
+    #[error(
+        "runtime dispatch candidate fact '{candidate_id}' has reservations with mixed lease ids"
+    )]
+    MixedReservationLease { candidate_id: String },
+    #[error("runtime dispatch candidate fact '{candidate_id}' has reservation for unselected device '{device_id}'")]
+    ReservationDeviceNotSelected {
+        candidate_id: String,
+        device_id: String,
+    },
+    #[error("runtime dispatch candidate fact '{candidate_id}' has zero-byte reservation for device '{device_id}'")]
+    EmptyReservationBytes {
+        candidate_id: String,
+        device_id: String,
+    },
+    #[error("runtime dispatch candidate fact '{candidate_id}' has duplicate reservation claim for device '{device_id}' and resource '{resource_kind}'")]
+    DuplicateReservationClaim {
+        candidate_id: String,
+        device_id: String,
+        resource_kind: String,
+    },
     #[error("runtime dispatch candidate fact '{candidate_id}' carries a path-shaped model ref")]
     PathCarryingModelRef { candidate_id: String },
     #[error("runtime dispatch candidate fact '{candidate_id}' has invalid model ref")]
@@ -242,6 +264,55 @@ fn validate_candidate_fact(
             source,
         }
     })?;
+    let Some(first_reservation) = fact.reservations.first() else {
+        return Err(
+            WorkflowRuntimeDispatchCandidateFactBundleError::MissingReservation {
+                candidate_id: candidate_id.to_string(),
+            },
+        );
+    };
+    let mut reservation_claims = std::collections::BTreeSet::new();
+    for reservation in &fact.reservations {
+        if reservation.reservation_lease_id != first_reservation.reservation_lease_id {
+            return Err(
+                WorkflowRuntimeDispatchCandidateFactBundleError::MixedReservationLease {
+                    candidate_id: candidate_id.to_string(),
+                },
+            );
+        }
+        if !fact
+            .selected_device_ids
+            .iter()
+            .any(|device_id| device_id == &reservation.device_id)
+        {
+            return Err(
+                WorkflowRuntimeDispatchCandidateFactBundleError::ReservationDeviceNotSelected {
+                    candidate_id: candidate_id.to_string(),
+                    device_id: reservation.device_id.as_str().to_string(),
+                },
+            );
+        }
+        if reservation.reserved_bytes == 0 {
+            return Err(
+                WorkflowRuntimeDispatchCandidateFactBundleError::EmptyReservationBytes {
+                    candidate_id: candidate_id.to_string(),
+                    device_id: reservation.device_id.as_str().to_string(),
+                },
+            );
+        }
+        if !reservation_claims.insert((
+            reservation.device_id.as_str(),
+            reservation.resource_kind.clone(),
+        )) {
+            return Err(
+                WorkflowRuntimeDispatchCandidateFactBundleError::DuplicateReservationClaim {
+                    candidate_id: candidate_id.to_string(),
+                    device_id: reservation.device_id.as_str().to_string(),
+                    resource_kind: format!("{:?}", reservation.resource_kind),
+                },
+            );
+        }
+    }
     Ok(())
 }
 
@@ -277,7 +348,7 @@ fn dispatch_candidate(fact: WorkflowRuntimeDispatchCandidateFact) -> SchedulerDi
         selected_device_ids: fact.selected_device_ids,
         selected_model_ref: fact.selected_model_ref,
         runtime_trait_settings: fact.runtime_trait_settings,
-        reservation: Some(fact.reservation),
+        reservations: fact.reservations,
         resource_fit_assessment: Some(fact.resource_fit_assessment),
         batching_group_id: fact.batching_group_id,
         candidate_source_diagnostics: Vec::new(),
@@ -337,6 +408,42 @@ mod tests {
     }
 
     #[test]
+    fn candidate_fact_bundle_rejects_missing_reservations() {
+        let mut fact = candidate_fact();
+        fact.reservations.clear();
+        let bundle = candidate_fact_bundle(vec![fact]);
+
+        let error = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(bundle)
+            .expect_err("candidate facts must carry reservation evidence");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchCandidateFactBundleError::MissingReservation { .. }
+        ));
+    }
+
+    #[test]
+    fn candidate_fact_bundle_rejects_mixed_reservation_leases() {
+        let mut fact = candidate_fact();
+        let mut reservation = fact.reservations[0].clone();
+        reservation.reservation_lease_id =
+            SchedulerReservationLeaseId::parse("reservation.dispatch-facts.other")
+                .expect("reservation id");
+        reservation.device_id = "cuda:1".parse().expect("device id");
+        fact.selected_device_ids.push(reservation.device_id.clone());
+        fact.reservations.push(reservation);
+        let bundle = candidate_fact_bundle(vec![fact]);
+
+        let error = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(bundle)
+            .expect_err("candidate facts must not mix reservation leases");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchCandidateFactBundleError::MixedReservationLease { .. }
+        ));
+    }
+
+    #[test]
     fn candidate_fact_bundle_maps_path_free_facts_to_scheduler_candidates() {
         let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
             candidate_fact_bundle(vec![candidate_fact()]),
@@ -351,7 +458,7 @@ mod tests {
         assert_eq!(candidate.candidate_id.as_str(), "candidate.diffusers.cuda0");
         assert_eq!(candidate.selected_runtime_id.as_str(), "diffusers-pytorch");
         assert_eq!(candidate.selected_device_ids[0].as_str(), "cuda:0");
-        assert!(candidate.reservation.is_some());
+        assert_eq!(candidate.reservations.len(), 1);
         assert!(candidate.resource_fit_assessment.is_some());
         assert!(candidate.candidate_source_diagnostics.is_empty());
     }
@@ -398,7 +505,7 @@ mod tests {
                     .expect("environment id"),
                 manifest_id: None,
             },
-            reservation: SchedulerResourceReservation {
+            reservations: vec![SchedulerResourceReservation {
                 reservation_lease_id: SchedulerReservationLeaseId::parse(
                     "reservation.dispatch-facts",
                 )
@@ -408,7 +515,7 @@ mod tests {
                 device_id,
                 resource_kind: SchedulerResourceKind::DeviceVram,
                 reserved_bytes: 1,
-            },
+            }],
             resource_fit_assessment: SchedulerResourceFitAssessment {
                 workflow_run_id,
                 task_id,
