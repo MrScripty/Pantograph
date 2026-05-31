@@ -19537,6 +19537,28 @@ Worker rules:
     handles without owning Pumas facts, runtime-registry policy, or
     runtime-host dispatch decisions. Remove the temporary staged
     `#[allow(dead_code)]` once the bundle is used by hosted startup.
+- 2026-05-31 Tauri media-conversion compile blocker slice:
+  - Smallest useful slice: remove the stale Tauri startup call to
+    `Arc<WorkflowService>::set_media_conversion_executor` so the hosted
+    startup migration can be validated against a compiling Tauri package.
+  - Allowed files touched: `src-tauri/src/app_setup.rs`,
+    `src-tauri/src/workflow/README.md`, and this execution log.
+  - Implementation: removed the obsolete workflow-service media conversion
+    executor injection from `app_setup.rs` and updated the Tauri workflow
+    README to match the current workflow-service boundary: workflow-service no
+    longer owns host-injected media conversion execution, and the Tauri
+    adapter only runs when a dedicated host-side conversion caller invokes it.
+  - No-fallback/no-legacy result: no replacement compatibility setter was
+    added to workflow-service, no media conversion execution was moved into
+    runtime dispatch, and no inference/runtime fallback path was introduced.
+  - Verification passed: `cargo fmt -- --check` and
+    `cargo check -p pantograph`. `cargo check` still reports the pre-existing
+    workflow-service `set_active_run_execution_plan` warning and now exposes
+    dead-code warnings for the unused Tauri managed media conversion adapter.
+  - Remaining follow-up: decide whether the unused Tauri managed media
+    conversion adapter should be deleted, moved behind a future dedicated
+    host-side conversion command, or wired through a new non-workflow-service
+    media conversion boundary after the current hosted composition migration.
 
 ### Traceability Links
 

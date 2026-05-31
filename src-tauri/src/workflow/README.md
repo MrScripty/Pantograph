@@ -218,11 +218,12 @@ delegates to `pantograph-workflow-service`, and returns the backend graph
 mutation response; it does not validate proposal identity, construct patch
 operations, rewrite node data, remove edges, clear literals, or infer submit
 authority.
-Managed media conversion is injected into the shared workflow service at
-startup from `app_setup.rs`. The neutral conversion request/result contract
-stays in `pantograph-media-conversion`; the Tauri adapter only resolves
+Managed media conversion is no longer injected into the shared workflow
+service at startup. The neutral conversion request/result contract stays in
+`pantograph-media-conversion`; the Tauri adapter only resolves
 desktop-managed dependency leases, executes converter processes, and releases
-leases after each attempt.
+leases after each attempt when a dedicated host-side conversion caller invokes
+it.
 The adapter owns a local dependency-plan cleanup guard so leases acquired before
 converter execution are also released when a conversion future is cancelled or
 dropped after acquisition.
