@@ -21092,6 +21092,27 @@ Worker rules:
     `modelPath` fixtures outside this slice and remove only the surfaces that
     still represent successful runtime graph execution rather than app config,
     embedding/RAG config, or stale-graph diagnostic coverage.
+- 2026-05-31 node-engine dependency-input `model_path` edge rejection slice:
+  - Smallest useful slice: remove the dependency-input resolver behavior that
+    still copied a direct graph `model_path -> model_path` edge into task
+    inputs and merged model context from that path edge.
+  - Allowed files touched: `crates/node-engine/src/engine/dependency_inputs.rs`
+    and these plan files.
+  - Implementation: added `model_path` to the rejected dependency-target
+    handles and limited model-intent context merging to typed
+    `pumas_model_ref` targets. Updated the focused resolver fixture to assert
+    direct `model_path` edges are dropped instead of preserved.
+  - No-fallback/no-legacy result: graph dependency resolution no longer creates
+    successful task inputs from direct `model_path` edges. Typed
+    `pumas_model_ref` intent remains the only model-intent merge path in this
+    resolver, and package/load facts remain blocked from graph propagation.
+  - Verification passed: `cargo fmt -p node-engine`; `cargo test -p
+    node-engine resolve_dependency_inputs -- --nocapture`; and `cargo check -p
+    node-engine --features inference-nodes,pytorch-nodes`.
+  - Remaining follow-up: inspect embedded-runtime workflow-host model path
+    resolution and remaining runtime lifecycle fixtures separately because
+    those touch backend host lifecycle ownership rather than node-engine graph
+    dependency input projection.
 
 ### Traceability Links
 

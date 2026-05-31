@@ -26,7 +26,10 @@ pub(super) fn resolve_dependency_inputs(
         let (source_handle, target_handle) = canonical_dependency_edge_handles(graph, edge);
         if matches!(
             target_handle,
-            "resolved_model_source" | "resolved_model_package_facts" | "model_package_facts"
+            "model_path"
+                | "resolved_model_source"
+                | "resolved_model_package_facts"
+                | "model_package_facts"
         ) {
             continue;
         }
@@ -37,7 +40,7 @@ pub(super) fn resolve_dependency_inputs(
             inputs.insert(target_handle.to_string(), value.clone());
         }
 
-        if matches!(target_handle, "model_path" | "pumas_model_ref") {
+        if target_handle == "pumas_model_ref" {
             merge_model_context(&mut inputs, dep_outputs);
         }
     }
@@ -138,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_dependency_inputs_preserves_direct_model_path_edge_without_path_context_repair() {
+    fn resolve_dependency_inputs_rejects_direct_model_path_edge() {
         let graph = WorkflowGraph {
             id: "workflow".to_string(),
             name: "Workflow".to_string(),
@@ -184,14 +187,8 @@ mod tests {
 
         let inputs = resolve_dependency_inputs(&graph, &"runtime".to_string(), &dependency_outputs);
 
-        assert_eq!(
-            inputs.get("model_path"),
-            Some(&serde_json::json!("/tmp/model.gguf"))
-        );
-        assert_eq!(
-            inputs.get("model_id"),
-            Some(&serde_json::json!("family/model"))
-        );
+        assert_eq!(inputs.get("model_path"), None);
+        assert_eq!(inputs.get("model_id"), None);
         assert_eq!(inputs.get("backend_key"), None);
         assert_eq!(inputs.get("recommended_backend"), None);
     }
