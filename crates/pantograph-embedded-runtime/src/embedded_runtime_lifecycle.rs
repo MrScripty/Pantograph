@@ -75,6 +75,52 @@ impl EmbeddedRuntime {
         )
     }
 
+    /// Build a hosted runtime around a workflow service that was already
+    /// composed by `EmbeddedWorkflowServiceComposition`.
+    ///
+    /// This constructor intentionally does not mutate workflow-service
+    /// capacity, scheduler diagnostics, or runtime-dispatch dependencies. Those
+    /// concerns must be attached before the service is shared.
+    pub fn from_hosted_composition(
+        config: EmbeddedRuntimeConfig,
+        gateway: Arc<inference::InferenceGateway>,
+        extensions: SharedExtensions,
+        workflow_service: SharedWorkflowService,
+        rag_backend: Option<Arc<dyn RagBackend>>,
+        runtime_registry: Option<SharedRuntimeRegistry>,
+        host_runtime_mode_info: Option<HostRuntimeModeSnapshot>,
+    ) -> Self {
+        if let (Some(runtime_registry), Some(mode_info)) =
+            (runtime_registry.as_ref(), host_runtime_mode_info.as_ref())
+        {
+            runtime_registry::reconcile_runtime_registry_mode_info(
+                runtime_registry.as_ref(),
+                mode_info,
+            );
+        }
+
+        let additional_runtime_capabilities = host_runtime_mode_info
+            .as_ref()
+            .map(runtime_capabilities::runtime_capabilities_from_mode_info)
+            .unwrap_or_default();
+
+        Self {
+            config,
+            gateway,
+            extensions,
+            workflow_service,
+            runtime_registry,
+            dependency_readiness_snapshot_producer: None,
+            session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
+            session_executions: Arc::new(
+                workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore::new(),
+            ),
+            rag_backend,
+            python_runtime: Arc::new(ProcessPythonRuntimeAdapter),
+            additional_runtime_capabilities,
+        }
+    }
+
     pub async fn hosted_with_default_python_runtime(
         config: EmbeddedRuntimeConfig,
         gateway: Arc<inference::InferenceGateway>,

@@ -1788,6 +1788,16 @@ Next staged implementation sequence:
    accepts an already shared `WorkflowService`. During migration it may remain
    only as a non-resource-backed/fail-closed helper for existing tests, with
    clear follow-up to delete or rename it after callers move to the bundle.
+   Completed 2026-05-31 for Tauri headless runtime callers:
+   embedded-runtime now exposes `EmbeddedRuntime::from_hosted_composition` for
+   services that were already composed before sharing, and
+   `src-tauri/src/workflow/headless_runtime.rs` uses it instead of
+   `hosted_with_default_python_runtime`. The new constructor preserves
+   preconfigured workflow-service capacity and does not mutate scheduler
+   diagnostics or runtime-dispatch dependencies after sharing. Remaining work:
+   narrow, rename, or delete `hosted_with_default_python_runtime` for the
+   embedded-runtime test/non-resource-backed path so it cannot be confused with
+   the canonical resource-backed hosted composition entry point.
 5. Add focused tests proving hosted composition cannot expose successful
    resource-backed dispatch without owner Pumas access and runtime registry,
    that Tauri/headless runtime construction does not install dispatch

@@ -93,6 +93,44 @@ async fn hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from
 }
 
 #[tokio::test]
+async fn hosted_composition_constructor_preserves_preconfigured_service_capacity() {
+    let temp = TempDir::new().expect("temp dir");
+    write_test_workflow(temp.path(), "runtime-text");
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let workflow_service = Arc::new(WorkflowService::with_capacity_limits(3, 1));
+    let runtime = EmbeddedRuntime::from_hosted_composition(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: Some(3),
+        },
+        Arc::new(inference::InferenceGateway::new()),
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        workflow_service.clone(),
+        None,
+        Some(Arc::new(RuntimeRegistry::new())),
+        None,
+    );
+
+    let status = workflow_service
+        .workflow_local_network_status_query(
+            pantograph_workflow_service::WorkflowLocalNetworkStatusQueryRequest {
+                include_network_interfaces: false,
+                include_disks: false,
+            },
+        )
+        .expect("local network status");
+    assert_eq!(status.local_node.scheduler_load.max_loaded_sessions, 1);
+
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
 async fn embedded_runtime_shutdown_reconciles_registry_to_stopped() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");

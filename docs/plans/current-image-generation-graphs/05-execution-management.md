@@ -19785,6 +19785,40 @@ Worker rules:
     `EmbeddedRuntime::hosted_with_default_python_runtime`, then narrow or
     rename that helper so it cannot be mistaken for canonical hosted dispatch
     composition.
+- 2026-05-31 headless runtime hosted-composition constructor slice:
+  - Smallest useful slice: add an embedded-runtime constructor for already
+    composed hosted workflow services and migrate
+    `src-tauri/src/workflow/headless_runtime.rs` to it, without renaming or
+    deleting the legacy helper used by existing embedded-runtime tests.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/runtime_lifecycle_capability_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `src-tauri/src/workflow/headless_runtime.rs`, and this plan log.
+  - Implementation: added `EmbeddedRuntime::from_hosted_composition`, which
+    wraps an already-composed shared workflow service without applying
+    loaded-runtime capacity, scheduler diagnostics, or runtime-dispatch
+    dependencies after sharing. It still reconciles host runtime mode into the
+    runtime registry and derives host-provided runtime capabilities. Tauri
+    headless runtime construction now uses this constructor instead of
+    `hosted_with_default_python_runtime`.
+  - Focused tests added: embedded-runtime hosted-composition constructor test
+    proving preconfigured workflow-service loaded-session capacity is
+    preserved even when the runtime config carries a different
+    `max_loaded_sessions` value.
+  - No-fallback/no-legacy result: the successful Tauri resource-backed hosted
+    path no longer uses `hosted_with_default_python_runtime`, and no
+    post-share runtime-dispatch or scheduler-diagnostics mutation was added.
+    The legacy helper remains for existing non-resource-backed embedded-runtime
+    tests and must still be narrowed, renamed, or deleted in a follow-up slice.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_lifecycle_capability_tests --lib`,
+    `cargo check -p pantograph`, `cargo check -p pantograph-embedded-runtime --no-default-features`,
+    and `git diff --check`. Checks still report pre-existing dead-code
+    warnings in workflow-service and Tauri workflow modules.
+  - Remaining follow-up: narrow, rename, or delete
+    `EmbeddedRuntime::hosted_with_default_python_runtime` so it is clearly not
+    the canonical hosted resource-backed dispatch composition entry point.
 
 ### Traceability Links
 

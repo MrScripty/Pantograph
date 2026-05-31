@@ -14,7 +14,7 @@ packages.
 | `embedded_data_graph_execution.rs` | Owns embedded-runtime data-graph execution, terminal-node demand handling, runtime extension injection, and data-graph output collection. |
 | `embedded_edit_session_execution.rs` | Owns embedded-runtime edit-session graph execution, embedding runtime preparation, workflow event emission, runtime trace projection, and inference-runtime restore coordination. |
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
-| `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, dependency-readiness snapshot provider composition for standalone services, registry injection, accessors, and shutdown coordination. |
+| `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, hosted-composition runtime wrapping, host wiring, dependency-readiness snapshot provider composition for standalone services, registry injection, accessors, and shutdown coordination. |
 | `embedded_workflow_graph_api.rs` | Owns embedded-runtime public graph persistence, edit-session, graph mutation, connection, and insert-preview facade methods that forward into the workflow service. |
 | `embedded_workflow_host.rs` | Owns the embedded workflow host implementation that adapts host runtime, model metadata, runtime capabilities, session loading, inspection, technical-fit, and workflow runs into workflow-service contracts. |
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |

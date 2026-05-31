@@ -66,7 +66,7 @@ pub(crate) async fn build_runtime(
         }) as Arc<dyn RagBackend>
     });
 
-    Ok(EmbeddedRuntime::hosted_with_default_python_runtime(
+    Ok(EmbeddedRuntime::from_hosted_composition(
         config,
         gateway.inner_arc(),
         extensions.clone(),
@@ -74,6 +74,5 @@ pub(crate) async fn build_runtime(
         rag_backend,
         Some(runtime_registry.clone()),
         Some(host_runtime_mode_info),
-    )
-    .await)
+    ))
 }
