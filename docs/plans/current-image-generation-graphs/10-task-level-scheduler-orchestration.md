@@ -413,7 +413,10 @@ implementation can be considered complete:
    reservation, and resource-fit facts. Production embedded-runtime provider
    wiring remains blocked on explicit runtime-registry reservation
    release/retention ownership for all selected and unselected candidate
-   outcomes.
+   outcomes. The selected re-plan path is a shared reservation lifecycle
+   contract: workflow-service emits typed dispatch/session outcomes, and
+   embedded-runtime implements runtime-registry release/reconcile behavior
+   before real resource-backed candidate bundles are wired.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.

@@ -18673,6 +18673,26 @@ Worker rules:
     runtime-host terminal success/failure, cancellation, retry/defer, and
     session close before wiring the embedded-runtime final provider to emit
     real resource-backed candidate bundles.
+- 2026-05-30 reservation lifecycle re-plan decision:
+  - Selected option: option 3, a shared reservation lifecycle contract with
+    embedded-runtime implementation.
+  - Ownership: workflow-service emits typed dispatch/session lifecycle
+    outcomes for candidate leases; embedded-runtime implements concrete
+    runtime-registry release, retention-hint mutation, and reclaim/reconcile
+    side effects; scheduler continues to own selection policy only.
+  - Standards result: this separates task/session outcome emission from
+    runtime-registry I/O, keeps workflow-service free of infrastructure
+    business logic, avoids hidden provider-local cleanup state, and gives
+    replay/idempotency a typed contract.
+  - No-fallback/no-legacy result: the plan forbids graph-path cleanup guesses,
+    `ModelRefV2` adapters, reduced execution-plan handoff synthesis,
+    display-string parsing, compatibility shims, and production candidate
+    emission without lifecycle wiring.
+  - Required next slices: contract-only lifecycle DTO/port and fixture tests;
+    workflow-service lifecycle emission with a fail-closed unavailable
+    default; embedded-runtime runtime-registry lifecycle implementation; then
+    final provider wiring that requires candidate provider and lifecycle port
+    to be configured together.
 
 ### Traceability Links
 

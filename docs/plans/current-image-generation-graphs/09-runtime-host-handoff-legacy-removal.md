@@ -946,15 +946,93 @@ Implementation progress:
   the production embedded-runtime provider, acquire runtime-registry leases,
   release reservations, synthesize candidates from graph paths or reduced
   execution plans, or adapt facts back into `ModelRefV2`.
-- Remaining follow-up before production provider wiring: define and implement
-  reservation release/retention ownership for runtime-registry leases acquired
-  by embedded-runtime dispatch resource facts. The release owner must cover
-  no-selection, request validation failure, runtime-host dispatch failure,
-  runtime-host terminal success/failure, cancellation, retry/defer, and session
-  close without relying on graph paths, `ModelRefV2`, reduced plans, or host
-  display strings. Do not wire the embedded-runtime final provider to emit real
-  resource-backed candidate bundles until this lifecycle is explicit and
-  tested.
+- 2026-05-30 reservation lifecycle re-plan decision: use option 3, a shared
+  reservation lifecycle contract with an embedded-runtime implementation.
+  Workflow-service emits typed scheduler/application outcomes for leases that
+  came from dispatch candidate facts; embedded-runtime implements the concrete
+  runtime-registry release, retention-hint mutation, and reclaim/reconcile
+  behavior. Do not let workflow-service import runtime-registry internals, and
+  do not hide lease cleanup in an opaque provider-local state machine.
+
+### Runtime Dispatch Reservation Lifecycle Contract
+
+Production embedded-runtime provider wiring is blocked until runtime-registry
+reservation lifecycle ownership is explicit and tested. The selected option-3
+split is:
+
+- **Shared contract owner:** define a narrow reservation lifecycle DTO/port
+  contract consumable by workflow-service and implemented by embedded-runtime.
+  The contract carries validated scheduler lease ids, workflow/run/task
+  correlation, dispatch candidate ids when available, lifecycle outcome,
+  terminal/error diagnostics, and idempotency/correlation ids. It carries no
+  graph paths, `ModelRefV2`, reduced execution-plan fields, runtime-host load
+  targets, or provider-private source facts.
+- **Workflow-service application owner:** records which validated candidate
+  facts were submitted to scheduler selection and emits lifecycle outcomes for
+  no-selection, request validation failure, selected dispatch start,
+  runtime-host dispatch failure, runtime-host terminal success/failure,
+  cancellation, retry/defer, session close, and duplicate/replayed lifecycle
+  observations. It does not call runtime-registry directly and does not choose
+  release/reclaim policy.
+- **Embedded-runtime infrastructure owner:** implements the lifecycle port
+  against `SharedRuntimeRegistry`, releases or updates retention for owned
+  leases, runs the existing release-and-reconcile path where reclaim is
+  needed, and returns typed diagnostics for unknown, already-released,
+  mismatched, or failed release attempts.
+- **Scheduler owner:** continues to require reservation facts on dispatch
+  candidates and uses those facts only for dispatch selection/handoff. It does
+  not own runtime-registry I/O or release side effects.
+
+Required lifecycle outcomes:
+
+- unselected candidate after scheduler no-selection or different candidate
+  selected
+- candidate request rejected before selection validation completes
+- selected candidate dispatch started
+- selected candidate runtime-host dispatch rejected before host execution
+- runtime-host terminal completed
+- runtime-host terminal failed
+- workflow/session cancellation
+- retry/defer supersession
+- session close or active-run cleanup
+- duplicate/replayed lifecycle event
+
+Standards gates:
+
+- Keep validation synchronous and side effects behind the embedded-runtime port
+  implementation. Do not hold workflow/session locks across async release or
+  reclaim calls.
+- Use correct-by-construction Rust APIs: typed lease ids, outcome enums,
+  bounded diagnostics, `serde(deny_unknown_fields)` where serialized,
+  validated wrappers or `TryFrom`, `#[must_use]` on lifecycle application
+  results, and idempotency keys for replay.
+- Keep the boundary simple by separating independent concerns: workflow-service
+  owns task/session outcome emission; embedded-runtime owns registry release
+  and retention side effects; scheduler owns selection policy; runtime host
+  owns execution.
+- Do not add compatibility shims, fallback release guesses, graph-path
+  recovery, `ModelRefV2` adapters, reduced-plan handoff synthesis, or provider
+  display-string parsing.
+- Add focused tests for every required outcome plus duplicate/replay behavior,
+  unknown lease diagnostics, selected-vs-unselected release behavior, terminal
+  success/failure cleanup, cancellation/session-close cleanup, and no registry
+  cleanup calls from workflow-service directly.
+
+Staged implementation:
+
+1. Add the shared reservation lifecycle contract and fixture/validation tests.
+   This is contract-only and must not wire production provider emission.
+2. Add workflow-service lifecycle emission around dispatch selection and
+   runtime-host dispatch using the shared port with a typed unavailable
+   default that fails closed when production lifecycle wiring is absent.
+3. Add the embedded-runtime lifecycle port implementation backed by
+   runtime-registry release/retention/reconcile APIs.
+4. Wire embedded-runtime composition to provide both the final dispatch
+   candidate provider and reservation lifecycle port together. Do not allow one
+   without the other in production.
+5. Only after lifecycle verification passes, join Pumas package facts, runtime
+   capability facts, and runtime resource facts into real resource-backed
+   candidate bundles.
 
 ## Verification Strategy
 
