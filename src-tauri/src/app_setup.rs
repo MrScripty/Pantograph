@@ -270,17 +270,17 @@ pub fn run_app() -> AppStartupResult<()> {
                 })?;
                 let workflow_service = startup_output.workflow_service;
                 let shared_extensions = startup_output.shared_extensions;
-                let model_dependency_resolver = startup_output.model_dependency_resolver;
+                let dependency_activity = startup_output.dependency_activity;
                 let dependency_readiness_snapshot_producer: workflow::commands::SharedDependencyReadinessSnapshotProducer =
                     Arc::new(startup_output.dependency_readiness_snapshot_producer);
 
                 app.manage(workflow_service.clone());
                 app.manage(shared_extensions);
-                app.manage(model_dependency_resolver.clone());
+                app.manage(dependency_activity.clone());
                 app.manage(dependency_readiness_snapshot_producer);
 
                 let dependency_event_app = app.handle().clone();
-                model_dependency_resolver.set_activity_emitter(Arc::new(move |event| {
+                dependency_activity.set_emitter(Arc::new(move |event| {
                     let _ = dependency_event_app.emit("dependency-activity", &event);
                 }));
 

@@ -112,7 +112,9 @@ pub use managed_runtime_manager::{
     select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
     ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
 };
-pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
+pub use model_dependencies::{
+    DependencyActivityHub, SharedModelDependencyResolver, TauriModelDependencyResolver,
+};
 pub use node_execution::{
     CacheCapability, DiagnosticsCapability, ExternalToolCapability, ManagedCapabilityKind,
     ManagedCapabilityRoute, ModelExecutionCapability, NodeCancellationToken, NodeExecutionContext,

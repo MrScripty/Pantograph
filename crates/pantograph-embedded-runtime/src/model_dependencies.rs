@@ -31,6 +31,7 @@ mod python_environment;
 mod requirements;
 
 use activity::DependencyActivityContext;
+pub use activity::DependencyActivityHub;
 pub use activity::{DependencyActivityEmitter, DependencyActivityEvent};
 use descriptors::ResolvedModelDescriptor;
 

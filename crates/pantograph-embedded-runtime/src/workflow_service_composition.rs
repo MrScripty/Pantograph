@@ -27,8 +27,7 @@ use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 use crate::SharedExtensions;
 use crate::{
-    model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver},
-    runtime_registry::HostRuntimeRegistryController,
+    model_dependencies::DependencyActivityHub, runtime_registry::HostRuntimeRegistryController,
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
 };
@@ -199,7 +198,7 @@ impl<C> EmbeddedHostedStartupCompositionInput<C> {
 pub struct EmbeddedHostedStartupCompositionOutput {
     pub workflow_service: SharedWorkflowService,
     pub shared_extensions: SharedExtensions,
-    pub model_dependency_resolver: SharedModelDependencyResolver,
+    pub dependency_activity: Arc<DependencyActivityHub>,
     pub dependency_readiness_snapshot_producer: EmbeddedDependencyReadinessSnapshotProducerHandle,
 }
 
@@ -438,9 +437,7 @@ impl EmbeddedWorkflowServiceComposition {
         .await?;
         Self::require_owner_pumas_selector_access(pumas_selector_access.as_ref())?;
 
-        let model_dependency_resolver: SharedModelDependencyResolver = Arc::new(
-            TauriModelDependencyResolver::new(shared_extensions.clone(), input.project_root),
-        );
+        let dependency_activity = Arc::new(DependencyActivityHub::default());
         {
             let kv_store = Arc::new(inference::kv_cache::KvCacheStore::new(
                 input.kv_cache_dir,
@@ -469,7 +466,7 @@ impl EmbeddedWorkflowServiceComposition {
         Ok(EmbeddedHostedStartupCompositionOutput {
             workflow_service: output.workflow_service,
             shared_extensions,
-            model_dependency_resolver,
+            dependency_activity,
             dependency_readiness_snapshot_producer: output.dependency_readiness_snapshot_producer,
         })
     }
@@ -941,6 +938,32 @@ mod tests {
                 "kv cache store should be installed"
             );
         }
+        let observed_activity = Arc::new(std::sync::Mutex::new(Vec::new()));
+        output.dependency_activity.set_emitter(Arc::new({
+            let observed_activity = observed_activity.clone();
+            move |event| {
+                observed_activity
+                    .lock()
+                    .expect("activity lock")
+                    .push(event.phase);
+            }
+        }));
+        output
+            .dependency_activity
+            .emit(crate::model_dependencies::DependencyActivityEvent {
+                timestamp: "2026-05-31T00:00:00Z".to_string(),
+                node_type: "diagnostic".to_string(),
+                model_path: "diagnostic-only".to_string(),
+                phase: "observed".to_string(),
+                message: "activity boundary".to_string(),
+                binding_id: None,
+                requirement_name: None,
+                stream: None,
+            });
+        assert_eq!(
+            observed_activity.lock().expect("activity lock").as_slice(),
+            ["observed"]
+        );
         output
             .dependency_readiness_snapshot_producer
             .shutdown()

@@ -406,7 +406,14 @@ cleanup.
   seeds the resolver into execution extensions. Remaining follow-up: replace
   Tauri-managed resolver activity wiring with a backend-owned diagnostic/
   activity subscription handle, then classify or retire retained resolver
-  commands/probes/tests.
+  commands/probes/tests. 2026-05-31 progress: hosted startup now returns a
+  backend-owned dependency activity hub instead of exposing
+  `TauriModelDependencyResolver` to Tauri as managed state. Tauri subscribes to
+  that hub and forwards bounded `dependency-activity` transport events only;
+  it no longer attaches activity emitters to the resolver or owns resolver
+  lifecycle/policy. Remaining follow-up: classify or retire retained resolver
+  commands/probes/tests, including `pumas_dependency_runtime_probe`, and keep
+  any retained surface diagnostic/tooling-only until deletion is possible.
 - [ ] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not

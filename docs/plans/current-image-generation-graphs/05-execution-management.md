@@ -20615,6 +20615,48 @@ Worker rules:
     diagnostic/activity subscription handle and adjust Tauri hosted startup so
     Tauri forwards activity events without managing `TauriModelDependencyResolver`
     as business state.
+- 2026-05-31 backend-owned dependency activity boundary:
+  - Smallest useful slice: replace the hosted-startup Tauri-managed resolver
+    activity wiring with a backend-owned dependency activity hub while leaving
+    retained resolver/probe deletion for a later focused diagnostic/tooling
+    cleanup slice.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `src-tauri/src/app_setup.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: added `DependencyActivityHub` as the backend-owned
+    subscription/emit boundary, returned it from hosted startup, and updated
+    Tauri setup to manage that activity hub and forward `dependency-activity`
+    events as app-shell transport. Hosted startup no longer returns
+    `TauriModelDependencyResolver` to Tauri or calls resolver activity setup.
+  - No-fallback/no-legacy result: runtime execution still cannot receive the
+    legacy resolver through runtime extension snapshots or hosted shared
+    execution extensions, and Tauri no longer owns resolver business state,
+    dependency policy, install/check decisions, or resolver activity
+    attachment. No scheduler/runtime-host/readiness facts were adapted into
+    `ModelDependencyRequest`, `ModelRefV2`, or path-shaped launch payloads.
+  - Focused tests updated: hosted startup tests now prove the activity hub can
+    publish bounded dependency activity while the shared runtime execution
+    extensions omit the legacy resolver.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`; `cargo
+    fmt --manifest-path src-tauri/Cargo.toml`; `cargo test -p
+    pantograph-embedded-runtime hosted_startup -- --nocapture`; `cargo test -p
+    pantograph-embedded-runtime runtime_extensions -- --nocapture`; `cargo
+    check -p pantograph-embedded-runtime`; `cargo check -p pantograph`; and
+    `rg -n
+    "model_dependency_resolver|startup_output\\.model_dependency_resolver|manage\\(model_dependency_resolver|set_activity_emitter"
+    src-tauri/src/app_setup.rs
+    crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`
+    returning no hits. `cargo check` still reports pre-existing dead-code
+    warnings in `pantograph-workflow-service` and Tauri workflow modules.
+  - Remaining follow-up: classify or retire retained resolver
+    commands/probes/tests, including `src-tauri/src/bin/pumas_dependency_runtime_probe.rs`,
+    and keep any retained surface diagnostic/tooling-only until deletion is
+    possible after canonical scheduler/runtime-host task-result response
+    coverage.
 
 ### Traceability Links
 
