@@ -19213,11 +19213,45 @@ Worker rules:
     4. Keep the provider unit-level path only and defer production wiring. This
        is not enough for complete inference-run testing and should only be a
        temporary stop.
-  - Recommendation pending user decision: prefer option 1 if the goal is the
-    smallest standards-compliant production bridge, because it keeps the
-    scheduler provider synchronous, makes freshness/version ownership explicit,
-    and avoids widening workflow-service orchestration before complete
-    inference-run testing.
+- 2026-05-30 production provider wiring re-plan decision:
+  - Selected immediate path: use option 1 now. Add an explicit, versioned
+    dispatch source-fact snapshot cache owned by embedded-runtime composition.
+    Async source owners refresh Pumas package facts and runtime capability
+    facts ahead of scheduler dispatch, and the synchronous provider reads only
+    a validated fresh snapshot.
+  - Required bridge discipline: the option 1 snapshot must use the same
+    path-free, validated dispatch source-fact shape that the later option 3
+    persisted/admission-attached snapshot will consume. Do not create a second
+    production contract, test-only static snapshot, or provider-private cache
+    shape that would need to be rewritten later.
+  - Option 3 placement: after the first complete inference path is working
+    end-to-end, promote the validated dispatch source-fact snapshot into
+    readiness/admission task state before relying on restart/replay,
+    duplicate-dispatch prevention, cancellation recovery, durable multi-run
+    scheduling, or production-grade recovery semantics.
+  - Standards result: option 1 is allowed only as a short-turnaround
+    composition-owned bridge. It keeps scheduler selection synchronous, keeps
+    Pumas/runtime fact lifecycle ownership in embedded-runtime, keeps
+    workflow-service host-agnostic, and requires explicit freshness/version
+    diagnostics instead of hidden mutable cache behavior.
+  - No-fallback/no-legacy result: the bridge must fail closed with typed source
+    diagnostics when the snapshot is missing, stale, version-mismatched, or
+    incomplete. It must not fabricate candidates from selector summaries,
+    graph paths, reduced execution plans, frontend/Tauri state, display
+    strings, `ModelRefV2`, provider-private defaults, or inferred
+    device/runtime values.
+  - Next implementation order:
+    1. Add the embedded-runtime versioned dispatch source-fact snapshot
+       lifecycle and validation around the existing staged Pumas and runtime
+       capability sources.
+    2. Wire resource-backed provider construction to read the validated
+       snapshot plus runtime-registry resource source through the paired
+       composition dependency bundle.
+    3. Add the canonical embedded runtime-host execution port needed for a
+       complete inference path.
+    4. After the complete inference path works, add the option 3
+       readiness/admission-attached persisted snapshot and drift/freshness
+       diagnostics before durable replay/recovery semantics.
 
 ### Traceability Links
 

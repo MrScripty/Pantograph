@@ -1525,11 +1525,30 @@ Next implementation sequence:
    `WorkflowRuntimeDispatchCandidateProvider` is synchronous, but Pumas package
    fact collection currently depends on async selector access. Do not wire a
    test-only static source snapshot into production composition.
-7. Next after re-plan: wire resource-backed provider construction into the
+7. Selected 2026-05-30 immediate path: use option 1 as a short-turnaround
+   bridge. Add a versioned dispatch source-fact snapshot owned by
+   embedded-runtime composition. Async Pumas/runtime source owners refresh the
+   snapshot before dispatch, while the synchronous workflow-service provider
+   reads only validated fresh, path-free facts.
+8. Bridge guardrail: the option 1 snapshot must use the same validated
+   dispatch source-fact shape that the later option 3
+   readiness/admission-attached snapshot will persist. Missing, stale,
+   version-mismatched, or incomplete snapshots must return typed diagnostics
+   and no candidates; do not introduce a provider-private cache contract or
+   static production snapshot.
+9. Next implementation: wire resource-backed provider construction into the
    embedded runtime composition boundary that owns the runtime registry,
-   runtime-host port, reservation lifecycle port, and the selected source-fact
-   ownership model.
-8. Follow-on: add a device-source slice so unconstrained tasks receive
+   runtime-host port, reservation lifecycle port, validated dispatch
+   source-fact snapshot, and runtime-registry resource source.
+10. Follow-on: add the canonical embedded runtime-host execution port needed
+   for a complete inference path.
+11. After the first complete inference path works end-to-end, implement option
+   3 by promoting the validated dispatch source-fact snapshot into
+   readiness/admission task state with persistence, freshness, drift, and
+   invalidation diagnostics before relying on restart/replay,
+   duplicate-dispatch prevention, cancellation recovery, durable multi-run
+   scheduling, or production-grade recovery semantics.
+12. Follow-on: add a device-source slice so unconstrained tasks receive
    selected device candidates from runtime capability facts instead of provider
    guesses.
 
