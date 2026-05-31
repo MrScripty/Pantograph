@@ -1753,6 +1753,18 @@ Next staged implementation sequence:
    also define how Tauri stores and shuts down the returned
    dependency-readiness producer handle without making Tauri the business owner
    of dependency-readiness production.
+   Selected 2026-05-31: use staged backend-owned hosted startup composition.
+   Do not use the narrow Tauri reorder as the implementation path. Add a
+   small embedded-runtime startup composition boundary first; it must receive
+   host infrastructure/configuration, initialize or validate owner Pumas
+   selector access before workflow-service sharing, build executor extensions
+   and dependency resolver wiring through backend-owned helpers, invoke the
+   hosted composition bundle, and return `SharedWorkflowService`,
+   `SharedExtensions`, the model dependency resolver, and lifecycle handles.
+   The follow-up Tauri slice may manage those returned values and attach
+   app-shell event sinks, but it must not own Pumas fact interpretation,
+   dependency-readiness production policy, runtime-registry policy, or runtime
+   dispatch decisions.
 4. Narrow or replace `EmbeddedRuntime::hosted_with_default_python_runtime`.
    It must not remain the successful resource-backed hosted path while it
    accepts an already shared `WorkflowService`. During migration it may remain

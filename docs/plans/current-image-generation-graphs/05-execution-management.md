@@ -19645,6 +19645,62 @@ Worker rules:
     owns Pumas selector acquisition, and how the returned
     dependency-readiness producer handle is managed and shut down without
     duplicating `EmbeddedRuntime` lifecycle ownership.
+- 2026-05-31 hosted startup ownership re-plan decision:
+  - Options considered:
+    1. Reorder Tauri startup narrowly so Tauri synchronously initializes
+       Pumas selector access before sharing workflow state, then calls the
+       embedded-runtime bundle. This is short but risks complecting Tauri
+       transport/startup with Pumas access sequencing, dependency-readiness
+       lifecycle, and runtime-dispatch policy.
+    2. Move directly to a complete backend-owned hosted startup composition
+       in one slice. This is the clean target architecture but too broad for
+       the next validated slice because it touches service construction,
+       extension initialization, sidecar lifecycle, Tauri managed state, and
+       headless runtime construction together.
+    3. Stage the backend-owned hosted startup composition. First add a small
+       embedded-runtime startup composition boundary that owns Pumas selector
+       acquisition/validation before workflow-service sharing and returns
+       typed lifecycle handles. Then migrate Tauri startup and headless
+       runtime construction onto that boundary in a follow-up slice.
+    4. Defer hosted startup migration and keep hosted dispatch fail-closed
+       while continuing lower-level runtime-host work.
+  - Selected decision: use option 3. Option 2 remains the target
+    architecture, but the transition must be staged so each slice is small and
+    verifiable. Tauri must supply infrastructure inputs only: app/project
+    paths, process spawner/gateway, runtime registry, app-shell event sinks,
+    and persisted store locations. Embedded-runtime must own Pumas selector
+    acquisition/validation, workflow-service pre-share construction,
+    dependency-readiness producer startup, runtime-dispatch dependency
+    installation, scheduler diagnostics, and the typed lifecycle handle
+    bundle.
+  - Next implementation sequence:
+    1. Add the embedded-runtime hosted startup composition input/output
+       boundary. It must accept host infrastructure/configuration, initialize
+       or validate owner Pumas selector access before sharing the service,
+       build executor extensions and dependency resolver wiring through
+       backend-owned helpers, call the existing hosted composition bundle, and
+       return `SharedWorkflowService`, `SharedExtensions`, the model
+       dependency resolver, and dependency-readiness lifecycle handles.
+    2. Add focused embedded-runtime tests proving non-owner or missing Pumas
+       selector access fails with typed initialization diagnostics, failed
+       workflow-service construction does not leak sidecars, and no runtime
+       dispatch dependencies are installed after sharing.
+    3. Migrate Tauri startup to call the startup composition before managing
+       workflow state. Tauri may manage the returned service/extensions/
+       lifecycle handles and attach app-shell projection/validation event
+       sinks after construction, but it must not derive Pumas facts or runtime
+       dispatch policy.
+    4. Migrate `headless_runtime.rs` away from
+       `EmbeddedRuntime::hosted_with_default_python_runtime` as the
+       successful resource-backed hosted path, then narrow or rename that
+       helper so it cannot be mistaken for the canonical hosted dispatch
+       composition.
+  - No-fallback/no-legacy guardrail: do not add post-share runtime-dispatch
+    setters, do not let Tauri interpret Pumas package facts or runtime
+    registry policy, do not keep `hosted_with_default_python_runtime` as a
+    successful resource-backed path accepting an already shared service, and
+    fail closed with typed initialization diagnostics when required hosted
+    inputs are missing.
 
 ### Traceability Links
 
