@@ -18920,6 +18920,28 @@ Worker rules:
     `runtime_dispatch_candidate_provider` module that joins staged embedded
     fact sources into workflow-service candidate bundles while the composition
     factory remains a wiring boundary.
+- 2026-05-30 final provider assembly selected decision:
+  - Selected option: option 1, a focused embedded-runtime
+    `runtime_dispatch_candidate_provider` behavior module.
+  - Standards result: candidate fact assembly is now assigned to a behavior
+    owner separate from construction, workflow-service scheduler orchestration,
+    scheduler ranking/selection policy, runtime-host worker execution, and
+    runtime-registry release/reclaim policy. This follows the coding
+    standards' simplicity/complection rule and the architecture standards'
+    composition-root guidance.
+  - No-fallback/no-legacy result: the selected provider must not synthesize
+    candidates from graph paths, reduced execution plans, frontend state,
+    display strings, `ModelRefV2`, dependency-preflight compatibility paths,
+    or provider-private cleanup state.
+  - Async boundary result: because the workflow-service provider trait is
+    synchronous, the plan now requires the first provider slice to return typed
+    unavailable diagnostics when package facts are not already available. It
+    must not block scheduler selection on async Pumas lookups.
+  - Next checklist: add a fail-closed provider skeleton and diagnostics tests;
+    wire it through the existing paired dependency bundle; add a staged
+    package-fact input contract; then join package/runtime facts, add real
+    runtime-registry reservation, prove lifecycle release coverage, and only
+    then enable non-empty resource-backed candidates.
 
 ### Traceability Links
 

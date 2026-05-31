@@ -1250,6 +1250,77 @@ dedicated embedded-runtime provider owns fact assembly; workflow-service owns
 the provider trait and scheduler selection; runtime-registry owns resource
 reservation/release; and the composition factory only enforces paired wiring.
 
+Selected decision: use option 1. Add a focused embedded-runtime
+`runtime_dispatch_candidate_provider` module that implements the
+workflow-service `WorkflowRuntimeDispatchCandidateProvider` trait and owns
+joining staged embedded-runtime facts into validated
+`WorkflowRuntimeDispatchCandidateFactBundle` values. The provider is a
+behavior module, not a construction module. `EmbeddedWorkflowServiceComposition`
+must continue to only attach dependencies and enforce paired wiring.
+
+Standards alignment for the selected option:
+
+- Simplicity/complection: candidate assembly is separated from construction,
+  scheduler selection policy, runtime-registry lifecycle/release behavior, and
+  runtime-host worker execution. Readers can reason about fact assembly without
+  reading workflow-service orchestration or composition-root code.
+- Composition-root boundary: the composition factory selects and wires the
+  concrete provider, runtime-host port, and lifecycle port as a complete
+  dependency bundle. It does not join facts or choose candidates.
+- Source ownership: embedded-runtime may consume Pumas package facts,
+  runtime-registry capability facts, and runtime-registry reservation facts
+  because those sources are embedded-runtime infrastructure boundaries.
+  Workflow-service receives only validated scheduler-facing candidate bundles.
+- Scheduler ownership: scheduler/workflow-service still owns dispatch
+  selection, ranking, task state, batching policy, and typed no-candidate
+  diagnostics. The provider supplies facts; it does not pick the winner.
+- Runtime-registry ownership: runtime-registry remains the owner of admission,
+  reservation ids, release, retention, and reclaim policy. The provider may
+  request reservations and project returned leases; it must not invent
+  alternate admission or release behavior.
+- Async boundary: because `WorkflowRuntimeDispatchCandidateProvider` is
+  synchronous, the first provider slice must not perform async Pumas lookups
+  or block inside scheduler selection. If package facts are not already
+  available through a staged snapshot/cache, return typed unavailable
+  diagnostics and no candidates.
+- No fallback/legacy: the provider must not recover candidates from graph
+  paths, reduced execution plans, frontend state, display strings,
+  `ModelRefV2`, dependency-preflight compatibility paths, or provider-private
+  cleanup state.
+
+Next implementation sequence:
+
+1. Add `runtime_dispatch_candidate_provider.rs` with a fail-closed provider
+   skeleton that implements `WorkflowRuntimeDispatchCandidateProvider`, returns
+   typed provider diagnostics, and does not emit non-empty candidates until all
+   required source facts are supplied.
+2. Add focused provider tests for missing Pumas/package facts, missing runtime
+   capability facts, missing resource facts, path-carrying model refs, and
+   no-candidate diagnostics.
+3. Wire the fail-closed provider through
+   `EmbeddedWorkflowServiceDispatchDependencies` together with the runtime-host
+   execution port and reservation lifecycle port, proving the composition
+   factory enforces paired production wiring.
+4. Add the source-input contract for already-available/staged Pumas package
+   facts so the provider can remain synchronous. If implementation discovers
+   that package facts can only be fetched asynchronously at selection time,
+   stop and re-plan the provider trait or snapshot lifecycle instead of
+   blocking in scheduler selection.
+5. Join Pumas package facts with runtime-registry capability facts to produce
+   candidate fact drafts with typed compatibility diagnostics, but no resource
+   leases yet.
+6. Add runtime-registry reservation through
+   `RuntimeDispatchResourceFactsSource`, project returned leases into
+   `SchedulerResourceReservation`, and emit candidates only when reservation
+   succeeds.
+7. Verify lifecycle pairing by proving every emitted reservation lease is
+   handled by the embedded reservation lifecycle port on unselected,
+   dispatch-rejected, completed, failed, cancellation, retry/defer, and
+   session-close paths.
+8. Only after provider and lifecycle tests pass, remove the staged
+   `#[allow(dead_code)]` lifecycle-port allowance and enable non-empty
+   resource-backed candidate sets in hosted production composition.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
