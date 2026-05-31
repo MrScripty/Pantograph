@@ -40,7 +40,7 @@ impl WorkflowRuntimeDispatchCandidateSet {
     ) -> Self {
         let bundle = bundle.into_inner();
         Self {
-            candidates: Vec::new(),
+            candidates: bundle.facts.into_iter().map(dispatch_candidate).collect(),
             diagnostics: bundle.diagnostics,
         }
     }
@@ -269,6 +269,21 @@ fn validate_source_diagnostic(
     Ok(())
 }
 
+fn dispatch_candidate(fact: WorkflowRuntimeDispatchCandidateFact) -> SchedulerDispatchCandidate {
+    SchedulerDispatchCandidate {
+        candidate_id: fact.candidate_id,
+        selected_runtime_id: fact.selected_runtime_id,
+        selected_runtime_variant_id: fact.selected_runtime_variant_id,
+        selected_device_ids: fact.selected_device_ids,
+        selected_model_ref: fact.selected_model_ref,
+        runtime_trait_settings: fact.runtime_trait_settings,
+        reservation: Some(fact.reservation),
+        resource_fit_assessment: Some(fact.resource_fit_assessment),
+        batching_group_id: fact.batching_group_id,
+        candidate_source_diagnostics: Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pantograph_dependency_planning::{DependencyEnvironmentId, DependencyEnvironmentRef};
@@ -322,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_fact_bundle_does_not_emit_candidates_before_mapping_slice() {
+    fn candidate_fact_bundle_maps_path_free_facts_to_scheduler_candidates() {
         let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
             candidate_fact_bundle(vec![candidate_fact()]),
         )
@@ -330,8 +345,15 @@ mod tests {
 
         let candidate_set = WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle);
 
-        assert!(candidate_set.candidates.is_empty());
+        assert_eq!(candidate_set.candidates.len(), 1);
         assert_eq!(candidate_set.diagnostics.len(), 1);
+        let candidate = &candidate_set.candidates[0];
+        assert_eq!(candidate.candidate_id.as_str(), "candidate.diffusers.cuda0");
+        assert_eq!(candidate.selected_runtime_id.as_str(), "diffusers-pytorch");
+        assert_eq!(candidate.selected_device_ids[0].as_str(), "cuda:0");
+        assert!(candidate.reservation.is_some());
+        assert!(candidate.resource_fit_assessment.is_some());
+        assert!(candidate.candidate_source_diagnostics.is_empty());
     }
 
     fn candidate_fact_bundle(

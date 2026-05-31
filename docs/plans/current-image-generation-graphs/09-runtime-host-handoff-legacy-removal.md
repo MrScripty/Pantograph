@@ -938,6 +938,23 @@ Implementation progress:
   tests inject ready and unavailable sources. No package-manager probing, shell
   parsing, graph/path/package-name inference, Python probe reuse, scheduler
   policy, compatibility shim, or legacy preflight behavior was added.
+- 2026-05-30 workflow-service dispatch fact mapping slice: mapped validated
+  `WorkflowRuntimeDispatchCandidateFactBundle` facts one-to-one into
+  `SchedulerDispatchCandidate` values. This is a pure workflow-service
+  contract mapping from already-canonical selected runtime/device/model,
+  reservation, resource-fit, trait, and batching facts. It does not configure
+  the production embedded-runtime provider, acquire runtime-registry leases,
+  release reservations, synthesize candidates from graph paths or reduced
+  execution plans, or adapt facts back into `ModelRefV2`.
+- Remaining follow-up before production provider wiring: define and implement
+  reservation release/retention ownership for runtime-registry leases acquired
+  by embedded-runtime dispatch resource facts. The release owner must cover
+  no-selection, request validation failure, runtime-host dispatch failure,
+  runtime-host terminal success/failure, cancellation, retry/defer, and session
+  close without relying on graph paths, `ModelRefV2`, reduced plans, or host
+  display strings. Do not wire the embedded-runtime final provider to emit real
+  resource-backed candidate bundles until this lifecycle is explicit and
+  tested.
 
 ## Verification Strategy
 

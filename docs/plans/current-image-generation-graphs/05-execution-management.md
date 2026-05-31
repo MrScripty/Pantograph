@@ -18639,6 +18639,40 @@ Worker rules:
   - Remaining follow-up: wire session-runner/final-provider cleanup ownership
     for acquired leases before enabling non-empty candidate mapping from the
     joined Pumas, runtime capability, and resource facts.
+- 2026-05-30 workflow-service dispatch fact mapping slice:
+  - Slice scope: workflow-service dispatch fact bundle mapping only. Allowed
+    files: `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`,
+    `09-runtime-host-handoff-legacy-removal.md`,
+    `10-task-level-scheduler-orchestration.md`, and this execution log.
+  - Implementation: mapped validated
+    `WorkflowRuntimeDispatchCandidateFactBundle` facts one-to-one into
+    `SchedulerDispatchCandidate` values, preserving selected runtime/device,
+    model ref, trait settings, reservation, resource-fit, and batching facts.
+  - Test coverage: updated focused runtime-dispatch-selection tests to prove
+    path-free fact bundles validate, path-carrying model refs are rejected,
+    duplicate candidates are rejected, and validated facts project into
+    scheduler candidates.
+  - No-fallback/no-legacy result: the slice does not configure a production
+    embedded-runtime provider, acquire or release runtime-registry leases,
+    synthesize candidates from graph paths or reduced execution plans, route
+    through node-engine planned inference, or adapt facts back into
+    `ModelRefV2`.
+  - Standards result: mapping stays in workflow-service as pure application
+    contract assembly while embedded-runtime remains the source owner for
+    async Pumas/runtime/resource fact collection. Production provider wiring
+    remains blocked until explicit runtime-registry reservation
+    release/retention ownership is implemented and tested.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+    `cargo check -p pantograph-workflow-service`, and `git diff --check`.
+    `cargo check` still reports the pre-existing
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: implement reservation release/retention ownership for
+    no-selection, request validation failure, runtime-host dispatch failure,
+    runtime-host terminal success/failure, cancellation, retry/defer, and
+    session close before wiring the embedded-runtime final provider to emit
+    real resource-backed candidate bundles.
 
 ### Traceability Links
 

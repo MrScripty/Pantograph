@@ -407,6 +407,13 @@ implementation can be considered complete:
    task-level work is dependency readiness admission, scheduler dispatch
    selection, and runtime-host request construction from the actual
    dispatch-selected `SchedulerRuntimeHandoff`.
+   2026-05-30 update: workflow-service now maps validated runtime dispatch
+   candidate fact bundles into scheduler candidates for the dispatch-selection
+   request. This only consumes already-canonical selected runtime/device/model,
+   reservation, and resource-fit facts. Production embedded-runtime provider
+   wiring remains blocked on explicit runtime-registry reservation
+   release/retention ownership for all selected and unselected candidate
+   outcomes.
 12. Remove planned-inference launch ownership and legacy resolver/path
    successful branches once task orchestration and runtime-host dispatch are
    wired.
