@@ -15,6 +15,7 @@ public exports out of the service crate.
 | `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version, presentation-revision, and proof-aware executable validation snapshot publication against the durable attribution store. |
 | `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, format-default, and conversion-attribution DTOs for binary-safe media payload handling. |
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
+| `artifact_writer.rs` | Shared backend artifact writer handle used by workflow-service artifact APIs and runtime-host media output without a `WorkflowService` self-reference. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `diagnostic_errors.rs` | Typed workflow error phase registry, scoped diagnostics recorder API, and durable error-event append helpers. |
 | `executable_validation_snapshot.rs` | Durable executable validation snapshot contract, proof freshness validation, attribution-store compaction, and scheduler inference projection helpers. |
@@ -131,6 +132,10 @@ lifecycle port. `service_config.rs` exposes that port as a workflow-service
 composition dependency, and the default fails closed before runtime-host
 dispatch so tests and production wiring cannot leak reservations by omitting
 the embedded-runtime lifecycle owner.
+Artifact persistence is exposed through `WorkflowArtifactWriter`. The writer is
+the shared backend handle for ArtifactStore-backed writes/reads; it lets
+workflow-service and runtime-host media sinks share one persistence boundary
+without passing `WorkflowService` back into the runtime-host execution port.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and

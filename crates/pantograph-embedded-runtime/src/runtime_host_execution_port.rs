@@ -344,7 +344,7 @@ mod tests {
     };
     use pantograph_runtime_host_contracts::RuntimeHostExecutionContractError;
     use pantograph_workflow_service::{
-        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowService,
+        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowArtifactWriter, WorkflowService,
     };
     use pumas_library::models::{
         AssetValidationState, PackageArtifactKind, PumasArtifactLoadPathKind,
@@ -464,7 +464,8 @@ mod tests {
     #[tokio::test]
     async fn port_completes_image_execution_with_sink_backed_media_ref() {
         let temp = tempfile::TempDir::new().expect("temp artifact dir");
-        let workflow_service = Arc::new(workflow_service_with_artifact_store(&temp));
+        let artifact_writer = artifact_writer(&temp);
+        let workflow_service = WorkflowService::new().with_artifact_writer(artifact_writer.clone());
         let mut request = runtime_host_request_fixture();
         request
             .handoff
@@ -477,7 +478,7 @@ mod tests {
             Arc::new(ReadyLoadTargetResolver),
             Arc::new(FixturePackageFactsResolver),
             Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                workflow_service.clone(),
+                artifact_writer,
             )),
             Arc::new(inference::InferenceGateway::with_backend(
                 Box::new(MockImageBackend),
@@ -686,10 +687,10 @@ mod tests {
         }
     }
 
-    fn workflow_service_with_artifact_store(temp: &tempfile::TempDir) -> WorkflowService {
+    fn artifact_writer(temp: &tempfile::TempDir) -> WorkflowArtifactWriter {
         let artifact_store = ArtifactStore::open(temp.path().join("artifacts"), artifact_policy())
             .expect("open artifact store");
-        WorkflowService::new().with_artifact_store(artifact_store)
+        WorkflowArtifactWriter::new(artifact_store)
     }
 
     fn artifact_policy() -> ArtifactPolicy {

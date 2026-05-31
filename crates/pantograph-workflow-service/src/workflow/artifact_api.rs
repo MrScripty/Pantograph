@@ -5,10 +5,10 @@ use super::{
     },
     ArtifactAttribution, ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptor, ArtifactDescriptorQueryRequest,
-    ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreError,
-    ArtifactStoreStats, ArtifactStreamBodyRead, ArtifactStreamChunkRecord,
-    ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
-    ArtifactStreamReadRequest, ArtifactWriteRequest, WorkflowService, WorkflowServiceError,
+    ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
+    ArtifactStreamBodyRead, ArtifactStreamChunkRecord, ArtifactStreamChunkWriteRequest,
+    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactStreamReadRequest,
+    ArtifactWriteRequest, WorkflowService, WorkflowServiceError,
 };
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId, WorkflowVersionId};
 
@@ -19,19 +19,15 @@ impl WorkflowService {
     ) -> Result<ArtifactDescriptor, WorkflowServiceError> {
         let attribution = request.attribution.clone();
         let payload_ref = request.artifact_id.as_ref().map(artifact_payload_ref);
-        let mut store = match self.artifact_store_guard() {
-            Ok(store) => store,
+        let writer = match self.artifact_writer() {
+            Ok(writer) => writer,
             Err(error) => {
                 return Err(self.artifact_error_with_diagnostics(&attribution, payload_ref, error));
             }
         };
-        store.write_artifact(request).map_err(|error| {
-            self.artifact_error_with_diagnostics(
-                &attribution,
-                payload_ref,
-                artifact_store_error(error),
-            )
-        })
+        writer
+            .write_artifact(request)
+            .map_err(|error| self.artifact_error_with_diagnostics(&attribution, payload_ref, error))
     }
 
     pub fn artifact_descriptor(
@@ -39,10 +35,9 @@ impl WorkflowService {
         request: ArtifactDescriptorQueryRequest,
     ) -> Result<ArtifactDescriptorQueryResponse, WorkflowServiceError> {
         let artifact = self
-            .artifact_store_guard()?
+            .artifact_writer()?
             .descriptor(&request.artifact_id)
-            .map(Some)
-            .map_err(artifact_store_error)?;
+            .map(Some)?;
         Ok(ArtifactDescriptorQueryResponse { artifact })
     }
 
@@ -50,16 +45,15 @@ impl WorkflowService {
         &self,
         request: ArtifactReadRequest,
     ) -> Result<ArtifactBodyRead, WorkflowServiceError> {
-        let store = self.artifact_store_guard()?;
-        let attribution = store
+        let writer = self.artifact_writer()?;
+        let attribution = writer
             .descriptor(&request.artifact_id)
             .ok()
             .map(|descriptor| descriptor.attribution);
         let payload_ref = Some(artifact_payload_ref(&request.artifact_id));
-        match store.read_body(request) {
+        match writer.read_body(request) {
             Ok(response) => Ok(response),
             Err(error) => {
-                let error = artifact_store_error(error);
                 if let Some(attribution) = attribution.as_ref() {
                     Err(self.artifact_error_with_diagnostics(attribution, payload_ref, error))
                 } else {
@@ -75,35 +69,30 @@ impl WorkflowService {
     ) -> Result<ArtifactDescriptor, WorkflowServiceError> {
         let attribution = request.attribution.clone();
         let payload_ref = request.artifact_id.as_ref().map(artifact_payload_ref);
-        let mut store = match self.artifact_store_guard() {
-            Ok(store) => store,
+        let writer = match self.artifact_writer() {
+            Ok(writer) => writer,
             Err(error) => {
                 return Err(self.artifact_error_with_diagnostics(&attribution, payload_ref, error));
             }
         };
-        store.open_stream(request).map_err(|error| {
-            self.artifact_error_with_diagnostics(
-                &attribution,
-                payload_ref,
-                artifact_store_error(error),
-            )
-        })
+        writer
+            .open_stream(request)
+            .map_err(|error| self.artifact_error_with_diagnostics(&attribution, payload_ref, error))
     }
 
     pub fn append_artifact_stream_chunk(
         &self,
         request: ArtifactStreamChunkWriteRequest,
     ) -> Result<ArtifactStreamChunkRecord, WorkflowServiceError> {
-        let mut store = self.artifact_store_guard()?;
-        let attribution = store
+        let writer = self.artifact_writer()?;
+        let attribution = writer
             .descriptor(&request.artifact_id)
             .ok()
             .map(|descriptor| descriptor.attribution);
         let payload_ref = Some(artifact_payload_ref(&request.artifact_id));
-        match store.append_stream_chunk(request) {
+        match writer.append_stream_chunk(request) {
             Ok(record) => Ok(record),
             Err(error) => {
-                let error = artifact_store_error(error);
                 if let Some(attribution) = attribution.as_ref() {
                     Err(self.artifact_error_with_diagnostics(attribution, payload_ref, error))
                 } else {
@@ -117,16 +106,15 @@ impl WorkflowService {
         &self,
         request: ArtifactStreamReadRequest,
     ) -> Result<ArtifactStreamBodyRead, WorkflowServiceError> {
-        let store = self.artifact_store_guard()?;
-        let attribution = store
+        let writer = self.artifact_writer()?;
+        let attribution = writer
             .descriptor(&request.artifact_id)
             .ok()
             .map(|descriptor| descriptor.attribution);
         let payload_ref = Some(artifact_payload_ref(&request.artifact_id));
-        match store.read_stream_body(request) {
+        match writer.read_stream_body(request) {
             Ok(response) => Ok(response),
             Err(error) => {
-                let error = artifact_store_error(error);
                 if let Some(attribution) = attribution.as_ref() {
                     Err(self.artifact_error_with_diagnostics(attribution, payload_ref, error))
                 } else {
@@ -140,16 +128,15 @@ impl WorkflowService {
         &self,
         request: ArtifactStreamFinalizeRequest,
     ) -> Result<ArtifactDescriptor, WorkflowServiceError> {
-        let mut store = self.artifact_store_guard()?;
-        let attribution = store
+        let writer = self.artifact_writer()?;
+        let attribution = writer
             .descriptor(&request.artifact_id)
             .ok()
             .map(|descriptor| descriptor.attribution);
         let payload_ref = Some(artifact_payload_ref(&request.artifact_id));
-        match store.finalize_stream(request) {
+        match writer.finalize_stream(request) {
             Ok(descriptor) => Ok(descriptor),
             Err(error) => {
-                let error = artifact_store_error(error);
                 if let Some(attribution) = attribution.as_ref() {
                     Err(self.artifact_error_with_diagnostics(attribution, payload_ref, error))
                 } else {
@@ -163,37 +150,29 @@ impl WorkflowService {
         &self,
         request: ArtifactConsumeAcknowledgementRequest,
     ) -> Result<ArtifactConsumeAcknowledgementResponse, WorkflowServiceError> {
-        self.artifact_store_guard()?
-            .acknowledge_consume(request)
-            .map_err(artifact_store_error)
+        self.artifact_writer()?.acknowledge_consume(request)
     }
 
     pub fn artifact_policy(&self) -> Result<ArtifactPolicy, WorkflowServiceError> {
-        Ok(self.artifact_store_guard()?.policy().clone())
+        self.artifact_writer()?.policy()
     }
 
     pub fn update_artifact_policy(
         &self,
         policy: ArtifactPolicy,
     ) -> Result<ArtifactPolicy, WorkflowServiceError> {
-        let mut store = self.artifact_store_guard()?;
-        store.update_policy(policy).map_err(artifact_store_error)?;
-        Ok(store.policy().clone())
+        self.artifact_writer()?.update_policy(policy)
     }
 
     pub fn apply_artifact_store_retention_cleanup(
         &self,
         now_ms: u64,
     ) -> Result<u64, WorkflowServiceError> {
-        self.artifact_store_guard()?
-            .apply_retention_cleanup(now_ms)
-            .map_err(artifact_store_error)
+        self.artifact_writer()?.apply_retention_cleanup(now_ms)
     }
 
     pub fn artifact_store_stats(&self) -> Result<ArtifactStoreStats, WorkflowServiceError> {
-        self.artifact_store_guard()?
-            .stats()
-            .map_err(artifact_store_error)
+        self.artifact_writer()?.stats()
     }
 }
 
@@ -214,25 +193,6 @@ impl WorkflowService {
         ) {
             Ok(outcome) => error.with_diagnostics(outcome.into_error_link(Some(&workflow_run_id))),
             Err(record_error) => record_error,
-        }
-    }
-}
-
-fn artifact_store_error(error: ArtifactStoreError) -> WorkflowServiceError {
-    match error {
-        ArtifactStoreError::InvalidArtifactId
-        | ArtifactStoreError::NotFound { .. }
-        | ArtifactStoreError::BodyUnavailable { .. }
-        | ArtifactStoreError::ArtifactTooLarge { .. }
-        | ArtifactStoreError::DiskLimitExceeded { .. }
-        | ArtifactStoreError::StreamNotWritable { .. }
-        | ArtifactStoreError::InvalidStreamSequence { .. }
-        | ArtifactStoreError::ArtifactAccountingOverflow { .. }
-        | ArtifactStoreError::InvalidByteRange => {
-            WorkflowServiceError::InvalidRequest(error.to_string())
-        }
-        ArtifactStoreError::Io(_) | ArtifactStoreError::Manifest(_) => {
-            WorkflowServiceError::Internal(error.to_string())
         }
     }
 }

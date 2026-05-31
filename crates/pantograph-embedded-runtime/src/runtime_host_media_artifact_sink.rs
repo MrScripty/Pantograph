@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use inference::EncodedImage;
 use pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef;
 use pantograph_workflow_service::{
     ArtifactAttribution, ArtifactFormatMetadata, ArtifactPayloadKind, ArtifactWriteRequest,
-    WorkflowService, WorkflowServiceError,
+    WorkflowArtifactWriter, WorkflowServiceError,
 };
 use thiserror::Error;
 
@@ -51,13 +49,13 @@ pub(crate) enum RuntimeHostMediaArtifactSinkError {
 
 #[derive(Clone)]
 pub(crate) struct WorkflowServiceRuntimeHostMediaArtifactSink {
-    workflow_service: Arc<WorkflowService>,
+    artifact_writer: WorkflowArtifactWriter,
 }
 
 impl WorkflowServiceRuntimeHostMediaArtifactSink {
     #[must_use]
-    pub(crate) fn new(workflow_service: Arc<WorkflowService>) -> Self {
-        Self { workflow_service }
+    pub(crate) fn new(artifact_writer: WorkflowArtifactWriter) -> Self {
+        Self { artifact_writer }
     }
 }
 
@@ -83,7 +81,7 @@ impl RuntimeHostMediaArtifactSink for WorkflowServiceRuntimeHostMediaArtifactSin
             request.image_index,
         );
         let descriptor = self
-            .workflow_service
+            .artifact_writer
             .write_artifact(ArtifactWriteRequest {
                 artifact_id: Some(artifact_id.clone()),
                 payload_kind: ArtifactPayloadKind::Image,
@@ -181,15 +179,16 @@ fn runtime_host_media_type_id(media_type: &str) -> String {
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowErrorCode,
+        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowErrorCode, WorkflowService,
     };
     use tempfile::TempDir;
 
     #[test]
-    fn workflow_service_sink_writes_image_output_as_path_free_artifact_ref() {
+    fn shared_artifact_writer_sink_writes_image_output_as_path_free_artifact_ref() {
         let temp = TempDir::new().expect("temp artifact dir");
-        let service = Arc::new(workflow_service_with_artifact_store(&temp));
-        let sink = WorkflowServiceRuntimeHostMediaArtifactSink::new(service.clone());
+        let writer = artifact_writer(&temp);
+        let service = WorkflowService::new().with_artifact_writer(writer.clone());
+        let sink = WorkflowServiceRuntimeHostMediaArtifactSink::new(writer);
         let image = EncodedImage {
             data_base64: "aGVsbG8=".to_string(),
             mime_type: "image/png".to_string(),
@@ -256,9 +255,8 @@ mod tests {
 
     #[test]
     fn workflow_service_sink_rejects_invalid_image_payload() {
-        let sink = WorkflowServiceRuntimeHostMediaArtifactSink::new(Arc::new(
-            workflow_service_with_artifact_store(&TempDir::new().expect("temp artifact dir")),
-        ));
+        let temp = TempDir::new().expect("temp artifact dir");
+        let sink = WorkflowServiceRuntimeHostMediaArtifactSink::new(artifact_writer(&temp));
         let image = EncodedImage {
             data_base64: "****".to_string(),
             mime_type: "image/png".to_string(),
@@ -290,9 +288,13 @@ mod tests {
     }
 
     #[test]
-    fn workflow_service_sink_reports_missing_artifact_store() {
-        let service = Arc::new(WorkflowService::new());
-        let sink = WorkflowServiceRuntimeHostMediaArtifactSink::new(service);
+    fn shared_artifact_writer_sink_reports_artifact_write_failure() {
+        let temp = TempDir::new().expect("temp artifact dir");
+        let writer = artifact_writer(&temp);
+        let service = WorkflowService::new().with_artifact_writer(writer.clone());
+        let sink = WorkflowServiceRuntimeHostMediaArtifactSink::new(writer);
+        drop(service);
+        drop(temp);
         let image = EncodedImage {
             data_base64: "aGVsbG8=".to_string(),
             mime_type: "image/png".to_string(),
@@ -318,15 +320,13 @@ mod tests {
             panic!("expected artifact write failure");
         };
         assert_eq!(source.code(), WorkflowErrorCode::InternalError);
-        assert!(source
-            .to_string()
-            .contains("artifact store is not configured"));
+        assert!(source.to_string().contains("artifact store io error"));
     }
 
-    fn workflow_service_with_artifact_store(temp: &TempDir) -> WorkflowService {
+    fn artifact_writer(temp: &TempDir) -> WorkflowArtifactWriter {
         let artifact_store = ArtifactStore::open(temp.path().join("artifacts"), artifact_policy())
             .expect("open artifact store");
-        WorkflowService::new().with_artifact_store(artifact_store)
+        WorkflowArtifactWriter::new(artifact_store)
     }
 
     fn artifact_policy() -> ArtifactPolicy {

@@ -51,7 +51,7 @@ impl WorkflowService {
                 max_loaded_sessions,
             ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
-            artifact_store: None,
+            artifact_writer: None,
             artifact_format_settings: Arc::new(Mutex::new(ArtifactFormatSettings::default())),
             artifact_format_settings_path: None,
             artifact_format_dependency_versions: Arc::new(Mutex::new(
@@ -153,7 +153,12 @@ impl WorkflowService {
     }
 
     pub fn with_artifact_store(mut self, store: ArtifactStore) -> Self {
-        self.artifact_store = Some(Arc::new(Mutex::new(store)));
+        self.artifact_writer = Some(super::WorkflowArtifactWriter::new(store));
+        self
+    }
+
+    pub fn with_artifact_writer(mut self, writer: super::WorkflowArtifactWriter) -> Self {
+        self.artifact_writer = Some(writer);
         self
     }
 
@@ -282,17 +287,13 @@ impl WorkflowService {
         })
     }
 
-    pub(crate) fn artifact_store_guard(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, ArtifactStore>, WorkflowServiceError> {
-        let Some(store) = self.artifact_store.as_ref() else {
+    pub fn artifact_writer(&self) -> Result<super::WorkflowArtifactWriter, WorkflowServiceError> {
+        let Some(writer) = self.artifact_writer.as_ref() else {
             return Err(WorkflowServiceError::Internal(
                 "artifact store is not configured".to_string(),
             ));
         };
-        store
-            .lock()
-            .map_err(|_| WorkflowServiceError::Internal("artifact store lock poisoned".to_string()))
+        Ok(writer.clone())
     }
 
     pub(crate) fn artifact_format_settings_guard(

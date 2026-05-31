@@ -218,6 +218,11 @@ now initializes active-run scheduler task state from the immutable task graph
 after queue admission and before the current whole-run execution path
 continues. Full task progression, runtime-host dispatch lifecycle, and old
 node-engine output-demand launch removal remain staged Milestone 5c work.
+Artifact persistence is shared through `WorkflowArtifactWriter`, a
+backend-owned handle created before `WorkflowService` is shared. Workflow
+facade artifact APIs and runtime-host media output can use the same writer
+without passing `Arc<WorkflowService>` back into embedded-runtime sinks or
+moving artifact persistence policy into Tauri.
 The first scheduler-task execution entrypoint is intentionally narrow: it
 executes only active-run tasks already in ready non-runtime node-engine state,
 transitions them through running under the active-run store lock, returns a

@@ -71,11 +71,8 @@ pub(super) fn workflow_io_artifact_metadata(
     let materialized = workflow_io_artifact_body(&binding.value)?;
     let artifact_id = payload_artifact_id.clone();
     if materialized.body.len() <= RETAINED_WORKFLOW_IO_VALUE_MAX_BYTES {
-        if let Some(store) = service.artifact_store.as_ref() {
-            let mut store = store.lock().map_err(|_| {
-                WorkflowServiceError::Internal("artifact store lock poisoned".to_string())
-            })?;
-            let write_result = store.write_artifact(ArtifactWriteRequest {
+        if let Ok(writer) = service.artifact_writer() {
+            let write_result = writer.write_artifact(ArtifactWriteRequest {
                 artifact_id: Some(artifact_id),
                 payload_kind: materialized.payload_kind,
                 media_type: materialized.media_type.clone(),

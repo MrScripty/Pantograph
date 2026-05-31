@@ -1240,3 +1240,26 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   temporary guardrail. Verification must prove no self-reference, no Tauri
   business logic, typed diagnostics for partial wiring, and completed
   runtime-host responses recorded as scheduler task results.
+- 2026-05-31 shared backend artifact writer slice completed.
+  Smallest useful vertical slice: introduce the shared backend artifact writer
+  handle and refactor runtime-host media output to depend on it, without
+  enabling hosted production image execution yet. Implementation:
+  `WorkflowArtifactWriter` now wraps the backend artifact store and is exposed
+  by workflow-service; `WorkflowService` uses it for artifact facade methods
+  while preserving diagnostics ownership; `WorkflowServiceRuntimeHostMediaArtifactSink`
+  now depends on the writer instead of `Arc<WorkflowService>`. No-fallback/
+  no-legacy result: no runtime fallback, graph path, `ModelRefV2`,
+  planned-inference branch, Tauri persistence logic, inline media output, or
+  fake artifact ref was added. Verification passed: `cargo fmt --package
+  pantograph-workflow-service --package pantograph-embedded-runtime`; `cargo
+  check -p pantograph-workflow-service`; `cargo check -p
+  pantograph-embedded-runtime`; `cargo test -p pantograph-embedded-runtime
+  runtime_host_media_artifact_sink -- --nocapture`; `cargo test -p
+  pantograph-embedded-runtime runtime_host_execution_port -- --nocapture`;
+  `cargo test -p pantograph-workflow-service artifact_store -- --nocapture`.
+  Verification caveat: the focused commands still report the known
+  workflow-service `set_active_run_execution_plan` warning. Remaining
+  follow-up: hosted composition must create or receive the shared writer before
+  service sharing, inject the writer-backed media sink into the production
+  runtime-host port with package-facts/load-target/gateway dependencies, and
+  add session-level completed task result coverage.

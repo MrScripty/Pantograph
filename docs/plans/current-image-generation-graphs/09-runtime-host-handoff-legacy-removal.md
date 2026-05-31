@@ -2032,6 +2032,21 @@ workflow-service artifact APIs and runtime-host media output, no
 partial composition fails closed with typed diagnostics, and completed
 runtime-host image responses are recorded as scheduler task results.
 
+Completed 2026-05-31 for the shared backend artifact writer slice:
+`pantograph-workflow-service` now exposes `WorkflowArtifactWriter`, a cloneable
+backend artifact-store handle created before `WorkflowService` is shared.
+`WorkflowService` artifact APIs use the handle internally and still own their
+diagnostics wrapping, while `WorkflowServiceRuntimeHostMediaArtifactSink`
+depends on the writer instead of `Arc<WorkflowService>`. Focused runtime-host
+tests prove the service and sink can share one writer and that completed image
+execution still returns path-free media artifact refs. This removes the
+service self-reference blocker for the next hosted production composition
+slice, but does not yet enable hosted production image execution. Remaining
+follow-up: construct/inject the shared writer in hosted embedded-runtime
+composition, build the runtime-host port with package-facts resolver,
+load-target resolver, inference gateway, and writer-backed sink, and add
+session-level task-result coverage.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

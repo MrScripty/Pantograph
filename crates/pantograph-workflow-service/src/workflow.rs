@@ -27,6 +27,7 @@ mod artifact_api;
 mod artifact_contracts;
 mod artifact_settings_api;
 mod artifact_store;
+mod artifact_writer;
 mod attribution_api;
 mod contracts;
 mod dependency_readiness_composition;
@@ -73,6 +74,7 @@ pub use self::artifact_store::{
     ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
     ArtifactWriteRequest,
 };
+pub use self::artifact_writer::WorkflowArtifactWriter;
 pub use self::contracts::*;
 pub use self::dependency_readiness_composition::WorkflowDependencyReadinessComponents;
 pub use self::diagnostics_api::{
@@ -255,7 +257,7 @@ pub use crate::scheduler::{
 pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
-    artifact_store: Option<Arc<Mutex<ArtifactStore>>>,
+    artifact_writer: Option<WorkflowArtifactWriter>,
     artifact_format_settings: Arc<Mutex<ArtifactFormatSettings>>,
     artifact_format_settings_path: Option<Arc<PathBuf>>,
     artifact_format_dependency_versions: Arc<Mutex<ArtifactFormatDependencyVersions>>,

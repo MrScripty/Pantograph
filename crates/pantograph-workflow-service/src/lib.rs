@@ -119,7 +119,7 @@ pub use workflow::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
-    WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
+    WorkflowArtifactWriter, WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
     WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport, WorkflowBackendHintLabel,
     WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
     WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,

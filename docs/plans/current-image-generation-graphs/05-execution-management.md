@@ -20106,6 +20106,54 @@ Worker rules:
     with typed diagnostics, Tauri contains no artifact persistence policy, and
     completed image runtime-host responses are recorded as scheduler task
     results.
+- 2026-05-31 shared backend artifact writer slice:
+  - Smallest useful slice: introduce the shared backend artifact writer handle
+    and refactor runtime-host media output to depend on it, without wiring
+    hosted production image execution yet.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/artifact_writer.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_io_artifacts.rs`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_media_artifact_sink.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: added `WorkflowArtifactWriter` as a cloneable backend
+    handle over the artifact store, changed `WorkflowService` to hold and
+    expose that handle, kept existing artifact facade methods on
+    `WorkflowService`, and changed
+    `WorkflowServiceRuntimeHostMediaArtifactSink` to depend on
+    `WorkflowArtifactWriter` instead of `Arc<WorkflowService>`.
+  - No-fallback/no-legacy result: the slice does not add a runtime execution
+    fallback, graph path, `ModelRefV2`, planned-inference branch, Tauri
+    persistence logic, inline media output, or fake artifact refs. Existing
+    workflow-service artifact APIs still own diagnostics wrapping, while the
+    runtime-host sink only writes generated media through the shared backend
+    writer.
+  - Focused tests updated: runtime-host media sink tests prove the sink and
+    `WorkflowService` can share one writer, invalid image payloads fail
+    closed, writer-backed artifact write failures become typed sink errors,
+    and runtime-host execution-port completion still returns path-free media
+    refs through the writer-backed sink.
+  - Verification passed: `cargo fmt --package pantograph-workflow-service
+    --package pantograph-embedded-runtime`; `cargo check -p
+    pantograph-workflow-service`; `cargo check -p pantograph-embedded-runtime`;
+    `cargo test -p pantograph-embedded-runtime
+    runtime_host_media_artifact_sink -- --nocapture`; `cargo test -p
+    pantograph-embedded-runtime runtime_host_execution_port -- --nocapture`;
+    `cargo test -p pantograph-workflow-service artifact_store --
+    --nocapture`. These commands still report the known workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up before production use: hosted embedded-runtime
+    composition still must create or obtain the shared writer before sharing
+    `WorkflowService`, inject the writer-backed media sink into the
+    scheduler-dispatch runtime-host port with package-facts/load-target/
+    gateway dependencies, and add session-level completed task-result
+    coverage.
 
 ### Traceability Links
 
