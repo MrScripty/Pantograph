@@ -21,8 +21,9 @@ use crate::scheduler::{
 
 use super::{
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
-    NoRuntimeDispatchCandidatesProvider, SqliteAttributionStore, SqliteDiagnosticsLedger,
-    WorkflowDiagnosticsProjectionRefreshSink, WorkflowRuntimeDispatchCandidateProvider,
+    NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher, SqliteAttributionStore,
+    SqliteDiagnosticsLedger, WorkflowDiagnosticsProjectionRefreshSink,
+    WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchSourceRefresher,
     WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError,
 };
 
@@ -62,6 +63,7 @@ impl WorkflowService {
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
             scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
             dependency_readiness_provider: default_dependency_readiness_provider(),
+            runtime_dispatch_source_refresher: default_runtime_dispatch_source_refresher(),
             runtime_dispatch_candidate_provider: default_runtime_dispatch_candidate_provider(),
             dependency_readiness_work_queue: Arc::new(DependencyReadinessWorkQueue::new()),
             dependency_requirements_registry: Arc::new(
@@ -97,6 +99,15 @@ impl WorkflowService {
         provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     ) -> Self {
         self.runtime_dispatch_candidate_provider = provider;
+        self
+    }
+
+    #[must_use]
+    pub fn with_runtime_dispatch_source_refresher(
+        mut self,
+        refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
+    ) -> Self {
+        self.runtime_dispatch_source_refresher = refresher;
         self
     }
 
@@ -355,6 +366,10 @@ fn default_dependency_readiness_provider() -> Arc<dyn WorkflowDependencyReadines
 fn default_runtime_dispatch_candidate_provider() -> Arc<dyn WorkflowRuntimeDispatchCandidateProvider>
 {
     Arc::new(NoRuntimeDispatchCandidatesProvider)
+}
+
+fn default_runtime_dispatch_source_refresher() -> Arc<dyn WorkflowRuntimeDispatchSourceRefresher> {
+    Arc::new(NoRuntimeDispatchSourceRefresher)
 }
 
 fn dependency_requirements_registry_error(

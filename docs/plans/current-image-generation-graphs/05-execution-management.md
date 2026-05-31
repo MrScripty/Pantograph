@@ -19358,6 +19358,52 @@ Worker rules:
     resource-backed dispatch dependency bundle only after adding the snapshot
     refresh lifecycle that can keep dispatch facts fresh before session
     dispatch.
+- 2026-05-30 runtime dispatch source refresh port slice:
+  - Smallest useful slice: add the pre-dispatch source-refresh lifecycle hook
+    without moving Pumas/runtime-registry source ownership into
+    workflow-service and without making scheduler candidate selection perform
+    hidden async source collection.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+    `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_dispatch_source_snapshot.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `09-runtime-host-handoff-legacy-removal.md`, and this execution log.
+  - Implementation: added `WorkflowRuntimeDispatchSourceRefresher`, called by
+    the session runner after dependency-readiness admission and before
+    `WorkflowRuntimeDispatchCandidateProvider`. The embedded-runtime
+    implementation refreshes the shared versioned source-fact snapshot store,
+    and `EmbeddedWorkflowServiceDispatchDependencies::resource_backed` now
+    wires one store into both the refresher and resource-backed provider.
+  - No-fallback/no-legacy result: workflow-service owns only the orchestration
+    point. It does not own Pumas package fact resolution, runtime-registry
+    source collection, selector summaries, graph paths, reduced plans,
+    `ModelRefV2`, or inferred runtime/device values. Missing or invalid
+    refreshed facts still flow through typed diagnostics and no candidates.
+  - Test notes: initial focused tests failed because the expected model id in
+    the workflow-service assertion used the library asset URI rather than the
+    dependency-planning model id, and because embedded-runtime imported the
+    new workflow-service trait from the crate root instead of the workflow
+    module. Both were corrected before final verification.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_source_snapshot --lib`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: connect hosted embedded-runtime startup to the paired
+    resource-backed dispatch dependency bundle, then continue toward the
+    first complete inference path. Option 3 remains scheduled after that path:
+    promote the validated source-fact snapshot into durable
+    readiness/admission task state before restart/replay, cancellation
+    recovery, duplicate-dispatch prevention, or production-grade recovery
+    semantics.
 
 ### Traceability Links
 

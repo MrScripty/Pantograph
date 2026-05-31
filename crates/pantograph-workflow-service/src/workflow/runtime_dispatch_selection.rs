@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use pantograph_dependency_planning::{
     DependencyEnvironmentRef, DependencyPlanningContractError, DependencyReadinessProofEnvelope,
     DeviceIntentId, PumasModelRef, RuntimeIntentId,
@@ -14,6 +15,21 @@ use thiserror::Error;
 use super::{WorkflowSchedulerTask, WorkflowServiceError};
 
 pub const WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION: u16 = 1;
+
+/// Workflow-service pre-dispatch refresh boundary for runtime dispatch sources.
+///
+/// Implementations may refresh already-owned source snapshots before the
+/// synchronous candidate provider is called. Workflow-service owns the
+/// orchestration point, but not Pumas/runtime-registry source ownership.
+#[async_trait]
+pub trait WorkflowRuntimeDispatchSourceRefresher: Send + Sync {
+    async fn refresh_runtime_dispatch_sources(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &DependencyReadinessProofEnvelope,
+    ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError>;
+}
 
 /// Workflow-service provider boundary for runtime dispatch candidates.
 ///
@@ -93,6 +109,21 @@ impl TryFrom<WorkflowRuntimeDispatchCandidateFactBundle>
 #[derive(Debug, Default)]
 pub(crate) struct NoRuntimeDispatchCandidatesProvider;
 
+#[derive(Debug, Default)]
+pub(crate) struct NoRuntimeDispatchSourceRefresher;
+
+#[async_trait]
+impl WorkflowRuntimeDispatchSourceRefresher for NoRuntimeDispatchSourceRefresher {
+    async fn refresh_runtime_dispatch_sources(
+        &self,
+        _task: &WorkflowSchedulerTask,
+        _ready_record: &SchedulerTaskStateRecord,
+        _readiness_proof: &DependencyReadinessProofEnvelope,
+    ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+        Ok(())
+    }
+}
+
 impl WorkflowRuntimeDispatchCandidateProvider for NoRuntimeDispatchCandidatesProvider {
     fn runtime_dispatch_candidates(
         &self,
@@ -142,6 +173,13 @@ pub(crate) fn runtime_dispatch_selection_request(
 #[non_exhaustive]
 pub enum WorkflowRuntimeDispatchCandidateProviderError {
     #[error("runtime dispatch candidate provider failed: {message}")]
+    Failed { message: String },
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum WorkflowRuntimeDispatchSourceRefreshError {
+    #[error("runtime dispatch source refresh failed: {message}")]
     Failed { message: String },
 }
 

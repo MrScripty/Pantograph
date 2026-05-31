@@ -36,6 +36,7 @@ use pantograph_scheduler::{
 use super::*;
 use crate::workflow::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+    WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
 };
 use crate::{
     GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
@@ -410,6 +411,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let host = RuntimeInferenceSessionHost::new();
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
     let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
@@ -418,6 +420,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             dependency_readiness_provider.clone(),
         ))
         .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+        .with_runtime_dispatch_source_refresher(source_refresher.clone())
         .with_runtime_dispatch_candidate_provider(Arc::new(
             SingleCanonicalRuntimeDispatchCandidateProvider,
         ))
@@ -526,6 +529,10 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     assert!(lifecycle_events
         .iter()
         .all(|event| event.reservation_lease_id.as_str() == "reservation.runtime_session_test"));
+    assert_eq!(
+        source_refresher.model_refs(),
+        vec!["image/example/tiny-diffusion"]
+    );
 }
 
 #[tokio::test]
@@ -2726,6 +2733,43 @@ impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
             state: ReservationLifecycleApplicationState::Applied,
             diagnostics: Vec::new(),
         })
+    }
+}
+
+#[derive(Default)]
+struct RecordingRuntimeDispatchSourceRefresher {
+    model_refs: Mutex<Vec<String>>,
+}
+
+impl RecordingRuntimeDispatchSourceRefresher {
+    fn model_refs(&self) -> Vec<String> {
+        self.model_refs
+            .lock()
+            .expect("runtime dispatch source refresh lock")
+            .clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl WorkflowRuntimeDispatchSourceRefresher for RecordingRuntimeDispatchSourceRefresher {
+    async fn refresh_runtime_dispatch_sources(
+        &self,
+        _task: &WorkflowSchedulerTask,
+        _ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &DependencyReadinessProofEnvelope,
+    ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+        self.model_refs
+            .lock()
+            .expect("runtime dispatch source refresh lock")
+            .push(
+                readiness_proof
+                    .preflight_result
+                    .identity_key
+                    .model_ref
+                    .model_id
+                    .clone(),
+            );
+        Ok(())
     }
 }
 

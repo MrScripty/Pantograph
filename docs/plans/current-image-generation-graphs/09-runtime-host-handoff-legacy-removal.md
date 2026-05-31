@@ -1560,13 +1560,22 @@ Next implementation sequence:
    returns typed rejected responses for missing/unavailable load targets, and
    does not call legacy node-engine, whole-run, `ModelRefV2`, graph-path, or
    reduced-plan execution paths.
-11. After the first complete inference path works end-to-end, implement option
+11. Follow-on: add a workflow-service pre-dispatch source-refresh port and
+   embedded-runtime implementation so async source owners can refresh the
+   versioned snapshot before the synchronous candidate provider runs.
+   Completed 2026-05-30: `WorkflowRuntimeDispatchSourceRefresher` is called
+   after dependency-readiness admission and before candidate collection, while
+   `EmbeddedRuntimeDispatchSourceFactRefresher` refreshes the shared snapshot
+   store that the resource-backed provider reads. Workflow-service owns only
+   the orchestration point; Pumas/runtime-registry source ownership remains in
+   embedded-runtime.
+12. After the first complete inference path works end-to-end, implement option
    3 by promoting the validated dispatch source-fact snapshot into
    readiness/admission task state with persistence, freshness, drift, and
    invalidation diagnostics before relying on restart/replay,
    duplicate-dispatch prevention, cancellation recovery, durable multi-run
    scheduling, or production-grade recovery semantics.
-12. Follow-on: add a device-source slice so unconstrained tasks receive
+13. Follow-on: add a device-source slice so unconstrained tasks receive
    selected device candidates from runtime capability facts instead of provider
    guesses.
 

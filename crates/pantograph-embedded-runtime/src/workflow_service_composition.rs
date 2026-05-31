@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use pantograph_runtime_host_contracts::{ReservationLifecyclePort, RuntimeHostExecutionPort};
-use pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProvider;
+use pantograph_workflow_service::workflow::{
+    WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchSourceRefresher,
+};
 use pantograph_workflow_service::{
     WorkflowDependencyReadinessComponents, WorkflowService, WorkflowServiceError,
 };
@@ -10,7 +12,9 @@ use crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource;
 use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
 use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
 use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
-use crate::runtime_dispatch_source_snapshot::EmbeddedRuntimeDispatchSourceFactSnapshotStore;
+use crate::runtime_dispatch_source_snapshot::{
+    EmbeddedRuntimeDispatchSourceFactRefresher, EmbeddedRuntimeDispatchSourceFactSnapshotStore,
+};
 use crate::SharedWorkflowService;
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
@@ -28,6 +32,7 @@ pub(crate) struct EmbeddedWorkflowServiceComposition {
 #[derive(Clone)]
 pub(crate) struct EmbeddedWorkflowServiceDispatchDependencies {
     runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
+    runtime_dispatch_source_refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
     runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
 }
@@ -36,11 +41,13 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     #[must_use]
     pub(crate) fn new(
         runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
+        runtime_dispatch_source_refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
         runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
         reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
     ) -> Self {
         Self {
             runtime_dispatch_candidate_provider,
+            runtime_dispatch_source_refresher,
             runtime_host_execution_port,
             reservation_lifecycle_port,
         }
@@ -60,11 +67,14 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
             runtime_capability_source,
             max_snapshot_age_ms,
         );
-        let provider =
-            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(snapshot_store)
-                .with_resource_facts_source(resource_facts_source);
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(
+            snapshot_store.clone(),
+        )
+        .with_resource_facts_source(resource_facts_source);
+        let refresher = EmbeddedRuntimeDispatchSourceFactRefresher::new(snapshot_store);
         Self::new(
             Arc::new(provider),
+            Arc::new(refresher),
             runtime_host_execution_port,
             reservation_lifecycle_port,
         )
@@ -73,6 +83,7 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     #[must_use]
     fn configure_workflow_service(self, service: WorkflowService) -> WorkflowService {
         service
+            .with_runtime_dispatch_source_refresher(self.runtime_dispatch_source_refresher)
             .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider)
             .with_runtime_host_execution_port(self.runtime_host_execution_port)
             .with_reservation_lifecycle_port(self.reservation_lifecycle_port)
@@ -127,14 +138,34 @@ impl EmbeddedWorkflowServiceComposition {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
         RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     };
     use pantograph_runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
+    use pantograph_scheduler::SchedulerTaskStateRecord;
+    use pantograph_workflow_service::workflow::{
+        WorkflowRuntimeDispatchSourceRefreshError, WorkflowSchedulerTask,
+    };
 
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
+
+    #[derive(Debug)]
+    struct AcceptingDispatchSourceRefresher;
+
+    #[async_trait]
+    impl WorkflowRuntimeDispatchSourceRefresher for AcceptingDispatchSourceRefresher {
+        async fn refresh_runtime_dispatch_sources(
+            &self,
+            _task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            _readiness_proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+            Ok(())
+        }
+    }
 
     #[async_trait]
     impl RuntimeHostExecutionPort for RejectingRuntimeHostPort {
@@ -213,6 +244,7 @@ mod tests {
     fn builds_with_paired_runtime_dispatch_dependencies() {
         let dependencies = EmbeddedWorkflowServiceDispatchDependencies::new(
             Arc::new(EmbeddedRuntimeDispatchCandidateProvider::new()),
+            Arc::new(AcceptingDispatchSourceRefresher),
             Arc::new(RejectingRuntimeHostPort),
             Arc::new(RejectingReservationLifecyclePort),
         );

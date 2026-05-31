@@ -141,12 +141,14 @@ pub(crate) use self::non_runtime_task_adapter::{
 };
 pub(crate) use self::runtime_dispatch_selection::{
     runtime_dispatch_selection_request, NoRuntimeDispatchCandidatesProvider,
+    NoRuntimeDispatchSourceRefresher,
 };
 pub use self::runtime_dispatch_selection::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
-    WorkflowRuntimeDispatchCandidateSet,
+    WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchSourceRefreshError,
+    WorkflowRuntimeDispatchSourceRefresher,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 pub(crate) use self::runtime_host_task_input_mapping::{
@@ -265,6 +267,7 @@ pub struct WorkflowService {
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
     scheduler_task_orchestrator: WorkflowSchedulerTaskOrchestrator,
     dependency_readiness_provider: Arc<dyn WorkflowDependencyReadinessProvider>,
+    runtime_dispatch_source_refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
     runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     dependency_readiness_work_queue: Arc<DependencyReadinessWorkQueue>,
     dependency_requirements_registry: Arc<InMemoryDependencyRequirementsRegistry>,

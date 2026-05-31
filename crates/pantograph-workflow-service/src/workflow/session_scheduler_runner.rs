@@ -455,6 +455,19 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 .clone();
             let dispatch_context =
                 ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
+            self.service
+                .runtime_dispatch_source_refresher
+                .refresh_runtime_dispatch_sources(
+                    &dispatch_context.task,
+                    &dispatch_context.ready_record,
+                    &readiness_proof,
+                )
+                .await
+                .map_err(|error| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "runtime dispatch source refresh failed: {error}"
+                    ))
+                })?;
             let candidate_set = self
                 .service
                 .runtime_dispatch_candidate_provider

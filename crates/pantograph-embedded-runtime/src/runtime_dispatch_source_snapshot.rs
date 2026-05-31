@@ -1,6 +1,13 @@
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use async_trait::async_trait;
 use pantograph_dependency_planning::PumasModelRef;
+use pantograph_scheduler::SchedulerTaskStateRecord;
+use pantograph_workflow_service::workflow::{
+    WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
+    WorkflowSchedulerTask,
+};
 
 use crate::pumas_dispatch_package_facts::{
     PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsSource,
@@ -63,6 +70,11 @@ pub(crate) struct EmbeddedRuntimeDispatchSourceFactSnapshotStore {
 struct EmbeddedRuntimeDispatchSourceFactSnapshotState {
     next_snapshot_version: u64,
     current_snapshot: Option<EmbeddedRuntimeDispatchCandidateSourceSnapshot>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EmbeddedRuntimeDispatchSourceFactRefresher {
+    snapshot_store: EmbeddedRuntimeDispatchSourceFactSnapshotStore,
 }
 
 impl EmbeddedRuntimeDispatchSourceFactSnapshotStore {
@@ -137,6 +149,31 @@ impl EmbeddedRuntimeDispatchSourceFactSnapshotStore {
     }
 }
 
+impl EmbeddedRuntimeDispatchSourceFactRefresher {
+    #[must_use]
+    pub(crate) fn new(snapshot_store: EmbeddedRuntimeDispatchSourceFactSnapshotStore) -> Self {
+        Self { snapshot_store }
+    }
+}
+
+#[async_trait]
+impl WorkflowRuntimeDispatchSourceRefresher for EmbeddedRuntimeDispatchSourceFactRefresher {
+    async fn refresh_runtime_dispatch_sources(
+        &self,
+        _task: &WorkflowSchedulerTask,
+        _ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &pantograph_dependency_planning::DependencyReadinessProofEnvelope,
+    ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+        self.snapshot_store
+            .refresh_for_model_ref(
+                &readiness_proof.preflight_result.identity_key.model_ref,
+                current_time_ms(),
+            )
+            .await;
+        Ok(())
+    }
+}
+
 fn validate_snapshot_for_dispatch(
     mut snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     model_ref: &PumasModelRef,
@@ -177,6 +214,13 @@ fn validate_snapshot_for_dispatch(
     snapshot.runtime_capability_facts = None;
     snapshot.diagnostics.extend(diagnostics);
     snapshot
+}
+
+fn current_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 fn validate_model_ref(
