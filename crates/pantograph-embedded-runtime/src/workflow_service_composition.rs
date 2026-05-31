@@ -97,32 +97,12 @@ impl EmbeddedWorkflowServiceComposition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
     use async_trait::async_trait;
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
         RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     };
-    use pantograph_workflow_service::workflow::{
-        WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
-    };
-    use pantograph_workflow_service::WorkflowSchedulerTask;
-
-    #[derive(Debug)]
-    struct EmptyCandidateProvider;
-
-    impl WorkflowRuntimeDispatchCandidateProvider for EmptyCandidateProvider {
-        fn runtime_dispatch_candidates(
-            &self,
-            _task: &WorkflowSchedulerTask,
-            _ready_record: &pantograph_scheduler::SchedulerTaskStateRecord,
-            _readiness_proof: &pantograph_dependency_planning::DependencyReadinessProofEnvelope,
-        ) -> Result<
-            WorkflowRuntimeDispatchCandidateSet,
-            WorkflowRuntimeDispatchCandidateProviderError,
-        > {
-            Ok(WorkflowRuntimeDispatchCandidateSet::default())
-        }
-    }
 
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
@@ -203,7 +183,7 @@ mod tests {
     #[test]
     fn builds_with_paired_runtime_dispatch_dependencies() {
         let dependencies = EmbeddedWorkflowServiceDispatchDependencies::new(
-            Arc::new(EmptyCandidateProvider),
+            Arc::new(EmbeddedRuntimeDispatchCandidateProvider::new()),
             Arc::new(RejectingRuntimeHostPort),
             Arc::new(RejectingReservationLifecyclePort),
         );

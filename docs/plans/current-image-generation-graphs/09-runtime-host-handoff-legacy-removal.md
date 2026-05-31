@@ -1308,6 +1308,11 @@ Next implementation sequence:
    `EmbeddedWorkflowServiceDispatchDependencies` together with the runtime-host
    execution port and reservation lifecycle port, proving the composition
    factory enforces paired production wiring.
+   Started 2026-05-30: the composition bundle test now uses the real
+   `EmbeddedRuntimeDispatchCandidateProvider` with paired runtime-host and
+   reservation lifecycle ports, proving the provider fits the existing paired
+   dependency API. Hosted production construction still remains unchanged until
+   concrete runtime-host wiring is supplied.
 4. Add the source-input contract for already-available/staged Pumas package
    facts so the provider can remain synchronous. If implementation discovers
    that package facts can only be fetched asynchronously at selection time,
@@ -1340,6 +1345,21 @@ Discovered follow-up: the provider is intentionally staged with
 `EmbeddedWorkflowServiceDispatchDependencies`. It still emits no non-empty
 candidate sets; the next slice must connect the fail-closed provider through
 the paired composition dependency bundle before any real fact-joining work.
+
+2026-05-30 paired fail-closed provider composition slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`
+- `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Discovered follow-up: this slice proves the fail-closed provider can be wired
+through the complete dependency bundle, but it intentionally uses rejecting
+test ports and does not change hosted production composition. The next
+production slice still needs a real runtime-host port or a selected
+standards-compliant fail-closed embedded-runtime runtime-host port before
+hosted construction can pass a complete bundle.
 
 ## Verification Strategy
 

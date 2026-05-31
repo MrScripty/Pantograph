@@ -18970,6 +18970,33 @@ Worker rules:
     `EmbeddedWorkflowServiceDispatchDependencies` with the runtime-host port
     and reservation lifecycle port, then add staged package-fact inputs before
     emitting any non-empty resource-backed candidate sets.
+- 2026-05-30 paired fail-closed provider composition slice:
+  - Slice scope: embedded-runtime workflow-service composition tests and plan
+    logs only.
+  - Implementation: replaced the composition test's local empty candidate
+    provider with the real `EmbeddedRuntimeDispatchCandidateProvider`, proving
+    the fail-closed provider can be supplied through the complete
+    `EmbeddedWorkflowServiceDispatchDependencies` bundle with runtime-host and
+    reservation lifecycle ports.
+  - Test coverage: reran the workflow-service composition tests and the
+    dispatch candidate provider tests together as focused coverage for the
+    paired boundary.
+  - No-fallback/no-legacy result: the provider still emits no candidates and
+    hosted production construction remains unchanged. No graph paths, reduced
+    execution plans, display strings, `ModelRefV2`, or compatibility preflight
+    paths are accepted as candidate evidence.
+  - Standards result: the factory remains a wiring boundary while provider
+    behavior stays in the dedicated provider module. The test uses rejecting
+    ports, so no hidden runtime-host fallback path is introduced.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: select or implement the concrete hosted
+    runtime-host execution port needed to pass a complete production dependency
+    bundle; otherwise hosted composition must stay on fail-closed defaults.
 
 ### Traceability Links
 
