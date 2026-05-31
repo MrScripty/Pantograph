@@ -19505,6 +19505,38 @@ Worker rules:
     input/output bundle that returns the shared service and owned lifecycle
     handles, then migrate Tauri startup/headless runtime construction to
     consume that bundle and manage only returned handles.
+- 2026-05-31 hosted composition bundle contract slice:
+  - Smallest useful slice: add the embedded-runtime hosted composition
+    input/output bundle contract and lifecycle handle ownership without
+    migrating Tauri startup or exposing a new successful hosted dispatch path.
+  - Allowed files touched:
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `09-runtime-host-handoff-legacy-removal.md`, and this execution log.
+  - Implementation: added
+    `EmbeddedHostedWorkflowServiceCompositionInput` and
+    `EmbeddedHostedWorkflowServiceCompositionOutput`. The bundle builds the
+    resource-backed workflow service before sharing, starts the
+    dependency-readiness snapshot producer under the same embedded-runtime
+    composition owner after service construction succeeds, and returns both
+    the shared service and producer handle to the future hosted runtime
+    composition caller.
+  - No-fallback/no-legacy result: the slice does not alter Tauri startup,
+    does not add post-share dispatch setters, does not route runtime dispatch
+    through `ModelRefV2`, graph paths, reduced execution plans, or legacy
+    node-engine inference launch, and fails closed with typed errors when
+    owner Pumas access or valid producer configuration is missing.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+    `cargo check` still reports the pre-existing workflow-service
+    `set_active_run_execution_plan` dead-code warning.
+  - Remaining follow-up: migrate `src-tauri/src/app_setup.rs` and
+    `src-tauri/src/workflow/headless_runtime.rs` onto the hosted composition
+    bundle so Tauri supplies infrastructure inputs and manages returned
+    handles without owning Pumas facts, runtime-registry policy, or
+    runtime-host dispatch decisions. Remove the temporary staged
+    `#[allow(dead_code)]` once the bundle is used by hosted startup.
 
 ### Traceability Links
 

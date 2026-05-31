@@ -21,7 +21,11 @@ use crate::runtime_dispatch_source_snapshot::{
 use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
 use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
-use crate::{runtime_registry::HostRuntimeRegistryController, SharedWorkflowService};
+use crate::{
+    runtime_registry::HostRuntimeRegistryController, EmbeddedDependencyReadinessSnapshotProducer,
+    EmbeddedDependencyReadinessSnapshotProducerConfig,
+    EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
+};
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
 ///
@@ -71,6 +75,49 @@ impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
     pub(crate) fn with_workflow_service(mut self, workflow_service: WorkflowService) -> Self {
         self.workflow_service = workflow_service;
         self
+    }
+}
+
+pub(crate) struct EmbeddedHostedWorkflowServiceCompositionInput<C> {
+    pub(crate) factory_input: EmbeddedHostedWorkflowServiceFactoryInput<C>,
+    pub(crate) dependency_readiness_runtime_handle: tokio::runtime::Handle,
+    pub(crate) dependency_readiness_producer_config:
+        EmbeddedDependencyReadinessSnapshotProducerConfig,
+}
+
+impl<C> EmbeddedHostedWorkflowServiceCompositionInput<C> {
+    pub(crate) fn new(
+        factory_input: EmbeddedHostedWorkflowServiceFactoryInput<C>,
+        dependency_readiness_runtime_handle: tokio::runtime::Handle,
+    ) -> Self {
+        Self {
+            factory_input,
+            dependency_readiness_runtime_handle,
+            dependency_readiness_producer_config:
+                EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_dependency_readiness_producer_config(
+        mut self,
+        config: EmbeddedDependencyReadinessSnapshotProducerConfig,
+    ) -> Self {
+        self.dependency_readiness_producer_config = config;
+        self
+    }
+}
+
+pub(crate) struct EmbeddedHostedWorkflowServiceCompositionOutput {
+    pub(crate) workflow_service: SharedWorkflowService,
+    pub(crate) dependency_readiness_snapshot_producer:
+        EmbeddedDependencyReadinessSnapshotProducerHandle,
+}
+
+impl EmbeddedHostedWorkflowServiceCompositionOutput {
+    #[must_use]
+    pub(crate) fn workflow_service(&self) -> &SharedWorkflowService {
+        &self.workflow_service
     }
 }
 
@@ -207,6 +254,73 @@ impl EmbeddedWorkflowServiceComposition {
                 input.workflow_service,
                 input.max_loaded_sessions,
             )
+    }
+
+    pub(crate) fn resource_backed_hosted_bundle<C>(
+        input: EmbeddedHostedWorkflowServiceCompositionInput<C>,
+    ) -> Result<EmbeddedHostedWorkflowServiceCompositionOutput, EmbeddedRuntimeError>
+    where
+        C: HostRuntimeRegistryController + Send + Sync + 'static,
+    {
+        let pumas_api = match input.factory_input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(api) => api.clone(),
+            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+                return Err(EmbeddedRuntimeError::Initialization {
+                    message: format!(
+                        "hosted resource-backed workflow-service composition requires Pumas owner selector access, got {} access",
+                        input.factory_input.pumas_selector_access.role_name()
+                    ),
+                });
+            }
+        };
+        let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
+        let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
+        let factory_input = input.factory_input;
+        let runtime_host_execution_port =
+            Arc::new(EmbeddedRuntimeHostExecutionPort::with_load_target_resolver(
+                RuntimeHostPumasLoadTargetResolver::new(pumas_api),
+            ));
+        let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
+            factory_input.runtime_registry.clone(),
+            factory_input.runtime_registry_controller,
+        ));
+        let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
+            PumasDispatchPackageFactsSource::new(Some(factory_input.pumas_selector_access)),
+            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
+            RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
+            factory_input.max_dispatch_source_snapshot_age_ms,
+            runtime_host_execution_port,
+            reservation_lifecycle_port,
+        );
+        let scheduler_diagnostics_provider =
+            Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
+                factory_input.gateway,
+                factory_input.runtime_registry,
+            ));
+        let composition = Self::new()
+            .with_runtime_dispatch_dependencies(dispatch_dependencies)
+            .with_scheduler_diagnostics_provider(scheduler_diagnostics_provider);
+        let dependency_readiness = composition.dependency_readiness().clone();
+        let workflow_service = composition
+            .into_shared_configured_workflow_service(
+                factory_input.workflow_service,
+                factory_input.max_loaded_sessions,
+            )
+            .map_err(|error| EmbeddedRuntimeError::Initialization {
+                message: error.to_string(),
+            })?;
+        let dependency_readiness_snapshot_producer =
+            EmbeddedDependencyReadinessSnapshotProducer::new(
+                dependency_readiness.snapshot_provider(),
+                dependency_readiness.work_queue(),
+                dependency_readiness.requirements_registry(),
+            )
+            .with_config(dependency_readiness_producer_config)
+            .spawn(dependency_readiness_runtime_handle)?;
+        Ok(EmbeddedHostedWorkflowServiceCompositionOutput {
+            workflow_service,
+            dependency_readiness_snapshot_producer,
+        })
     }
 
     pub(crate) fn into_shared_workflow_service(
@@ -446,5 +560,84 @@ mod tests {
         assert!(error
             .to_string()
             .contains("requires Pumas owner selector access"));
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_bundle_returns_service_and_lifecycle_handle() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(WorkflowService::with_capacity_limits(2, 2));
+        let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+            factory_input,
+            tokio::runtime::Handle::current(),
+        );
+
+        let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input)
+            .expect("hosted resource-backed bundle should build");
+
+        assert!(Arc::strong_count(output.workflow_service()) >= 1);
+        output
+            .dependency_readiness_snapshot_producer
+            .shutdown()
+            .await;
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_bundle_rejects_invalid_producer_config_before_sharing() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        );
+        let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+            factory_input,
+            tokio::runtime::Handle::current(),
+        )
+        .with_dependency_readiness_producer_config(
+            EmbeddedDependencyReadinessSnapshotProducerConfig {
+                poll_interval: std::time::Duration::ZERO,
+            },
+        );
+
+        let error = match EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input) {
+            Ok(_) => panic!("invalid producer config must reject hosted bundle"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, EmbeddedRuntimeError::Config { .. }));
+        assert!(error
+            .to_string()
+            .contains("dependency-readiness snapshot producer poll interval"));
     }
 }

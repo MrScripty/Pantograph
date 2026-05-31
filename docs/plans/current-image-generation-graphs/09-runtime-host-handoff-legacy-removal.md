@@ -1717,12 +1717,24 @@ Next staged implementation sequence:
    The output must return the `SharedWorkflowService` plus lifecycle handles
    owned by the hosted runtime composition, including dependency-readiness
    producer handles when they are started.
+   Completed 2026-05-31 for the embedded-runtime bundle contract:
+   `EmbeddedHostedWorkflowServiceCompositionInput` and
+   `EmbeddedHostedWorkflowServiceCompositionOutput` now model the pre-share
+   resource-backed hosted composition boundary. The output returns the shared
+   service and dependency-readiness producer handle, and tests prove successful
+   bundle creation plus typed rejection for invalid producer configuration.
 2. Split service construction from lifecycle sidecars without exposing partial
    successful dispatch. Dispatch dependencies and scheduler diagnostics must
    be installed before sharing. Any sidecar that necessarily needs the shared
    service, such as projection refresh workers, must be started by the same
    hosted composition owner before commands are exposed and must not mutate
    runtime dispatch dependencies.
+   Partially completed 2026-05-31: dispatch dependencies and scheduler
+   diagnostics are installed before sharing, and the dependency-readiness
+   producer starts only after service construction succeeds so failed service
+   construction does not leak a background lifecycle handle. App-shell
+   sidecars such as projection refresh workers remain for the Tauri migration
+   slice.
 3. Migrate `src-tauri/src/app_setup.rs` and
    `src-tauri/src/workflow/headless_runtime.rs` so Tauri supplies
    infrastructure inputs and manages returned handles, but does not own Pumas
