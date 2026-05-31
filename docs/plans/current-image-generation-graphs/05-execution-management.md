@@ -19742,6 +19742,49 @@ Worker rules:
     service/extensions/resolver/lifecycle handle, then migrate
     `src-tauri/src/workflow/headless_runtime.rs` away from the successful
     resource-backed use of `hosted_with_default_python_runtime`.
+- 2026-05-31 Tauri hosted startup composition migration slice:
+  - Smallest useful slice: migrate desktop startup onto
+    `EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup`
+    without changing the headless runtime construction helper yet. This makes
+    hosted workflow-service sharing depend on the backend-owned startup
+    composition boundary while keeping runtime execution call sites stable for
+    the next slice.
+  - Allowed files touched: `src-tauri/src/app_setup.rs`,
+    `src-tauri/src/app_lifecycle.rs`, `src-tauri/src/workflow/commands.rs`,
+    `src-tauri/src/workflow/mod.rs`, `src-tauri/src/README.md`, and this plan
+    log.
+  - Implementation: Tauri now creates the unshared configured
+    `WorkflowService`, loads desktop config, creates the gateway/controller,
+    detects the Pumas setup path as infrastructure input, then calls the
+    embedded-runtime hosted startup composition before managing workflow
+    state. Tauri manages only returned handles: shared workflow service,
+    executor extensions, model dependency resolver, and dependency-readiness
+    snapshot producer. The old asynchronous `executor-extension-init` task and
+    Tauri-local dependency resolver/KV-cache installation were removed.
+    Window shutdown now also shuts down the returned dependency-readiness
+    producer handle.
+  - No-fallback/no-legacy result: no post-share runtime-dispatch setter was
+    added; Tauri no longer owns Pumas selector setup, model dependency resolver
+    installation, KV-cache extension wiring, or dependency-readiness
+    production. The slice still leaves `headless_runtime.rs` using
+    `EmbeddedRuntime::hosted_with_default_python_runtime`; this is a planned
+    remaining legacy removal and is not used to preserve the migrated startup
+    wiring.
+  - Focused tests/fixtures: no new Tauri unit fixture was added because this
+    slice changes the desktop composition root and lifecycle registration.
+    Verification used compile coverage of Tauri managed-state wiring plus the
+    existing embedded-runtime hosted-composition test suite as the focused
+    contract regression.
+  - Verification passed: `cargo fmt -- --check`, `cargo check -p pantograph`,
+    `cargo check -p pantograph --bins`,
+    `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+    and `git diff --check`. Checks still report pre-existing dead-code
+    warnings in workflow-service and Tauri workflow modules.
+  - Remaining follow-up: migrate `src-tauri/src/workflow/headless_runtime.rs`
+    away from the successful resource-backed use of
+    `EmbeddedRuntime::hosted_with_default_python_runtime`, then narrow or
+    rename that helper so it cannot be mistaken for canonical hosted dispatch
+    composition.
 
 ### Traceability Links
 

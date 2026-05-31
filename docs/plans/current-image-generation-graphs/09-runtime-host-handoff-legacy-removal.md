@@ -1774,6 +1774,15 @@ Next staged implementation sequence:
    sharing, installs shared extensions, KV-cache, and model dependency
    resolver wiring, invokes the hosted composition bundle, and returns
    lifecycle handles for the host to manage. Tauri migration remains pending.
+   Completed 2026-05-31 for the Tauri startup migration: `app_setup.rs` now
+   calls the hosted startup composition before managing workflow state and
+   manages the returned workflow service, extensions, dependency resolver, and
+   dependency-readiness producer handle. Tauri now supplies infrastructure
+   inputs only and no longer owns the asynchronous Pumas/executor-extension
+   initialization task. `app_lifecycle.rs` shuts down the returned
+   dependency-readiness producer handle during window close. Headless runtime
+   construction still needs the follow-up migration away from
+   `hosted_with_default_python_runtime`.
 4. Narrow or replace `EmbeddedRuntime::hosted_with_default_python_runtime`.
    It must not remain the successful resource-backed hosted path while it
    accepts an already shared `WorkflowService`. During migration it may remain

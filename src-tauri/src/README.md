@@ -52,6 +52,12 @@ Startup resource failures flow through `app_setup::run_app()` and the Tauri
 setup result with logged context instead of production `expect(...)` panics.
 Startup/setup async tasks are registered in `app_tasks.rs` and drained during
 window shutdown before runtime workers and model processes are stopped.
+Hosted workflow startup uses the embedded-runtime composition boundary before
+Tauri manages workflow state. Tauri supplies app paths, gateway/controller,
+runtime registry, runtime handle, and event sinks, while embedded-runtime owns
+Pumas selector setup, executor extension wiring, dependency resolver
+installation, dependency-readiness production, and resource-backed dispatch
+composition.
 Window shutdown also stops health monitoring and any tracked automatic recovery
 task before workflow cleanup and runtime process shutdown.
 Media conversion business logic is not owned by Tauri. If scheduler task
@@ -83,6 +89,11 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
   instead of panicking.
 - Startup/setup tasks spawned from the composition root must be tracked by the
   app task registry.
+- Hosted workflow startup must call the backend-owned embedded-runtime startup
+  composition before exposing workflow state to commands.
+- Tauri must only manage returned hosted startup handles; it must not derive
+  Pumas package facts, install runtime-dispatch dependencies, or own
+  dependency-readiness production policy.
 - Window shutdown must stop health and recovery background tasks before
   tearing down workflow runtimes and model processes.
 - Tauri-local DTOs should migrate toward shared backend contracts where

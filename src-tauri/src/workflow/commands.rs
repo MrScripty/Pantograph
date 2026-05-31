@@ -25,6 +25,9 @@ pub type SharedWorkflowService = Arc<pantograph_workflow_service::WorkflowServic
 /// Shared backend-owned stale workflow execution session cleanup worker.
 pub type SharedWorkflowExecutionSessionStaleCleanupWorker =
     Arc<pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupWorker>;
+/// Shared backend-owned dependency-readiness snapshot producer.
+pub type SharedDependencyReadinessSnapshotProducer =
+    Arc<pantograph_embedded_runtime::EmbeddedDependencyReadinessSnapshotProducerHandle>;
 /// Shared backend-owned diagnostics projection store.
 pub type SharedWorkflowDiagnosticsStore = Arc<super::diagnostics::WorkflowDiagnosticsStore>;
 /// Shared filesystem-backed workflow graph store.

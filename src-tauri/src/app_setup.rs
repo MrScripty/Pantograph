@@ -7,12 +7,17 @@ use crate::llm::{
     SharedRecoveryManager, SharedRuntimeRegistry,
 };
 use crate::project_root::resolve_project_root;
-use crate::workflow::{self, SharedModelDependencyResolver};
+use crate::workflow;
+use pantograph_embedded_runtime::{
+    EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupPumasSelectorSource,
+    EmbeddedWorkflowServiceComposition,
+};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 
 type AppStartupResult<T> = Result<T, Box<dyn std::error::Error>>;
+const HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS: u64 = 1_000;
 
 fn startup_error(message: impl Into<String>) -> Box<dyn std::error::Error> {
     Box::new(std::io::Error::other(message.into()))
@@ -80,21 +85,19 @@ pub fn run_app() -> AppStartupResult<()> {
             workflow_artifact_store_path
         ))
     })?;
-    let workflow_service: workflow::commands::SharedWorkflowService = Arc::new(
-        pantograph_workflow_service::WorkflowService::new()
-            .with_artifact_store(workflow_artifact_store)
-            .with_attribution_store(workflow_attribution_store)
-            .with_diagnostics_ledger(workflow_service_ledger)
-            .with_artifact_format_settings_path(
-                pantograph_data_dir.join("artifact-format-settings.json"),
-            )
-            .map_err(|error| {
-                startup_error(format!("failed to open artifact format settings: {error}"))
-            })?,
-    );
+    let workflow_service = pantograph_workflow_service::WorkflowService::new()
+        .with_artifact_store(workflow_artifact_store)
+        .with_attribution_store(workflow_attribution_store)
+        .with_diagnostics_ledger(workflow_service_ledger)
+        .with_artifact_format_settings_path(
+            pantograph_data_dir.join("artifact-format-settings.json"),
+        )
+        .map_err(|error| {
+            startup_error(format!("failed to open artifact format settings: {error}"))
+        })?;
     workflow::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &pantograph_data_dir,
-        workflow_service.as_ref(),
+        &workflow_service,
     )
     .map_err(|error| {
         startup_error(format!(
@@ -151,21 +154,10 @@ pub fn run_app() -> AppStartupResult<()> {
         Arc::new(llm::recovery::RecoveryManager::default());
     let app_task_registry: SharedAppTaskRegistry = Arc::new(AppTaskRegistry::new());
 
-    // Create shared executor extensions (populated async in .setup())
-    let shared_extensions: workflow::commands::SharedExtensions =
-        Arc::new(RwLock::new(node_engine::ExecutorExtensions::new()));
-
-    // Dependency resolver used by execution preflight and workflow dependency commands.
-    let model_dependency_resolver: SharedModelDependencyResolver = Arc::new(
-        workflow::model_dependencies::TauriModelDependencyResolver::new(
-            shared_extensions.clone(),
-            project_root.clone(),
-        ),
-    );
-
+    let startup_project_root = project_root.clone();
+    let startup_runtime_registry = runtime_registry.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(workflow_service.clone())
         .manage(workflow_diagnostics_store)
         .manage(workflow_graph_store)
         .manage(orchestration_store)
@@ -174,36 +166,139 @@ pub fn run_app() -> AppStartupResult<()> {
         .manage(health_monitor)
         .manage(recovery_manager)
         .manage(app_task_registry.clone())
-        .manage(shared_extensions.clone())
-        .manage(model_dependency_resolver.clone())
         .setup({
-            let shared_extensions = shared_extensions.clone();
-            let model_dependency_resolver = model_dependency_resolver.clone();
-            let workflow_service = workflow_service.clone();
             let app_task_registry = app_task_registry.clone();
+            let runtime_registry = startup_runtime_registry.clone();
+            let project_root = startup_project_root.clone();
             move |app| {
-                let workflow_service_for_cleanup = workflow_service.clone();
                 let runtime_handle = tauri::async_runtime::handle().inner().clone();
-                let workflow_execution_session_cleanup_worker =
-                    workflow_service_for_cleanup
-                        .clone()
-                        .spawn_workflow_execution_session_stale_cleanup_worker_with_handle(
-                            pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupWorkerConfig::default(
-                            ),
-                            runtime_handle,
-                        )
-                        .map_err(|error| {
-                            startup_error(format!(
-                                "failed to start workflow execution session stale cleanup worker: {error}"
-                            ))
-                        })?;
-                let workflow_execution_session_cleanup_worker: workflow::commands::SharedWorkflowExecutionSessionStaleCleanupWorker =
-                    Arc::new(workflow_execution_session_cleanup_worker);
-                app.manage(workflow_execution_session_cleanup_worker);
-
                 let app_data_dir = app.path().app_data_dir().map_err(|error| {
                     startup_error(format!("failed to resolve app data dir: {error}"))
                 })?;
+
+                if let Err(err) =
+                    inference::reconcile_interrupted_managed_runtime_jobs(&app_data_dir)
+                {
+                    log::warn!("Failed to reconcile interrupted managed runtime jobs: {err}");
+                }
+
+                // Clean up any lingering sidecar processes from previous runs
+                if let Err(err) = inference::LlamaServer::cleanup_stale_sidecar(&app_data_dir) {
+                    log::warn!("Failed to clean up stale sidecar: {}", err);
+                }
+
+                // Create process spawner and inference gateway
+                let spawner = llm::process_tauri::create_spawner(app.handle().clone());
+                let gateway: SharedGateway = Arc::new(InferenceGateway::new(spawner));
+                tauri::async_runtime::block_on(async { gateway.init().await });
+                app.manage(gateway.clone());
+
+                let project_data_dir = project_root.join(DATA_DIR);
+
+                // Create the data directory if it doesn't exist
+                if !project_data_dir.exists() {
+                    match std::fs::create_dir_all(&project_data_dir) {
+                        Ok(()) => {
+                            log::info!("Created project data directory: {:?}", project_data_dir);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to create data directory {:?}: {}. Some features may not work.", project_data_dir, e);
+                        }
+                    }
+                }
+
+                // Initialize RAG manager with project data directory
+                let rag_manager = create_rag_manager(project_data_dir);
+                app.manage(rag_manager);
+
+                let kv_cache_dir = app_data_dir.join("kv_cache");
+                let config = tauri::async_runtime::block_on(async {
+                    match AppConfig::load(&app_data_dir).await {
+                        Ok(config) => {
+                            log::info!("Loaded app configuration");
+                            config
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to load config, using defaults: {}", e);
+                            AppConfig::default()
+                        }
+                    }
+                });
+                let max_loaded_sessions = config.workflow.max_loaded_sessions;
+                let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
+                app.manage(shared_config);
+
+                // Prefer the sibling Pumas release build dir when available, then fall back to the launcher root.
+                let pumas_launcher_root = project_root
+                    .parent()
+                    .map(|parent| parent.join("Pumas-Library"))
+                    .filter(|p| p.exists());
+                let pumas_release_dir = pumas_launcher_root
+                    .as_ref()
+                    .map(|root| root.join("rust").join("target").join("release"))
+                    .filter(|p| p.exists());
+                if let Some(ref p) = pumas_release_dir {
+                    log::info!("Detected sibling Pumas release dir at {:?}", p);
+                } else if let Some(ref p) = pumas_launcher_root {
+                    log::info!("Detected sibling Pumas-Library at {:?}", p);
+                }
+                let pumas_library_path = pumas_release_dir.or(pumas_launcher_root);
+
+                let startup_input = EmbeddedHostedStartupCompositionInput::new(
+                    runtime_registry.clone(),
+                    gateway.clone(),
+                    gateway.inner_arc(),
+                    Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(
+                        pumas_library_path,
+                    )),
+                    project_root.clone(),
+                    kv_cache_dir,
+                    runtime_handle.clone(),
+                    max_loaded_sessions,
+                    HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
+                )
+                .with_workflow_service(workflow_service);
+                let startup_output = tauri::async_runtime::block_on(
+                    EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(
+                        startup_input,
+                    ),
+                )
+                .map_err(|error| {
+                    startup_error(format!(
+                        "failed to compose hosted workflow startup boundary: {error}"
+                    ))
+                })?;
+                let workflow_service = startup_output.workflow_service;
+                let shared_extensions = startup_output.shared_extensions;
+                let model_dependency_resolver = startup_output.model_dependency_resolver;
+                let dependency_readiness_snapshot_producer: workflow::commands::SharedDependencyReadinessSnapshotProducer =
+                    Arc::new(startup_output.dependency_readiness_snapshot_producer);
+
+                app.manage(workflow_service.clone());
+                app.manage(shared_extensions);
+                app.manage(model_dependency_resolver.clone());
+                app.manage(dependency_readiness_snapshot_producer);
+
+                let dependency_event_app = app.handle().clone();
+                model_dependency_resolver.set_activity_emitter(Arc::new(move |event| {
+                    let _ = dependency_event_app.emit("dependency-activity", &event);
+                }));
+
+                let workflow_execution_session_cleanup_worker = workflow_service
+                    .clone()
+                    .spawn_workflow_execution_session_stale_cleanup_worker_with_handle(
+                        pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupWorkerConfig::default(
+                        ),
+                        runtime_handle,
+                    )
+                    .map_err(|error| {
+                        startup_error(format!(
+                            "failed to start workflow execution session stale cleanup worker: {error}"
+                        ))
+                    })?;
+                let workflow_execution_session_cleanup_worker: workflow::commands::SharedWorkflowExecutionSessionStaleCleanupWorker =
+                    Arc::new(workflow_execution_session_cleanup_worker);
+                app.manage(workflow_execution_session_cleanup_worker);
 
                 let projection_invalidation_bridge =
                     workflow::projection_invalidation_bridge::WorkflowDiagnosticsProjectionInvalidationBridge::start(
@@ -254,121 +349,6 @@ pub fn run_app() -> AppStartupResult<()> {
                     )),
                 );
                 app.manage(validation_lifecycle_bridge);
-
-                if let Err(err) =
-                    inference::reconcile_interrupted_managed_runtime_jobs(&app_data_dir)
-                {
-                    log::warn!("Failed to reconcile interrupted managed runtime jobs: {err}");
-                }
-
-                // Clean up any lingering sidecar processes from previous runs
-                if let Err(err) = inference::LlamaServer::cleanup_stale_sidecar(&app_data_dir) {
-                    log::warn!("Failed to clean up stale sidecar: {}", err);
-                }
-
-                // Create process spawner and inference gateway
-                let spawner = llm::process_tauri::create_spawner(app.handle().clone());
-                let gateway: SharedGateway = Arc::new(InferenceGateway::new(spawner));
-                tauri::async_runtime::block_on(async { gateway.init().await });
-                app.manage(gateway);
-
-                let dependency_event_app = app.handle().clone();
-                model_dependency_resolver.set_activity_emitter(Arc::new(move |event| {
-                    let _ = dependency_event_app.emit("dependency-activity", &event);
-                }));
-
-                let project_root = resolve_project_root().map_err(|error| {
-                    startup_error(format!(
-                        "failed to resolve Pantograph project root during setup: {error}"
-                    ))
-                })?;
-                let project_data_dir = project_root.join(DATA_DIR);
-
-                // Create the data directory if it doesn't exist
-                if !project_data_dir.exists() {
-                    match std::fs::create_dir_all(&project_data_dir) {
-                        Ok(()) => {
-                            log::info!("Created project data directory: {:?}", project_data_dir);
-                        }
-                        Err(e) => {
-                            log::error!("Failed to create data directory {:?}: {}. Some features may not work.", project_data_dir, e);
-                        }
-                    }
-                }
-
-                // Initialize RAG manager with project data directory
-                let rag_manager = create_rag_manager(project_data_dir);
-                app.manage(rag_manager);
-
-                let kv_cache_dir = app_data_dir.join("kv_cache");
-                let config = tauri::async_runtime::block_on(async {
-                    match AppConfig::load(&app_data_dir).await {
-                        Ok(config) => {
-                            log::info!("Loaded app configuration");
-                            config
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to load config, using defaults: {}", e);
-                            AppConfig::default()
-                        }
-                    }
-                });
-                workflow_service
-                    .set_loaded_runtime_capacity_limit(config.workflow.max_loaded_sessions)
-                    .map_err(|error| {
-                        startup_error(format!("failed to apply workflow runtime config: {error}"))
-                    })?;
-                let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
-                app.manage(shared_config);
-
-                // Initialize executor extensions (PumasApi etc.) asynchronously.
-                // Prefer the sibling Pumas release build dir when available, then fall back
-                // to the launcher root.
-                let pumas_launcher_root = project_root
-                    .parent()
-                    .map(|parent| parent.join("Pumas-Library"))
-                    .filter(|p| p.exists());
-                let pumas_release_dir = pumas_launcher_root
-                    .as_ref()
-                    .map(|root| root.join("rust").join("target").join("release"))
-                    .filter(|p| p.exists());
-                if let Some(ref p) = pumas_release_dir {
-                    log::info!("Detected sibling Pumas release dir at {:?}", p);
-                } else if let Some(ref p) = pumas_launcher_root {
-                    log::info!("Detected sibling Pumas-Library at {:?}", p);
-                }
-                let pumas_library_path = pumas_release_dir.or(pumas_launcher_root);
-
-                // Register the dependency resolver synchronously to avoid startup races
-                // where model execution can happen before async extension setup finishes.
-                tauri::async_runtime::block_on(async {
-                    let resolver_trait: Arc<dyn node_engine::ModelDependencyResolver> =
-                        model_dependency_resolver.clone();
-                    let mut ext = shared_extensions.write().await;
-                    ext.set(
-                        node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-                        resolver_trait,
-                    );
-                });
-
-                let ext_init = shared_extensions.clone();
-                let extension_init_task = tauri::async_runtime::spawn(async move {
-                    let mut ext = ext_init.write().await;
-                    workflow_nodes::setup_extensions_with_path(
-                        &mut ext,
-                        pumas_library_path.as_deref(),
-                    )
-                    .await;
-
-                    // Initialize KV cache store for cache save/load/truncate nodes
-                    let kv_store = std::sync::Arc::new(inference::kv_cache::KvCacheStore::new(
-                        kv_cache_dir,
-                        inference::kv_cache::StoragePolicy::MemoryAndDisk,
-                    ));
-                    ext.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
-                    log::info!("Initialized KV cache store");
-                });
-                app_task_registry.track("executor-extension-init", extension_init_task);
 
                 Ok(())
             }

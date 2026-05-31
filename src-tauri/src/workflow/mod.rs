@@ -32,7 +32,6 @@ mod headless_diagnostics;
 pub mod headless_diagnostics_transport;
 mod headless_runtime;
 pub mod headless_workflow_commands;
-pub mod model_dependencies;
 pub mod orchestration;
 pub mod projection_invalidation_bridge;
 mod projection_invalidation_transport;
@@ -50,5 +49,4 @@ pub mod workflow_port_query_commands;
 
 // Re-export types used by main.rs
 pub use diagnostics::WorkflowDiagnosticsStore;
-pub use model_dependencies::SharedModelDependencyResolver;
 pub use orchestration::SharedOrchestrationStore;
