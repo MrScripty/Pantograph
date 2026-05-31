@@ -1,11 +1,9 @@
 use super::*;
 use crate::workflow::{
-    WorkflowExecutionPlan, WorkflowExecutionPlanNodeDecision, WorkflowExecutionSessionRunRequest,
-    WorkflowInferenceDeviceClass, WorkflowInferenceTaskId, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph,
 };
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
-use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerRuntimeDeviceConstraints, SchedulerTaskExecutionIntent,
     SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
@@ -28,23 +26,6 @@ fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
         timeout_ms: None,
         priority: None,
     }
-}
-
-fn image_execution_plan_for_run(workflow_run_id: &str) -> WorkflowExecutionPlan {
-    WorkflowExecutionPlan::new(
-        WorkflowRunId::try_from(workflow_run_id.to_string()).expect("valid run id"),
-        WorkflowId::try_from("workflow-image-plan".to_string()).expect("valid workflow id"),
-        vec![WorkflowExecutionPlanNodeDecision::new(
-            "image-node-1",
-            "pytorch",
-            "pytorch-runtime",
-            "pytorch.cuda",
-            WorkflowInferenceDeviceClass::Cuda,
-            WorkflowInferenceTaskId::ImageGeneration,
-        )
-        .expect("valid node decision")],
-    )
-    .expect("valid execution plan")
 }
 
 fn scheduler_task_intent(workflow_run_id: &str, task_id: &str) -> SchedulableTaskIntent {
@@ -286,116 +267,6 @@ fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_div
         candidate.warm_session_compatibility,
         WorkflowExecutionSessionWarmCompatibility::Compatible
     );
-}
-
-#[test]
-fn active_run_records_run_scoped_execution_plan() {
-    let mut store = WorkflowExecutionSessionStore::new(1, 1);
-    let session_id = store
-        .create_session(
-            "workflow-image-plan".to_string(),
-            None,
-            None,
-            vec!["pytorch".to_string()],
-            vec!["stable-diffusion-xl".to_string()],
-            true,
-        )
-        .expect("create session");
-    let workflow_run_id = store
-        .enqueue_run(&session_id, &empty_run_request())
-        .expect("enqueue run");
-    store
-        .begin_queued_run(&session_id, &workflow_run_id)
-        .expect("begin run")
-        .expect("dequeued run");
-
-    let execution_plan = image_execution_plan_for_run(&workflow_run_id);
-
-    store
-        .set_active_run_execution_plan(&session_id, &workflow_run_id, execution_plan)
-        .expect("record execution plan");
-
-    let active_run = store
-        .active
-        .get(&session_id)
-        .and_then(|session| session.active_run.as_ref())
-        .expect("active run");
-    assert_eq!(
-        active_run
-            .execution_plan
-            .as_ref()
-            .expect("execution plan")
-            .workflow_run_id()
-            .as_str(),
-        workflow_run_id
-    );
-    assert_eq!(
-        store
-            .active_run_execution_plan(&session_id, &workflow_run_id)
-            .expect("query active plan")
-            .expect("execution plan")
-            .workflow_run_id()
-            .as_str(),
-        workflow_run_id
-    );
-    assert!(store
-        .active_run_execution_plan(&session_id, "other-run")
-        .expect("query mismatched active plan")
-        .is_none());
-}
-
-#[test]
-fn finish_run_clears_run_scoped_execution_plan_before_next_admission() {
-    let mut store = WorkflowExecutionSessionStore::new(1, 1);
-    let session_id = store
-        .create_session(
-            "workflow-image-plan".to_string(),
-            None,
-            None,
-            vec!["pytorch".to_string()],
-            vec!["stable-diffusion-xl".to_string()],
-            true,
-        )
-        .expect("create session");
-    let first_workflow_run_id = store
-        .enqueue_run(&session_id, &empty_run_request())
-        .expect("enqueue first run");
-    store
-        .begin_queued_run(&session_id, &first_workflow_run_id)
-        .expect("begin first run")
-        .expect("dequeued first run");
-    store
-        .set_active_run_execution_plan(
-            &session_id,
-            &first_workflow_run_id,
-            image_execution_plan_for_run(&first_workflow_run_id),
-        )
-        .expect("record first execution plan");
-
-    store
-        .finish_run(&session_id, &first_workflow_run_id)
-        .expect("finish first run");
-    assert!(store
-        .active_run_execution_plan(&session_id, &first_workflow_run_id)
-        .expect("query finished run plan")
-        .is_none());
-
-    let second_workflow_run_id = store
-        .enqueue_run(&session_id, &empty_run_request())
-        .expect("enqueue second run");
-    store
-        .begin_queued_run(&session_id, &second_workflow_run_id)
-        .expect("begin second run")
-        .expect("dequeued second run");
-
-    assert!(store
-        .active_run_execution_plan(&session_id, &first_workflow_run_id)
-        .expect("query prior run plan during second run")
-        .is_none());
-    assert!(store
-        .active_run_execution_plan(&session_id, &second_workflow_run_id)
-        .expect("query second run before plan")
-        .is_none());
 }
 
 #[test]

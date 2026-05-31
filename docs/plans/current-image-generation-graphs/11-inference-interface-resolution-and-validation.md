@@ -974,8 +974,9 @@ instead of falling back to previously rendered ports.
   pantograph-workflow-service --no-default-features`; `cargo check -p
   pantograph-workflow-service --all-features`; targeted source search in
   `crates/` for retired unscoped validation event/stream DTO names; and `git
-  diff --check`. Workflow-service checks still report only the known
-  `set_active_run_execution_plan` dead-code warning.
+  diff --check`. At the time, workflow-service checks still reported the known
+  `set_active_run_execution_plan` dead-code warning; that active-plan storage
+  bridge was removed in the later 2026-05-31 Milestone 5c/5b cleanup slice.
 - Remaining next slices: replace `puma-lib` graph authoring with model-ref-only
   semantics, then tighten request extraction for strict model-ref binding and
   explicit constraint diagnostics. After those boundary slices pass, implement

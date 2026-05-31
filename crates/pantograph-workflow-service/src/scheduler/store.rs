@@ -8,8 +8,8 @@ use pantograph_scheduler::SchedulerTaskStateRecord;
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
-    WorkflowExecutionPlan, WorkflowLocalRunPlacementRecord, WorkflowLocalRunPlacementState,
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowSchedulerTaskGraph,
+    WorkflowLocalRunPlacementRecord, WorkflowLocalRunPlacementState, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskResult, WorkflowServiceError,
 };
 
@@ -50,7 +50,6 @@ struct WorkflowExecutionSessionActiveRun {
     dequeued_at_ms: u64,
     priority: i32,
     scheduler_decision_reason: WorkflowSchedulerDecisionReason,
-    execution_plan: Option<WorkflowExecutionPlan>,
     // Milestone 5c stages task-state storage before the orchestrator consumes it.
     #[allow(dead_code)]
     scheduler_task_graph: Option<WorkflowSchedulerTaskGraph>,
@@ -403,50 +402,6 @@ impl WorkflowExecutionSessionStore {
             .unwrap_or_default();
         Self::mark_session_access(state, tick);
         Ok(())
-    }
-
-    pub(crate) fn set_active_run_execution_plan(
-        &mut self,
-        session_id: &str,
-        workflow_run_id: &str,
-        execution_plan: WorkflowExecutionPlan,
-    ) -> Result<(), WorkflowServiceError> {
-        let tick = self.next_tick();
-        let state = self.active.get_mut(session_id).ok_or_else(|| {
-            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
-        })?;
-        let Some(active_run) = state.active_run.as_mut() else {
-            return Err(WorkflowServiceError::Internal(format!(
-                "session '{}' has no active run",
-                session_id
-            )));
-        };
-        if active_run.workflow_run_id != workflow_run_id {
-            return Err(WorkflowServiceError::Internal(format!(
-                "session '{}' active run '{}' does not match '{}'",
-                session_id, active_run.workflow_run_id, workflow_run_id
-            )));
-        }
-        active_run.execution_plan = Some(execution_plan);
-        Self::mark_session_access(state, tick);
-        Ok(())
-    }
-
-    pub(crate) fn active_run_execution_plan(
-        &self,
-        session_id: &str,
-        workflow_run_id: &str,
-    ) -> Result<Option<WorkflowExecutionPlan>, WorkflowServiceError> {
-        let state = self.active.get(session_id).ok_or_else(|| {
-            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
-        })?;
-        let Some(active_run) = state.active_run.as_ref() else {
-            return Ok(None);
-        };
-        if active_run.workflow_run_id != workflow_run_id {
-            return Ok(None);
-        }
-        Ok(active_run.execution_plan.clone())
     }
 
     pub(crate) fn update_runtime_affinity_basis(

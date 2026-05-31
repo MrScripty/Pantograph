@@ -200,7 +200,6 @@ impl WorkflowExecutionSessionStore {
             dequeued_at_ms,
             priority: queued.priority,
             scheduler_decision_reason,
-            execution_plan: None,
             scheduler_task_graph: None,
             scheduler_task_records: Default::default(),
             scheduler_task_results: Default::default(),

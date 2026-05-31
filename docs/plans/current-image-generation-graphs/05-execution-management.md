@@ -20739,6 +20739,47 @@ Worker rules:
     `model_dependency_activity.rs`; and `git diff --check`. `cargo check`
     still reports the pre-existing workflow-service
     `set_active_run_execution_plan` warning.
+- 2026-05-31 active execution-plan bridge deletion slice:
+  - Smallest useful slice: delete the remaining workflow-service active
+    execution-plan storage/API/tests and the embedded-runtime reduced
+    execution-plan projection helper after the session runtime path had
+    scheduler-selected runtime-host dispatch coverage.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/scheduler/store.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/store_queue.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/store_tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_execution_plan_projection.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_execution_plan_projection_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and these plan files.
+  - Implementation: removed `WorkflowExecutionSessionActiveRun` execution-plan
+    storage, removed `set_active_run_execution_plan`/
+    `active_run_execution_plan` and the public
+    `workflow_execution_session_active_execution_plan` accessor, deleted the
+    active-plan store tests, and deleted embedded-runtime's
+    `workflow_execution_plan_projection` module/tests.
+  - No-fallback/no-legacy result: there is no remaining active-run
+    reduced-plan storage or embedded-runtime reduced-plan projection that can
+    reconstruct runtime dispatch. The public `WorkflowExecutionPlan` DTO stays
+    only for validation/diagnostic contracts and is not a runtime launch
+    source.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service -p
+    pantograph-embedded-runtime`; `cargo test -p pantograph-workflow-service
+    scheduler::store --lib`; `cargo check -p pantograph-embedded-runtime`;
+    `cargo check -p pantograph-workflow-service`; `cargo test -p
+    pantograph-workflow-service
+    workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+    --lib`; `git diff --check`;
+    and targeted `rg` over workflow-service scheduler/session API and
+    embedded-runtime sources for `execution_plan`,
+    `active_run_execution_plan`, `workflow_execution_plan_projection`, and
+    `set_active_run_execution_plan` returning no hits. The old
+    `set_active_run_execution_plan` warning is removed by this slice.
+  - Remaining follow-up: continue deleting or converting remaining
+    node-engine `ModelDependencyRequest`/`ModelRefV2` test-only contracts and
+    path-repair helpers once their diagnostic-only coverage has been replaced
+    by scheduler task-state/results and runtime-host response tests.
 
 ### Traceability Links
 

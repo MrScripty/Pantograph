@@ -90,8 +90,6 @@ mod runtime_registry_observations;
 pub mod task_executor;
 pub mod technical_fit;
 mod workflow_event_identity;
-#[allow(dead_code)]
-mod workflow_execution_plan_projection;
 mod workflow_execution_session_execution;
 pub mod workflow_runtime;
 mod workflow_scheduler_diagnostics;

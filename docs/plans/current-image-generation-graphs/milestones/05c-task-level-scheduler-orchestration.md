@@ -262,6 +262,14 @@ durable task orchestration path.
      `workflow_execution_plan_projection`, `EmbeddedPlannedInferenceExecutionHost`,
      node-engine `PlannedInferenceExecutionHost`, and the image-generation
      success branch that reconstructs dispatch from a whole-run plan.
+     2026-05-31 progress: `active_run_execution_plan`,
+     `workflow_execution_session_active_execution_plan`, active execution-plan
+     store tests, and the embedded-runtime
+     `workflow_execution_plan_projection` helper/tests were deleted after the
+     session runtime path had scheduler-selected runtime-host dispatch
+     coverage. The public `WorkflowExecutionPlan` DTO remains only for current
+     validation/diagnostic contracts and must not be used as runtime launch
+     input.
   Until the handoff execution slice is wired, runtime tasks must continue to fail
   closed with typed scheduler/workflow diagnostics; do not re-enable a successful
   active-plan or node-engine planned-inference compatibility route.
@@ -456,10 +464,11 @@ durable task orchestration path.
   dependency. Workflow-service no longer keeps a private node-engine
   whole-run launch or whole-run artifactization compatibility route. Future
   artifact/media output handling must be introduced through scheduler-task
-  result materialization and runtime-host output projection. Remaining
-  replan boundary: active execution-plan storage still exists because
-  embedded-runtime planned inference reads it; removing it requires replacing
-  that cross-crate bridge with scheduler-selected runtime handoff dispatch.
+  result materialization and runtime-host output projection. 2026-05-31
+  update: the active execution-plan storage/projection bridge was later
+  deleted after scheduler-selected runtime-host dispatch coverage existed for
+  session runtime tasks; workflow progress must continue through scheduler
+  task state/results rather than whole-run execution-plan storage.
   2026-05-31 media conversion ownership decision: delete the unused Tauri
   managed media conversion adapter in the next cleanup slice instead of
   preserving dormant desktop-owned business logic. Future conversion must be a

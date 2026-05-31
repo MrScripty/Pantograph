@@ -448,8 +448,12 @@ cleanup.
   `EmbeddedPlannedInferenceExecutionHost` and its embedded-runtime tests were
   removed after hosted runtime-host composition was wired; node-engine
   `PlannedInferenceExecutionHost` and its extension key were removed in the
-  follow-up fail-closed node-engine slice. Remaining cleanup in this task is
-  the model-dependency/model-ref/path-shaped contract and fixture removal.
+  follow-up fail-closed node-engine slice. 2026-05-31 progress: the
+  workflow-service active execution-plan storage/API/tests and embedded-runtime
+  reduced execution-plan projection helper/tests were deleted after
+  scheduler-selected runtime-host dispatch coverage existed for session
+  runtime tasks. Remaining cleanup in this task is the
+  model-dependency/model-ref/path-shaped contract and fixture removal.
 - [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
   replacement user-visible state.
