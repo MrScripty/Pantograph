@@ -19470,6 +19470,41 @@ Worker rules:
     next hosted-startup slice must either use this factory from the hosted
     composition root or replace it with the final lifecycle bundle so the
     staging allowance can be removed.
+- 2026-05-31 hosted startup composition re-plan boundary:
+  - Investigation result: the factory slice proved the embedded-runtime
+    pre-share composition boundary, but hosted/Tauri startup still constructs
+    and manages an already shared `Arc<WorkflowService>` before Pumas owner
+    selector access exists. Per-command runtime builders then receive that
+    shared service and attach runtime registry state later. Wiring the factory
+    directly into that flow would require post-share dispatch mutation or
+    moving runtime-dispatch business logic into Tauri startup.
+  - Standards concern: post-share dispatch mutation violates the composition
+    root and single-owner stateful-flow standards. Moving Pumas facts,
+    runtime-registry policy, dependency-readiness lifecycle, or runtime-host
+    dispatch decisions into `src-tauri` would complect transport/app-shell
+    startup with backend runtime policy. Tauri may provide infrastructure
+    inputs and hold returned handles, but embedded-runtime must own hosted
+    workflow-service/runtime composition.
+  - Options recorded in `09-runtime-host-handoff-legacy-removal.md`: keep
+    Tauri as the late service builder, introduce the backend-owned hosted
+    composition bundle as the target design, stage that target across two
+    validated slices, or defer hosted wiring and keep fail-closed dispatch
+    diagnostics.
+  - Selected decision: use the staged option. The target design is a
+    backend-owned hosted composition bundle in embedded-runtime; implement it
+    in two validated slices so the first slice introduces the bundle contract
+    and lifecycle ownership, and the second slice migrates Tauri startup onto
+    it before enabling successful hosted resource-backed dispatch.
+  - No-fallback/no-legacy guardrail: do not add post-share setters for runtime
+    dispatch dependencies, do not let `hosted_with_default_python_runtime`
+    become the successful resource-backed path while it accepts an already
+    shared service, and do not keep partial dispatch wiring as a successful
+    alternate branch. Missing construction inputs must produce typed
+    initialization diagnostics or a fail-closed hosted service.
+  - Next implementation sequence: add an embedded-runtime hosted composition
+    input/output bundle that returns the shared service and owned lifecycle
+    handles, then migrate Tauri startup/headless runtime construction to
+    consume that bundle and manage only returned handles.
 
 ### Traceability Links
 

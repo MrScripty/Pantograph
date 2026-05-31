@@ -1666,6 +1666,82 @@ Next implementation sequence:
 5. After this factory slice, continue to the first complete inference path by
    wiring runtime-specific execution behind `EmbeddedRuntimeHostExecutionPort`.
 
+2026-05-31 re-plan trigger: the hosted workflow-service factory exists, but
+hosted startup still constructs and manages `Arc<WorkflowService>` before
+Pumas owner selector access exists, then passes that already shared service
+into `EmbeddedRuntime::hosted_with_default_python_runtime` and attaches
+runtime-registry state later. The next slice therefore cannot be a direct
+call-site swap. It must change hosted composition ownership so the
+resource-backed workflow service is built before sharing and before commands
+can run against partial dispatch state.
+
+Standards-aligned hosted startup options:
+
+1. Keep Tauri as the late composition root and reorder startup so Pumas
+   extensions initialize before `WorkflowService` is shared. Tauri would then
+   call the embedded-runtime factory and manage the returned service. This is
+   short, but risky: `src-tauri` would coordinate Pumas access, workflow
+   service stores, runtime registry, dependency readiness, and runtime
+   dispatch lifecycle in one place. It is standards-compliant only if Tauri is
+   kept to infrastructure wiring and no runtime-dispatch policy or Pumas fact
+   interpretation moves there.
+2. Introduce the backend-owned hosted composition bundle as the target design.
+   Embedded-runtime receives explicit infrastructure inputs from the host,
+   creates/configures the workflow service, installs dependency readiness,
+   resource-backed dispatch dependencies, runtime-host execution,
+   reservation lifecycle, scheduler diagnostics, and lifecycle sidecars, then
+   returns `SharedWorkflowService` plus owned handles for Tauri to manage.
+   This best matches composition-root, single-owner lifecycle, and
+   simplicity/complection standards.
+3. Stage option 2 in two validated slices. First add the hosted composition
+   bundle contract and lifecycle ownership in embedded-runtime without
+   migrating every Tauri caller. Then migrate Tauri startup/headless runtime
+   construction onto that bundle and enable successful resource-backed hosted
+   dispatch only once all required inputs are available before sharing. This
+   keeps slices small while preserving option 2 as the target design.
+4. Defer hosted wiring and continue lower-level runtime-host execution work
+   while hosted dispatch stays fail-closed. This is correct but does not
+   unblock hosted complete inference-run testing.
+
+Selected decision: option 3, with option 2 as the target architecture. Do not
+implement option 1's Tauri-owned late builder unless the embedded-runtime
+bundle proves impossible and a new re-plan explicitly accepts that ownership.
+Do not use post-share dispatch setters as an implementation shortcut.
+
+Next staged implementation sequence:
+
+1. Add an embedded-runtime hosted composition input/output bundle. Inputs must
+   be explicit infrastructure/configuration values such as app paths, gateway,
+   runtime registry, owner Pumas selector access or setup source, workflow
+   service store/configuration inputs, capacity, and app-shell event sinks.
+   The output must return the `SharedWorkflowService` plus lifecycle handles
+   owned by the hosted runtime composition, including dependency-readiness
+   producer handles when they are started.
+2. Split service construction from lifecycle sidecars without exposing partial
+   successful dispatch. Dispatch dependencies and scheduler diagnostics must
+   be installed before sharing. Any sidecar that necessarily needs the shared
+   service, such as projection refresh workers, must be started by the same
+   hosted composition owner before commands are exposed and must not mutate
+   runtime dispatch dependencies.
+3. Migrate `src-tauri/src/app_setup.rs` and
+   `src-tauri/src/workflow/headless_runtime.rs` so Tauri supplies
+   infrastructure inputs and manages returned handles, but does not own Pumas
+   fact resolution, runtime-registry policy, dependency-readiness production,
+   or runtime-host dispatch decisions.
+4. Narrow or replace `EmbeddedRuntime::hosted_with_default_python_runtime`.
+   It must not remain the successful resource-backed hosted path while it
+   accepts an already shared `WorkflowService`. During migration it may remain
+   only as a non-resource-backed/fail-closed helper for existing tests, with
+   clear follow-up to delete or rename it after callers move to the bundle.
+5. Add focused tests proving hosted composition cannot expose successful
+   resource-backed dispatch without owner Pumas access and runtime registry,
+   that Tauri/headless runtime construction does not install dispatch
+   dependencies after sharing, and that missing hosted inputs produce typed
+   initialization diagnostics or fail-closed service behavior.
+6. After hosted composition uses the bundle, remove the temporary staged
+   `#[allow(dead_code)]` on `workflow_service_composition` and continue to the
+   first complete inference path behind `EmbeddedRuntimeHostExecutionPort`.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
