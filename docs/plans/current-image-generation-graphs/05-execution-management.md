@@ -18789,6 +18789,30 @@ Worker rules:
   - Remaining follow-up: wire embedded-runtime composition so the final
     runtime dispatch candidate provider and reservation lifecycle port are
     configured together, then remove the staged dead-code allowance.
+- 2026-05-30 composition wiring re-plan boundary:
+  - Finding: hosted embedded-runtime construction currently receives an
+    already shared `Arc<WorkflowService>`, but the reservation lifecycle port is
+    configured through a pre-share workflow-service builder. The next slice
+    cannot enforce "final candidate provider and lifecycle port are configured
+    together" without changing composition ownership.
+  - Selected decision: use option 3, a focused embedded-runtime
+    workflow-service composition factory. The factory returns
+    `Arc<WorkflowService>` only after dependency-readiness components,
+    runtime-host port, runtime dispatch candidate provider, and reservation
+    lifecycle port are configured consistently.
+  - Standards result: this follows the composition-root standard by selecting
+    concrete runtime infrastructure at the embedded-runtime boundary; follows
+    simplicity/complection guidance by separating wiring from scheduler,
+    workflow-service orchestration, runtime-registry policy, and Tauri
+    transport; and avoids mutable post-share dispatch dependency changes.
+  - No-fallback/no-legacy result: the composition factory must not synthesize
+    candidates from graph paths, reduced execution plans, frontend state,
+    display strings, `ModelRefV2`, or provider-private cleanup state.
+  - Required next slices: add the narrow composition module and README note;
+    route standalone workflow-service construction through it; adapt hosted
+    construction so runtime-registry/gateway dependencies are available before
+    the workflow service is shared; wire final candidate provider and lifecycle
+    port together; then remove the staged lifecycle-port dead-code allowance.
 
 ### Traceability Links
 

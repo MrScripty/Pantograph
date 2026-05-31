@@ -1077,6 +1077,86 @@ final dispatch candidate provider. The next slice must remove that staging
 allowance by injecting the port wherever real resource-backed candidate bundles
 are enabled.
 
+2026-05-30 re-plan boundary: composition wiring cannot be completed as a
+simple connection slice because hosted embedded-runtime construction receives
+an already shared `Arc<WorkflowService>`, while the workflow-service
+reservation lifecycle port is currently a builder-style dependency that must
+be supplied before sharing. Continuing without a design decision would either
+wire the lifecycle port without the final candidate provider, violating the
+"configure both together" rule, or add ad hoc mutable configuration to
+workflow-service. The next plan update must choose a standards-compliant
+composition direction before implementation continues.
+
+Options to resolve:
+
+1. Add a workflow-service setter for the lifecycle port using interior
+   mutability around scheduler orchestration. This is the smallest surface but
+   weakens the current constructor-owned dependency shape and risks runtime
+   reconfiguration of dispatch behavior after sessions exist.
+2. Change embedded-runtime constructors so hosted/standalone composition owns
+   `WorkflowService` before it is wrapped in `Arc`, then build one canonical
+   workflow service with dependency readiness, candidate provider, runtime-host
+   port, and lifecycle port configured together. This preserves explicit
+   composition and avoids mutable post-share wiring, but it is a broader
+   constructor migration.
+3. Introduce a small embedded-runtime workflow-service factory/composition
+   object that returns `Arc<WorkflowService>` only after all required paired
+   runtime dispatch dependencies are present. This keeps pairing explicit and
+   avoids exposing mutable setters, but it adds a new composition boundary that
+   must replace current direct `Arc<WorkflowService>` construction paths.
+
+Selected decision: use option 3. Add a focused embedded-runtime
+workflow-service composition factory that returns `Arc<WorkflowService>` only
+after all paired runtime dispatch dependencies are configured. The factory is
+not a new policy owner: it may create and connect concrete dependencies, but
+it must not choose scheduler policy, runtime/device ranking, Pumas
+package-fact policy, runtime-registry release policy, or graph validation
+behavior.
+
+Standards alignment:
+
+- Simplicity/complection: the new boundary separates runtime composition from
+  workflow-service task orchestration, scheduler policy, runtime-registry
+  lifecycle side effects, and Tauri/app transport. This is justified because
+  it lets each owner change independently while preserving the paired-provider
+  invariant.
+- Composition root: concrete runtime dispatch candidate providers,
+  runtime-host ports, dependency-readiness components, and reservation
+  lifecycle ports must be selected at the embedded-runtime composition
+  boundary before the workflow service is shared.
+- State/lifecycle ownership: workflow-service remains the application emitter
+  for lifecycle events; embedded-runtime remains the infrastructure owner for
+  runtime-registry release/reconcile side effects; runtime-registry remains
+  the retention/reclaim policy owner. The composition factory only wires these
+  owners together.
+- No mutable post-share wiring: do not add production setters that mutate
+  dispatch dependencies on `Arc<WorkflowService>` after sessions can exist.
+  Tests may still build workflow services directly when they intentionally use
+  default fail-closed dependencies.
+- No fallback/legacy: the factory must not synthesize candidates from graph
+  paths, reduced execution plans, frontend state, display strings,
+  `ModelRefV2`, or provider-private cleanup state.
+
+Next implementation sequence:
+
+1. Add a narrow embedded-runtime workflow-service composition module that owns
+   construction of a fully wired `WorkflowService` and documents why the
+   boundary exists.
+2. Move standalone workflow-service construction through that module while
+   preserving the public embedded-runtime facade shape.
+3. Add hosted construction support that accepts runtime-registry/gateway
+   inputs early enough to configure the reservation lifecycle port before the
+   service is wrapped in `Arc`.
+4. Wire the final runtime dispatch candidate provider and reservation
+   lifecycle port through the same composition path. The plan still forbids
+   enabling non-empty resource-backed candidates until both dependencies are
+   present.
+5. Remove the staged `#[allow(dead_code)]` from the embedded lifecycle port
+   when production composition exercises it.
+6. Add tests proving production composition fails closed or refuses to build
+   when only one of the paired dispatch dependencies is present, and proving
+   direct test construction still uses fail-closed defaults.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target
