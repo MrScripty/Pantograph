@@ -155,7 +155,16 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`; it
   resolves only from the scheduler-selected model ref and fails closed for
   missing dispatch decisions, Pumas lookup errors, decode failures, stale
-  package-facts contracts, and selected-artifact mismatches.
+  package-facts contracts, and selected-artifact mismatches. 2026-05-31 media
+  output re-plan update: before gateway execution is enabled, add the selected
+  option 2 `RuntimeHostMediaArtifactSink` boundary. The sink must persist
+  generated images through the backend-owned artifact store/workflow-service
+  artifact boundary and return path-free
+  `RuntimeHostExecutionMediaArtifactRef` values. The runtime-host port must not
+  own workflow-service persistence internals, invent artifact ids, return
+  inline base64 media as scheduler task results, or call Tauri/frontend code.
+  Missing sink or artifact write failures must return typed runtime-host
+  diagnostics.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing
@@ -1103,3 +1112,20 @@ this transition only in workflow-service; the legal lifecycle belongs in the
   projection inside `EmbeddedRuntimeHostExecutionPort`; add path-free media
   artifact output projection; plan explicit selected-backend and typed float
   input contracts.
+- 2026-05-31 runtime-host media artifact sink re-plan selected.
+  Decision: implement option 2 before wiring successful image gateway
+  execution. Add a narrow backend-owned `RuntimeHostMediaArtifactSink` rather
+  than injecting the full `WorkflowService` into
+  `EmbeddedRuntimeHostExecutionPort`, returning inline base64 media in
+  runtime-host outputs, or keeping execution fail-closed as the next
+  implementation path. The sink owns only generated-media persistence and
+  returns `RuntimeHostExecutionMediaArtifactRef`; the port owns validation,
+  Pumas package/load-target resolution, gateway execution, response shaping,
+  and typed diagnostics. This keeps persistence mechanics independent from
+  runtime execution and keeps Tauri/frontend, scheduler policy, graph editor,
+  node-engine, reduced execution plans, `ModelRefV2`, and fake artifact refs
+  out of the successful output path. Required verification for the future
+  slice: sink tests for deterministic artifact ids/attribution or artifact
+  store delegation, missing-sink diagnostics, write-failure diagnostics, and a
+  runtime-host response test proving completed image execution returns only
+  path-free media artifact refs.

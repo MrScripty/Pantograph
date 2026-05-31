@@ -1877,6 +1877,36 @@ package facts plus load target plus image projection in the runtime-host port,
 add path-free media artifact output projection, and plan durable selected
 backend and float input contracts.
 
+2026-05-31 media artifact output re-plan decision: use a narrow backend-owned
+runtime-host media artifact sink before successful image execution is wired.
+The sink is the selected option 2 from the re-plan discussion. It should expose
+only the operation the runtime-host executor needs: accept generated image
+output plus task/run/node/port attribution, persist through the backend-owned
+artifact store or workflow-service artifact boundary, and return a
+`RuntimeHostExecutionMediaArtifactRef`. `EmbeddedRuntimeHostExecutionPort`
+must receive the sink as a dependency and remain responsible for response
+shaping, but it must not own workflow-service persistence internals, invent
+artifact ids, return inline base64 media as scheduler task results, or call
+Tauri/frontend code. Missing sink and artifact write failures must fail closed
+with typed runtime-host diagnostics.
+
+Options disposition for the media-output boundary:
+
+1. Rejected for now: inject full `WorkflowService` into the runtime-host port.
+   This is the fastest path but complects request validation, Pumas resolution,
+   inference execution, artifact persistence, and response shaping.
+2. Selected: add `RuntimeHostMediaArtifactSink` as a narrow dependency. This
+   follows the standards' simplicity/complection guidance because persistence
+   can change independently from runtime execution and the port can be tested
+   without exposing workflow-service internals.
+3. Rejected for now: extend runtime-host output contracts to carry inline
+   encoded media. This weakens path-free artifact-ref ownership, risks large
+   scheduler task-result payloads, and moves retention decisions into the wrong
+   boundary.
+4. Temporary guardrail only: keep execution fail-closed until the sink exists.
+   This remains acceptable between slices but is not the next implementation
+   path.
+
 Standards alignment: this decision follows the simplicity/complection rule by
 separating validation and runtime side effects, transport mapping and domain
 execution, lifecycle ownership and request handling, and diagnostics policy and

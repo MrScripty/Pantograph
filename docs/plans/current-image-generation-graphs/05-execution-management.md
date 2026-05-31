@@ -19937,6 +19937,34 @@ Worker rules:
     `EmbeddedRuntimeHostExecutionPort`, add path-free media artifact output
     projection, and plan the longer-term explicit selected-backend dispatch
     field plus typed float input values.
+- 2026-05-31 runtime-host media artifact sink re-plan decision:
+  - Selected direction: use option 2, a narrow backend-owned
+    `RuntimeHostMediaArtifactSink` boundary, before wiring successful image
+    gateway execution.
+  - Standards rationale: this separates runtime request handling and inference
+    execution from artifact persistence mechanics. The runtime-host port may
+    validate requests, resolve Pumas facts/load targets, call the canonical
+    image gateway, and shape runtime-host responses, but it must not own
+    workflow-service persistence internals or invent artifact ids. Tauri stays
+    an infrastructure composition caller and must not contain media-output
+    business logic.
+  - Required next slice: define the sink trait and focused implementation
+    ownership. The port receives a sink as a dependency; the sink writes
+    generated image outputs through the backend-owned artifact store or
+    workflow-service artifact boundary and returns
+    `RuntimeHostExecutionMediaArtifactRef`. Missing sink or artifact write
+    failure must produce typed runtime-host diagnostics, not inline base64,
+    fake refs, graph paths, or scheduler/task-result persistence workarounds.
+  - Rejected alternatives: injecting full `WorkflowService` into the port is
+    too complected because it couples runtime execution to persistence; inline
+    encoded media in runtime-host outputs risks large scheduler task results
+    and weakens artifact retention ownership; keeping execution fail-closed is
+    acceptable only as a temporary guardrail, not as the next implementation
+    path.
+  - Follow-up after the sink slice: compose package-facts resolution,
+    load-target resolution, image projection, gateway execution, sink-backed
+    media artifact refs, and typed failure diagnostics inside
+    `EmbeddedRuntimeHostExecutionPort`.
 
 ### Traceability Links
 
