@@ -64,6 +64,8 @@ mod reservation_lifecycle;
 pub mod runtime_capabilities;
 mod runtime_config;
 #[allow(dead_code)]
+mod runtime_dispatch_candidate_provider;
+#[allow(dead_code)]
 mod runtime_dispatch_capability_facts;
 #[allow(dead_code)]
 mod runtime_dispatch_resource_facts;

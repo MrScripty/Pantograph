@@ -1294,9 +1294,16 @@ Next implementation sequence:
    skeleton that implements `WorkflowRuntimeDispatchCandidateProvider`, returns
    typed provider diagnostics, and does not emit non-empty candidates until all
    required source facts are supplied.
+   Completed 2026-05-30: `pantograph-embedded-runtime` now has an initial
+   fail-closed dispatch candidate provider boundary that implements the
+   workflow-service provider trait and emits typed no-candidate diagnostics
+   instead of candidates while source facts are unavailable.
 2. Add focused provider tests for missing Pumas/package facts, missing runtime
    capability facts, missing resource facts, path-carrying model refs, and
    no-candidate diagnostics.
+   Started 2026-05-30: focused tests cover missing staged package/runtime/
+   resource facts and path-carrying Pumas model refs. Later slices must expand
+   coverage when source-input contracts are added.
 3. Wire the fail-closed provider through
    `EmbeddedWorkflowServiceDispatchDependencies` together with the runtime-host
    execution port and reservation lifecycle port, proving the composition
@@ -1320,6 +1327,19 @@ Next implementation sequence:
 8. Only after provider and lifecycle tests pass, remove the staged
    `#[allow(dead_code)]` lifecycle-port allowance and enable non-empty
    resource-backed candidate sets in hosted production composition.
+
+2026-05-30 fail-closed dispatch candidate provider slice verification:
+
+- `cargo fmt -- --check`
+- `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`
+- `cargo check -p pantograph-embedded-runtime` (passes with existing
+  workflow-service `set_active_run_execution_plan` dead-code warning)
+
+Discovered follow-up: the provider is intentionally staged with
+`#[allow(dead_code)]` until it is wired through
+`EmbeddedWorkflowServiceDispatchDependencies`. It still emits no non-empty
+candidate sets; the next slice must connect the fail-closed provider through
+the paired composition dependency bundle before any real fact-joining work.
 
 ## Verification Strategy
 

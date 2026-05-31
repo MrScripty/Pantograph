@@ -18942,6 +18942,34 @@ Worker rules:
     package-fact input contract; then join package/runtime facts, add real
     runtime-registry reservation, prove lifecycle release coverage, and only
     then enable non-empty resource-backed candidates.
+- 2026-05-30 fail-closed dispatch candidate provider slice:
+  - Slice scope: embedded-runtime dispatch candidate provider module, module
+    index, embedded-runtime README, and plan logs only.
+  - Implementation: added `EmbeddedRuntimeDispatchCandidateProvider`, an
+    initial fail-closed implementation of the workflow-service
+    `WorkflowRuntimeDispatchCandidateProvider` trait. It emits no candidates
+    and returns typed scheduler diagnostics for missing staged Pumas package
+    facts, runtime capability facts, and runtime resource facts.
+  - Test coverage: added focused tests for no-candidate diagnostics when
+    staged source facts are unavailable and invalid-candidate diagnostics for
+    path-carrying Pumas model refs.
+  - No-fallback/no-legacy result: the provider does not synthesize candidates
+    from graph paths, reduced execution plans, frontend state, display names,
+    `ModelRefV2`, dependency-preflight compatibility paths, or provider-private
+    cleanup state.
+  - Standards result: candidate-provider behavior now has a dedicated module
+    separate from workflow-service orchestration and composition-root wiring.
+    The provider remains synchronous and returns unavailable diagnostics
+    instead of blocking scheduler selection on async Pumas access.
+  - Verification passed: `cargo fmt -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+    and `cargo check -p pantograph-embedded-runtime`. `cargo check` still
+    reports the pre-existing workflow-service `set_active_run_execution_plan`
+    dead-code warning.
+  - Remaining follow-up: wire the fail-closed provider through
+    `EmbeddedWorkflowServiceDispatchDependencies` with the runtime-host port
+    and reservation lifecycle port, then add staged package-fact inputs before
+    emitting any non-empty resource-backed candidate sets.
 
 ### Traceability Links
 
