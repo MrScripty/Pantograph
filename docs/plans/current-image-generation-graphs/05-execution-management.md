@@ -21407,6 +21407,47 @@ Worker rules:
     through the production-composed runtime-host port from scheduler task state,
     persists the completed `WorkflowSchedulerTaskResult`, and returns requested
     workflow outputs.
+- 2026-05-31 Milestone 5c/5b runtime-host failed-result scheduler slice:
+  - Smallest useful slice: fix the session runner path for failed
+    runtime-host responses discovered while attempting the full
+    production-composed image session path.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+    `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    and these plan files.
+  - Implementation: runtime-host `Failed`, `Unavailable`, and `Invalid`
+    responses now map to a terminal-failed scheduler task transition with
+    bounded diagnostics, while completed runtime-host responses still require
+    the completed transition. The active-run result store now validates
+    failed task results against terminal-failed transitions instead of forcing
+    every recorded runtime-host result through completed-task semantics.
+  - No-fallback/no-legacy result: this slice adds no alternate execution path,
+    no graph-path input, no `ModelRefV2`, no node-engine planned-inference
+    branch, and no Tauri-owned policy. Invalid runtime-host execution remains
+    fail-closed and visible through typed scheduler task state.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+    -- --nocapture`; `cargo check -p pantograph-workflow-service`; and
+    `git diff --check -- crates/pantograph-workflow-service/src/scheduler/store_task_results.rs
+    crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs
+    crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`.
+  - Discovered re-plan boundary: the full production-composed successful image
+    session path is still blocked by canonical inference-interface resolution.
+    The current static `llm-inference` graph contract does not expose a
+    `prompt` input. Adding a prompt edge fails submit-readiness validation as
+    an unknown target input, while omitting the edge leaves runtime-host image
+    execution without the required materialized prompt. Do not solve this by
+    re-adding static legacy prompt ports; the next successful session path must
+    consume the persisted resolved inference-node interface descriptor from
+    Milestone 5d.
+  - Remaining follow-up: implement dynamic inference-interface port
+    resolution/persistence in the validator, graph editor, scheduler task
+    materializer, and runtime-host request builder before adding the complete
+    production-composed successful image session test.
 
 ### Traceability Links
 

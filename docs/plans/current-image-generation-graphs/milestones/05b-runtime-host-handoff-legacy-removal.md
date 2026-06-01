@@ -1658,3 +1658,30 @@ this ordering to add graph-path fallback, node-engine planned-inference launch,
   service sharing, inject the writer-backed media sink into the production
   runtime-host port with package-facts/load-target/gateway dependencies, and
   add session-level completed task result coverage.
+- 2026-05-31 runtime-host failed-result scheduler slice completed.
+  Smallest useful vertical slice: fix failed runtime-host response handling in
+  the task-level session runner before continuing the full production image
+  session path. Implementation: failed, unavailable, and invalid
+  `RuntimeHostExecutionResponse` values now persist as failed
+  `WorkflowSchedulerTaskResult` records and transition the scheduler task to
+  terminal-failed with bounded diagnostics. Completed runtime-host responses
+  still require completed result status and a completed task transition.
+  No-fallback/no-legacy result: no compatibility adapter, graph-path prompt,
+  `ModelRefV2`, node-engine planned-inference branch, or Tauri-owned business
+  policy was added; failed runtime-host execution fails closed through
+  scheduler task state. Verification passed: `cargo fmt -p
+  pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+  workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure
+  -- --nocapture`; `cargo test -p pantograph-workflow-service
+  workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+  -- --nocapture`; `cargo check -p pantograph-workflow-service`; and
+  `git diff --check` for the touched workflow-service files. Discovered
+  boundary: the complete production-composed successful image session cannot
+  be finished until Milestone 5d supplies persisted dynamic inference-node
+  input/output ports. The static `llm-inference` contract intentionally lacks
+  `prompt`; adding the edge is rejected by graph validation, and omitting it
+  leaves runtime-host image execution without materialized prompt input. Do
+  not add a static prompt compatibility port. Remaining follow-up: complete
+  inference-interface resolution/persistence, then add the successful
+  scheduler-to-runtime-host image session coverage using the resolved
+  descriptor.

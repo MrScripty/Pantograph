@@ -21,12 +21,13 @@ use pantograph_inference_interface_contracts::{
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
-    ReservationLifecyclePortError, RuntimeHostExecutionMediaArtifactRef,
-    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
-    WorkflowSessionRuntimeLoadProofReadinessState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    ReservationLifecyclePortError, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    WorkflowSessionRuntimeLoadProofDiagnosticPhase, WorkflowSessionRuntimeLoadProofReadinessState,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerReservationLeaseId,
@@ -533,6 +534,104 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     assert_eq!(
         source_refresher.model_refs(),
         vec!["image/example/tiny-diffusion"]
+    );
+}
+
+#[tokio::test]
+async fn workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure() {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(FailingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+        .with_runtime_dispatch_source_refresher(source_refresher)
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let workflow_id = "wf-runtime-host-failed-result";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("failed runtime-host result should fail the workflow run");
+
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert!(
+        error
+            .message()
+            .contains("scheduler task 'infer' did not complete; final state was TerminalFailed"),
+        "unexpected error: {error}"
+    );
+    assert_eq!(runtime_host_port.requests().len(), 1);
+    let lifecycle_events = reservation_lifecycle_port.events();
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .map(|event| &event.outcome)
+            .collect::<Vec<_>>(),
+        vec![
+            &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::RuntimeHostFailed,
+        ]
     );
 }
 
@@ -2825,6 +2924,50 @@ impl RuntimeHostExecutionPort for CompletingRuntimeHostPort {
                 ),
             }],
             diagnostics: Vec::new(),
+            terminal_metadata: None,
+        })
+    }
+}
+
+#[derive(Default)]
+struct FailingRuntimeHostPort {
+    requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
+}
+
+impl FailingRuntimeHostPort {
+    fn requests(&self) -> Vec<RuntimeHostExecutionRequest> {
+        self.requests
+            .lock()
+            .expect("runtime host request lock")
+            .clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl RuntimeHostExecutionPort for FailingRuntimeHostPort {
+    async fn execute_runtime_host_request(
+        &self,
+        request: RuntimeHostExecutionRequest,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        self.requests
+            .lock()
+            .expect("runtime host request lock")
+            .push(request.clone());
+        Ok(RuntimeHostExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            execution_request_id: request.execution_request_id,
+            workflow_id: request.handoff.task_intent.workflow_id,
+            workflow_run_id: request.handoff.task_intent.workflow_run_id,
+            node_id: request.handoff.task_intent.node_id,
+            task_id: request.handoff.task_intent.task_id,
+            state: RuntimeHostExecutionState::Failed,
+            outputs: Vec::new(),
+            diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+                code: RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                message: "runtime host failed image execution".to_string(),
+                hint: Some("test.runtime_host_failed".to_string()),
+            }],
             terminal_metadata: None,
         })
     }

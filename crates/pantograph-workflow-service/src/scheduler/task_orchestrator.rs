@@ -576,7 +576,8 @@ impl WorkflowSchedulerTaskOrchestrator {
         started: &StartedRuntimeTaskExecution,
         result: WorkflowSchedulerTaskResult,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
-        let completion_transition = completion_transition_from_running(&started.running_record)?;
+        let completion_transition =
+            runtime_result_transition_from_running(&started.running_record, &result)?;
         store
             .complete_active_run_scheduler_task(
                 session_id,
@@ -1344,7 +1345,7 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     ReservationLifecyclePort(ReservationLifecyclePortError),
     #[error("scheduler contract validation failed")]
     SchedulerContract(SchedulerContractError),
-    #[error("workflow service operation failed")]
+    #[error("workflow service operation failed: {0}")]
     WorkflowService(WorkflowServiceError),
     #[error("external workflow input materialization failed")]
     ExternalInputMaterialization(WorkflowExternalInputMaterializationError),
@@ -1463,6 +1464,23 @@ fn completion_transition_from_running(
     )
 }
 
+fn runtime_result_transition_from_running(
+    record: &SchedulerTaskStateRecord,
+    result: &WorkflowSchedulerTaskResult,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    match result.status {
+        WorkflowSchedulerTaskResultStatus::Completed => completion_transition_from_running(record),
+        WorkflowSchedulerTaskResultStatus::Failed
+        | WorkflowSchedulerTaskResultStatus::Unavailable
+        | WorkflowSchedulerTaskResultStatus::Invalid => {
+            terminal_failure_transition_from_running_diagnostics(
+                record,
+                runtime_result_failure_diagnostics(result),
+            )
+        }
+    }
+}
+
 fn terminal_failure_transition_from_running(
     record: &SchedulerTaskStateRecord,
     diagnostic: SchedulerTaskStateDiagnostic,
@@ -1480,6 +1498,32 @@ fn terminal_failure_transition_from_running_diagnostics(
         SchedulerTaskStateKind::Running,
         SchedulerTaskState::TerminalFailed { diagnostics },
     )
+}
+
+fn runtime_result_failure_diagnostics(
+    result: &WorkflowSchedulerTaskResult,
+) -> Vec<SchedulerTaskStateDiagnostic> {
+    if result.diagnostics.is_empty() {
+        return vec![SchedulerTaskStateDiagnostic {
+            severity: SchedulerTaskStateDiagnosticSeverity::Error,
+            code: SchedulerTaskStateDiagnosticCode::TerminalFailure,
+            message: format!(
+                "runtime host returned {:?} for scheduler task '{}'",
+                result.status, result.task_id
+            ),
+            hint: Some("Inspect the runtime-host task result diagnostics.".to_string()),
+        }];
+    }
+    result
+        .diagnostics
+        .iter()
+        .map(|diagnostic| SchedulerTaskStateDiagnostic {
+            severity: SchedulerTaskStateDiagnosticSeverity::Error,
+            code: SchedulerTaskStateDiagnosticCode::TerminalFailure,
+            message: diagnostic.message.clone(),
+            hint: Some(diagnostic.code.clone()),
+        })
+        .collect()
 }
 
 fn runtime_dispatch_selection_task_diagnostics(

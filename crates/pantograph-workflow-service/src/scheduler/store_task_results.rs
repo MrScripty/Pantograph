@@ -315,23 +315,31 @@ fn validate_completion_transition_for_result(
     transition: &SchedulerTaskStateTransition,
     result: &WorkflowSchedulerTaskResult,
 ) -> Result<(), WorkflowServiceError> {
-    if result.status != crate::workflow::WorkflowSchedulerTaskResultStatus::Completed {
-        return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task result '{}' must be completed for task completion",
-            result.task_id
-        )));
-    }
     if transition.expected_previous_state != Some(SchedulerTaskStateKind::Running) {
         return Err(WorkflowServiceError::InvalidRequest(format!(
             "scheduler task '{}' completion must expect running state",
             result.task_id
         )));
     }
-    if transition.next_state.kind() != SchedulerTaskStateKind::Completed {
-        return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task '{}' completion transition must end completed",
-            result.task_id
-        )));
+    match result.status {
+        crate::workflow::WorkflowSchedulerTaskResultStatus::Completed => {
+            if transition.next_state.kind() != SchedulerTaskStateKind::Completed {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' completed result transition must end completed",
+                    result.task_id
+                )));
+            }
+        }
+        crate::workflow::WorkflowSchedulerTaskResultStatus::Failed
+        | crate::workflow::WorkflowSchedulerTaskResultStatus::Unavailable
+        | crate::workflow::WorkflowSchedulerTaskResultStatus::Invalid => {
+            if transition.next_state.kind() != SchedulerTaskStateKind::TerminalFailed {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' failed result transition must end terminal-failed",
+                    result.task_id
+                )));
+            }
+        }
     }
     validate_transition_result_correlation(transition, result, "completion")
 }
