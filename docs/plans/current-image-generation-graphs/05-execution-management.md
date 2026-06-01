@@ -21509,6 +21509,31 @@ Worker rules:
     admission. Option 2 is the smallest fail-closed interim guardrail. Option
     3 is useful for advanced override UX, but should not become an implicit
     default or frontend-owned scheduler policy.
+- 2026-05-31 production resource-estimate decision update:
+  - Decision: use option 1 as the target production design and option 2 as the
+    next thin validation checkpoint. Validation/snapshot production must create
+    conservative typed resource estimates from backend-owned facts before
+    scheduler dispatch. Until those estimates are available, dispatch/admission
+    must fail closed with a typed missing-estimates diagnostic.
+  - Resource model: estimates must separate model/load memory from
+    execution/context memory. Model/load claims cover resident weights,
+    components, runtime package costs, and selected device placement.
+    Execution/context claims cover prompt/context/KV cache, image dimensions,
+    batch count, temporary buffers, and other task-shape costs.
+  - Scheduler semantics: runtime registry owns current available resources,
+    active reservations, residency facts, and release after task completion,
+    failure, or cancellation. The scheduler may queue/defer and reconsider
+    tasks after releases occur, but it must not count memory that might be
+    freed in the future as available for current dispatch.
+  - Same-model reuse: if registry/candidate facts prove the same compatible
+    model is already resident, the scheduler may use an incremental
+    execution/context claim instead of a full reload claim. If residency,
+    compatibility, or resource estimates are missing, execution blocks with
+    typed diagnostics rather than falling back to zero-resource execution.
+  - Standards alignment: this keeps validation facts, scheduling policy,
+    runtime registry state, and runtime-host execution as separate concerns;
+    preserves parse/validate-once boundary behavior; avoids frontend/Tauri
+    business policy; and avoids implicit defaults or fallback execution.
 
 ### Traceability Links
 

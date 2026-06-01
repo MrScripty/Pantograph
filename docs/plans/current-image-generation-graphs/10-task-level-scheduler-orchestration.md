@@ -166,6 +166,23 @@ from descriptor/Pumas/runtime facts during validation, whether dispatch blocks
 with a resource-estimates-missing diagnostic until Milestone 6 facts exist, or
 whether an explicit authored resource constraint contract is added.
 
+2026-05-31 decision update: use conservative resource estimate production as
+the target path, with an explicit typed missing-estimates diagnostic as the
+next thin fail-closed checkpoint. Required claims must be produced before
+scheduler dispatch from backend-owned facts: Pumas/model load memory,
+descriptor/task execution shape, runtime/device capability facts, and selected
+constraints. The estimates must distinguish model/load memory from
+execution/context memory so an already-resident model can avoid a full reload
+claim while still reserving incremental prompt/context, batch, dimension, KV,
+or temporary-buffer resources. Runtime registry remains the owner of available
+resource state, active reservations, residency, and reservation release. The
+scheduler may reconsider waiting/deferred tasks after reservations are released
+when running work completes, fails, or is cancelled, but it must not assume
+future release as current capacity. Same-model reuse is allowed only when
+registry/candidate facts explicitly prove compatible residency; missing
+residency or missing estimate facts must block with typed diagnostics, not
+fall back to zero-resource execution.
+
 ## Task Definition And Task State Replan
 
 The current `pantograph-scheduler` queue contracts require a complete
