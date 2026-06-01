@@ -6,7 +6,8 @@ use pantograph_dependency_planning::{
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
-    SchedulerNodeId, SchedulerRuntimeDeviceConstraints, SchedulerTraitId, SchedulerTraitSetting,
+    SchedulerEstimateHint, SchedulerEstimateHintKind, SchedulerNodeId,
+    SchedulerRuntimeDeviceConstraints, SchedulerTraitId, SchedulerTraitSetting,
     SchedulerTraitValue,
 };
 use serde_json::json;
@@ -32,6 +33,16 @@ fn workflow_run_id() -> WorkflowRunId {
 }
 
 fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
+    ready_inference_projection(resource_estimate_hints())
+}
+
+fn inference_projection_without_resource_estimates() -> WorkflowSchedulerInferenceTaskProjections {
+    ready_inference_projection(Vec::new())
+}
+
+fn ready_inference_projection(
+    estimate_hints: Vec<SchedulerEstimateHint>,
+) -> WorkflowSchedulerInferenceTaskProjections {
     WorkflowSchedulerInferenceTaskProjections::from_records(vec![
         WorkflowSchedulerInferenceTaskProjection::Ready(
             WorkflowSchedulerReadyInferenceTaskProjection {
@@ -56,12 +67,25 @@ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
                     trait_id: SchedulerTraitId::parse("denoising_scheduler").expect("trait id"),
                     value: SchedulerTraitValue::String("euler_discrete".to_string()),
                 }],
-                estimate_hints: Vec::new(),
+                estimate_hints,
                 dependency_readiness_source: dependency_readiness_source("iface.test.v1"),
             },
         ),
     ])
     .expect("projection")
+}
+
+fn resource_estimate_hints() -> Vec<SchedulerEstimateHint> {
+    vec![
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakRamBytes,
+            value: 2_147_483_648,
+        },
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakVramBytes,
+            value: 4_294_967_296,
+        },
+    ]
 }
 
 fn dependency_readiness_source(
@@ -247,6 +271,7 @@ fn scheduler_task_graph_projects_path_free_inference_intent() {
         Some("cuda:0")
     );
     assert_eq!(intent.trait_settings.len(), 1);
+    assert_eq!(intent.estimate_hints, resource_estimate_hints());
     assert_eq!(
         intent.trait_settings[0].trait_id.as_str(),
         "denoising_scheduler"
@@ -259,6 +284,38 @@ fn scheduler_task_graph_projects_path_free_inference_intent() {
     let encoded = serde_json::to_string(&graph).expect("encode task graph");
     assert!(!encoded.contains("model_path"));
     assert!(!encoded.contains("/tmp/legacy-model"));
+}
+
+#[test]
+fn scheduler_task_graph_blocks_runtime_inference_without_resource_estimates() {
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph_with_inline_inference_ref(),
+        &inference_projection_without_resource_estimates(),
+    )
+    .expect("graph");
+    let inference_task = graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "infer")
+        .expect("inference task");
+
+    assert!(inference_task.schedulable_intent.is_none());
+    assert!(inference_task.schedulable_intent_template.is_none());
+    assert_eq!(
+        inference_task
+            .inference_descriptor_fingerprint
+            .as_ref()
+            .map(|fingerprint| fingerprint.as_str()),
+        Some("iface.test.v1")
+    );
+    assert!(inference_task.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == WorkflowSchedulerTaskProjectionDiagnosticCode::MissingResourceEstimates
+            && diagnostic.port_id.is_none()
+            && diagnostic.message
+                == "runtime inference scheduler tasks require validated resource estimate hints"
+    }));
 }
 
 #[test]

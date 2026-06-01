@@ -29,6 +29,8 @@ const PORT_VALUE: &str = "value";
 const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const MISSING_RESOURCE_ESTIMATES_MESSAGE: &str =
+    "runtime inference scheduler tasks require validated resource estimate hints";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkflowSchedulerInferenceTaskProjections {
@@ -289,6 +291,19 @@ fn schedulable_intent_for_node(
 
     match inference_task_projection {
         WorkflowSchedulerInferenceTaskProjection::Ready(projection) => {
+            if projection.estimate_hints.is_empty() {
+                return (
+                    None,
+                    None,
+                    Some(projection.descriptor_fingerprint.clone()),
+                    vec![diagnostic(
+                        node_id,
+                        None,
+                        WorkflowSchedulerTaskProjectionDiagnosticCode::MissingResourceEstimates,
+                        MISSING_RESOURCE_ESTIMATES_MESSAGE,
+                    )],
+                );
+            }
             let template = WorkflowSchedulerTaskIntentTemplate {
                 task_type: projection.task_type.clone(),
                 constraints: projection.constraints.clone(),

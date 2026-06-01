@@ -12,7 +12,7 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 6;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 7;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -141,6 +141,7 @@ pub enum WorkflowSchedulerTaskProjectionDiagnosticCode {
     StaleInferenceDescriptor,
     UnavailableInferenceDescriptor,
     InvalidInferenceDescriptor,
+    MissingResourceEstimates,
     MissingNonRuntimeTemplateValue,
     InvalidNonRuntimeTemplateValue,
     UnsupportedNonRuntimeTaskTemplate,

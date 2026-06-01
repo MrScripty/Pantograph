@@ -21534,6 +21534,40 @@ Worker rules:
     runtime registry state, and runtime-host execution as separate concerns;
     preserves parse/validate-once boundary behavior; avoids frontend/Tauri
     business policy; and avoids implicit defaults or fallback execution.
+- 2026-05-31 missing resource-estimate scheduler guardrail slice:
+  - Smallest useful slice: implement option 2's fail-closed checkpoint before
+    production-composed runtime dispatch consumes scheduler task intents.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/task_graph_contracts.rs`,
+    `crates/pantograph-workflow-service/src/workflow/task_graph.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/task_graph.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    and these plan files.
+  - Implementation: scheduler task graph schema version advanced to 7 and now
+    exposes `missing_resource_estimates` as a typed projection diagnostic.
+    Runtime-inference projections with validated descriptors but no estimate
+    hints no longer produce `SchedulableTaskIntent` records; they remain
+    visible in the task graph with descriptor fingerprint and a blocking
+    diagnostic. Existing runtime session fixtures now include explicit RAM and
+    VRAM estimate hints so successful scheduler dispatch tests continue to
+    prove the positive path with resource claims present.
+  - No-fallback/no-legacy result: this slice does not synthesize zero-resource
+    reservations, infer estimates from graph paths, call legacy node-engine
+    execution, reintroduce `ModelRefV2`, or move resource policy into
+    frontend/Tauri. Missing estimates block before runtime dispatch with a
+    typed backend-owned diagnostic.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    scheduler_task_graph_blocks_runtime_inference_without_resource_estimates
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    scheduler_task_graph_projects_path_free_inference_intent -- --nocapture`;
+    `cargo test -p pantograph-workflow-service
+    workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+    -- --nocapture`; and `cargo check -p pantograph-workflow-service`.
+  - Remaining follow-up: implement option 1 by producing conservative
+    backend-owned model/load and execution/context estimate hints from
+    validation/Pumas/runtime facts instead of hand-authored test fixture
+    estimates, then add the complete production-composed image session path.
 
 ### Traceability Links
 

@@ -1685,3 +1685,20 @@ this ordering to add graph-path fallback, node-engine planned-inference launch,
   inference-interface resolution/persistence, then add the successful
   scheduler-to-runtime-host image session coverage using the resolved
   descriptor.
+- 2026-05-31 missing resource-estimate scheduler guardrail slice completed.
+  Smallest useful vertical slice: fail closed before runtime-host dispatch
+  when scheduler inference projections do not carry validated resource
+  estimate hints. Implementation: task graph schema version 7 adds a typed
+  `missing_resource_estimates` projection diagnostic, and runtime-inference
+  nodes with empty estimate hints no longer materialize schedulable intents.
+  Existing runtime session fixtures now carry explicit RAM/VRAM hints so the
+  positive scheduler dispatch path still proves resource claims are present.
+  No-fallback/no-legacy result: no zero-resource fallback, graph-path estimate
+  inference, node-engine planned-inference branch, `ModelRefV2`, or Tauri-owned
+  scheduler policy was added. Verification passed: `cargo fmt -p
+  pantograph-workflow-service`; focused task graph tests for missing estimates
+  and positive path projection; focused runtime session dispatch test; and
+  `cargo check -p pantograph-workflow-service`. Remaining follow-up:
+  validation snapshot production must generate conservative model/load and
+  execution/context resource estimates from backend-owned facts before the
+  production-composed image session path can be completed.

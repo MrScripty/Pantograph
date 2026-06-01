@@ -31,9 +31,10 @@ use pantograph_runtime_host_contracts::{
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
-    SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerReservationLeaseId,
-    SchedulerResourceFitAssessment, SchedulerResourceFitState, SchedulerResourceKind,
-    SchedulerResourceReservation, SchedulerTaskStateRecord,
+    SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerEstimateHint,
+    SchedulerEstimateHintKind, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
+    SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
+    SchedulerTaskStateRecord,
 };
 
 use super::*;
@@ -3289,13 +3290,26 @@ fn runtime_executable_validation_snapshot(
             availability_status: InferenceAvailabilityStatus::Available,
             validation_status: DraftGraphValidationStatus::Executable,
             trait_settings: Vec::new(),
-            estimate_hints: Vec::new(),
+            estimate_hints: runtime_resource_estimate_hints(),
             dependency_requirements_id: dependency_proof.dependency_requirements_id,
             selected_binding_ids: dependency_proof.identity_key.selected_binding_ids,
             dependency_override_fingerprint: dependency_proof.dependency_override_fingerprint,
             blocking_diagnostics: Vec::new(),
         }],
     }
+}
+
+fn runtime_resource_estimate_hints() -> Vec<SchedulerEstimateHint> {
+    vec![
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakRamBytes,
+            value: 2_147_483_648,
+        },
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakVramBytes,
+            value: 4_294_967_296,
+        },
+    ]
 }
 
 fn runtime_dependency_requirements_proof(
