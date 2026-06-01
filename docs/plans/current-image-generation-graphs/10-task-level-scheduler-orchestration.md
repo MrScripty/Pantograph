@@ -154,6 +154,18 @@ dependency preflight outputs.
 The names are planning names. Implementation may choose shorter local names,
 but the ownership and data boundaries must remain explicit.
 
+2026-05-31 production-composed image session boundary: resource-backed runtime
+dispatch now depends on explicit scheduler resource claims derived from
+`SchedulerEstimateHint` values. Current executable validation snapshot
+projection stores empty estimate hints for inference nodes, so a
+production-composed image session cannot dispatch without either explicit
+estimate facts or a typed fail-closed diagnostic. Do not treat missing
+estimates as zero-resource reservations. Before the full production-composed
+image session path is implemented, re-plan whether estimate hints are produced
+from descriptor/Pumas/runtime facts during validation, whether dispatch blocks
+with a resource-estimates-missing diagnostic until Milestone 6 facts exist, or
+whether an explicit authored resource constraint contract is added.
+
 ## Task Definition And Task State Replan
 
 The current `pantograph-scheduler` queue contracts require a complete

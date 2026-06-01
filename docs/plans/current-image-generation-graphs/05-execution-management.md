@@ -21480,6 +21480,35 @@ Worker rules:
     production validation-state snapshot generation for saved workflows, then
     wire the production-composed runtime-host port and Pumas-backed image
     execution into the same session path.
+- 2026-05-31 production-composed image session re-plan boundary:
+  - Investigation after the authored-port session slice found that the next
+    full production-composed image session path cannot be implemented as a
+    standards-compliant thin slice until resource-estimate ownership is
+    resolved. `WorkflowExecutableValidationSnapshotNode::from_projection_record`
+    currently writes empty `estimate_hints`, while the resource-backed runtime
+    dispatch provider derives `RuntimeReservationRequirements` from scheduler
+    estimate hints and rejects candidates with no resource claims.
+  - Why this blocks implementation: adding a production-composed session test
+    can seed Pumas facts, runtime registry capability facts, dependency
+    readiness, authored inference ports, and the artifact writer, but dispatch
+    still fails before runtime-host execution unless resource claims exist.
+    Treating missing estimates as zero-resource reservations would be an
+    implicit fallback and would violate the no-fallback/no-legacy rule.
+  - Re-plan options to decide before production source changes:
+    1. Add required conservative resource estimate facts to the executable
+       validation snapshot from descriptor/Pumas/runtime facts and fail
+       validation when estimates are missing.
+    2. Make the dispatch provider return a typed "resource estimates missing"
+       diagnostic earlier, keeping execution blocked until Milestone 6/Pumas
+       facts provide estimates.
+    3. Add an explicit user/system-authored resource constraint contract that
+       validation snapshots can carry when Pumas facts do not yet provide
+       estimates.
+  - Standards note: option 1 is the likely production direction because
+    resource claims become explicit validated facts before scheduler
+    admission. Option 2 is the smallest fail-closed interim guardrail. Option
+    3 is useful for advanced override UX, but should not become an implicit
+    default or frontend-owned scheduler policy.
 
 ### Traceability Links
 
