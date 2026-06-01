@@ -21606,6 +21606,38 @@ Worker rules:
     execution/context estimate producer into `InferenceInterfaceResolverFacts`
     so production validation publications produce these hints without fixture
     seeding.
+- 2026-05-31 production inference facts provider re-plan boundary:
+  - Investigation after estimate-hint propagation found that production graph
+    sessions still construct with `UnavailableInferenceInterfaceFactsProvider`
+    unless tests inject a static provider. The backend now has a contract path
+    for resource estimate hints, but no production provider owns the Pumas
+    selected-artifact facts, runtime capability facts, and resource-estimate
+    conversion needed to populate `InferenceInterfaceResolverFacts`.
+  - Why this blocks the next production code slice: adding estimates inside
+    the graph session store would either invent fallback values or move Pumas
+    and runtime business policy into a state/session component. Adding them in
+    Tauri or the frontend would violate backend-owned data and no-business-
+    logic-in-Tauri constraints. Completing the production-composed inference
+    path now requires deciding the provider ownership and composition root.
+  - Standards-aligned options for re-plan:
+    1. Implement a workflow-service-local provider backed only by existing
+       workflow capability/model metadata. This is the shortest path but can
+       only produce coarse workflow-level model size estimates and risks
+       duplicating Pumas/runtime interpretation already owned elsewhere.
+    2. Implement an embedded-runtime/Pumas-backed inference facts provider and
+       inject it through backend composition. This keeps Pumas selected
+       artifact interpretation, runtime availability, and resource estimates
+       near the runtime/Pumas adapters, then passes path-free facts into
+       workflow-service validation.
+    3. Stop Pantograph here until the Pumas producer contract exposes the
+       richer model/load and execution/context estimates directly, then wire a
+       thin provider that only maps those facts into scheduler estimate hints.
+  - Recommendation: choose option 2 as the next Pantograph slice, with option
+    3 documented as the long-term producer-quality target. Option 2 matches
+    the composition-root and dependency-direction standards because workflow
+    validation consumes a narrow provider contract, while Pumas/runtime fact
+    interpretation stays in the backend adapter layer and Tauri/frontend remain
+    display-only.
 
 ### Traceability Links
 

@@ -1718,3 +1718,13 @@ this ordering to add graph-path fallback, node-engine planned-inference launch,
   Remaining follow-up: connect real Pumas/runtime estimate production to
   `InferenceInterfaceResolverFacts` before completing the production-composed
   image session.
+- 2026-05-31 production inference facts provider re-plan boundary recorded.
+  The estimate-hint contract path is implemented, but production graph
+  sessions still use `UnavailableInferenceInterfaceFactsProvider` unless tests
+  inject static facts. The next production slice must choose provider
+  ownership before editing code. Recommended path: implement an
+  embedded-runtime/Pumas-backed provider injected through backend composition,
+  while preserving Pumas producer-quality estimates as the longer-term target.
+  Rejected as default: inventing graph/session fallback estimates, adding
+  frontend/Tauri policy, or duplicating runtime/Pumas interpretation inside
+  graph session state.
