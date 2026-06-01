@@ -254,6 +254,17 @@ defining an image-only inference-node interface.
       validated intent/revision/session types after boundary parsing; raw
       strings, numeric revisions, or JSON maps may not become internal
       freshness keys.
+      Implementation update 2026-05-31: session-level scheduler runtime tests
+      now use a persisted authored `inference_interface_snapshot` for the
+      generic `llm-inference` node and connect `text-input.text` to the
+      descriptor-authored `prompt` input. The dispatch test asserts the
+      resulting scheduler/runtime-host request contains the materialized prompt
+      input. This proves the current validation/materialization path can use
+      persisted authored task ports without reintroducing static
+      `llm-inference` prompt ports or `node.data.definition` fallback. The
+      remaining production work is to generate and persist this authored
+      snapshot from current validation state for saved workflows rather than
+      hand-authoring it in tests.
 - [ ] Replace `ModelDependencyRequest`/`ModelRefV2.model_path` dependency
       preflight with scheduler-owned readiness and runtime handoff. Re-plan
       decision on 2026-05-26: use option 3. Dependency readiness, runtime/device

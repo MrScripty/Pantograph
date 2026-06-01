@@ -23,11 +23,12 @@ use pantograph_runtime_host_contracts::{
     ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
     ReservationLifecyclePortError, RuntimeHostExecutionDiagnostic,
     RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
-    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
-    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
-    WorkflowSessionRuntimeLoadProofDiagnosticPhase, WorkflowSessionRuntimeLoadProofReadinessState,
-    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionInputValue, RuntimeHostExecutionMediaArtifactRef,
+    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionState, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
+    WorkflowSessionRuntimeLoadProofReadinessState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerReservationLeaseId,
@@ -499,6 +500,12 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     );
     let recorded = runtime_host_port.requests();
     assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].materialized_inputs.len(), 1);
+    assert_eq!(recorded[0].materialized_inputs[0].port_id, "prompt");
+    assert_eq!(
+        recorded[0].materialized_inputs[0].value,
+        RuntimeHostExecutionInputValue::String("paint a red cube".to_string())
+    );
     assert_eq!(
         recorded[0]
             .handoff
@@ -3165,6 +3172,7 @@ fn runtime_inference_session_graph() -> WorkflowGraph {
                     "task_kind": "image_generation",
                     "runtime": "pytorch",
                     "device": "cuda:0",
+                    "inference_interface_snapshot": runtime_inference_interface_snapshot_json(),
                     "pumas_model_ref": {
                         "model_id": "image/example/tiny-diffusion",
                         "revision": "main",
@@ -3173,9 +3181,53 @@ fn runtime_inference_session_graph() -> WorkflowGraph {
                 }),
             },
         ],
-        edges: Vec::new(),
+        edges: vec![crate::graph::GraphEdge {
+            id: "prompt-to-infer".to_string(),
+            source: "prompt".to_string(),
+            source_handle: "text".to_string(),
+            target: "infer".to_string(),
+            target_handle: "prompt".to_string(),
+        }],
         derived_graph: None,
     }
+}
+
+fn runtime_inference_interface_snapshot_json() -> serde_json::Value {
+    serde_json::json!({
+        "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+        "descriptor_fingerprint": "runtime_descriptor_fingerprint_1",
+        "task_kind": "image_generation",
+        "inputs": [
+            {
+                "port_id": "prompt",
+                "label": "Prompt",
+                "direction": "input",
+                "requirement": "required",
+                "value_type": {
+                    "category": "scalar",
+                    "kind": "string"
+                },
+                "availability": {
+                    "status": "available"
+                }
+            }
+        ],
+        "outputs": [
+            {
+                "port_id": "image",
+                "label": "Image",
+                "direction": "output",
+                "requirement": "required",
+                "value_type": {
+                    "category": "artifact",
+                    "kind": "image"
+                },
+                "availability": {
+                    "status": "available"
+                }
+            }
+        ]
+    })
 }
 
 fn runtime_executable_validation_snapshot(

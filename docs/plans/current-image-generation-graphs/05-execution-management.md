@@ -21448,6 +21448,38 @@ Worker rules:
     resolution/persistence in the validator, graph editor, scheduler task
     materializer, and runtime-host request builder before adding the complete
     production-composed successful image session test.
+- 2026-05-31 Milestone 5d/5b authored inference-port session materialization
+  test slice:
+  - Smallest useful slice: update the runtime session graph fixture to persist
+    the authored inference interface snapshot and connect prompt through the
+    descriptor-authored `prompt` input, then assert scheduler runtime-host
+    dispatch materializes that prompt into the runtime-host request.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+    and these plan files.
+  - Implementation: the session fixture now saves
+    `inference_interface_snapshot` on the `llm-inference` node with `prompt`
+    input and `image` output summaries, connects `text-input.text` to
+    `llm-inference.prompt`, and verifies the dispatched
+    `RuntimeHostExecutionRequest.materialized_inputs` contains the prompt
+    string.
+  - No-fallback/no-legacy result: the slice does not add static
+    `llm-inference` prompt ports, `node.data.definition` fallback, graph path
+    inputs, `ModelRefV2`, node-engine planned-inference execution, or
+    Tauri-owned policy. Submit/readiness validation accepts the task port only
+    through the persisted authored snapshot.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+    -- --nocapture`; `cargo test -p pantograph-workflow-service
+    workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure
+    -- --nocapture`; and `cargo test -p pantograph-workflow-service
+    workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch
+    -- --nocapture`.
+  - Remaining follow-up: replace hand-authored session fixtures with
+    production validation-state snapshot generation for saved workflows, then
+    wire the production-composed runtime-host port and Pumas-backed image
+    execution into the same session path.
 
 ### Traceability Links
 
