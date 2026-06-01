@@ -21568,6 +21568,44 @@ Worker rules:
     backend-owned model/load and execution/context estimate hints from
     validation/Pumas/runtime facts instead of hand-authored test fixture
     estimates, then add the complete production-composed image session path.
+- 2026-05-31 inference validation estimate-hint propagation slice:
+  - Smallest useful slice: carry backend-owned scheduler estimate facts through
+    inference interface resolution, validation publication, current validation
+    state, and executable validation snapshot compaction.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_interface_resolver.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_projection.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_publication.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_interface_facts.rs`,
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/executable_validation_snapshot.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_version.rs`,
+    and these plan files.
+  - Implementation: `InferenceInterfaceResolverFacts` now has defaulted
+    scheduler estimate hints, `InferenceInterfaceResolutionProjection` and
+    `InferenceInterfaceNodeProjectionRecord` preserve them, current validation
+    state uses them in scheduler projections, and executable snapshot
+    compaction persists them into `WorkflowExecutableValidationSnapshotNode`.
+  - No-fallback/no-legacy result: this slice does not derive estimates from
+    graph paths, UI fields, retired runtime contracts, or zero-resource
+    defaults. Missing estimate facts remain empty and are blocked by the
+    `missing_resource_estimates` task-graph diagnostic from the previous
+    slice.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+    test -p pantograph-workflow-service
+    projection_carries_scheduler_estimate_hints_from_resolver_facts --
+    --nocapture`; `cargo test -p pantograph-workflow-service
+    publication_projects_ready_inference_node_and_summary_event -- --nocapture`;
+    `cargo test -p pantograph-workflow-service
+    scheduler_projection_state_projects_executable_node_records --
+    --nocapture`; `cargo test -p pantograph-workflow-service
+    compacts_graph_session_snapshot_source_with_dependency_proof --
+    --nocapture`; and `cargo check -p pantograph-workflow-service`.
+  - Remaining follow-up: wire the real Pumas/runtime model-load and
+    execution/context estimate producer into `InferenceInterfaceResolverFacts`
+    so production validation publications produce these hints without fixture
+    seeding.
 
 ### Traceability Links
 

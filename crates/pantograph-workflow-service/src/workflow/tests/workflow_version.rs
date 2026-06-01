@@ -468,6 +468,7 @@ fn executable_validation_publication(
             update_proposal: None,
             runtime_constraint: None,
             device_constraint: None,
+            estimate_hints: Vec::new(),
         }],
         request_diagnostics: Vec::new(),
     }

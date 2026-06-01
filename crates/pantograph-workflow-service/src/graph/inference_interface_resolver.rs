@@ -6,6 +6,7 @@ use pantograph_inference_interface_contracts::{
     InferenceTaskKind, ResolveInferenceInterfaceRequest, RuntimeIntentId,
     INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
+use pantograph_scheduler::SchedulerEstimateHint;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -29,6 +30,8 @@ pub struct InferenceInterfaceResolverFacts {
     pub capability: Option<InferenceCapabilityFacts>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runtimes: Vec<InferenceRuntimeAvailabilityFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub estimate_hints: Vec<SchedulerEstimateHint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -607,6 +610,7 @@ mod tests {
                 state: InferenceRuntimeAvailabilityState::Available,
                 device_ids: vec![device_id("cuda.0")],
             }],
+            estimate_hints: Vec::new(),
         }
     }
 

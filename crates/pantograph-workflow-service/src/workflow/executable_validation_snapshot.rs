@@ -361,7 +361,7 @@ impl WorkflowExecutableValidationSnapshotNode {
             availability_status: record.descriptor.availability.status,
             validation_status: record.validation_summary.status,
             trait_settings: Vec::new(),
-            estimate_hints: Vec::new(),
+            estimate_hints: record.estimate_hints.clone(),
             dependency_requirements_id,
             selected_binding_ids,
             dependency_override_fingerprint,
@@ -1150,6 +1150,7 @@ mod tests {
             "requirements.image_generation.cuda0"
         );
         assert_eq!(snapshot.nodes[0].selected_binding_ids.len(), 1);
+        assert_eq!(snapshot.nodes[0].estimate_hints, source_estimate_hints());
     }
 
     #[test]
@@ -1492,8 +1493,22 @@ mod tests {
                 update_proposal: None,
                 runtime_constraint: Some(RuntimeIntentId::parse("pytorch").unwrap()),
                 device_constraint: Some(DeviceIntentId::parse("cuda:0").unwrap()),
+                estimate_hints: source_estimate_hints(),
             }],
             request_diagnostics: Vec::new(),
         }
+    }
+
+    fn source_estimate_hints() -> Vec<SchedulerEstimateHint> {
+        vec![
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakRamBytes,
+                value: 2_147_483_648,
+            },
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakVramBytes,
+                value: 4_294_967_296,
+            },
+        ]
     }
 }

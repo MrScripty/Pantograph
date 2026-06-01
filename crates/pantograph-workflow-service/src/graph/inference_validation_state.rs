@@ -20,7 +20,7 @@ use pantograph_inference_interface_contracts::{
     InferenceTaskKind, ValidatedDependencyEnvironmentActionIntent, WorkflowGraphRevision,
     WorkflowGraphSessionId, WorkflowNodeId,
 };
-use pantograph_scheduler::SchedulerTraitSetting;
+use pantograph_scheduler::{SchedulerEstimateHint, SchedulerTraitSetting};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -1211,6 +1211,7 @@ pub(crate) struct CurrentInferenceValidationNodeRecord {
     pub pumas_model_ref: PumasModelRef,
     pub runtime_constraint: Option<RuntimeIntentId>,
     pub device_constraint: Option<DeviceIntentId>,
+    pub estimate_hints: Vec<SchedulerEstimateHint>,
     #[allow(dead_code)]
     pub projection: InferenceInterfaceNodeProjectionRecord,
     pub dependency_requirements_proof: Option<CurrentDependencyRequirementsProof>,
@@ -1226,6 +1227,7 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
         let pumas_model_ref = record.descriptor.model_ref.clone();
         let runtime_constraint = record.runtime_constraint.clone();
         let device_constraint = record.device_constraint.clone();
+        let estimate_hints = record.estimate_hints.clone();
         Self {
             node_id,
             descriptor_fingerprint,
@@ -1235,6 +1237,7 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
             pumas_model_ref,
             runtime_constraint,
             device_constraint,
+            estimate_hints,
             projection: record,
             dependency_requirements_proof: None,
         }
@@ -1417,7 +1420,7 @@ impl CurrentInferenceValidationNodeRecord {
                         requested_device_id: self.device_constraint.clone(),
                     },
                     trait_settings: Vec::new(),
-                    estimate_hints: Vec::new(),
+                    estimate_hints: self.estimate_hints.clone(),
                     dependency_readiness_source: WorkflowSchedulerDependencyReadinessSource {
                         graph_revision: DependencyReadinessGraphRevision::parse(
                             graph_revision.as_str(),
@@ -1800,6 +1803,7 @@ mod tests {
         DraftGraphValidationStatus, InferenceAvailability, InferenceConnectionSurfaceStatus,
         InferenceDiagnosticCode, InferenceInterfaceDescriptor,
     };
+    use pantograph_scheduler::SchedulerEstimateHintKind;
 
     use super::*;
 
@@ -2583,6 +2587,7 @@ mod tests {
                 .len(),
             1
         );
+        assert_eq!(projection.estimate_hints, scheduler_estimate_hints());
     }
 
     #[tokio::test]
@@ -2951,6 +2956,20 @@ mod tests {
             update_proposal: None,
             runtime_constraint: Some("pytorch".parse().expect("runtime id")),
             device_constraint: Some("cuda.0".parse().expect("device id")),
+            estimate_hints: scheduler_estimate_hints(),
         }
+    }
+
+    fn scheduler_estimate_hints() -> Vec<SchedulerEstimateHint> {
+        vec![
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakRamBytes,
+                value: 2_147_483_648,
+            },
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakVramBytes,
+                value: 4_294_967_296,
+            },
+        ]
     }
 }

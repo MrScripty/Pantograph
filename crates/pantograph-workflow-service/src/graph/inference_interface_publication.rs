@@ -8,6 +8,7 @@ use pantograph_inference_interface_contracts::{
     InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceInterfaceFingerprint,
     RuntimeIntentId, WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
+use pantograph_scheduler::SchedulerEstimateHint;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -92,6 +93,8 @@ pub struct InferenceInterfaceNodeProjectionRecord {
     pub runtime_constraint: Option<RuntimeIntentId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_constraint: Option<DeviceIntentId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub estimate_hints: Vec<SchedulerEstimateHint>,
 }
 
 impl InferenceInterfaceNodeProjectionRecord {
@@ -260,6 +263,7 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
             update_proposal,
             runtime_constraint: input.request.runtime_constraint.clone(),
             device_constraint: input.request.device_constraint.clone(),
+            estimate_hints: projection.estimate_hints,
         });
     }
 
@@ -499,6 +503,7 @@ mod tests {
         InferenceModelResolutionState, InferenceRuntimeAvailabilityFact,
         InferenceRuntimeAvailabilityState, Position, WorkflowGraph,
     };
+    use pantograph_scheduler::{SchedulerEstimateHint, SchedulerEstimateHintKind};
 
     #[test]
     fn publication_projects_ready_inference_node_and_summary_event() {
@@ -514,6 +519,10 @@ mod tests {
         assert!(publication.request_diagnostics.is_empty());
         assert_eq!(publication.node_projections.len(), 1);
         assert_eq!(publication.node_projections[0].node_id.as_str(), "infer");
+        assert_eq!(
+            publication.node_projections[0].estimate_hints,
+            estimate_hints()
+        );
         assert_eq!(
             publication.validation_session.summary.status,
             DraftGraphValidationStatus::Executable
@@ -813,7 +822,21 @@ mod tests {
                 state: InferenceRuntimeAvailabilityState::Available,
                 device_ids: Vec::new(),
             }],
+            estimate_hints: estimate_hints(),
         }
+    }
+
+    fn estimate_hints() -> Vec<SchedulerEstimateHint> {
+        vec![
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakRamBytes,
+                value: 2_147_483_648,
+            },
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakVramBytes,
+                value: 4_294_967_296,
+            },
+        ]
     }
 
     fn prompt_port() -> InferencePortDescriptor {

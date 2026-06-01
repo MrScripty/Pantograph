@@ -1702,3 +1702,19 @@ this ordering to add graph-path fallback, node-engine planned-inference launch,
   validation snapshot production must generate conservative model/load and
   execution/context resource estimates from backend-owned facts before the
   production-composed image session path can be completed.
+- 2026-05-31 inference validation estimate-hint propagation slice completed.
+  Smallest useful vertical slice: carry backend-owned scheduler estimate facts
+  through inference interface resolution, validation publication, current
+  validation state, and executable snapshot compaction. Implementation:
+  resolver facts now expose defaulted scheduler estimate hints; resolution
+  projections, node projection records, current scheduler projections, and
+  executable validation snapshot nodes preserve those hints. No-fallback/
+  no-legacy result: the slice does not invent estimates from graph paths, UI
+  state, retired runtime contracts, or zero-resource defaults; absent facts
+  remain empty and are blocked by the prior `missing_resource_estimates`
+  diagnostic. Verification passed: `cargo fmt -p pantograph-workflow-service`;
+  focused projection, publication, current-state projection, and snapshot
+  compaction tests; and `cargo check -p pantograph-workflow-service`.
+  Remaining follow-up: connect real Pumas/runtime estimate production to
+  `InferenceInterfaceResolverFacts` before completing the production-composed
+  image session.

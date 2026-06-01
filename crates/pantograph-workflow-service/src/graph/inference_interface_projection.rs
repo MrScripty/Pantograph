@@ -7,6 +7,7 @@ use pantograph_inference_interface_contracts::{
     InferenceInterfaceDriftChangeKind, InferenceInterfaceDriftReport, InferencePortDescriptor,
     INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
+use pantograph_scheduler::SchedulerEstimateHint;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -34,6 +35,8 @@ pub struct InferenceInterfaceResolutionProjection {
     pub validation_summary: DraftGraphValidationSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_report: Option<InferenceInterfaceDriftReport>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub estimate_hints: Vec<SchedulerEstimateHint>,
 }
 
 pub fn resolve_inference_interface_projection(
@@ -41,6 +44,7 @@ pub fn resolve_inference_interface_projection(
     facts: InferenceInterfaceResolverFacts,
     authored_snapshot: Option<AuthoredInferenceInterfaceSnapshot>,
 ) -> Result<InferenceInterfaceResolutionProjection, InferenceInterfaceProjectionError> {
+    let estimate_hints = facts.estimate_hints.clone();
     let descriptor = resolve_inference_interface_from_facts(request, facts)?;
     let authored_snapshot = match authored_snapshot {
         Some(snapshot) => {
@@ -57,6 +61,7 @@ pub fn resolve_inference_interface_projection(
         authored_snapshot,
         validation_summary,
         drift_report,
+        estimate_hints,
     })
 }
 
@@ -446,6 +451,7 @@ mod tests {
         InferenceTaskKind, InferenceValueType, PumasModelRef, ResolveInferenceInterfaceRequest,
         RuntimeIntentId,
     };
+    use pantograph_scheduler::{SchedulerEstimateHint, SchedulerEstimateHintKind};
 
     use crate::graph::{
         InferenceCapabilityFacts, InferenceModelResolutionFacts, InferenceModelResolutionState,
@@ -472,6 +478,15 @@ mod tests {
             .validation_summary
             .enqueue_disabled_reasons
             .is_empty());
+    }
+
+    #[test]
+    fn projection_carries_scheduler_estimate_hints_from_resolver_facts() {
+        let projection =
+            resolve_inference_interface_projection(request(None, None), ready_facts(), None)
+                .expect("projection");
+
+        assert_eq!(projection.estimate_hints, estimate_hints());
     }
 
     #[test]
@@ -628,7 +643,21 @@ mod tests {
                 state: InferenceRuntimeAvailabilityState::Available,
                 device_ids: vec![device_id("cuda.0")],
             }],
+            estimate_hints: estimate_hints(),
         }
+    }
+
+    fn estimate_hints() -> Vec<SchedulerEstimateHint> {
+        vec![
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakRamBytes,
+                value: 2_147_483_648,
+            },
+            SchedulerEstimateHint {
+                kind: SchedulerEstimateHintKind::PeakVramBytes,
+                value: 4_294_967_296,
+            },
+        ]
     }
 
     fn port(

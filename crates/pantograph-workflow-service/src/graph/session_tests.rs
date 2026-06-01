@@ -2684,6 +2684,7 @@ fn ready_inference_facts() -> InferenceInterfaceResolverFacts {
             state: InferenceRuntimeAvailabilityState::Available,
             device_ids: Vec::new(),
         }],
+        estimate_hints: Vec::new(),
     }
 }
 

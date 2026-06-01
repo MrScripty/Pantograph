@@ -52,5 +52,6 @@ pub(crate) fn missing_model_facts() -> InferenceInterfaceResolverFacts {
         },
         capability: None,
         runtimes: Vec::new(),
+        estimate_hints: Vec::new(),
     }
 }
