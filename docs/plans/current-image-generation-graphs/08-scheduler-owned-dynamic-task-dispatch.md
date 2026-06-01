@@ -225,6 +225,39 @@ Resource observation implementation requirements:
 - Verify admission-time snapshots with deterministic fakes first, then add
   platform-specific smoke coverage where local tooling supports it.
 
+## Production Resource Estimate Implementation Path
+
+The production inference path must add resource estimates through this
+standards-compliant sequence:
+
+1. Record the ownership model in the plan and contracts: Pumas supplies static
+   package evidence, Pantograph estimates runtime memory, the scheduler admits
+   or rejects work, and the diagnostics ledger later refines estimates from
+   observations.
+2. Implement a concrete backend-owned `InferenceInterfaceFactsProvider` through
+   embedded-runtime/backend composition. `workflow-service` consumes the
+   provider contract; Tauri and frontend remain transport/presentation only.
+3. Have that provider consume Pumas static artifact facts plus
+   runtime/device/task-shape facts. It must not read graph-visible paths,
+   selector summaries as executable authority, UI state, or legacy
+   `ModelRefV2`/`ModelDependencyRequest` data.
+4. Add a deterministic Pantograph estimator that produces conservative
+   `SchedulerEstimateHint` records for model/load and execution/context memory
+   from logical artifact sizes, runtime overhead, precision/quantization
+   evidence, image/task parameters, and proven residency facts. Same-model
+   reuse may reduce a load estimate only when the runtime registry proves the
+   model is already resident; estimates must not assume memory will become free
+   after unrelated running tasks complete.
+5. Preserve fail-closed diagnostics. Missing, stale, ambiguous, unsupported, or
+   overflowed estimate inputs produce typed diagnostics and leave task
+   projection without schedulable runtime intent rather than using zero,
+   unlimited, name-derived, or compatibility fallback estimates.
+6. After the complete inference path is proven, add diagnostics-ledger
+   refinement that compares predicted and observed memory by
+   model/runtime/device/task signature and adjusts future estimates
+   conservatively. The estimator remains the single policy owner; Pumas remains
+   static evidence only.
+
 ## Graph Editor Abstraction
 
 The graph editor should remain simple:

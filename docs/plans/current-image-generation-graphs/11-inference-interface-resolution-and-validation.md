@@ -64,7 +64,9 @@ Out of scope:
 - **Pumas:** owns model identity, selected artifact identity, package facts,
   artifact readiness, storage kind, validation state, and local/external
   storage approval. Pumas does not own Pantograph support policy or scheduler
-  runtime ranking.
+  runtime ranking. Pumas may expose logical artifact/component sizes and
+  source-tagged package evidence, but it does not own exact loaded-memory,
+  context-memory, residency, or admission estimates.
 - **Inference crate:** owns canonical inference task/interface conventions,
   runtime-family capability facts, normalized trait names, supported and
   unavailable feature reporting, and runtime-specific execution translation

@@ -184,10 +184,16 @@ Blast-radius limits:
 - Backend adapters expose feasibility, estimates, diagnostics, and execution
   translation only. They must not implement cross-backend ranking, random or
   exploration policy, queue fairness, or learned model/runtime preference.
-- Memory estimate production is split from memory admission. Inference and
-  backend adapters may publish typed estimates and explicit unavailable states,
-  but the scheduler owns fit decisions, reservations, retries, rescheduling,
-  termination after retry exhaustion, and learned memory/timing policy.
+- Memory estimate production is split from memory admission. Pumas publishes
+  static artifact evidence such as logical file/component sizes, config,
+  precision/quantization, and package freshness. Pantograph backend-owned
+  inference facts providers and estimators publish typed conservative loaded
+  model/context/runtime estimates and explicit unavailable states. The scheduler
+  owns fit decisions, reservations, retries, rescheduling, termination after
+  retry exhaustion, and learned memory/timing policy from diagnostics-ledger
+  observations. Pumas must not be treated as an exact loaded-memory oracle, and
+  missing estimate inputs must not degrade into zero/unlimited fallback
+  estimates.
 - Runtime-registry technical-fit selection consumes immutable typed admission
   facts, not mutable reservation APIs. Candidate `peak_ram_bytes` and
   `peak_vram_bytes` estimates are checked against snapshot budget rows and

@@ -51,6 +51,10 @@ milestone status in its file and summarize progress in
    - Add the backend-owned resolver/validator that turns connected model
      references into typed generic inference-node ports, defaults,
      availability, options, and diagnostics.
+   - Add the production inference facts provider/resource estimator that turns
+     Pumas static artifact facts plus runtime/device/task-shape facts into
+     conservative scheduler estimate hints or typed insufficient-facts
+     diagnostics.
    - Graph editor draft validation, executable publish/admission validation,
      scheduler task materialization, and pre-dispatch validation must consume
      the same resolved interface descriptor so task execution cannot drift from

@@ -109,6 +109,8 @@ registered model artifacts:
 - stable model identity and selected artifact identity
 - artifact kind, executable entry path, storage kind, validation state, and
   selected files
+- logical file sizes and selected-artifact component sizes derived from the
+  package manifest/filesystem without loading tensors into runtime memory
 - Transformers-compatible model/config/task/generation metadata
 - Diffusers bundle metadata and component layout
 - GGUF header metadata
@@ -127,6 +129,8 @@ Pumas must not expose Pantograph-specific runtime policy:
 - no scheduler admission decisions
 - no backend ranking
 - no RAM/VRAM placement decisions
+- no exact loaded-model or context-memory requirements that would require
+  loading model weights or simulating a Pantograph runtime
 - no learned throughput policy
 - no Pantograph workflow/node ids
 - no implicit runtime recommendations that replace missing facts
@@ -136,6 +140,15 @@ Pumas must not expose Pantograph-specific runtime policy:
 Backend hints from Pumas remain advisory facts. Pantograph may map those facts to
 runtime candidates, but Pumas does not decide which backend, device, or runtime
 variant executes a workflow.
+
+Resource-estimation ownership is intentionally split. Pumas owns static,
+source-tagged artifact evidence, including logical file sizes, component layout,
+precision/quantization evidence, config metadata, and package freshness.
+Pantograph owns loaded-memory estimation, context/KV/temp-buffer estimation,
+runtime/device overhead, same-model residency reuse, scheduler resource
+admission, and learned refinement from observed memory-ledger facts. Pumas
+facts are therefore inputs to Pantograph's estimator, not proof that a model
+can be loaded on a given host.
 
 Package-fact family labels are acceptable only when they are backed by explicit
 source-tagged package evidence. For example, Pumas may emit `flux` when
@@ -687,11 +700,17 @@ Pantograph expects Pumas facts to support this deterministic flow:
    facts for model lists.
 2. On selected-model hydration, Pantograph gets full package facts.
 3. The inference planner validates task, artifact kind, family evidence,
-   component roles, generation defaults, custom-code facts, dependency facts,
-   and backend hints.
-4. The scheduler chooses backend/runtime/device from Pantograph-owned candidate
-   facts.
-5. The inference backend executes exactly the scheduler-selected decision.
+   component roles, logical artifact sizes, generation defaults, custom-code
+   facts, dependency facts, and backend hints.
+4. Pantograph's backend-owned inference facts provider combines Pumas static
+   facts with runtime/device/task-shape facts and emits conservative scheduler
+   estimate hints or typed insufficient-facts diagnostics.
+5. The scheduler chooses backend/runtime/device from Pantograph-owned candidate
+   facts, current resource observations/reservations, and validated estimate
+   hints.
+6. The inference backend executes exactly the scheduler-selected decision, and
+   later diagnostics-ledger observations may refine Pantograph's future
+   estimates without changing Pumas into a runtime-memory oracle.
 
 If Pumas facts are missing or ambiguous, Pantograph should fail planning with a
 typed diagnostic. It must not guess from names or substitute another family,

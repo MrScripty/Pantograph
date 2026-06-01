@@ -21619,25 +21619,32 @@ Worker rules:
     Tauri or the frontend would violate backend-owned data and no-business-
     logic-in-Tauri constraints. Completing the production-composed inference
     path now requires deciding the provider ownership and composition root.
-  - Standards-aligned options for re-plan:
-    1. Implement a workflow-service-local provider backed only by existing
-       workflow capability/model metadata. This is the shortest path but can
-       only produce coarse workflow-level model size estimates and risks
-       duplicating Pumas/runtime interpretation already owned elsewhere.
-    2. Implement an embedded-runtime/Pumas-backed inference facts provider and
-       inject it through backend composition. This keeps Pumas selected
-       artifact interpretation, runtime availability, and resource estimates
-       near the runtime/Pumas adapters, then passes path-free facts into
-       workflow-service validation.
-    3. Stop Pantograph here until the Pumas producer contract exposes the
-       richer model/load and execution/context estimates directly, then wire a
-       thin provider that only maps those facts into scheduler estimate hints.
-  - Recommendation: choose option 2 as the next Pantograph slice, with option
-    3 documented as the long-term producer-quality target. Option 2 matches
-    the composition-root and dependency-direction standards because workflow
-    validation consumes a narrow provider contract, while Pumas/runtime fact
-    interpretation stays in the backend adapter layer and Tauri/frontend remain
-    display-only.
+  - 2026-06-01 re-plan resolution: use the six-part backend-owned
+    resource-estimate implementation path. Pumas is the source of static
+    artifact facts such as logical file/component sizes, package layout,
+    config, precision/quantization evidence, and selected-artifact freshness.
+    Pantograph is the owner of loaded-memory/context/runtime estimates,
+    scheduler admission, residency reuse, and later diagnostics-ledger
+    refinement from observed memory facts.
+  - Next implementation direction:
+    1. Record the corrected ownership model in plan and source documentation.
+    2. Implement a production `InferenceInterfaceFactsProvider` through
+       embedded-runtime/backend composition, injected into workflow-service.
+    3. Consume Pumas static artifact facts plus runtime/device/task-shape and
+       proven residency facts; do not use selector summaries, UI state, graph
+       paths, `ModelRefV2`, or `ModelDependencyRequest` as executable
+       authority.
+    4. Produce conservative `SchedulerEstimateHint` values with checked
+       arithmetic and typed impossible/overflow diagnostics.
+    5. Preserve fail-closed diagnostics when estimate inputs are missing,
+       stale, ambiguous, unsupported, or insufficient.
+    6. After the complete inference path is proven, add diagnostics-ledger
+       refinement keyed by typed model/runtime/device/task signatures.
+  - Standards result: this path keeps runtime-memory policy backend-owned,
+    keeps Tauri and frontend free of business logic, preserves Pumas as a
+    factual producer instead of a runtime-memory oracle, and separates static
+    package evidence, estimate policy, scheduler admission, and learned
+    refinement as independent concerns.
 
 ### Traceability Links
 

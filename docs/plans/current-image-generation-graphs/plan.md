@@ -74,6 +74,8 @@ risk, lifecycle, and execution-management content.
 9. [Inference Interface Resolution And Validation](11-inference-interface-resolution-and-validation.md)
    - Generic inference-node model interface resolution
    - Shared descriptor contract for port discovery and validation
+   - Production inference facts provider and conservative resource estimate
+     hints from Pumas static facts plus Pantograph runtime/device facts
    - Graph editor draft validation, executable publish/admission validation,
      and execution revalidation
    - Scheduler, node-engine, runtime-host, and Pumas ownership boundaries

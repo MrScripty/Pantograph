@@ -102,6 +102,17 @@ defining an image-only inference-node interface.
       facts, and optional graph-authored constraints into one descriptor. It
       must return typed unavailable/not-implemented diagnostics when facts or
       runtime support are missing rather than guessing from names or paths.
+- [ ] Add the production inference facts provider and conservative resource
+      estimator before completing the successful production inference session
+      path. The provider must be injected through backend composition, consume
+      Pumas static artifact facts plus runtime/device/task-shape and proven
+      residency facts, and populate `InferenceInterfaceResolverFacts` with
+      conservative `SchedulerEstimateHint` values or typed insufficient-facts
+      diagnostics. Pumas supplies logical package evidence only; Pantograph
+      owns loaded-memory/context estimation, scheduler admission, and later
+      diagnostics-ledger refinement. Do not synthesize estimates from graph
+      paths, selector summaries, UI state, `ModelRefV2`,
+      `ModelDependencyRequest`, or Tauri-owned policy.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation
@@ -148,6 +159,19 @@ defining an image-only inference-node interface.
       missing, pending, stale, unavailable, unresolved, invalid, or disagrees
       with the current graph revision, the action returns typed diagnostics and
       does not call dependency execution.
+      Production inference facts provider resolution: the fail-closed
+      `UnavailableInferenceInterfaceFactsProvider` is a guardrail, not the
+      production source. The production source must be a backend-owned provider
+      injected through composition that consumes Pumas static artifact facts,
+      runtime/device/task-shape facts, and proven residency facts to populate
+      `InferenceInterfaceResolverFacts.estimate_hints`. Pumas supplies logical
+      file/component sizes and package evidence; Pantograph owns the
+      conservative loaded-memory/context estimator, scheduler resource
+      admission, and later diagnostics-ledger refinement. Missing or
+      insufficient estimate inputs must produce typed diagnostics and leave
+      runtime task projection blocked by `missing_resource_estimates`; do not
+      synthesize estimates from graph paths, UI state, selector summaries,
+      `ModelRefV2`, `ModelDependencyRequest`, or Tauri-owned policy.
       Re-plan update: before deriving canonical dependency-environment
       requests, replace numeric validation revision identity with graph
       fingerprint revision identity and store/read the latest current

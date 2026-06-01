@@ -1722,9 +1722,27 @@ this ordering to add graph-path fallback, node-engine planned-inference launch,
   The estimate-hint contract path is implemented, but production graph
   sessions still use `UnavailableInferenceInterfaceFactsProvider` unless tests
   inject static facts. The next production slice must choose provider
-  ownership before editing code. Recommended path: implement an
-  embedded-runtime/Pumas-backed provider injected through backend composition,
-  while preserving Pumas producer-quality estimates as the longer-term target.
+  ownership before editing code. Selected path: implement the six-part
+  backend-owned resource-estimate path.
+  1. Record the corrected ownership model: Pumas owns static artifact facts;
+     Pantograph owns loaded-memory/context estimation, scheduler admission,
+     and ledger refinement.
+  2. Add a concrete production `InferenceInterfaceFactsProvider` through
+     embedded-runtime/backend composition; `workflow-service` consumes the
+     provider contract and Tauri/frontend remain transport/presentation only.
+  3. Have the provider consume Pumas logical file/component sizes, package
+     evidence, runtime/device/task-shape facts, and proven residency facts.
+  4. Produce conservative `SchedulerEstimateHint` values with checked
+     arithmetic and typed impossible/overflow diagnostics; same-model reuse
+     may count only when runtime state proves the model is already resident.
+  5. Preserve fail-closed behavior for missing, stale, ambiguous, unsupported,
+     or overflowed inputs so task projection remains blocked by
+     `missing_resource_estimates`.
+  6. After the complete inference path is proven, add diagnostics-ledger
+     refinement that compares predicted and observed memory by typed
+     model/runtime/device/task signatures.
   Rejected as default: inventing graph/session fallback estimates, adding
-  frontend/Tauri policy, or duplicating runtime/Pumas interpretation inside
-  graph session state.
+  frontend/Tauri policy, treating Pumas as an exact runtime-memory oracle,
+  using selector summaries as executable authority, assuming memory will free
+  after unrelated running tasks complete, or duplicating runtime/Pumas
+  interpretation inside graph session state.
