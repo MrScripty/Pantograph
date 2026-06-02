@@ -145,6 +145,16 @@ Pantograph-owned conservative estimator/provider and scheduler estimate-hint
 population; no loaded-memory or admission policy was added in the DTO/projection
 slice.
 
+2026-06-02 estimator primitive update: embedded-runtime now has a pure
+Pantograph-owned conservative estimator that transforms validated Pumas logical
+size facts into inference resource-estimate DTOs and bounded scheduler
+RAM/VRAM estimate hints. It uses checked arithmetic, rejects weak or missing
+size evidence with typed unavailable estimates, and does not read graph paths,
+selector summaries, UI state, Tauri policy, or runtime-registry state. The next
+slice must wire a production `InferenceInterfaceFactsProvider` through backend
+composition so resolver facts can receive these hints together with runtime,
+device, task-shape, and proven-residency context.
+
 ## Standards Rule
 
 The standards constraints in

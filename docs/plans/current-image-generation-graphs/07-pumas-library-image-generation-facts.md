@@ -162,6 +162,15 @@ contract, project those logical size facts through embedded-runtime, and produce
 Pantograph-owned conservative scheduler estimate hints with typed fail-closed
 diagnostics for missing or stale size facts.
 
+2026-06-02 Pantograph estimator update: the logical-size projection is now
+paired with an embedded-runtime pure estimator primitive. The estimator accepts
+validated Pumas logical package size facts, applies checked conservative
+loaded-memory/runtime-overhead arithmetic, and publishes scheduler RAM/VRAM
+hints only when the resulting values are positive and within scheduler bounds.
+Weak, missing, zero, or overflowing size evidence produces typed unavailable
+resource estimates and no scheduler hints. Production provider wiring remains
+the next Pantograph-owned step.
+
 Package-fact family labels are acceptable only when they are backed by explicit
 source-tagged package evidence. For example, Pumas may emit `flux` when
 `model_index.json` identifies a FLUX pipeline or component layout, but it must
@@ -717,6 +726,9 @@ Pantograph expects Pumas facts to support this deterministic flow:
 4. Pantograph's backend-owned inference facts provider combines Pumas static
    facts with runtime/device/task-shape facts and emits conservative scheduler
    estimate hints or typed insufficient-facts diagnostics.
+   2026-06-02 status: the pure logical-size-to-estimate transform exists in
+   embedded-runtime; provider composition with runtime/device/task-shape and
+   residency facts remains open.
 5. The scheduler chooses backend/runtime/device from Pantograph-owned candidate
    facts, current resource observations/reservations, and validated estimate
    hints.

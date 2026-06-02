@@ -135,6 +135,21 @@ defining an image-only inference-node interface.
         `InferenceInterfaceFactsProvider` and pure conservative estimator from
         Pumas logical-size evidence plus runtime/device/task-shape/proven
         residency facts, preserving typed insufficient-facts diagnostics.
+      - 2026-06-02 conservative estimator primitive slice completed:
+        `pantograph-embedded-runtime` now owns
+        `inference_resource_estimator.rs`, a pure checked-arithmetic transform
+        from Pumas logical package size facts into `InferenceResourceEstimate`
+        values and bounded `SchedulerEstimateHint` RAM/VRAM hints. The slice
+        only touched embedded-runtime module wiring/docs and this plan, kept
+        production behavior fail-closed until provider composition, and did not
+        derive estimates from graph paths, selector summaries, UI state,
+        `ModelRefV2`, `ModelDependencyRequest`, or Tauri policy. Focused
+        verification: `cargo fmt`; `cargo test -p pantograph-embedded-runtime
+        inference_resource_estimator`; `cargo check -p
+        pantograph-embedded-runtime`; `git diff --check`. Remaining follow-up:
+        remove the staged module's narrow `#[allow(dead_code)]` when the
+        production `InferenceInterfaceFactsProvider` consumes the estimator and
+        combines it with runtime/device/task-shape/proven-residency facts.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation
