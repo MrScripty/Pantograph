@@ -21781,6 +21781,30 @@ Worker rules:
     event-driven end-to-end validation coverage, and the successful production
     inference-session path.
 
+- 2026-06-02 resource-backed hosted validation coverage slice:
+  - Slice scope: add embedded-runtime composition coverage proving the
+    resource-backed hosted workflow service can consume owner Pumas package
+    facts plus runtime-registry capability facts, then refresh a graph edit
+    session's current inference validation summary through the workflow-service
+    API.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`
+    and plan execution notes only.
+  - No-fallback confirmation: the test builds isolated Pumas package facts from
+    a path-free `pumas_model_ref`, registers a ready runtime with explicit
+    backend keys, and validates through backend graph APIs. It does not derive
+    facts from graph paths, selector summaries, UI state, `ModelRefV2`,
+    `ModelDependencyRequest`, or Tauri policy.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p pantograph-embedded-runtime resource_backed_hosted_service_refreshes_validation_from_production_facts`;
+    `cargo check -p pantograph-embedded-runtime`.
+  - Result: the provider-to-validation vertical path is covered through
+    resource-backed hosted composition. Remaining Milestone 5d work is richer
+    device/task-shape/proven-residency inputs, event-driven validation delivery,
+    queue/admission proof, and the successful production inference-session
+    path.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

@@ -591,16 +591,23 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
+    use pantograph_inference_interface_contracts::DraftGraphValidationStatus;
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
         RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     };
-    use pantograph_runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
-    use pantograph_scheduler::SchedulerTaskStateRecord;
+    use pantograph_runtime_registry::{
+        RuntimeRegistration, RuntimeRegistry, RuntimeTransition, SharedRuntimeRegistry,
+    };
+    use pantograph_scheduler::{SchedulerEstimateHintKind, SchedulerTaskStateRecord};
+    use pantograph_workflow_service::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use pantograph_workflow_service::workflow::{
         WorkflowRuntimeDispatchSourceRefreshError, WorkflowSchedulerTask,
     };
-    use pantograph_workflow_service::{ArtifactPolicy, ArtifactStore};
+    use pantograph_workflow_service::{
+        ArtifactPolicy, ArtifactStore, WorkflowGraphCurrentValidationRefreshRequest,
+        WorkflowGraphEditSessionCreateRequest,
+    };
 
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
@@ -757,6 +764,100 @@ mod tests {
             .expect("hosted resource-backed workflow service should build");
 
         drop(shared);
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_service_refreshes_validation_from_production_facts() {
+        let temp_dir = create_test_env();
+        let model_id = "diffusion/imported/test-bundle";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        write_test_diffusers_bundle(&model_dir);
+        write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["pytorch".to_string(), "diffusers".to_string()]),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime-instance.001".to_string()),
+                },
+            )
+            .expect("ready runtime transition");
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
+        let service = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input)
+            .expect("hosted resource-backed workflow service should build");
+        let session = service
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: connected_inference_graph(model_id),
+                workflow_id: None,
+            })
+            .await
+            .expect("create graph edit session");
+        let graph_revision = session
+            .graph_revision
+            .parse()
+            .expect("valid session graph revision");
+
+        let validation = service
+            .workflow_graph_refresh_current_validation_summary(
+                WorkflowGraphCurrentValidationRefreshRequest {
+                    graph_session_id: session.session_id,
+                    graph_revision,
+                },
+            )
+            .await
+            .expect("refresh validation summary");
+
+        let summary = validation
+            .summary
+            .summary
+            .expect("current validation summary");
+        assert_eq!(summary.status, DraftGraphValidationStatus::Executable);
+        let projection = validation
+            .node_projections
+            .first()
+            .expect("inference node projection");
+        assert_eq!(projection.node_id.as_str(), "infer");
+        assert_eq!(projection.descriptor.task_kind.as_str(), "image_generation");
+        assert_eq!(projection.descriptor.inputs[0].port_id.as_str(), "prompt");
+        assert_eq!(projection.descriptor.outputs[0].port_id.as_str(), "image");
+        assert!(projection
+            .runtime_constraint
+            .as_ref()
+            .is_some_and(|runtime_id| runtime_id.as_str() == "pytorch"));
+        assert!(projection.estimate_hints.iter().any(|hint| {
+            hint.kind == SchedulerEstimateHintKind::PeakRamBytes && hint.value > 0
+        }));
+        assert!(projection.estimate_hints.iter().any(|hint| {
+            hint.kind == SchedulerEstimateHintKind::PeakVramBytes && hint.value > 0
+        }));
     }
 
     #[tokio::test]
@@ -1112,6 +1213,112 @@ mod tests {
 
     fn workflow_service_with_artifact_store(temp_dir: &tempfile::TempDir) -> WorkflowService {
         workflow_service_with_store(temp_dir, WorkflowService::with_capacity_limits(2, 2))
+    }
+
+    fn create_test_env() -> tempfile::TempDir {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/metadata")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/cache")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/logs")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("shared-resources/models")).unwrap();
+        temp_dir
+    }
+
+    fn connected_inference_graph(model_id: &str) -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "model".to_string(),
+                    node_type: "puma-lib".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "pumas_model_ref": {
+                            "model_id": model_id,
+                            "selected_artifact_id": "diffusers"
+                        }
+                    }),
+                },
+                GraphNode {
+                    id: "infer".to_string(),
+                    node_type: "llm-inference".to_string(),
+                    position: Position { x: 200.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "task_kind": "image_generation",
+                        "runtime": "pytorch"
+                    }),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "model-to-infer".to_string(),
+                source: "model".to_string(),
+                source_handle: "pumas_model_ref".to_string(),
+                target: "infer".to_string(),
+                target_handle: "pumas_model_ref".to_string(),
+            }],
+            derived_graph: None,
+        }
+    }
+
+    fn write_test_diffusers_bundle(root: &std::path::Path) {
+        std::fs::create_dir_all(root.join("scheduler")).unwrap();
+        std::fs::create_dir_all(root.join("text_encoder")).unwrap();
+        std::fs::create_dir_all(root.join("tokenizer")).unwrap();
+        std::fs::create_dir_all(root.join("unet")).unwrap();
+        std::fs::create_dir_all(root.join("vae")).unwrap();
+        std::fs::write(
+            root.join("model_index.json"),
+            serde_json::json!({
+                "_class_name": "StableDiffusionPipeline",
+                "_diffusers_version": "0.32.0",
+                "_name_or_path": "synthetic/tiny-sd",
+                "scheduler": ["diffusers", "EulerDiscreteScheduler"],
+                "text_encoder": ["transformers", "CLIPTextModel"],
+                "tokenizer": ["transformers", "CLIPTokenizer"],
+                "unet": ["diffusers", "UNet2DConditionModel"],
+                "vae": ["diffusers", "AutoencoderKL"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    fn write_imported_diffusion_metadata(
+        model_dir: &std::path::Path,
+        model_id: &str,
+        entry_path: &std::path::Path,
+    ) {
+        std::fs::create_dir_all(model_dir).unwrap();
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::json!({
+                "schema_version": 2,
+                "model_id": model_id,
+                "family": "imported",
+                "model_type": "diffusion",
+                "official_name": "test-bundle",
+                "cleaned_name": "test-bundle",
+                "source_path": entry_path.display().to_string(),
+                "entry_path": entry_path.display().to_string(),
+                "storage_kind": "external_reference",
+                "bundle_format": "diffusers_directory",
+                "pipeline_class": "StableDiffusionPipeline",
+                "selected_artifact_id": "diffusers",
+                "import_state": "ready",
+                "validation_state": "valid",
+                "pipeline_tag": "text-to-image",
+                "task_type_primary": "text-to-image",
+                "input_modalities": ["text"],
+                "output_modalities": ["image"],
+                "task_classification_source": "external-diffusers-import",
+                "task_classification_confidence": 1.0,
+                "model_type_resolution_source": "external-diffusers-import",
+                "model_type_resolution_confidence": 1.0,
+                "recommended_backend": "diffusers",
+                "runtime_engine_hints": ["diffusers", "pytorch"]
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 
     fn workflow_service_with_store(

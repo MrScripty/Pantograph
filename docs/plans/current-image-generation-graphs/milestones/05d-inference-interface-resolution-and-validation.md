@@ -184,6 +184,18 @@ defining an image-only inference-node interface.
         pantograph-workflow-service
         workflow_service_graph_session_fact_providers_preserve_inference_and_dependency_providers`;
         `cargo check -p pantograph-workflow-service`.
+      - 2026-06-02 resource-backed hosted validation coverage completed:
+        `pantograph-embedded-runtime` now has a composition test proving owner
+        Pumas package facts and runtime-registry capability facts reach
+        workflow-service current validation through the resource-backed hosted
+        service. The test verifies executable descriptor projection, task
+        ports, selected runtime constraint, and nonzero scheduler RAM/VRAM
+        estimate hints from Pumas logical sizes. It does not add runtime
+        execution, queue admission, graph-path-derived estimates, or Tauri/
+        frontend policy. Focused verification: `cargo fmt`; `cargo test -p
+        pantograph-embedded-runtime
+        resource_backed_hosted_service_refreshes_validation_from_production_facts`;
+        `cargo check -p pantograph-embedded-runtime`.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation
