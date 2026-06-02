@@ -7398,6 +7398,7 @@ dependencies = [
  "pantograph-dependency-environment-service",
  "pantograph-dependency-planning",
  "pantograph-diagnostics-ledger",
+ "pantograph-inference-interface-contracts",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
  "pantograph-runtime-host-contracts",

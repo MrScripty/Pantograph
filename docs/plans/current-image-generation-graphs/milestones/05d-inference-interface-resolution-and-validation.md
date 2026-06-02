@@ -150,6 +150,29 @@ defining an image-only inference-node interface.
         remove the staged module's narrow `#[allow(dead_code)]` when the
         production `InferenceInterfaceFactsProvider` consumes the estimator and
         combines it with runtime/device/task-shape/proven-residency facts.
+      - 2026-06-02 production provider wiring slice completed:
+        `pantograph-embedded-runtime` now owns
+        `inference_interface_facts_provider.rs` and resource-backed hosted
+        workflow-service composition installs it before wrapping the service in
+        `Arc`. `pantograph-workflow-service` gained a graph-session provider
+        composition API so inference-interface and dependency-environment
+        providers can coexist without one overwriting the other. The provider
+        projects canonical task ports from inference task evidence, filters
+        runtime availability through runtime-registry backend keys matched to
+        Pumas backend hints, and publishes conservative scheduler estimate
+        hints from logical-size facts. No-fallback confirmation: missing
+        package, task, runtime, or estimate facts publish only proven resolver
+        facts and rely on canonical resolver/admission diagnostics; no graph
+        paths, selector summaries, UI state, `ModelRefV2`,
+        `ModelDependencyRequest`, or Tauri policy are consulted. Focused
+        verification: `cargo fmt`; `cargo test -p pantograph-embedded-runtime
+        inference_interface_facts_provider`; `cargo test -p
+        pantograph-embedded-runtime inference_resource_estimator`; `cargo
+        check -p pantograph-embedded-runtime`; `cargo check -p
+        pantograph-workflow-service`; `git diff --check`. Remaining follow-up:
+        feed richer device/task-shape/proven-residency facts into the provider
+        and add end-to-end graph validation coverage that proves resolver facts
+        reach enqueue/admission without blocking graph editing.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

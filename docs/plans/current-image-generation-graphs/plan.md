@@ -155,6 +155,16 @@ slice must wire a production `InferenceInterfaceFactsProvider` through backend
 composition so resolver facts can receive these hints together with runtime,
 device, task-shape, and proven-residency context.
 
+2026-06-02 provider wiring update: resource-backed embedded-runtime workflow
+service composition now installs a backend-owned
+`InferenceInterfaceFactsProvider` before sharing the service. The provider
+combines Pumas package facts, runtime-registry capability facts, and the
+conservative logical-size estimator into workflow-service resolver facts. It
+does not put business logic in Tauri or the frontend, and missing Pumas,
+runtime, task, or estimate facts continue to fail closed through canonical
+resolver/admission diagnostics instead of graph-path or selector-summary
+fallbacks.
+
 ## Standards Rule
 
 The standards constraints in

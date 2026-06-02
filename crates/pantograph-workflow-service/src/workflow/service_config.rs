@@ -13,7 +13,9 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
 };
 
-use crate::graph::GraphSessionStore;
+use crate::graph::{
+    GraphSessionStore, InferenceInterfaceFactsProvider, UnavailableInferenceInterfaceFactsProvider,
+};
 use crate::scheduler::{
     WorkflowDependencyReadinessProvider, WorkflowExecutionSessionStore,
     WorkflowSchedulerTaskOrchestrator,
@@ -116,9 +118,35 @@ impl WorkflowService {
         mut self,
         provider: SharedDependencyEnvironmentProvider,
     ) -> Self {
-        self.graph_session_store = Arc::new(
-            GraphSessionStore::with_dependency_environment_provider(provider.clone()),
+        self = self.with_graph_session_fact_providers(
+            Arc::new(UnavailableInferenceInterfaceFactsProvider),
+            provider,
         );
+        self
+    }
+
+    #[must_use]
+    pub fn with_inference_interface_facts_provider(
+        mut self,
+        provider: Arc<dyn InferenceInterfaceFactsProvider>,
+    ) -> Self {
+        self.graph_session_store = Arc::new(
+            GraphSessionStore::with_inference_interface_facts_provider(provider),
+        );
+        self
+    }
+
+    #[must_use]
+    pub fn with_graph_session_fact_providers(
+        mut self,
+        inference_provider: Arc<dyn InferenceInterfaceFactsProvider>,
+        provider: SharedDependencyEnvironmentProvider,
+    ) -> Self {
+        self.graph_session_store = Arc::new(GraphSessionStore::with_timeout_and_providers(
+            std::time::Duration::from_secs(5 * 60),
+            inference_provider,
+            provider.clone(),
+        ));
         self.dependency_readiness_provider = Arc::new(DependencyEnvironmentService::new(provider));
         self
     }

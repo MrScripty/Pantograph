@@ -21732,6 +21732,33 @@ Worker rules:
     conservative Pantograph-owned resource estimator that consumes these
     static package-size facts.
 
+- 2026-06-02 production inference-interface facts provider wiring slice:
+  - Slice scope: add the embedded-runtime production
+    `InferenceInterfaceFactsProvider`, wire it through resource-backed hosted
+    workflow-service composition before `Arc` sharing, and add the
+    workflow-service graph-session provider API needed to preserve both
+    inference-interface facts and dependency-environment facts.
+  - Allowed write set: `crates/pantograph-embedded-runtime` provider,
+    composition, README, and Cargo manifest; `crates/pantograph-workflow-service`
+    service configuration; `Cargo.lock`; and plan execution notes.
+  - No-fallback confirmation: the provider consumes only Pumas package facts,
+    runtime-registry capability facts, and the Pantograph conservative
+    estimator. It does not derive model, runtime, device, or estimate facts
+    from graph paths, selector summaries, UI state, `ModelRefV2`,
+    `ModelDependencyRequest`, or Tauri policy. Missing inputs leave descriptor
+    and admission paths fail-closed through typed canonical diagnostics.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p pantograph-embedded-runtime inference_interface_facts_provider`;
+    `cargo test -p pantograph-embedded-runtime inference_resource_estimator`;
+    `cargo check -p pantograph-embedded-runtime`;
+    `cargo check -p pantograph-workflow-service`;
+    `git diff --check`.
+  - Result: Milestone 5d now has production backend provider wiring for
+    interface resolver facts and scheduler estimate hints. Remaining work is
+    richer device/task-shape/proven-residency inputs, event-driven end-to-end
+    validation coverage, and the successful production inference-session path.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

@@ -45,7 +45,7 @@ mod embedded_workflow_host_helpers;
 mod embedded_workflow_service_api;
 pub mod embedding_workflow;
 pub mod host_runtime;
-#[allow(dead_code)]
+mod inference_interface_facts_provider;
 mod inference_resource_estimator;
 pub mod managed_runtime_manager;
 mod media_base64;

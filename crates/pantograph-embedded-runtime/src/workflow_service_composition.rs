@@ -12,6 +12,7 @@ use pantograph_workflow_service::{
 };
 use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
+use crate::inference_interface_facts_provider::EmbeddedInferenceInterfaceFactsProvider;
 use crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource;
 use crate::reservation_lifecycle::EmbeddedReservationLifecyclePort;
 use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
@@ -44,6 +45,8 @@ pub struct EmbeddedWorkflowServiceComposition {
     dispatch_dependencies: Option<EmbeddedWorkflowServiceDispatchDependencies>,
     scheduler_diagnostics_provider:
         Option<Arc<dyn pantograph_workflow_service::WorkflowSchedulerDiagnosticsProvider>>,
+    inference_interface_facts_provider:
+        Option<Arc<dyn pantograph_workflow_service::graph::InferenceInterfaceFactsProvider>>,
 }
 
 pub(crate) struct EmbeddedHostedWorkflowServiceFactoryInput<C> {
@@ -292,6 +295,15 @@ impl EmbeddedWorkflowServiceComposition {
         self
     }
 
+    #[must_use]
+    pub(crate) fn with_inference_interface_facts_provider(
+        mut self,
+        provider: Arc<dyn pantograph_workflow_service::graph::InferenceInterfaceFactsProvider>,
+    ) -> Self {
+        self.inference_interface_facts_provider = Some(provider);
+        self
+    }
+
     pub(crate) fn resource_backed_hosted<C>(
         input: EmbeddedHostedWorkflowServiceFactoryInput<C>,
     ) -> Result<SharedWorkflowService, WorkflowServiceError>
@@ -321,8 +333,9 @@ impl EmbeddedWorkflowServiceComposition {
             input.runtime_registry.clone(),
             input.runtime_registry_controller,
         ));
+        let pumas_selector_access = input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
-            PumasDispatchPackageFactsSource::new(Some(input.pumas_selector_access)),
+            PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
@@ -331,12 +344,18 @@ impl EmbeddedWorkflowServiceComposition {
         );
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
-                input.gateway,
-                input.runtime_registry,
+                input.gateway.clone(),
+                input.runtime_registry.clone(),
+            ));
+        let inference_interface_facts_provider =
+            Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
+                PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
+                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry),
             ));
         Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
             .with_scheduler_diagnostics_provider(scheduler_diagnostics_provider)
+            .with_inference_interface_facts_provider(inference_interface_facts_provider)
             .into_shared_configured_workflow_service(
                 input.workflow_service,
                 input.max_loaded_sessions,
@@ -383,8 +402,9 @@ impl EmbeddedWorkflowServiceComposition {
             factory_input.runtime_registry.clone(),
             factory_input.runtime_registry_controller,
         ));
+        let pumas_selector_access = factory_input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
-            PumasDispatchPackageFactsSource::new(Some(factory_input.pumas_selector_access)),
+            PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
@@ -394,11 +414,17 @@ impl EmbeddedWorkflowServiceComposition {
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
                 factory_input.gateway,
-                factory_input.runtime_registry,
+                factory_input.runtime_registry.clone(),
+            ));
+        let inference_interface_facts_provider =
+            Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
+                PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
+                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry),
             ));
         let composition = Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
-            .with_scheduler_diagnostics_provider(scheduler_diagnostics_provider);
+            .with_scheduler_diagnostics_provider(scheduler_diagnostics_provider)
+            .with_inference_interface_facts_provider(inference_interface_facts_provider);
         let dependency_readiness = composition.dependency_readiness().clone();
         let workflow_service = composition
             .into_shared_configured_workflow_service(
@@ -540,6 +566,13 @@ impl EmbeddedWorkflowServiceComposition {
         let service = self
             .dependency_readiness
             .configure_workflow_service(service);
+        let service = match self.inference_interface_facts_provider {
+            Some(provider) => service.with_graph_session_fact_providers(
+                provider,
+                self.dependency_readiness.snapshot_provider(),
+            ),
+            None => service,
+        };
         let service = match self.dispatch_dependencies {
             Some(dependencies) => dependencies.configure_workflow_service(service),
             None => service,
