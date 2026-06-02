@@ -173,6 +173,17 @@ defining an image-only inference-node interface.
         feed richer device/task-shape/proven-residency facts into the provider
         and add end-to-end graph validation coverage that proves resolver facts
         reach enqueue/admission without blocking graph editing.
+      - 2026-06-02 workflow-service provider composition coverage completed:
+        `pantograph-workflow-service` now has a service-boundary graph-session
+        test proving `WorkflowService::with_graph_session_fact_providers`
+        preserves the inference-interface facts provider for current validation
+        and the dependency-environment provider for action-intent resolution in
+        the same edit session. The test keeps Tauri/frontend out of dependency
+        policy and does not restore unavailable-provider fallback behavior.
+        Focused verification: `cargo fmt`; `cargo test -p
+        pantograph-workflow-service
+        workflow_service_graph_session_fact_providers_preserve_inference_and_dependency_providers`;
+        `cargo check -p pantograph-workflow-service`.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

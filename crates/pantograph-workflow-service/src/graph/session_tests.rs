@@ -20,9 +20,9 @@ use crate::graph::{
 };
 use crate::{
     workflow::WorkflowSchedulerInferenceTaskProjection, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowGraphAddNodeRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphRemoveNodeRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowService,
 };
 use async_trait::async_trait;
 use pantograph_dependency_environment_service::{
@@ -2257,6 +2257,78 @@ async fn dependency_environment_action_intent_blocks_invalid_service_output() {
             target_node_id: "dep-env".parse().expect("valid target node id"),
             action: DependencyEnvironmentAction::Resolve,
         })
+        .await
+        .expect("intent resolution should return typed result");
+
+    assert_eq!(
+        result.status,
+        DependencyEnvironmentActionIntentStatus::Blocked
+    );
+    assert_eq!(
+        result.diagnostics[0].code,
+        InferenceDiagnosticCode::DependencySidecarDescriptorInvalid
+    );
+}
+
+#[tokio::test]
+async fn workflow_service_graph_session_fact_providers_preserve_inference_and_dependency_providers()
+{
+    let service = WorkflowService::new().with_graph_session_fact_providers(
+        Arc::new(StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        }),
+        Arc::new(InvalidDependencyEnvironmentProvider),
+    );
+    let session = service
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph: dependency_inference_graph(),
+            workflow_id: None,
+        })
+        .await
+        .expect("create graph edit session");
+    let graph_revision = session
+        .graph_revision
+        .parse()
+        .expect("valid session graph revision");
+
+    let validation = service
+        .workflow_graph_refresh_current_validation_summary(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: session.session_id.clone(),
+                graph_revision,
+            },
+        )
+        .await
+        .expect("refresh current validation summary");
+    let validation_summary = validation
+        .summary
+        .summary
+        .as_ref()
+        .expect("current validation summary");
+    assert_eq!(
+        validation_summary.status,
+        DraftGraphValidationStatus::Executable
+    );
+    let validation_session_id = validation
+        .summary
+        .validation_session_id
+        .clone()
+        .expect("validation session id");
+
+    let result = service
+        .workflow_graph_resolve_dependency_environment_action_intent(
+            DependencyEnvironmentActionIntent {
+                contract_version: 1,
+                graph_session_id: session.session_id.parse().expect("valid graph session id"),
+                graph_revision: session
+                    .graph_revision
+                    .parse()
+                    .expect("valid graph revision"),
+                validation_session_id: Some(validation_session_id),
+                target_node_id: "dep-env".parse().expect("valid target node id"),
+                action: DependencyEnvironmentAction::Resolve,
+            },
+        )
         .await
         .expect("intent resolution should return typed result");
 

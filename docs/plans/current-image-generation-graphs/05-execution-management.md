@@ -21759,6 +21759,28 @@ Worker rules:
     richer device/task-shape/proven-residency inputs, event-driven end-to-end
     validation coverage, and the successful production inference-session path.
 
+- 2026-06-02 workflow-service provider composition validation slice:
+  - Slice scope: add focused workflow-service graph-session coverage proving
+    `WorkflowService::with_graph_session_fact_providers` preserves both the
+    inference-interface facts provider and dependency-environment provider for
+    the same edit session.
+  - Allowed write set: `crates/pantograph-workflow-service/src/graph/session_tests.rs`
+    and plan execution notes only.
+  - No-fallback confirmation: the test creates a service with a ready static
+    inference provider and an invalid dependency-environment provider, refreshes
+    backend validation to prove inference facts are active, then resolves a
+    dependency-environment action intent to prove the dependency provider is
+    active. It does not reinstall the unavailable inference provider,
+    synthesize graph-path facts, or move dependency policy into Tauri/frontend.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p pantograph-workflow-service workflow_service_graph_session_fact_providers_preserve_inference_and_dependency_providers`;
+    `cargo check -p pantograph-workflow-service`.
+  - Result: the service-boundary composition contract is covered. Remaining
+    Milestone 5d work is richer device/task-shape/proven-residency facts,
+    event-driven end-to-end validation coverage, and the successful production
+    inference-session path.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module
