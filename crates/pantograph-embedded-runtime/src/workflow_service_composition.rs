@@ -591,7 +591,10 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
-    use pantograph_inference_interface_contracts::DraftGraphValidationStatus;
+    use pantograph_inference_interface_contracts::{
+        DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
+        DependencyEnvironmentActionIntentStatus, DraftGraphValidationStatus,
+    };
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
         RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
@@ -602,7 +605,9 @@ mod tests {
     use pantograph_scheduler::{SchedulerEstimateHintKind, SchedulerTaskStateRecord};
     use pantograph_workflow_service::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use pantograph_workflow_service::workflow::{
-        WorkflowRuntimeDispatchSourceRefreshError, WorkflowSchedulerTask,
+        WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
+        WorkflowRuntimeDispatchSourceRefreshError, WorkflowSchedulerInferenceTaskProjection,
+        WorkflowSchedulerTask,
     };
     use pantograph_workflow_service::{
         ArtifactPolicy, ArtifactStore, WorkflowGraphCurrentValidationRefreshRequest,
@@ -858,6 +863,172 @@ mod tests {
         assert!(projection.estimate_hints.iter().any(|hint| {
             hint.kind == SchedulerEstimateHintKind::PeakVramBytes && hint.value > 0
         }));
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_service_publishes_executable_snapshot_from_production_facts() {
+        let temp_dir = create_test_env();
+        let model_id = "diffusion/imported/test-bundle";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        write_test_diffusers_bundle(&model_dir);
+        write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["pytorch".to_string(), "diffusers".to_string()]),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime-instance.001".to_string()),
+                },
+            )
+            .expect("ready runtime transition");
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry,
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(workflow_service_with_artifact_and_attribution_store(
+            &temp_dir,
+        ));
+        let service = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input)
+            .expect("hosted resource-backed workflow service should build");
+        let session = service
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: connected_dependency_inference_graph(model_id),
+                workflow_id: Some("resource-backed-inference".to_string()),
+            })
+            .await
+            .expect("create graph edit session");
+        let graph_revision = session
+            .graph_revision
+            .parse()
+            .expect("valid session graph revision");
+
+        let validation = service
+            .workflow_graph_refresh_current_validation_summary(
+                WorkflowGraphCurrentValidationRefreshRequest {
+                    graph_session_id: session.session_id.clone(),
+                    graph_revision,
+                },
+            )
+            .await
+            .expect("refresh validation summary");
+        let validation_session_id = validation
+            .summary
+            .validation_session_id
+            .clone()
+            .expect("validation session id");
+        let readiness = service
+            .workflow_graph_resolve_dependency_environment_action_intent(
+                DependencyEnvironmentActionIntent {
+                    contract_version: 1,
+                    graph_session_id: session.session_id.parse().expect("graph session id"),
+                    graph_revision: session.graph_revision.parse().expect("graph revision"),
+                    validation_session_id: Some(validation_session_id.clone()),
+                    target_node_id: "dep-env".parse().expect("dependency node id"),
+                    action: DependencyEnvironmentAction::Resolve,
+                },
+            )
+            .await
+            .expect("resolve dependency readiness");
+        assert_eq!(
+            readiness.status,
+            DependencyEnvironmentActionIntentStatus::RequestReady,
+            "dependency readiness resolution should be request-ready: {:?}",
+            readiness.diagnostics
+        );
+        assert!(
+            readiness.diagnostics.is_empty(),
+            "dependency readiness diagnostics: {:?}",
+            readiness.diagnostics
+        );
+
+        let snapshot = service
+            .publish_graph_session_executable_validation_snapshot(
+                WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+                    workflow_id: "resource-backed-inference".to_string(),
+                    workflow_semantic_version: "1.0.0".to_string(),
+                    graph_session_id: session.session_id,
+                    validation_session_id: Some(validation_session_id.clone()),
+                    validation_snapshot_id: None,
+                },
+            )
+            .await
+            .expect("publish executable validation snapshot");
+
+        let record = snapshot.as_record();
+        assert_eq!(record.validation_session_id, validation_session_id);
+        assert_eq!(
+            record.validation_summary.status,
+            DraftGraphValidationStatus::Executable
+        );
+        assert_eq!(record.nodes.len(), 1);
+        let node = &record.nodes[0];
+        assert_eq!(node.node_id.as_str(), "infer");
+        assert_eq!(node.task_kind.as_str(), "image_generation");
+        assert!(node
+            .constraints
+            .requested_runtime_id
+            .as_ref()
+            .is_some_and(|runtime_id| runtime_id.as_str() == "pytorch"));
+        assert!(node.estimate_hints.iter().any(|hint| {
+            hint.kind == SchedulerEstimateHintKind::PeakRamBytes && hint.value > 0
+        }));
+        assert!(node.estimate_hints.iter().any(|hint| {
+            hint.kind == SchedulerEstimateHintKind::PeakVramBytes && hint.value > 0
+        }));
+
+        let projections = snapshot
+            .scheduler_inference_task_projections()
+            .expect("scheduler projections");
+        let scheduler_node_id = "infer".parse().expect("scheduler node id");
+        let projection = projections
+            .get(&scheduler_node_id)
+            .expect("scheduler inference projection");
+        let WorkflowSchedulerInferenceTaskProjection::Ready(ready_projection) = projection else {
+            panic!("published executable snapshot should project ready inference task");
+        };
+        assert_eq!(ready_projection.estimate_hints, node.estimate_hints);
+        assert_eq!(
+            ready_projection
+                .dependency_readiness_source
+                .validation_session_id
+                .as_ref()
+                .expect("projection validation session id")
+                .as_str(),
+            record.validation_session_id.as_str()
+        );
+        assert_eq!(
+            ready_projection
+                .dependency_readiness_source
+                .validation_snapshot_id
+                .as_ref()
+                .expect("projection validation snapshot id")
+                .as_str(),
+            record.validation_snapshot_id.as_str()
+        );
     }
 
     #[tokio::test]
@@ -1215,6 +1386,15 @@ mod tests {
         workflow_service_with_store(temp_dir, WorkflowService::with_capacity_limits(2, 2))
     }
 
+    fn workflow_service_with_artifact_and_attribution_store(
+        temp_dir: &tempfile::TempDir,
+    ) -> WorkflowService {
+        workflow_service_with_store(
+            temp_dir,
+            WorkflowService::with_ephemeral_attribution_store().expect("workflow service"),
+        )
+    }
+
     fn create_test_env() -> tempfile::TempDir {
         let temp_dir = tempfile::TempDir::new().expect("temp dir");
         std::fs::create_dir_all(temp_dir.path().join("launcher-data/metadata")).unwrap();
@@ -1257,6 +1437,26 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+
+    fn connected_dependency_inference_graph(model_id: &str) -> WorkflowGraph {
+        let mut graph = connected_inference_graph(model_id);
+        graph.nodes.push(GraphNode {
+            id: "dep-env".to_string(),
+            node_type: "dependency-environment".to_string(),
+            position: Position { x: 400.0, y: 0.0 },
+            data: serde_json::json!({
+                "mode": "manual"
+            }),
+        });
+        graph.edges.push(GraphEdge {
+            id: "dep-env-to-infer".to_string(),
+            source: "dep-env".to_string(),
+            source_handle: "dependency_environment_sidecar".to_string(),
+            target: "infer".to_string(),
+            target_handle: "dependency_environment_sidecar".to_string(),
+        });
+        graph
     }
 
     fn write_test_diffusers_bundle(root: &std::path::Path) {

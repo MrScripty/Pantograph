@@ -1321,6 +1321,23 @@ defining an image-only inference-node interface.
     current validation state or fails closed. Direct edit-session execution
     remains disabled. Verification passed with TypeScript typecheck, focused
     toolbar/command tests, and `git diff --check`.
+  - 2026-06-02 follow-up slice completed: embedded-runtime resource-backed
+    hosted composition now has focused coverage for publishing a compact
+    graph-session executable validation snapshot from production facts. The
+    test builds isolated Pumas package facts, registers a ready PyTorch runtime
+    with backend keys, refreshes workflow-service current validation, resolves
+    dependency-environment readiness through the public backend action-intent
+    API, publishes the executable snapshot, and asserts saved snapshot plus
+    scheduler projection records preserve runtime constraints, proof freshness
+    ids, and nonzero RAM/VRAM estimator hints. The slice discovered and
+    preserved the fail-closed proof prerequisite: publishing without a current
+    dependency requirements proof returns `dependency requirements proof is
+    missing for executable node infer`; the validated path records that proof
+    through backend readiness resolution rather than a test-only shortcut.
+    Verification passed with `cargo fmt`, `cargo test -p
+    pantograph-embedded-runtime
+    resource_backed_hosted_service_publishes_executable_snapshot_from_production_facts`,
+    and `cargo check -p pantograph-embedded-runtime`.
   - 2026-05-27 re-plan decision: use option 3 as the next implementation path.
     Add a backend-owned current validation summary read model/API for
     `graph_session_id + graph_revision`, then wire the graph editor submit gate

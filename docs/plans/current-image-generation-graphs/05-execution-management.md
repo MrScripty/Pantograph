@@ -21805,6 +21805,39 @@ Worker rules:
     queue/admission proof, and the successful production inference-session
     path.
 
+- 2026-06-02 resource-backed executable snapshot publication coverage slice:
+  - Slice scope: add embedded-runtime composition coverage proving the
+    resource-backed hosted workflow service can refresh executable validation
+    from owner Pumas package facts and runtime-registry facts, resolve the
+    dependency-environment sidecar readiness proof through the backend
+    workflow-service API, publish the compact graph-session executable
+    validation snapshot, and project queue-facing scheduler inference task
+    records from that saved snapshot.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`
+    and plan execution notes only.
+  - No-fallback confirmation: the test uses path-free `pumas_model_ref`
+    package facts, backend runtime-registry capability facts, the
+    workflow-service dependency-environment action intent API, and saved
+    executable snapshot publication. It does not synthesize graph-path facts,
+    selector summaries, UI state, `ModelRefV2`, `ModelDependencyRequest`,
+    Tauri policy, caller-supplied runtime publications, or direct scheduler
+    admission shortcuts.
+  - Discovered issue resolved in-slice: the first publish attempt failed
+    closed with `dependency requirements proof is missing for executable node
+    infer`. The test now records the proof through the public
+    dependency-environment resolve action before publishing, matching the
+    snapshot contract's proof-freshness requirement.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p pantograph-embedded-runtime resource_backed_hosted_service_publishes_executable_snapshot_from_production_facts`;
+    `cargo check -p pantograph-embedded-runtime`.
+  - Result: the resource-backed provider-to-validation-to-proof-to-saved
+    snapshot-to-scheduler-projection vertical path is covered. Remaining
+    Milestone 5d work is richer device/task-shape/proven-residency inputs,
+    event-driven validation delivery, queue/admission execution-session proof,
+    and the successful production inference-session path.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module
