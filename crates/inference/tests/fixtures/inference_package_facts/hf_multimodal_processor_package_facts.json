@@ -1,5 +1,5 @@
 {
-  "package_facts_contract_version": 2,
+  "package_facts_contract_version": 3,
   "model_ref": {
     "model_id": "vlm/llava/tiny-multimodal",
     "selected_artifact_path": "vlm/llava/tiny-multimodal"

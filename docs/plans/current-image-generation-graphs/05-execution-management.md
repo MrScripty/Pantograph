@@ -21640,11 +21640,97 @@ Worker rules:
        stale, ambiguous, unsupported, or insufficient.
     6. After the complete inference path is proven, add diagnostics-ledger
        refinement keyed by typed model/runtime/device/task signatures.
+  - 2026-06-02 Pumas handoff investigation and next-step update:
+    read-only inspection of Pumas-Library found that the change belongs in
+    Pumas package-facts detail contracts, not in Pantograph estimators or
+    selector summaries. Pumas already has versioned package-facts DTOs, a
+    focused `model_library/package_facts/` module, compact summary projection,
+    and a bounded package inspection manifest that reads file metadata length
+    for freshness. The missing Pumas contract is source-tagged logical
+    artifact/file/component size facts that include Diffusers bundle weight and
+    component files, not only `selected_files` or `model_index.json`. The
+    handoff plan is now recorded in
+    `docs/plans/current-image-generation-graphs/pumas-package-artifact-size-facts-handoff.md`.
+  - Updated Pantograph next step after Pumas completion:
+    1. Pin the Pumas release/commit that advances the package-facts contract
+       with logical artifact size facts.
+    2. Update Pantograph's Pumas dependency and inference package-facts DTOs to
+       the new contract, including stale-contract rejection tests.
+    3. Extend `PumasDispatchPackageFactsSource` and the runtime-host package
+       facts resolver projection to carry logical size facts without exposing
+       Pumas local paths as graph/session semantics.
+    4. Add the production `InferenceInterfaceFactsProvider` through
+       embedded-runtime composition and keep workflow-service as the resolver
+       application owner, not the Pumas/runtime fact source owner.
+    5. Implement a pure conservative estimator that derives
+       `SchedulerEstimateHint` values from Pumas logical sizes plus
+       runtime/device/task-shape/proven-residency facts with checked
+       arithmetic.
+    6. Add focused tests for successful estimate production, missing/stale
+       Pumas size facts, Diffusers bundle size coverage, same-model residency
+       reuse, and typed `missing_resource_estimates` blocking when inputs are
+       insufficient.
+    7. Add the complete production-composed image session path only after
+       production validation publications provide non-empty estimate hints from
+       the canonical provider.
   - Standards result: this path keeps runtime-memory policy backend-owned,
     keeps Tauri and frontend free of business logic, preserves Pumas as a
     factual producer instead of a runtime-memory oracle, and separates static
     package evidence, estimate policy, scheduler admission, and learned
     refinement as independent concerns.
+
+- 2026-06-02 Pumas package-facts v3 pin blocker:
+  - Attempted the next Pantograph slice allowed by Milestone 5d: update the
+    Pumas dependency to the reviewed package-facts v3 commit, mirror logical
+    artifact/file size DTOs in `inference`, and project/reject those facts in
+    embedded-runtime dispatch and runtime-host package-facts bridges.
+  - Verification hit a re-plan boundary before the slice could be validated:
+    `git ls-remote https://github.com/MrScripty/Pumas-Library.git HEAD`
+    still reports `8444b50df28c3e2bd8db58fb3645fa4dd8664b27`, while the
+    reviewed local Pumas commit is
+    `f87c3da8276a914a54c6f4f36d617bef9d9f424e`.
+    `CARGO_NET_GIT_FETCH_WITH_CLI=true cargo update -p pumas-library` failed
+    with `upload-pack: not our ref f87c3da8276a914a54c6f4f36d617bef9d9f424e`.
+  - Standards decision: stop rather than using a local path dependency,
+    selector-summary fallback, graph-path estimates, or Tauri/frontend-owned
+    policy. The current plan requires a reproducible published or otherwise
+    approved Pumas pin before production Pantograph code can consume v3 facts.
+  - Required decision: either publish/push the reviewed Pumas commit and rerun
+    the same slice, approve a standards-documented temporary local override for
+    development-only validation, or re-plan Pantograph to defer v3 consumption
+    and continue with non-dependent cleanup work.
+  - Resolution: the commit was pushed and the following slice validated the
+    untagged SHA pin through Cargo.
+
+- 2026-06-02 Pumas package-facts v3 contract/projection slice:
+  - Slice scope: pin the pushed untagged Pumas package-facts v3 commit,
+    update Pantograph's inference package-facts DTO mirror and fixtures, carry
+    logical artifact/file size facts through embedded-runtime dispatch and
+    runtime-host package-facts bridges, and fail closed when current-contract
+    facts omit `artifact.logical_size`.
+  - Allowed write set: `Cargo.toml`, `Cargo.lock`, `crates/inference` package
+    facts DTOs/tests/fixtures/README, `crates/pantograph-embedded-runtime`
+    package-facts bridge/provider tests/README, and plan execution notes.
+  - No-fallback confirmation: the slice does not estimate loaded memory,
+    reserve resources, synthesize package sizes from graph paths, selector
+    summaries, UI state, `ModelRefV2`, `ModelDependencyRequest`, or Tauri
+    policy. Missing logical-size facts return typed fail-closed diagnostics.
+  - Dependency pin result:
+    `CARGO_NET_GIT_FETCH_WITH_CLI=true cargo update -p pumas-library`
+    resolved `pumas-library` to untagged commit
+    `f87c3da8276a914a54c6f4f36d617bef9d9f424e`; no tag is required because
+    Cargo can fetch the commit SHA from the configured remote.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p inference package_fact`;
+    `cargo test -p inference pumas_image_generation_fixture_decodes_with_structured_diffusers_facts`;
+    `cargo test -p pantograph-embedded-runtime runtime_host_package_facts`;
+    `cargo test -p pantograph-embedded-runtime pumas_dispatch_package_facts`;
+    `cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider`.
+  - Result: Pumas package-facts v3 DTO/projection gate is complete. Remaining
+    Milestone 5d work is the production `InferenceInterfaceFactsProvider` plus
+    conservative Pantograph-owned resource estimator that consumes these
+    static package-size facts.
 
 ### Traceability Links
 

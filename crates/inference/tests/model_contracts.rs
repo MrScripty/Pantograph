@@ -15,12 +15,12 @@ use inference::{
     ModelLibraryUpdateFeed, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
     ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
     ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState,
-    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
-    PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
-    ResolvedModelSource, ResolvedModelSourceKind, RuntimeLifecycleSnapshot, SupportTier,
-    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
-    TaskRegistryResolutionDiagnosticKind, TaskRequestContract, TaskStreamingSupport,
-    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, PackageFactValueSource,
+    PackageSizeRole, ProcessorComponentKind, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
+    PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
+    RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
+    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskRequestContract,
+    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -88,7 +88,7 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
 
 const PUMAS_IMAGE_PACKAGE_FACT_FIXTURES: &[(&str, &str, &str)] = &[(
     "diffusers_sd_text_to_image_package_facts.json",
-    "281a45a5",
+    "f87c3da8",
     include_str!("fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"),
 )];
 
@@ -139,12 +139,29 @@ fn pumas_image_generation_fixture_decodes_with_structured_diffusers_facts() {
                 panic!("Pumas fixture {fixture_name} should resolve: {error:?}")
             });
 
-        assert_eq!(facts.package_facts_contract_version, 2);
+        assert_eq!(
+            facts.package_facts_contract_version,
+            MODEL_PACKAGE_FACTS_CONTRACT_VERSION
+        );
         assert!(facts.uses_current_contract());
         assert_eq!(
             facts.artifact.artifact_kind,
             ModelArtifactKind::DiffusersBundle
         );
+        let logical_size = facts.artifact.logical_size.as_ref().unwrap_or_else(|| {
+            panic!("Pumas fixture {fixture_name} should carry logical size facts")
+        });
+        assert_eq!(logical_size.total_size_bytes, Some(7952));
+        assert_eq!(
+            logical_size.value_source,
+            PackageFactValueSource::ComponentLayout
+        );
+        assert!(logical_size.files.iter().any(|file| {
+            file.relative_path == "unet/diffusion_pytorch_model.safetensors"
+                && file.size_bytes == Some(4096)
+                && file.value_source == PackageFactValueSource::FilesystemMetadata
+                && file.role == Some(PackageSizeRole::Weight)
+        }));
         assert_eq!(
             facts.task.task_type_primary.as_deref(),
             Some("image_generation")
@@ -200,7 +217,7 @@ fn pumas_artifact_load_target_decodes_existing_pumas_wire_shape() {
         "library_root_id": "library-root",
         "storage_kind": "library_owned",
         "validation_state": "valid",
-        "package_facts_contract_version": 2
+        "package_facts_contract_version": MODEL_PACKAGE_FACTS_CONTRACT_VERSION
     }))
     .expect("Pumas load-target response target should decode");
 

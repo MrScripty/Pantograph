@@ -7,7 +7,7 @@ use crate::image_generation_planner::{DenoisingSchedulerOptionId, ImageGeneratio
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, ModelArtifactKind, ModelStorageKind,
     ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, PumasModelRef,
+    PumasArtifactLoadTarget, PumasModelRef, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::InferenceExecutionTelemetryScope;
@@ -111,7 +111,7 @@ fn image_plan() -> ImageGenerationExecutionPlan {
             storage_kind: ModelStorageKind::LibraryOwned,
             validation_state: ModelValidationState::Valid,
             content_fingerprint: None,
-            package_facts_contract_version: Some(2),
+            package_facts_contract_version: Some(MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         },
         backend_id: BackendId::parse("pytorch").expect("valid backend id"),
         runtime_variant_id,

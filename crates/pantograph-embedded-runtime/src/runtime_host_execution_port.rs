@@ -771,7 +771,9 @@ mod tests {
                 storage_kind: StorageKind::LibraryOwned,
                 validation_state: AssetValidationState::Valid,
                 content_fingerprint: Some("sha256:abc".to_string()),
-                package_facts_contract_version: Some(2),
+                package_facts_contract_version: Some(
+                    pumas_library::models::PACKAGE_FACTS_CONTRACT_VERSION,
+                ),
             })
         }
     }

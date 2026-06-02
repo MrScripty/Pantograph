@@ -422,6 +422,7 @@ fn pumas_package_diagnostic_code(
         | PumasDispatchPackageFactsDiagnosticCode::PackageFactsDecodeFailed
         | PumasDispatchPackageFactsDiagnosticCode::StalePackageFactsContract
         | PumasDispatchPackageFactsDiagnosticCode::SelectedArtifactMismatch
+        | PumasDispatchPackageFactsDiagnosticCode::MissingLogicalSizeFacts
         | PumasDispatchPackageFactsDiagnosticCode::PathFactsStripped => {
             SchedulerDispatchSelectionDiagnosticCode::NoCandidates
         }
@@ -453,6 +454,9 @@ fn pumas_package_diagnostic_hint(code: PumasDispatchPackageFactsDiagnosticCode) 
         }
         PumasDispatchPackageFactsDiagnosticCode::SelectedArtifactMismatch => {
             "embedded_runtime_dispatch_candidate_provider.pumas.selected_artifact_mismatch"
+        }
+        PumasDispatchPackageFactsDiagnosticCode::MissingLogicalSizeFacts => {
+            "embedded_runtime_dispatch_candidate_provider.pumas.missing_logical_size_facts"
         }
         PumasDispatchPackageFactsDiagnosticCode::PathFactsStripped => {
             "embedded_runtime_dispatch_candidate_provider.pumas.path_facts_stripped"
@@ -1013,6 +1017,18 @@ mod tests {
                 unsupported: Vec::new(),
             },
             requires_custom_code: false,
+            logical_size: inference::PackageLogicalSizeFacts {
+                total_size_bytes: Some(7952),
+                value_source: inference::PackageFactValueSource::ComponentLayout,
+                files: vec![inference::PackageFileSizeFact {
+                    relative_path: "unet/diffusion_pytorch_model.safetensors".to_string(),
+                    size_bytes: Some(4096),
+                    status: inference::PackageFactStatus::Present,
+                    value_source: inference::PackageFactValueSource::FilesystemMetadata,
+                    role: Some(inference::PackageSizeRole::Weight),
+                }],
+                diagnostics: Vec::new(),
+            },
             diffusers: None,
         }
     }

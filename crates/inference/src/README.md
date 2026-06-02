@@ -67,6 +67,9 @@ of application-level scheduler policy.
 - Pumas model/package facts consumed by this crate must be versioned DTO/API
   projections or fixtures, not Pumas SQLite, `metadata_json`, or search-cache
   internals.
+- Pumas logical artifact/file size facts are static package evidence only.
+  Loaded-memory, context, residency, scheduler admission, and runtime-resource
+  estimates remain Pantograph-owned policy outside this crate.
 - Pumas package facts are durable producer facts. Pantograph-owned
   technical-fit candidate derivation, live runtime placement, admission,
   loaded-state interpretation, and final backend choice remain outside this
@@ -265,6 +268,10 @@ backend is registered.
 - `ModelExecutionDescriptor` remains a compact Pumas execution summary. Rich
   artifact kind, tokenizer/processor, generation default, custom-code, backend
   hint, and package diagnostic evidence belongs in `ResolvedModelPackageFacts`.
+- `ResolvedModelPackageFacts.artifact.logical_size` mirrors Pumas
+  package-facts v3 logical package byte evidence. Consumers may use it as
+  static input to their own estimators, but this crate must not convert it into
+  loaded-memory or admission decisions.
 - `ModelLoadSecurityPolicy` is the public Rust-owned model loading trust
   contract. It records remote-code, local/offline, cache, auth-token source,
   revision, code-revision, decision id, and accepted custom-code source policy

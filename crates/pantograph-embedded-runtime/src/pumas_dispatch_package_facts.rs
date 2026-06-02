@@ -29,6 +29,7 @@ pub(crate) struct PumasDispatchPackageFactsProjection {
     pub task: inference::TaskEvidence,
     pub backend_hints: inference::BackendHintFacts,
     pub requires_custom_code: bool,
+    pub logical_size: inference::PackageLogicalSizeFacts,
     pub diffusers: Option<PumasDispatchDiffusersFacts>,
 }
 
@@ -76,6 +77,7 @@ pub(crate) enum PumasDispatchPackageFactsDiagnosticCode {
     PackageFactsDecodeFailed,
     StalePackageFactsContract,
     SelectedArtifactMismatch,
+    MissingLogicalSizeFacts,
     PathFactsStripped,
 }
 
@@ -102,7 +104,7 @@ pub(crate) async fn resolve_pumas_dispatch_package_facts(
     selector_access: Option<&PumasSelectorAccess>,
     model_ref: &PumasModelRef,
 ) -> PumasDispatchPackageFactsBridgeOutcome {
-    let mut diagnostics = validate_dispatch_model_ref(model_ref);
+    let diagnostics = validate_dispatch_model_ref(model_ref);
     if !diagnostics.is_empty() {
         return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
     }
@@ -157,25 +159,45 @@ pub(crate) async fn resolve_pumas_dispatch_package_facts(
             );
         }
     };
+    validate_and_project_dispatch_package_facts(model_ref, facts, diagnostics)
+}
+
+fn validate_and_project_dispatch_package_facts(
+    model_ref: &PumasModelRef,
+    facts: inference::ResolvedModelPackageFacts,
+    mut diagnostics: Vec<PumasDispatchPackageFactsDiagnostic>,
+) -> PumasDispatchPackageFactsBridgeOutcome {
     if !facts.uses_current_contract() {
-        return unavailable(
+        diagnostics.push(diagnostic(
             PumasDispatchPackageFactsDiagnosticCode::StalePackageFactsContract,
             format!(
                 "Pumas package facts for model '{}' use stale contract version {}",
                 model_ref.model_id, facts.package_facts_contract_version
             ),
-        );
+        ));
+        return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
     }
     if model_ref.selected_artifact_id.is_some()
         && facts.model_ref.selected_artifact_id != model_ref.selected_artifact_id
     {
-        return unavailable(
+        diagnostics.push(diagnostic(
             PumasDispatchPackageFactsDiagnosticCode::SelectedArtifactMismatch,
             format!(
                 "Pumas package facts for model '{}' do not match selected artifact {:?}",
                 model_ref.model_id, model_ref.selected_artifact_id
             ),
-        );
+        ));
+        return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
+    }
+    if facts.artifact.logical_size.is_none() {
+        diagnostics.push(diagnostic(
+            PumasDispatchPackageFactsDiagnosticCode::MissingLogicalSizeFacts,
+            format!(
+                "Pumas package facts for model '{}' do not include logical artifact size facts",
+                model_ref.model_id
+            ),
+        ));
+        return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
     }
     if facts.model_ref.selected_artifact_path.is_some() {
         diagnostics.push(diagnostic(
@@ -225,6 +247,10 @@ fn project_dispatch_package_facts(
         task: facts.task,
         backend_hints: facts.backend_hints,
         requires_custom_code: facts.custom_code.requires_custom_code,
+        logical_size: facts
+            .artifact
+            .logical_size
+            .expect("logical size facts are validated before projection"),
         diffusers: facts.diffusers.map(project_diffusers_facts),
     }
 }
@@ -347,6 +373,8 @@ mod tests {
             .backend_hints
             .accepted
             .contains(&inference::BackendHintLabel::Diffusers));
+        assert!(facts.logical_size.total_size_bytes.is_some());
+        assert!(!facts.logical_size.files.is_empty());
         let diffusers = facts
             .diffusers
             .as_ref()
@@ -398,6 +426,48 @@ mod tests {
             Some("diffusers")
         );
         assert_eq!(facts.model_ref.selected_artifact_path, None);
+    }
+
+    #[test]
+    fn projection_preserves_logical_size_facts_without_paths() {
+        let package_facts = package_facts_fixture();
+
+        let outcome = validate_and_project_dispatch_package_facts(
+            &model_ref("image/stable-diffusion/tiny-sd", None),
+            package_facts,
+            Vec::new(),
+        );
+
+        let PumasDispatchPackageFactsBridgeOutcome::Projected { facts, .. } = outcome else {
+            panic!("current package facts should project");
+        };
+        assert_eq!(facts.logical_size.total_size_bytes, Some(7952));
+        assert!(facts.logical_size.files.iter().any(|file| {
+            file.relative_path == "text_encoder/model.safetensors"
+                && file.value_source == inference::PackageFactValueSource::FilesystemMetadata
+                && file.role == Some(inference::PackageSizeRole::Weight)
+        }));
+        assert_eq!(facts.model_ref.selected_artifact_path, None);
+    }
+
+    #[test]
+    fn missing_logical_size_facts_fail_closed() {
+        let mut package_facts = package_facts_fixture();
+        package_facts.artifact.logical_size = None;
+
+        let outcome = validate_and_project_dispatch_package_facts(
+            &model_ref("image/stable-diffusion/tiny-sd", None),
+            package_facts,
+            Vec::new(),
+        );
+
+        assert!(matches!(
+            outcome,
+            PumasDispatchPackageFactsBridgeOutcome::Unavailable { .. }
+        ));
+        assert!(outcome.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code == PumasDispatchPackageFactsDiagnosticCode::MissingLogicalSizeFacts
+        }));
     }
 
     #[tokio::test]
@@ -498,6 +568,13 @@ mod tests {
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         }
+    }
+
+    fn package_facts_fixture() -> inference::ResolvedModelPackageFacts {
+        serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+        ))
+        .expect("fixture should decode")
     }
 
     fn write_test_diffusers_bundle(root: &std::path::Path) {

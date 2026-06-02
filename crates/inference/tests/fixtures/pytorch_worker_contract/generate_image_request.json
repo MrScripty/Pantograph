@@ -18,7 +18,7 @@
       "load_path_kind": "directory",
       "storage_kind": "library_owned",
       "validation_state": "valid",
-      "package_facts_contract_version": 2
+      "package_facts_contract_version": 3
     },
     "family": "stable_diffusion",
     "pipeline_class": "StableDiffusionPipeline",

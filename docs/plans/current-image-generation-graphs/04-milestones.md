@@ -148,6 +148,18 @@ producer-fact completion is a hard gate before Milestone 5a, Milestone 5c,
 Milestone 5d, Milestone 5b, and Milestone 6 consume production
 image-generation model facts, integrate production task orchestration, resolve
 model-specific inference interfaces, or resolve runtime-host load targets.
+The 2026-06-02 Pumas package artifact size facts handoff in
+`pumas-package-artifact-size-facts-handoff.md` is a specific hard gate for the
+Milestone 5d production inference facts provider/resource estimator slice:
+Pantograph may continue to expose typed `missing_resource_estimates`
+diagnostics, but it must not implement production resource estimates until a
+pinned Pumas contract exposes source-tagged logical artifact/file/component
+sizes in package-facts detail results.
+2026-06-02 update: that Pumas v3 package-facts contract is now pinned by
+commit SHA and Pantograph mirrors/projects logical-size facts through inference
+and embedded-runtime package-facts bridges. The remaining Milestone 5d work is
+the backend-owned production inference facts provider and conservative resource
+estimator that consumes those facts.
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing
 candidate facts, device-resolution decision from Milestone 0 and Milestone 5,

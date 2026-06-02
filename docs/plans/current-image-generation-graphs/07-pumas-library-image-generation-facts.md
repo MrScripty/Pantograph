@@ -150,6 +150,18 @@ admission, and learned refinement from observed memory-ledger facts. Pumas
 facts are therefore inputs to Pantograph's estimator, not proof that a model
 can be loaded on a given host.
 
+2026-06-02 handoff update: the logical-size portion of this boundary is now
+split into a standalone Pumas team handoff plan:
+`pumas-package-artifact-size-facts-handoff.md`. That plan records the current
+Pumas-Library source findings and the required package-facts detail contract for
+logical artifact/file/component sizes. Pantograph must not implement a
+production resource estimator from selector summaries, graph paths, UI state, or
+legacy workflow metadata while this Pumas contract is missing. The next
+Pantograph slice after Pumas completes the handoff is to pin the updated Pumas
+contract, project those logical size facts through embedded-runtime, and produce
+Pantograph-owned conservative scheduler estimate hints with typed fail-closed
+diagnostics for missing or stale size facts.
+
 Package-fact family labels are acceptable only when they are backed by explicit
 source-tagged package evidence. For example, Pumas may emit `flux` when
 `model_index.json` identifies a FLUX pipeline or component layout, but it must

@@ -5,6 +5,7 @@ use pumas_library::models::{
     AssetValidationState, ModelArtifactState, ModelEntryPathState, PackageArtifactKind,
     PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
     PumasArtifactLoadTargetDiagnosticCode, ResolveModelArtifactLoadTargetResponse, StorageKind,
+    PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 use super::{
@@ -58,7 +59,7 @@ fn ready_load_target_response_returns_host_only_target() {
             storage_kind: StorageKind::LibraryOwned,
             validation_state: AssetValidationState::Valid,
             content_fingerprint: Some("sha256:abc".to_string()),
-            package_facts_contract_version: Some(2),
+            package_facts_contract_version: Some(PACKAGE_FACTS_CONTRACT_VERSION),
         }),
         diagnostics: Vec::new(),
     };

@@ -113,6 +113,28 @@ defining an image-only inference-node interface.
       diagnostics-ledger refinement. Do not synthesize estimates from graph
       paths, selector summaries, UI state, `ModelRefV2`,
       `ModelDependencyRequest`, or Tauri-owned policy.
+      2026-06-02 gate: this task must wait for the Pumas package artifact size
+      facts handoff plan to be implemented and pinned:
+      `../pumas-package-artifact-size-facts-handoff.md`. After that Pumas
+      contract is available, the next Pantograph slice is to update the Pumas
+      dependency and inference package-facts DTOs, project source-tagged logical
+      artifact/file/component sizes through embedded-runtime, reject stale or
+      missing size facts with typed diagnostics, and only then implement the
+      conservative estimator/provider. Until that dependency exists, the valid
+      behavior remains fail-closed `missing_resource_estimates`; zero-resource
+      reservations or graph-path-derived estimates are forbidden.
+      - 2026-06-02 Pumas v3 contract/projection slice completed: Pantograph
+        pins the pushed untagged Pumas commit
+        `f87c3da8276a914a54c6f4f36d617bef9d9f424e`, mirrors package-facts
+        contract v3 logical artifact/file size DTOs in `inference`, projects
+        logical-size facts through `PumasDispatchPackageFactsSource`, rejects
+        missing logical-size facts with typed diagnostics in dispatch and
+        runtime-host package-facts bridges, and keeps estimator/admission
+        policy deferred to the next backend-owned provider slice.
+      - Remaining work in this task: implement the production
+        `InferenceInterfaceFactsProvider` and pure conservative estimator from
+        Pumas logical-size evidence plus runtime/device/task-shape/proven
+        residency facts, preserving typed insufficient-facts diagnostics.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

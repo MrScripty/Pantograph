@@ -42,6 +42,7 @@ risk, lifecycle, and execution-management content.
    - Pumas/Pantograph ownership boundary
    - Required diffusers bundle facts
    - Required GGUF metadata facts
+   - [Pumas package artifact size facts handoff](pumas-package-artifact-size-facts-handoff.md)
    - Snapshot/cache/update-feed behavior
    - Early P0-P1 producer-contract start after Pantograph Milestone 0
    - P2-P5 producer-fact completion gate before Pantograph Milestone 5a/5c/5b/6
@@ -123,6 +124,26 @@ production task-level orchestration, before Milestone 5d resolves
 model-specific inference interfaces, before Milestone 5b resolves runtime-host
 load targets, and before Milestone 6 implements real PyTorch/diffusers image
 execution.
+
+2026-06-02 resource-estimate handoff update: the next Pantograph production
+inference-facts provider slice is gated on the Pumas package artifact size facts
+handoff in
+`pumas-package-artifact-size-facts-handoff.md`. After Pumas publishes or pins
+that contract, Pantograph should update its Pumas dependency and inference
+package-facts DTOs, project logical artifact size facts through
+embedded-runtime, and implement the conservative Pantograph-owned
+model/load plus execution/context estimator. Until then, production dispatch
+must continue to fail closed with typed missing-resource-estimate diagnostics
+rather than deriving estimates from graph paths, selector summaries, UI state,
+or legacy model-reference contracts.
+
+2026-06-02 implementation note: the pushed untagged Pumas package-facts v3
+commit is now pinned by SHA in Pantograph, and Pantograph mirrors/projects
+logical artifact/file size facts through inference and embedded-runtime package
+fact bridges. The remaining production inference-facts work is the
+Pantograph-owned conservative estimator/provider and scheduler estimate-hint
+population; no loaded-memory or admission policy was added in the DTO/projection
+slice.
 
 ## Standards Rule
 

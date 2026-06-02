@@ -78,6 +78,11 @@ fn validate_runtime_host_package_facts(
             },
         );
     }
+    if package_facts.artifact.logical_size.is_none() {
+        return Err(RuntimeHostPumasPackageFactsError::MissingLogicalSizeFacts {
+            model_id: selected_model_ref.model_id.clone(),
+        });
+    }
     Ok(package_facts)
 }
 
@@ -178,6 +183,10 @@ pub(crate) enum RuntimeHostPumasPackageFactsError {
         selected_artifact_id: Option<String>,
         package_artifact_id: Option<String>,
     },
+    #[error(
+        "Pumas package facts for model '{model_id}' do not include logical artifact size facts"
+    )]
+    MissingLogicalSizeFacts { model_id: String },
     #[error(transparent)]
     Pumas(#[from] PumasError),
 }
@@ -222,6 +231,14 @@ mod tests {
             "image/stable-diffusion/tiny-sd"
         );
         assert!(package_facts.uses_current_contract());
+        assert_eq!(
+            package_facts
+                .artifact
+                .logical_size
+                .as_ref()
+                .and_then(|logical_size| logical_size.total_size_bytes),
+            Some(7952)
+        );
     }
 
     #[test]
@@ -261,6 +278,23 @@ mod tests {
                 ..
             } if selected_artifact_id.as_deref() == Some("diffusers-bundle")
                 && package_artifact_id.as_deref() == Some("other-artifact")
+        ));
+    }
+
+    #[test]
+    fn missing_logical_size_facts_fail_closed() {
+        let request = validated_runtime_host_request();
+        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
+        let mut package_facts = image_package_facts_for_request(selected_model_ref);
+        package_facts.artifact.logical_size = None;
+
+        let error = validate_runtime_host_package_facts(selected_model_ref, package_facts)
+            .expect_err("missing logical size facts must fail closed");
+
+        assert!(matches!(
+            error,
+            RuntimeHostPumasPackageFactsError::MissingLogicalSizeFacts { model_id }
+                if model_id == "pumas://models/juggernaut-xl-v10"
         ));
     }
 

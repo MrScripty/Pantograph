@@ -179,9 +179,12 @@ Pumas-specific dependency resolution.
   full Pumas facts. Local-client and read-only access must return typed
   diagnostics instead of promoting selector summaries or display rows into
   executable authority. The bridge projects only path-free model/task/family/
-  component/backend-hint facts; scheduler candidates still require separate
-  runtime-registry capability facts and real resource reservation/resource-fit
-  facts before non-empty production candidate sets are allowed.
+  component/backend-hint and logical-size package facts; scheduler candidates
+  still require separate runtime-registry capability facts, Pantograph-owned
+  resource estimates, and real resource reservation/resource-fit facts before
+  non-empty production candidate sets are allowed. Missing logical-size facts
+  fail closed at the bridge instead of being synthesized from graph paths,
+  selector summaries, or UI state.
 - Reservation lifecycle handling is implemented as an embedded-runtime port
   over `SharedRuntimeRegistry`. It accepts only scheduler lease ids issued by
   the runtime-registry resource-facts source, releases terminal/unselected

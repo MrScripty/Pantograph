@@ -1,5 +1,5 @@
 {
-  "package_facts_contract_version": 2,
+  "package_facts_contract_version": 3,
   "model_ref": {
     "model_id": "image/stable-diffusion/tiny-sd"
   },
@@ -10,7 +10,62 @@
     "validation_state": "valid",
     "selected_files": [
       "model_index.json"
-    ]
+    ],
+    "logical_size": {
+      "total_size_bytes": 7952,
+      "value_source": "component_layout",
+      "files": [
+        {
+          "relative_path": "model_index.json",
+          "size_bytes": 512,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "component_config"
+        },
+        {
+          "relative_path": "scheduler/scheduler_config.json",
+          "size_bytes": 64,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "component_config"
+        },
+        {
+          "relative_path": "text_encoder/model.safetensors",
+          "size_bytes": 2048,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "weight"
+        },
+        {
+          "relative_path": "tokenizer/tokenizer_config.json",
+          "size_bytes": 80,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "tokenizer"
+        },
+        {
+          "relative_path": "unet/config.json",
+          "size_bytes": 128,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "component_config"
+        },
+        {
+          "relative_path": "unet/diffusion_pytorch_model.safetensors",
+          "size_bytes": 4096,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "weight"
+        },
+        {
+          "relative_path": "vae/diffusion_pytorch_model.safetensors",
+          "size_bytes": 1024,
+          "status": "present",
+          "value_source": "filesystem_metadata",
+          "role": "weight"
+        }
+      ]
+    }
   },
   "components": [
     {

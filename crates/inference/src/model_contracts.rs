@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Current inference package-facts contract version.
-pub const MODEL_PACKAGE_FACTS_CONTRACT_VERSION: u32 = 2;
+pub const MODEL_PACKAGE_FACTS_CONTRACT_VERSION: u32 = 3;
 
 /// Compact execution descriptor mirrored from Pumas API output.
 ///
@@ -1087,11 +1087,26 @@ pub enum PackageFactStatus {
 pub enum PackageFactValueSource {
     Header,
     Config,
+    FilesystemMetadata,
     UpstreamMetadata,
     ComponentLayout,
     FilenameWeak,
     Ambiguous,
     Unavailable,
+}
+
+/// Stable logical-size file roles for package evidence.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageSizeRole {
+    SelectedArtifact,
+    Weight,
+    Shard,
+    ComponentConfig,
+    Tokenizer,
+    DependencyManifest,
+    CompanionArtifact,
+    Other,
 }
 
 /// Image-generation family labels produced only from package evidence.
@@ -1957,6 +1972,34 @@ pub struct ResolvedArtifactFacts {
     pub sibling_files: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selected_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logical_size: Option<PackageLogicalSizeFacts>,
+}
+
+/// Source-tagged logical size facts for a selected package artifact.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PackageLogicalSizeFacts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_size_bytes: Option<u64>,
+    pub value_source: PackageFactValueSource,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<PackageFileSizeFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ModelPackageDiagnostic>,
+}
+
+/// Source-tagged logical size for one bounded package file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PackageFileSizeFact {
+    pub relative_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+    pub status: PackageFactStatus,
+    pub value_source: PackageFactValueSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<PackageSizeRole>,
 }
 
 /// Source kind for a backend-loadable model artifact.
