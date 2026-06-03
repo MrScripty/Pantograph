@@ -107,6 +107,21 @@ diagnostics, and Tauri transport as separate ownership boundaries. Do not use
 this ordering to add graph-path fallback, node-engine planned-inference launch,
 `ModelRefV2`, Tauri-owned business policy, or a temporary compatibility branch.
 
+Selected dependency-readiness active-run lifecycle re-plan as of 2026-06-03:
+before continuing successful production runtime-host dispatch, preserve pending
+dependency readiness as a non-terminal active workflow-run state. The existing
+first-run deferral path may return typed runtime-not-ready diagnostics, but the
+public runtime session API must not finish the run or append terminal events for
+that pending state. Scheduler task state remains the backend source of truth for
+inspection and later retry/admission. This active-run lifecycle option
+supersedes the earlier synchronous-provider first-run option; it must not block
+workflow-service on async probes, infer readiness from static declarations, or
+move retry/readiness/resource policy into Tauri or frontend code. After the
+first complete inference path is proven through this lifecycle, implement the
+later option 3 backend scheduler-worker/tick/event lifecycle from the
+composition root with tracked tasks, cancellation/shutdown, freshness, timeout,
+retry, reservation release, and overlap prevention.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must

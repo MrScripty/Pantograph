@@ -21840,6 +21840,10 @@ Worker rules:
 
 - 2026-06-03 production inference-session dependency-readiness sequencing
   re-plan:
+  - Superseded note: this section records the earlier synchronous-provider
+    option. It was superseded by the dependency-readiness option 2 correction
+    and the later active-run lifecycle re-plan below. Do not implement this
+    section as a blocking synchronous first-run probe or static-ready shortcut.
   - Re-plan trigger: the production-composed execution-session path still
     cannot prove a first run because
     `WorkflowSchedulerSessionRunner::admit_runtime_dependency_readiness`
@@ -21849,24 +21853,26 @@ Worker rules:
     `DependencyReadinessWorkItem`. The embedded-runtime async snapshot
     producer consumes that queue, so the queued producer cannot create the
     first seed/proof before admission has already failed closed.
-  - Selected option for the next slice: option 1. Add a backend-owned
-    production dependency-readiness provider in embedded-runtime composition
-    that can answer the existing workflow-service readiness provider contract
-    from canonical Pantograph backend facts. The provider may reuse the same
-    dependency requirements, inventory, snapshot, and proof projection helpers
-    as the async producer, but it must not move policy into Tauri/frontend,
-    derive readiness from graph paths, `ModelDependencyRequest`, `ModelRefV2`,
-    reduced execution plans, selector summaries, or caller-supplied proofs, or
-    treat missing facts as ready. Missing, stale, or insufficient facts remain
-    typed fail-closed diagnostics.
+  - Superseded selected option at that time: option 1 would have added a
+    backend-owned production dependency-readiness provider in embedded-runtime
+    composition that could answer the existing workflow-service readiness
+    provider contract from canonical Pantograph backend facts. The provider
+    could have reused the same dependency requirements, inventory, snapshot,
+    and proof projection helpers as the async producer, but it still could not
+    move policy into Tauri/frontend, derive readiness from graph paths,
+    `ModelDependencyRequest`, `ModelRefV2`, reduced execution plans, selector
+    summaries, or caller-supplied proofs, or treat missing facts as ready.
+    Missing, stale, or insufficient facts would remain typed fail-closed
+    diagnostics.
   - Standards guardrails: keep workflow-service as the readiness lifecycle and
     scheduler-admission owner; keep embedded-runtime as the concrete
     production provider/composition owner; do not hold session/graph locks
     across backend fact lookup; do not create untracked tasks, ad hoc runtimes,
     or hidden global infrastructure in feature modules; keep parse-once typed
     request/proof contracts at the boundary.
-  - Smallest useful next implementation slice: wire a resource-backed
-    dependency-readiness provider through the hosted workflow-service
+  - Historical smallest useful implementation slice for that superseded
+    option: wire a resource-backed dependency-readiness provider through the
+    hosted workflow-service
     composition and add a focused production-composed session test that reaches
     scheduler dispatch selection/readiness proof using Pumas package facts,
     runtime-registry capability facts, conservative estimate hints, and the
@@ -21874,7 +21880,8 @@ Worker rules:
     stay limited to the embedded-runtime provider/composition/tests, minimal
     workflow-service provider-contract changes only if required for typed
     diagnostics, and plan notes.
-  - Explicit follow-up after the complete production inference path is proven:
+  - Historical follow-up after the complete production inference path was
+    proven under that superseded option:
     implement option 3 as the event-driven dependency-readiness lifecycle.
     That later slice must enqueue readiness work before requiring a proof,
     record typed pending/deferred scheduler state instead of failing a
@@ -21955,12 +21962,54 @@ Worker rules:
     `cargo test -p pantograph-workflow-service orchestrator_retries_retryable_runtime_dependency_readiness_failure`;
     `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
     `cargo check -p pantograph-workflow-service`.
-  - Remaining follow-up: the public runtime session API still finishes runtime
-    runs after returning `RuntimeNotReady`. A later active-run lifecycle slice
-    must decide the typed pending response/resume API or scheduler-tick owner
-    that keeps or reopens a deferred run, then combine this retry transition
-    with a production provider that seeds concrete requirements and consumes
-    fresh producer snapshots.
+  - Remaining follow-up superseded by the active-run lifecycle re-plan below:
+    the public runtime session API still finishes runtime runs after returning
+    `RuntimeNotReady`. The next slice must keep the active run open for
+    dependency-readiness pending instead of choosing a scheduler-tick owner
+    first.
+
+- 2026-06-03 dependency-readiness active-run lifecycle re-plan:
+  - Re-plan trigger: the option 2 deferral and retry transitions now preserve
+    scheduler task state while the run is active, but the public runtime
+    session API still calls `finish_run` and records a terminal event after
+    `RuntimeNotReady`. That destroys the active run needed for backend-owned
+    readiness resume and splits lifecycle ownership between the API result,
+    scheduler state, and any caller retry behavior.
+  - Selected immediate option: use the active-run pending lifecycle option.
+    Dependency-readiness pending is non-terminal. The public runtime session
+    path must keep the active workflow run and scheduler task graph open,
+    leave runtime dispatch blocked until a fresh canonical readiness proof is
+    admitted, and expose typed pending/readiness diagnostics through backend
+    response or read-model state. Tauri and frontend may render that backend
+    state or invoke explicit backend commands only; they must not own retry,
+    readiness, resource, package, or scheduler policy.
+  - No-fallback confirmation: this option does not revive the earlier
+    synchronous first-run provider. It must not block on async probes in
+    workflow-service, infer readiness from static dependency declarations,
+    derive facts from graph paths, selector summaries, UI state, Tauri policy,
+    `ModelRefV2`, `ModelDependencyRequest`, reduced execution plans, or
+    caller-supplied proofs, and must not create a compatibility terminal rerun
+    path.
+  - Smallest useful next source slice: adjust the public runtime execution
+    lifecycle so dependency-readiness pending does not call `finish_run` or
+    append a terminal event. Add focused workflow-service tests proving the
+    active run remains inspectable after pending readiness, scheduler task
+    state remains deferred/waiting as appropriate, non-runtime terminal cleanup
+    is unchanged, and a later retry/admission pass can consume a fresh
+    producer snapshot without reopening a finished run.
+  - Standards guardrails: keep one backend owner for the run/task lifecycle;
+    keep async host/package observation outside synchronous core logic; wire
+    any future background worker only from the composition root with tracked
+    tasks, cancellation, shutdown, tracing, and health/failure handling; keep
+    contracts typed and append-only where public response/read-model shape
+    changes are required.
+  - Deferred option 3 placement: after the first complete inference path works
+    through the non-terminal active-run lifecycle, add the backend
+    scheduler-worker/tick/event lifecycle. That later option 3 slice must own
+    readiness wakeups, freshness windows, timeout, cancellation, retry,
+    reservation release, and overlap prevention under one backend lifecycle
+    manager. It must replace manual or request-driven resume pressure without
+    preserving terminal `RuntimeNotReady` as the production path.
 
 ### Traceability Links
 

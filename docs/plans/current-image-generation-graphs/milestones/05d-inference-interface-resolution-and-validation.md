@@ -204,20 +204,25 @@ defining an image-only inference-node interface.
         queue-facing scheduler inference task records from that saved
         snapshot. This still stops before production execution-session
         dispatch.
-      - 2026-06-03 dependency-readiness sequencing re-plan selected: use
-        option 1 for the next slice. Add a backend-owned production dependency
-        readiness provider through embedded-runtime composition that answers
-        the existing scheduler admission seed/proof contract from canonical
-        Pantograph backend facts. The provider must fail closed with typed
-        diagnostics when facts are missing, stale, or insufficient, and must
-        not derive readiness from graph paths, selector summaries, UI state,
-        Tauri policy, `ModelRefV2`, `ModelDependencyRequest`, reduced
-        execution plans, or caller-supplied proofs. After the first complete
-        production inference path is proven, return to option 3 and replace
-        the synchronous first-run readiness requirement with event-driven
-        readiness work queuing, typed pending/deferred scheduler state,
-        readiness arrival resume, and explicit freshness, timeout,
-        cancellation, and retry behavior.
+      - 2026-06-03 dependency-readiness lifecycle re-plan selected: the
+        earlier synchronous-provider first-run option is superseded. The
+        implemented deferral path queues backend readiness work and records
+        scheduler deferred state when no fresh proof exists; the next slice
+        must make that pending state non-terminal in the public runtime
+        session API. Workflow-service must keep the active run open, preserve
+        scheduler task state as the backend source of truth, avoid terminal
+        run events for readiness-pending responses, and expose typed pending
+        diagnostics/read-model state that Tauri/frontend can only display or
+        forward through backend commands. This task still requires production
+        facts to fail closed when missing, stale, or insufficient, and still
+        forbids graph paths, selector summaries, UI state, Tauri policy,
+        `ModelRefV2`, `ModelDependencyRequest`, reduced execution plans,
+        synchronous probes, or caller-supplied proofs. After the first
+        complete production inference path is proven through that active-run
+        lifecycle, return to option 3 and add the composition-root-owned
+        backend readiness worker/tick lifecycle with tracked tasks,
+        cancellation/shutdown, freshness, timeout, retry, and
+        reservation-release behavior.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

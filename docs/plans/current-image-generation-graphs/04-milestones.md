@@ -160,6 +160,17 @@ commit SHA and Pantograph mirrors/projects logical-size facts through inference
 and embedded-runtime package-facts bridges. The remaining Milestone 5d work is
 the backend-owned production inference facts provider and conservative resource
 estimator that consumes those facts.
+2026-06-03 dependency-readiness lifecycle update: before continuing successful
+production runtime dispatch, the public runtime session path must stop treating
+dependency-readiness pending as terminal. The next Milestone 5b/5d bridge slice
+must preserve the active workflow run when runtime dependency readiness is
+pending, keep scheduler task state as the backend source of truth, avoid
+terminal run events for pending readiness, and expose only typed backend
+pending diagnostics/read-model state to Tauri/frontend. The later option 3
+scheduler worker/tick lifecycle belongs after the first complete inference path
+is proven and must be composition-root owned with tracked tasks,
+cancellation/shutdown, freshness, timeout, retry, and reservation-release
+rules.
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing
 candidate facts, device-resolution decision from Milestone 0 and Milestone 5,

@@ -165,18 +165,23 @@ runtime, task, or estimate facts continue to fail closed through canonical
 resolver/admission diagnostics instead of graph-path or selector-summary
 fallbacks.
 
-2026-06-03 dependency-readiness sequencing re-plan update: option 2 is now
-the active implementation path. The previous synchronous-first-run option is
-insufficient for production first-run inference because host/package
-observation is async and owned by the embedded-runtime readiness producer
-lifecycle; workflow-service must not block on async probes or infer readiness
-from static dependency declarations. The next slices must move first-run
-dependency readiness to the event-driven lifecycle: enqueue readiness work,
-record typed pending/deferred scheduler state, keep runtime dispatch blocked
-until a fresh backend readiness proof exists, and later resume dispatch from
-the single backend lifecycle owner when readiness facts arrive. Missing,
-stale, or insufficient facts remain typed fail-closed diagnostics, not
-graph-path, Tauri, frontend, selector-summary, or legacy preflight fallback.
+2026-06-03 dependency-readiness active-run lifecycle re-plan update: the
+implemented first-run deferral path remains valid: workflow-service enqueues
+dependency-readiness work, records typed deferred scheduler state, blocks
+runtime dispatch, and returns typed runtime-not-ready diagnostics when no fresh
+backend readiness proof exists. The next re-planned slice is the public runtime
+session lifecycle: dependency-readiness pending must be a non-terminal
+backend-owned active-run state, not a finished workflow run. The API/read model
+must preserve the active scheduler task state, avoid recording terminal run
+events for readiness-pending responses, and expose typed pending diagnostics
+that Tauri/frontend can display without owning business policy. After the
+first complete inference path is proven through this active-run lifecycle,
+return to the deferred option 3 worker/tick design: a composition-root-owned
+backend lifecycle with tracked tasks, cancellation/shutdown, freshness,
+timeout, retry, and reservation-release behavior that resumes waiting tasks
+when readiness facts arrive. Missing, stale, or insufficient facts remain
+typed fail-closed diagnostics, not graph-path, Tauri, frontend,
+selector-summary, synchronous probe, or legacy preflight fallback.
 
 ## Standards Rule
 
