@@ -2707,6 +2707,31 @@ defining an image-only inference-node interface.
         Remaining follow-up: wire graph-mutation auto-triggers and transport/
         frontend consumption in later slices without moving freshness or
         validation policy outside workflow-service.
+      - 2026-06-03 validation task-start transport slice completed: Tauri now
+        registers `start_current_graph_validation_task` as a thin command that
+        forwards the typed graph-session/revision request to workflow-service
+        and returns the backend-issued validation session id. The frontend
+        `WorkflowCommandService` mirrors that command and has IPC forwarding
+        coverage. This slice does not add graph-mutation auto-triggering or
+        frontend overlay state.
+        Files touched: `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+        `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`,
+        `src/services/workflow/WorkflowCommandService.ts`,
+        `src/services/workflow/WorkflowService.commands.test.ts`,
+        `src/services/workflow/README.md`, this milestone, the
+        inference-interface plan, and the execution log.
+        No-fallback/no-legacy confirmation: Tauri and frontend forward only the
+        typed request and returned id. They do not accept or synthesize raw
+        resolver facts, Pumas facts, dependency proofs, runtime facts, retry
+        policy, validation freshness, graph paths, or submit authority.
+        Verification passed: `node --experimental-strip-types --test
+        src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+        typecheck`; `cargo check --manifest-path src-tauri/Cargo.toml`;
+        touched-source standards search; and `git diff --check`. The Tauri
+        check still reports pre-existing dead-code warnings in unrelated
+        workflow modules.
+        Remaining follow-up: add graph-mutation auto-triggers and frontend
+        overlay consumption in separate slices.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit

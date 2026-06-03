@@ -214,6 +214,16 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     );
   }
 
+  async startCurrentGraphValidationTask(
+    request: WorkflowGraphCurrentValidationRefreshRequest,
+  ): Promise<string> {
+    if (USE_WORKFLOW_MOCKS) {
+      return 'mock-validation-session';
+    }
+
+    return invokeWorkflowCommand<string>('start_current_graph_validation_task', { request });
+  }
+
   async graphValidationLifecycleEventSnapshot(
     graphSessionId: string,
   ): Promise<WorkflowGraphValidationLifecycleEventSnapshot> {

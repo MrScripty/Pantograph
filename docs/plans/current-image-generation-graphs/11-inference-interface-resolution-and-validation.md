@@ -186,6 +186,11 @@ Out of scope:
   and graph-revision request and return the backend-issued validation session
   id. Transport commands, frontend overlays, and graph-mutation auto-triggers
   remain separate slices and must not accept resolver facts or own freshness.
+- 2026-06-03 task-start transport implemented: Tauri and the frontend command
+  service now forward the backend explicit validation task trigger without
+  adding validation policy. They carry only graph-session/revision intent and
+  the returned validation session id; graph-mutation auto-triggering and editor
+  overlay state remain separate slices.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

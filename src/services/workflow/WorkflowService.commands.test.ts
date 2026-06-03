@@ -766,6 +766,38 @@ test('workflow command service forwards current validation refresh requests', as
   }
 });
 
+test('workflow command service forwards backend validation task start requests', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return 'validation-session-task';
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const validationSessionId = await service.startCurrentGraphValidationTask({
+      graph_session_id: 'graph-session-a',
+      graph_revision: 'graph-revision-a',
+    });
+
+    assert.equal(validationSessionId, 'validation-session-task');
+    assert.deepEqual(calls, [
+      {
+        cmd: 'start_current_graph_validation_task',
+        args: {
+          request: {
+            graph_session_id: 'graph-session-a',
+            graph_revision: 'graph-revision-a',
+          },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
 test('workflow command service forwards validation lifecycle event snapshot requests', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];

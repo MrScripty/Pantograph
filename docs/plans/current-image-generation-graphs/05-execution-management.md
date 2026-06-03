@@ -23090,6 +23090,37 @@ Worker rules:
     - Remaining follow-up: wire graph-mutation auto-triggers and bounded
       transport/frontend consumption in later thin slices without moving
       freshness or validation policy outside workflow-service.
+  - 2026-06-03 Milestone 5d validation task-start transport slice:
+    - Smallest useful vertical slice: expose the backend explicit validation
+      task trigger through a thin Tauri command and frontend command-service
+      method before editor overlay state or graph-mutation auto-triggers are
+      wired.
+    - Files touched:
+      `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+      `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`,
+      `src/services/workflow/WorkflowCommandService.ts`,
+      `src/services/workflow/WorkflowService.commands.test.ts`,
+      `src/services/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Implementation: registered `start_current_graph_validation_task`, which
+      forwards the typed graph-session/revision request to workflow-service and
+      returns the backend-issued validation session id. Added frontend IPC
+      forwarding coverage and README boundary notes.
+    - No-fallback/no-legacy result: Tauri and frontend remain transport/
+      presentation boundaries. They do not accept or synthesize raw resolver
+      facts, Pumas facts, dependency proofs, runtime facts, retry policy,
+      validation freshness, graph paths, or submit authority.
+    - Verification passed: `node --experimental-strip-types --test
+      src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+      typecheck`; `cargo check --manifest-path src-tauri/Cargo.toml`;
+      touched-source search for retired workflow events, model paths, raw JSON,
+      `anyhow`, `Result<T, String>`, and spawned task calls; and `git diff
+      --check`. The Tauri check still reports pre-existing dead-code warnings
+      in unrelated workflow modules.
+    - Remaining follow-up: add graph-mutation auto-triggers and editor overlay
+      consumption in separate slices.
 
 ### Traceability Links
 

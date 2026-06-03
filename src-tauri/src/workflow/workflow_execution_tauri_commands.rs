@@ -10,6 +10,7 @@ use super::workflow_execution_commands::{
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
+    DraftGraphValidationSessionId,
 };
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
@@ -348,6 +349,17 @@ pub async fn refresh_current_graph_validation_summary(
 ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, String> {
     workflow_service
         .workflow_graph_refresh_current_validation_summary(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
+#[command]
+pub async fn start_current_graph_validation_task(
+    request: WorkflowGraphCurrentValidationRefreshRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<DraftGraphValidationSessionId, String> {
+    workflow_service
+        .workflow_graph_start_current_validation_task(request)
         .await
         .map_err(|error| error.to_envelope_json())
 }

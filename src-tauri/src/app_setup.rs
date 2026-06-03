@@ -566,6 +566,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::workflow_execution_tauri_commands::resolve_dependency_environment_action_intent,
             crate::workflow::workflow_execution_tauri_commands::current_graph_validation_summary,
             crate::workflow::workflow_execution_tauri_commands::refresh_current_graph_validation_summary,
+            crate::workflow::workflow_execution_tauri_commands::start_current_graph_validation_task,
             crate::workflow::workflow_execution_tauri_commands::graph_validation_lifecycle_event_snapshot,
             crate::workflow::workflow_execution_tauri_commands::publish_graph_session_executable_validation_snapshot,
             crate::workflow::workflow_execution_tauri_commands::remove_execution,
