@@ -22319,6 +22319,50 @@ Worker rules:
       standalone composition using the existing workflow-service
       resume-candidate query plus embedded backend host resume path, while
       keeping Tauri limited to storing and shutting down returned handles.
+  - 2026-06-03 dependency-readiness auto-resume production wiring slice:
+    - Smallest useful vertical slice: wire the exported auto-resume lifecycle
+      to a real embedded-runtime workflow-service resume port and host startup
+      ownership without adding Tauri business policy.
+    - Files touched:
+      `crates/pantograph-embedded-runtime/src/dependency_readiness_auto_resume.rs`,
+      `crates/pantograph-embedded-runtime/src/dependency_readiness_auto_resume_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`,
+      `crates/pantograph-embedded-runtime/src/lib.rs`,
+      `src-tauri/src/app_setup.rs`, `src-tauri/src/app_lifecycle.rs`,
+      `src-tauri/src/workflow/commands.rs`, `src-tauri/src/workflow/mod.rs`,
+      and this plan log.
+    - Implementation: added the real embedded-runtime
+      `EmbeddedWorkflowServiceAutoResumePort` that lists
+      workflow-service dependency-readiness resume candidates and calls
+      `resume_workflow_execution_session_runtime_dependency_readiness` with an
+      embedded workflow host. `EmbeddedRuntime` can now spawn and own the
+      auto-resume handle, standalone runtime construction starts it beside the
+      snapshot producer, and shutdown stops auto-resume before tearing down
+      gateway/runtime resources. Hosted Tauri startup reuses the existing
+      backend runtime-construction helper to build the host context, starts the
+      embedded-runtime handle, stores only the returned handle, and shuts it
+      down before the snapshot producer on app close.
+    - No-fallback/no-legacy result: Tauri does not inspect candidates, retry
+      readiness, interpret scheduler state, inspect Pumas facts, or select
+      runtimes. The production loop still consumes only typed backend resume
+      candidates and calls the typed backend resume API.
+    - Focused tests: extended
+      `embedded_runtime_spawns_real_auto_resume_port_without_candidates` to
+      prove the real embedded-runtime workflow-service port can spawn, poll no
+      candidates, and shut down idempotently.
+    - Verification passed:
+      `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+      `cargo test --manifest-path crates/pantograph-embedded-runtime/Cargo.toml dependency_readiness_auto_resume`;
+      `cargo check --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      `cargo check --manifest-path src-tauri/Cargo.toml`.
+    - Verification note: Tauri check still reports pre-existing dead-code
+      warnings in workflow diagnostic/event/runtime modules; no new
+      auto-resume warning was introduced.
+    - Remaining follow-up: run a user-facing inference workflow smoke once the
+      image-generation runtime path is available and consider replacing bounded
+      polling with a typed snapshot notification channel only if measured
+      responsiveness or idle overhead justifies the extra contract.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

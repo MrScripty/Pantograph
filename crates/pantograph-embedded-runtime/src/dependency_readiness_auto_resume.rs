@@ -7,7 +7,7 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionResumeRequest, WorkflowRunResponse, WorkflowServiceError,
 };
 
-use crate::EmbeddedRuntimeError;
+use crate::{EmbeddedRuntimeError, EmbeddedWorkflowHost, SharedWorkflowService};
 
 /// Configuration for the embedded dependency-readiness auto-resume loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +33,45 @@ pub trait DependencyReadinessAutoResumePort: Send + Sync {
         &self,
         request: WorkflowExecutionSessionResumeRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError>;
+}
+
+pub(crate) struct EmbeddedWorkflowServiceAutoResumePort {
+    workflow_service: SharedWorkflowService,
+    workflow_host: EmbeddedWorkflowHost,
+}
+
+impl EmbeddedWorkflowServiceAutoResumePort {
+    pub(crate) fn new(
+        workflow_service: SharedWorkflowService,
+        workflow_host: EmbeddedWorkflowHost,
+    ) -> Self {
+        Self {
+            workflow_service,
+            workflow_host,
+        }
+    }
+}
+
+#[async_trait]
+impl DependencyReadinessAutoResumePort for EmbeddedWorkflowServiceAutoResumePort {
+    fn dependency_readiness_resume_candidates(
+        &self,
+    ) -> Result<Vec<WorkflowExecutionSessionResumeRequest>, WorkflowServiceError> {
+        self.workflow_service
+            .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+    }
+
+    async fn resume_dependency_readiness(
+        &self,
+        request: WorkflowExecutionSessionResumeRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.workflow_service
+            .resume_workflow_execution_session_runtime_dependency_readiness(
+                &self.workflow_host,
+                request,
+            )
+            .await
+    }
 }
 
 /// Embedded-runtime owner for retrying active runs paused at dependency readiness.

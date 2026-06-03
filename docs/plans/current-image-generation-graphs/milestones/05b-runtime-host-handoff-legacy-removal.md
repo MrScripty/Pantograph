@@ -1281,6 +1281,13 @@ upgrade after this path is working.
   readiness as non-terminal, and invalid poll-interval rejection. Remaining
   follow-up: wire the real port and returned handle into hosted and standalone
   composition beside the snapshot producer.
+- 2026-06-03 auto-resume production wiring slice completed:
+  embedded-runtime now owns the real workflow-service resume port and
+  `EmbeddedRuntime` can spawn/manage the auto-resume handle. Standalone runtime
+  construction starts the handle beside the snapshot producer. Hosted Tauri
+  startup creates the handle through embedded-runtime host construction and
+  stores/shuts down only the returned handle; it does not own readiness retry
+  policy. Shutdown stops auto-resume before tearing down runtime resources.
 - 2026-05-29 re-plan boundary before real dependency-readiness snapshot
   publication: the lifecycle shell has a provider and tracked task owner, but
   no standards-compliant source of readiness work. A real producer must know

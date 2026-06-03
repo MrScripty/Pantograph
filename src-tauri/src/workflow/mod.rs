@@ -30,7 +30,7 @@ mod graph_validation_lifecycle_transport;
 pub mod groups;
 mod headless_diagnostics;
 pub mod headless_diagnostics_transport;
-mod headless_runtime;
+pub(crate) mod headless_runtime;
 pub mod headless_workflow_commands;
 pub mod orchestration;
 pub mod projection_invalidation_bridge;

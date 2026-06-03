@@ -20,7 +20,8 @@ use crate::{
 };
 #[cfg(feature = "standalone")]
 use crate::{
-    EmbeddedDependencyReadinessSnapshotProducer, EmbeddedRuntimeError, StandaloneRuntimeConfig,
+    EmbeddedDependencyReadinessAutoResumeConfig, EmbeddedDependencyReadinessSnapshotProducer,
+    EmbeddedRuntimeError, StandaloneRuntimeConfig,
 };
 
 impl EmbeddedRuntime {
@@ -46,6 +47,7 @@ impl EmbeddedRuntime {
             extensions,
             workflow_service,
             runtime_registry: None,
+            dependency_readiness_auto_resume: None,
             dependency_readiness_snapshot_producer: None,
             session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
             session_runtime_load_proofs: Arc::new(Mutex::new(HashMap::new())),
@@ -110,6 +112,7 @@ impl EmbeddedRuntime {
             extensions,
             workflow_service,
             runtime_registry,
+            dependency_readiness_auto_resume: None,
             dependency_readiness_snapshot_producer: None,
             session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
             session_runtime_load_proofs: Arc::new(Mutex::new(HashMap::new())),
@@ -216,7 +219,7 @@ impl EmbeddedRuntime {
             );
         }
 
-        Ok(Self::with_default_python_runtime(
+        let runtime = Self::with_default_python_runtime(
             EmbeddedRuntimeConfig {
                 app_data_dir: config.app_data_dir,
                 project_root: config.project_root,
@@ -228,7 +231,16 @@ impl EmbeddedRuntime {
             workflow_service,
             None,
         )
-        .with_dependency_readiness_snapshot_producer(dependency_readiness_snapshot_producer))
+        .with_dependency_readiness_snapshot_producer(dependency_readiness_snapshot_producer);
+        let auto_resume = runtime
+            .spawn_dependency_readiness_auto_resume(
+                tokio::runtime::Handle::current(),
+                EmbeddedDependencyReadinessAutoResumeConfig::default(),
+            )
+            .map_err(|error| EmbeddedRuntimeError::Initialization {
+                message: error.to_string(),
+            })?;
+        Ok(runtime.with_dependency_readiness_auto_resume(auto_resume))
     }
 
     pub fn config(&self) -> &EmbeddedRuntimeConfig {
@@ -262,6 +274,30 @@ impl EmbeddedRuntime {
     ) -> Self {
         self.dependency_readiness_snapshot_producer = Some(producer);
         self
+    }
+
+    pub fn with_dependency_readiness_auto_resume(
+        mut self,
+        auto_resume: crate::EmbeddedDependencyReadinessAutoResumeHandle,
+    ) -> Self {
+        self.dependency_readiness_auto_resume = Some(auto_resume);
+        self
+    }
+
+    pub fn spawn_dependency_readiness_auto_resume(
+        &self,
+        runtime_handle: tokio::runtime::Handle,
+        config: crate::EmbeddedDependencyReadinessAutoResumeConfig,
+    ) -> Result<crate::EmbeddedDependencyReadinessAutoResumeHandle, crate::EmbeddedRuntimeError>
+    {
+        crate::EmbeddedDependencyReadinessAutoResume::new(Arc::new(
+            crate::dependency_readiness_auto_resume::EmbeddedWorkflowServiceAutoResumePort::new(
+                self.workflow_service.clone(),
+                self.host(),
+            ),
+        ))
+        .with_config(config)
+        .spawn(runtime_handle)
     }
 
     pub fn record_workflow_session_runtime_load_proof(
@@ -316,6 +352,9 @@ impl EmbeddedRuntime {
     }
 
     pub async fn shutdown(&self) {
+        if let Some(auto_resume) = self.dependency_readiness_auto_resume.as_ref() {
+            auto_resume.shutdown().await;
+        }
         if let Err(error) = self.workflow_service.invalidate_all_session_runtimes() {
             log::warn!(
                 "failed to invalidate workflow execution session runtimes before shutdown: {}",

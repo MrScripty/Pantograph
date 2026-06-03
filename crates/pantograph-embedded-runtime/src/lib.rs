@@ -175,6 +175,8 @@ pub struct EmbeddedRuntime {
     extensions: SharedExtensions,
     workflow_service: SharedWorkflowService,
     runtime_registry: Option<SharedRuntimeRegistry>,
+    dependency_readiness_auto_resume:
+        Option<dependency_readiness_auto_resume::EmbeddedDependencyReadinessAutoResumeHandle>,
     dependency_readiness_snapshot_producer:
         Option<dependency_readiness_lifecycle::EmbeddedDependencyReadinessSnapshotProducerHandle>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
@@ -186,6 +188,7 @@ pub struct EmbeddedRuntime {
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }
 
+#[derive(Clone)]
 pub(crate) struct EmbeddedWorkflowHost {
     app_data_dir: PathBuf,
     project_root: PathBuf,

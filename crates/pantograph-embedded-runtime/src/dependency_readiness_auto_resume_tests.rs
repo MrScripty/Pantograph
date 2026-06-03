@@ -4,13 +4,16 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    WorkflowExecutionSessionResumeRequest, WorkflowRunResponse, WorkflowServiceError,
+    WorkflowExecutionSessionResumeRequest, WorkflowRunResponse, WorkflowService,
+    WorkflowServiceError,
 };
+use tokio::sync::RwLock;
 
 use crate::dependency_readiness_auto_resume::{
     DependencyReadinessAutoResumePort, EmbeddedDependencyReadinessAutoResume,
     EmbeddedDependencyReadinessAutoResumeConfig,
 };
+use crate::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 
 #[tokio::test]
 async fn auto_resume_shutdown_is_idempotent_and_noops_without_candidates() {
@@ -117,6 +120,30 @@ async fn auto_resume_rejects_zero_poll_interval() {
     assert!(error
         .to_string()
         .contains("dependency-readiness auto-resume poll interval"));
+}
+
+#[tokio::test]
+async fn embedded_runtime_spawns_real_auto_resume_port_without_candidates() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let workflow_service = Arc::new(WorkflowService::new());
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig::new(
+            temp_dir.path().join("app-data"),
+            temp_dir.path().join("project"),
+        ),
+        Arc::new(inference::InferenceGateway::new()),
+        Arc::new(RwLock::new(node_engine::ExecutorExtensions::new())),
+        workflow_service,
+        None,
+    );
+    let handle = runtime
+        .spawn_dependency_readiness_auto_resume(tokio::runtime::Handle::current(), test_config())
+        .expect("auto-resume should spawn with real workflow-service port");
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    handle.shutdown().await;
+    handle.shutdown().await;
 }
 
 fn test_config() -> EmbeddedDependencyReadinessAutoResumeConfig {

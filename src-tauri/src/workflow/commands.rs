@@ -28,6 +28,9 @@ pub type SharedWorkflowExecutionSessionStaleCleanupWorker =
 /// Shared backend-owned dependency-readiness snapshot producer.
 pub type SharedDependencyReadinessSnapshotProducer =
     Arc<pantograph_embedded_runtime::EmbeddedDependencyReadinessSnapshotProducerHandle>;
+/// Shared backend-owned dependency-readiness auto-resume lifecycle.
+pub type SharedDependencyReadinessAutoResume =
+    Arc<pantograph_embedded_runtime::EmbeddedDependencyReadinessAutoResumeHandle>;
 /// Shared backend-owned diagnostics projection store.
 pub type SharedWorkflowDiagnosticsStore = Arc<super::diagnostics::WorkflowDiagnosticsStore>;
 /// Shared filesystem-backed workflow graph store.

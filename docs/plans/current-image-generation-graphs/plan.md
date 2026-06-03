@@ -210,6 +210,15 @@ The next source slice must wire a real embedded-runtime resume port through
 hosted and standalone composition so production startup returns/manages this
 handle beside the snapshot producer while Tauri remains a thin handle manager.
 
+2026-06-03 auto-resume production wiring update: the real embedded-runtime
+resume port is wired. It lists workflow-service resume candidates and calls
+the existing backend resume API with an embedded workflow host. Standalone
+runtime construction owns the handle, hosted Tauri startup creates the handle
+through embedded-runtime host construction and only stores/shuts down the
+returned handle, and shutdown stops auto-resume before tearing down runtime
+resources. The remaining improvement is optional event-first notification
+after the bounded polling path is proven under real inference workflow smoke.
+
 ## Standards Rule
 
 The standards constraints in

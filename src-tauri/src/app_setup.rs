@@ -209,7 +209,7 @@ pub fn run_app() -> AppStartupResult<()> {
 
                 // Initialize RAG manager with project data directory
                 let rag_manager = create_rag_manager(project_data_dir);
-                app.manage(rag_manager);
+                app.manage(rag_manager.clone());
 
                 let kv_cache_dir = app_data_dir.join("kv_cache");
                 let config = tauri::async_runtime::block_on(async {
@@ -273,11 +273,40 @@ pub fn run_app() -> AppStartupResult<()> {
                 let dependency_activity = startup_output.dependency_activity;
                 let dependency_readiness_snapshot_producer: workflow::commands::SharedDependencyReadinessSnapshotProducer =
                     Arc::new(startup_output.dependency_readiness_snapshot_producer);
+                let app_handle = app.handle().clone();
+                let dependency_readiness_auto_resume_runtime =
+                    tauri::async_runtime::block_on(workflow::headless_runtime::build_runtime(
+                        &app_handle,
+                        &gateway,
+                        &runtime_registry,
+                        &shared_extensions,
+                        &workflow_service,
+                        Some(&rag_manager),
+                    ))
+                    .map_err(|error| {
+                        startup_error(format!(
+                            "failed to compose dependency-readiness auto-resume runtime host: {error}"
+                        ))
+                    })?;
+                let dependency_readiness_auto_resume: workflow::commands::SharedDependencyReadinessAutoResume =
+                    Arc::new(
+                        dependency_readiness_auto_resume_runtime
+                            .spawn_dependency_readiness_auto_resume(
+                                runtime_handle.clone(),
+                                Default::default(),
+                            )
+                            .map_err(|error| {
+                                startup_error(format!(
+                                    "failed to start dependency-readiness auto-resume lifecycle: {error}"
+                                ))
+                            })?,
+                    );
 
                 app.manage(workflow_service.clone());
                 app.manage(shared_extensions);
                 app.manage(dependency_activity.clone());
                 app.manage(dependency_readiness_snapshot_producer);
+                app.manage(dependency_readiness_auto_resume);
 
                 let dependency_event_app = app.handle().clone();
                 dependency_activity.set_emitter(Arc::new(move |event| {
