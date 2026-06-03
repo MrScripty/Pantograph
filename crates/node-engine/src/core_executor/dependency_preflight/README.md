@@ -1,17 +1,17 @@
 # dependency_preflight
 
-This directory contains retired helper modules for node-engine dependency
-preflight.
+This directory contains the remaining retired helper modules from node-engine
+dependency preflight.
 
 Production runtime launch must not enter this directory as a successful
-execution path. If old runtime preflight is reached, the guardrail in
-`dependency_preflight.rs` fails closed before resolver lookup,
-`ModelDependencyRequest` construction, path repair, runtime-host dispatch, or
-`ModelRefV2` output. Its public helper now returns only success/diagnostic
-failure and cannot hand a legacy model-ref payload back to callers. The
-remaining helpers are retained temporarily for diagnostic tests and the planned
-legacy-contract deletion slice. The old `build_model_ref_v2` constructor has
-been deleted and must not be recreated as a compatibility bridge. The old
+execution path. The old node-engine preflight enforcement helper has been
+deleted instead of retained as a second readiness authority. The remaining
+facade rejects retired model-reference input shapes and re-exports path-free
+projection helpers used by cleanup tests and canonical dependency-planning
+contract work. It must not perform resolver lookup, `ModelDependencyRequest`
+construction, path repair, runtime-host dispatch, compatibility acceptance, or
+`ModelRefV2` output. The old `build_model_ref_v2` constructor has been deleted
+and must not be recreated as a compatibility bridge. The old
 `build_model_dependency_request` constructor has also been deleted; canonical
 dependency planning must use `planning_projection.rs` and shared
 `pantograph-dependency-planning` contracts instead of rebuilding

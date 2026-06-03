@@ -334,12 +334,6 @@ impl TaskExecutor for CoreTaskExecutor {
                     _ if preferred_backend.as_deref() == Some("pytorch") => {
                         #[cfg(feature = "pytorch-nodes")]
                         {
-                            let _preflight_context = dependency_preflight_lifecycle_context(
-                                &inputs,
-                                task_id,
-                                exec_id,
-                                preferred_backend.as_deref(),
-                            );
                             Err(NodeEngineError::ExecutionFailed(format!(
                                 "PyTorch runtime execution is scheduler-owned and requires scheduler task state/results; node-engine PyTorch launch is retired for workflow run '{exec_id}', node '{task_id}'"
                             )))
@@ -744,26 +738,6 @@ fn inference_model_id_from_inputs(inputs: &HashMap<String, serde_json::Value>) -
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned)
         })
-}
-
-#[cfg(feature = "pytorch-nodes")]
-fn dependency_preflight_lifecycle_context(
-    inputs: &HashMap<String, serde_json::Value>,
-    task_id: &str,
-    execution_id: &str,
-    backend_key: Option<&str>,
-) -> DependencyPreflightLifecycleContext {
-    let task_label = canonical_inference_task_entry(inputs)
-        .map(|entry| entry.canonical_label().to_string())
-        .unwrap_or_else(|| "text_generation".to_string());
-    DependencyPreflightLifecycleContext {
-        task_id: task_id.to_string(),
-        execution_id: execution_id.to_string(),
-        task_label,
-        backend_key: backend_key.map(ToOwned::to_owned),
-        model_id: inference_model_id_from_inputs(inputs),
-        resolved_artifact_kind: read_resolved_artifact_kind_from_inputs(inputs),
-    }
 }
 
 #[cfg(feature = "inference-nodes")]

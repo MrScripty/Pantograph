@@ -64,6 +64,10 @@ risk, lifecycle, and execution-management content.
    - PyTorch, llama.cpp, and audio migration
    - Node-engine preflight replacement
    - Legacy resolver/path deletion sequence
+   - 2026-06-03: dead node-engine dependency-preflight enforcement deleted;
+     remaining node-engine preflight code is limited to retired input
+     rejection and path-free projection helpers, with embedded-runtime
+     Python-backed preflight tracked separately.
 
 8. [Task-Level Scheduler Orchestration](10-task-level-scheduler-orchestration.md)
    - Option 4 target architecture

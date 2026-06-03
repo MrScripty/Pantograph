@@ -2201,6 +2201,18 @@ inputs and no longer calls backend unload side effects. Runtime lifecycle is
 scheduler/runtime-host owned; reaching the old node now returns a typed
 diagnostic before legacy model-ref parsing.
 
+Completed 2026-06-03 for dead node-engine dependency-preflight enforcement
+deletion: node-engine no longer exports or tests the old
+`enforce_dependency_preflight` helper, compatibility diagnostics constructor,
+or preflight lifecycle context. The remaining dependency-preflight module only
+rejects retired model-reference input shapes and re-exports path-free
+input/planning projection helpers; it cannot perform resolver lookup,
+`ModelDependencyRequest` construction, compatibility acceptance, runtime-host
+dispatch, lifecycle preflight emission, or `ModelRefV2` output. Embedded
+runtime Python-backed dependency preflight remains a separate active
+replacement/deletion target and must not be removed through this node-engine
+slice.
+
 ## Verification Strategy
 
 - Contract fixtures for host execution request/response and Pumas load-target

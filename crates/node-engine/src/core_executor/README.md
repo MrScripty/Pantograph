@@ -12,10 +12,10 @@ into frontend, transport, or descriptor crates.
 ## Contents
 | File | Responsibility |
 | --- | --- |
-| `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
+| `dependency_preflight.rs` | Retired dependency-preflight input rejection and path-free dependency-planning projection helpers. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
 | `inference_nodes.rs` | Feature-gated shared canonical inference request builders, graph result projection, and unload-model handling. |
-| `inference_tests.rs` | Focused tests for dependency preflight, backend-key normalization, embedding failure behavior, and reranker parsing. |
+| `inference_tests.rs` | Focused tests for canonical inference request building, backend-key normalization, embedding failure behavior, and reranker parsing. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `kv_cache_parsing_tests.rs` | Focused tests for KV-cache storage-policy and marker parsing helpers. |
 | `kv_cache_test_support.rs` | Mock inference backend and process fixtures shared by KV-cache behavior tests. |
@@ -30,7 +30,7 @@ into frontend, transport, or descriptor crates.
 
 ## Problem
 `CoreTaskExecutor` owns several unrelated execution concerns: built-in pure
-node handlers, file I/O, runtime dependency preflight, inference adapters,
+node handlers, file I/O, retired dependency input rejection, inference adapters,
 audio adapters, and tests. Keeping every helper inline makes dispatcher changes
 hard to review and encourages unrelated execution policies to grow together.
 
@@ -75,22 +75,22 @@ stable public facade and dispatch owner.
   treat those inference-only readers as live production paths.
 - Dependency preflight and model-reference construction are retired as
   successful node-engine runtime execution paths. `dependency_preflight.rs`
-  remains temporarily as a diagnostic-only guardrail and tested cleanup target:
-  if reached for old runtime preflight it must fail closed before resolver
-  lookup, `ModelDependencyRequest` construction, path repair, runtime-host
-  dispatch, or `ModelRefV2` output. Explicit workflow/backend inputs are the
-  only graph-owned backend signal here; resolved package facts may provide
-  factual task/model inputs, but `recommended_backend` and package backend
-  hints must not become executable backend selection in node-engine.
+  now owns only retired model-reference input rejection and path-free
+  dependency-planning projection helpers. It must not perform resolver lookup,
+  `ModelDependencyRequest` construction, path repair, compatibility
+  acceptance, runtime-host dispatch, lifecycle preflight emission, or
+  `ModelRefV2` output. Explicit workflow/backend inputs are the only
+  graph-owned backend signal here; resolved package facts may provide factual
+  task/model inputs, but `recommended_backend` and package backend hints must
+  not become executable backend selection in node-engine.
 - Dependency preflight must not special-case retired direct inference node
   shapes such as `diffusion-inference`. Image-generation preflight enters
   through canonical `llm-inference` task metadata and resolved package facts.
-- Dependency preflight lifecycle events are bounded model-package-resolution
-  diagnostics. The retired node-engine preflight guardrail may emit
-  started/failed/cleanup observations with request, task, backend/runtime, and
-  model identity plus the resolved artifact-kind label when known, but it must
-  not emit successful preflight completion or compatibility acceptance for
-  runtime launch.
+- Node-engine must not emit dependency-preflight lifecycle events for runtime
+  launch. Bounded inference lifecycle diagnostics may still be emitted by the
+  canonical inference request path where those diagnostics describe task
+  validation, package resolution, backend execution, result projection, and
+  cleanup without reintroducing preflight authority.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`. Node-engine
   PyTorch launch has been retired; successful PyTorch execution must come from
   scheduler task state/results and runtime-host responses, not this directory.

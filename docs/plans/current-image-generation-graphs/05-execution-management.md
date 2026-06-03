@@ -22544,6 +22544,38 @@ Worker rules:
       by the app-local registry, but it is a package API surface and must be
       handled in its own delete-or-rewrite slice rather than folded into this
       orphaned renderer cleanup.
+  - 2026-06-03 node-engine dependency-preflight enforcement deletion slice:
+    - Smallest useful vertical slice: remove the now-dead node-engine
+      dependency-preflight enforcement helper and lifecycle/compatibility
+      diagnostic scaffolding after production runtime dispatch moved to
+      scheduler/runtime-host state.
+    - Files touched:
+      `crates/node-engine/src/core_executor.rs`,
+      `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+      `crates/node-engine/src/core_executor/inference_tests.rs`,
+      `crates/node-engine/src/core_executor/README.md`,
+      `crates/node-engine/src/core_executor/dependency_preflight/README.md`,
+      `crates/node-engine/src/README.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/09-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this plan log.
+    - Implementation: deleted `enforce_dependency_preflight`, the
+      compatibility diagnostics constructor, the preflight lifecycle context,
+      and tests that only exercised that retired helper. Kept the
+      dependency-preflight module for retired model-reference input rejection
+      and path-free input/planning projection helpers.
+    - No-fallback/no-legacy result: node-engine cannot use dependency
+      preflight to perform resolver lookup, `ModelDependencyRequest`
+      construction, compatibility acceptance, runtime-host dispatch, lifecycle
+      preflight emission, or `ModelRefV2` output. The still-active
+      embedded-runtime Python-backed dependency preflight path remains a
+      separate replacement/deletion target.
+    - Verification passed:
+      `cargo fmt --manifest-path crates/node-engine/Cargo.toml`;
+      `cargo check --manifest-path crates/node-engine/Cargo.toml --features inference-nodes,pytorch-nodes,audio-nodes`;
+      `cargo test --manifest-path crates/node-engine/Cargo.toml --features inference-nodes,pytorch-nodes,audio-nodes dependency_preflight --lib`;
+      removed-symbol source search for node-engine preflight enforcement
+      helpers; and `git diff --check`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

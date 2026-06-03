@@ -229,6 +229,16 @@ upgrade after this path is working.
   dispatch-selected `SchedulerRuntimeHandoff`, maps runtime-host responses
   into scheduler task results, and projects requested workflow outputs without
   reduced-plan launch.
+- [x] Delete the dead node-engine dependency-preflight enforcement surface.
+  2026-06-03 slice: node-engine no longer exports or tests
+  `enforce_dependency_preflight`, the compatibility diagnostics constructor,
+  or the preflight lifecycle context. `dependency_preflight.rs` now only
+  rejects retired model-reference input shapes and re-exports path-free
+  input/planning projection helpers; it cannot perform resolver lookup,
+  `ModelDependencyRequest` construction, compatibility acceptance,
+  runtime-host dispatch, lifecycle preflight emission, or `ModelRefV2` output.
+  The still-active embedded-runtime Python-backed dependency preflight path is
+  a separate replacement/deletion target.
 - [x] Add the first complete image-generation inference path behind
   `EmbeddedRuntimeHostExecutionPort`. Selected 2026-05-31 direction: implement
   an image-generation-first embedded-runtime executor as the smallest useful
