@@ -219,7 +219,6 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
       { id: 'generation_options', label: 'Generation Options', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_OPTIONS_PAYLOADS },
       { id: 'task_options', label: 'Task Options', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
       { id: 'denoising_scheduler', label: 'Denoising Scheduler', data_type: 'string', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_OPTIONS_PAYLOADS },
-      { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
     ],
     outputs: [
       { id: 'response', label: 'Response', data_type: 'string', required: false, multiple: false, inference_payloads: RESPONSE_PAYLOADS },

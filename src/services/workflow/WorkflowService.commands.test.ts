@@ -113,6 +113,7 @@ test('mock node definitions expose intent-only Pumas inference ports', () => {
   assert.ok(llmInference.inputs.some((port) => port.id === 'device'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'backend_key'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'runtime_hint'));
+  assert.equal(llmInference.inputs.some((port) => port.id === 'inference_settings'), false);
   assert.equal(llmInference.inputs.some((port) => port.id === 'resolved_model_source'), false);
   assert.equal(
     llmInference.inputs.some((port) => port.id === 'resolved_model_package_facts'),

@@ -3442,6 +3442,20 @@ defining an image-only inference-node interface.
          paths. The focused test is therefore a source-contract deletion gate,
          while `npm run typecheck` verifies the changed module through the
          TypeScript project.
+       - 2026-06-03 implementation slice completed: removed the remaining
+         app-level `llm-inference.inference_settings` mock input from
+         `src/services/workflow/mocks.ts` and tightened
+         `WorkflowService.commands.test.ts` so the canonical app mock rejects
+         that retired settings port alongside `backend_key`, `runtime_hint`,
+         and resolved package/source fact ports.
+       - No-fallback/no-legacy gate: the app mock now matches the canonical
+         descriptor-owned settings rule. No mock-side settings alias,
+         compatibility port, package-fact port, or frontend-owned settings
+         source was added.
+       - Verification passed: `node --experimental-strip-types --test
+         src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+         typecheck`; targeted app mock search for retired port IDs; `git diff
+         --check`.
     3. Retire legacy graph-visible processing inference nodes with path-shaped
        ports (`audio-generation`, `onnx-inference`, `depth-estimation`) in a
        separate registry slice, or explicitly reclassify any retained node as a

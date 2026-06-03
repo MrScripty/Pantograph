@@ -22711,6 +22711,25 @@ Worker rules:
     matching pending runs when readiness facts arrive. That later slice must
     own tracked tasks, cancellation/shutdown, freshness, timeout, retry,
     reservation release, overlap prevention, and observability.
+  - 2026-06-03 Milestone 5d app mock inference-settings cleanup slice:
+    - Smallest useful vertical slice: remove the remaining app-level
+      `llm-inference.inference_settings` mock port and tighten the existing
+      workflow-service command contract test.
+    - Files touched: `src/services/workflow/mocks.ts`,
+      `src/services/workflow/WorkflowService.commands.test.ts`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - Implementation: deleted the `inference_settings` input from the app mock
+      `llm-inference` definition and added an assertion that the canonical app
+      mock no longer exposes it as a successful input.
+    - No-fallback/no-legacy result: no settings alias, package-fact port,
+      compatibility input, or frontend-owned settings source was introduced.
+      Backend inference-interface descriptors remain the only settings/port
+      authority.
+    - Verification passed: `node --experimental-strip-types --test
+      src/services/workflow/WorkflowService.commands.test.ts`; `npm run
+      typecheck`; targeted app mock search for retired port IDs; `git diff
+      --check`.
   - 2026-06-03 Milestone 5d package mock inference-port cleanup slice:
     - Smallest useful vertical slice: align the reusable
       `packages/svelte-graph` mock backend with the canonical intent-only
