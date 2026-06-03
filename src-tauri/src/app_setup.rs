@@ -386,7 +386,6 @@ pub fn run_app() -> AppStartupResult<()> {
             // LLM commands
             crate::llm::send_vision_prompt,
             crate::llm::connect_to_server,
-            crate::llm::start_sidecar_llm,
             crate::llm::get_llm_status,
             crate::llm::stop_llm,
             crate::llm::run_agent,

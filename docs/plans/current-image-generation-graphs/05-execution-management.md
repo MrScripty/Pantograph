@@ -22729,6 +22729,28 @@ Worker rules:
     - Discovered follow-up: the Tauri `start_sidecar_llm` command is still
       defined and registered server-side. It is now unreferenced from frontend
       source, but deleting it requires a separate Tauri/backend command slice.
+  - 2026-06-03 Milestone 5d Tauri direct-sidecar command cleanup slice:
+    - Smallest useful vertical slice: remove the now-unreferenced
+      `start_sidecar_llm` Tauri command, registration, and explicit llama.cpp
+      path request helper/test.
+    - Files touched: `src-tauri/src/llm/commands/server.rs`,
+      `src-tauri/src/llm/startup.rs`, `src-tauri/src/app_setup.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - No-fallback/no-legacy result: deleted the direct model-path runtime
+      startup command and helper rather than adapting them to `ModelRefV2`,
+      graph paths, or a compatibility command. Configured inference/embedding
+      startup remains available through the existing config/gateway path.
+    - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+      --check`; `cargo test --manifest-path src-tauri/Cargo.toml llm::startup`;
+      `cargo check --manifest-path src-tauri/Cargo.toml`; targeted source
+      search for `start_sidecar_llm` and
+      `build_explicit_llamacpp_inference_request`; targeted frontend/config
+      search for `modelPath`, `startSidecar`, and `mmprojPath`; `git diff
+      --check`.
+    - Verification caveat: Tauri Rust checks still emit pre-existing dead-code
+      warnings in workflow diagnostics/event/runtime modules; these are
+      unrelated to the removed command.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port

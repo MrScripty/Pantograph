@@ -31,20 +31,6 @@ pub(crate) fn build_external_inference_request(url: &str) -> Result<InferenceSta
     })
 }
 
-pub(crate) fn build_explicit_llamacpp_inference_request(
-    model_path: &str,
-    mmproj_path: &str,
-    device: &DeviceConfig,
-) -> Result<InferenceStartRequest, String> {
-    Ok(InferenceStartRequest {
-        external_url: None,
-        file_model_path: Some(PathBuf::from(model_path)),
-        mmproj_path: Some(PathBuf::from(mmproj_path)),
-        device: Some(llama_cpp_startup_device_intent(device)?),
-        gpu_layers: Some(device.gpu_layers),
-    })
-}
-
 pub(crate) fn build_configured_inference_request(
     config: &AppConfig,
 ) -> Result<InferenceStartRequest, String> {
@@ -109,9 +95,8 @@ mod tests {
 
     use super::{
         build_configured_embedding_request, build_configured_inference_request,
-        build_explicit_llamacpp_inference_request, build_external_inference_request,
-        build_resolved_embedding_request, resolve_embedding_model_path,
-        validate_external_server_url,
+        build_external_inference_request, build_resolved_embedding_request,
+        resolve_embedding_model_path, validate_external_server_url,
     };
 
     #[test]
@@ -171,38 +156,6 @@ mod tests {
             Some("Vulkan0")
         );
         assert_eq!(request.gpu_layers, Some(99));
-    }
-
-    #[test]
-    fn builds_explicit_llamacpp_inference_request_from_inputs() {
-        let request = build_explicit_llamacpp_inference_request(
-            "/models/main.gguf",
-            "/models/main.mmproj",
-            &DeviceConfig {
-                device: "none".to_string(),
-                gpu_layers: -1,
-            },
-        )
-        .expect("explicit llama.cpp inference request should build");
-
-        assert_eq!(
-            request.file_model_path.as_deref(),
-            Some(Path::new("/models/main.gguf"))
-        );
-        assert_eq!(
-            request.mmproj_path.as_deref(),
-            Some(Path::new("/models/main.mmproj"))
-        );
-        assert_eq!(
-            request
-                .device
-                .as_ref()
-                .and_then(|device| device.as_llama_cpp_selector())
-                .map(|device| device.to_id())
-                .as_deref(),
-            Some("none")
-        );
-        assert_eq!(request.gpu_layers, Some(-1));
     }
 
     #[test]

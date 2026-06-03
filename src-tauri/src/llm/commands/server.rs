@@ -6,7 +6,7 @@ use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::startup::{
     build_configured_embedding_request, build_configured_inference_request,
-    build_explicit_llamacpp_inference_request, build_external_inference_request,
+    build_external_inference_request,
 };
 use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
@@ -35,42 +35,6 @@ pub async fn connect_to_server(
 
     let backend_config = gateway
         .build_inference_start_config(build_external_inference_request(&url)?)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    gateway
-        .start(&backend_config)
-        .await
-        .map_err(|e| e.to_string())?;
-    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
-
-    Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
-}
-
-#[command]
-pub async fn start_sidecar_llm(
-    _app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    rag_manager: State<'_, SharedRagManager>,
-    config: State<'_, SharedAppConfig>,
-    model_path: String,
-    mmproj_path: String,
-) -> Result<ServerModeInfo, String> {
-    if gateway.mode_info().await.backend_key.as_deref() != Some("llama_cpp") {
-        gateway
-            .switch_backend("llama_cpp")
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    let config_guard = config.read().await;
-    let inference_request =
-        build_explicit_llamacpp_inference_request(&model_path, &mmproj_path, &config_guard.device)?;
-    drop(config_guard);
-
-    let backend_config = gateway
-        .build_inference_start_config(inference_request)
         .await
         .map_err(|e| e.to_string())?;
 

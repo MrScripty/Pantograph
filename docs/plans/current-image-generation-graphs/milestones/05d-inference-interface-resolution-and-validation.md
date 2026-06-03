@@ -3337,6 +3337,23 @@ defining an image-only inference-node interface.
     after this slice, but removing it is a separate Tauri/backend command slice
     that must verify no command registration or direct path-shaped runtime
     startup remains.
+  - 2026-06-03 Tauri direct-sidecar command removal slice completed: removed
+    the unreferenced `start_sidecar_llm` Tauri command, removed its
+    `app_setup.rs` registration, and deleted the now-dead explicit llama.cpp
+    path request helper/test from `src-tauri/src/llm/startup.rs`.
+  - No-fallback/no-legacy gate: the slice deletes the direct model-path runtime
+    startup command and helper rather than adapting them to `ModelRefV2`,
+    graph paths, or a compatibility command. Configured inference/embedding
+    startup remains available through the existing config/gateway path.
+  - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+    --check`; `cargo test --manifest-path src-tauri/Cargo.toml llm::startup`;
+    `cargo check --manifest-path src-tauri/Cargo.toml`; targeted source search
+    for `start_sidecar_llm` and `build_explicit_llamacpp_inference_request`;
+    targeted frontend/config search for `modelPath`, `startSidecar`, and
+    `mmprojPath`; `git diff --check`.
+  - Verification caveat: Tauri Rust checks still emit pre-existing dead-code
+    warnings in workflow diagnostics/event/runtime modules. They are not caused
+    by this command deletion and remain separate cleanup work.
   - 2026-05-29 re-plan boundary: the search gate found multiple distinct
     retired surfaces with different owners, so a single deletion slice would
     cross too much code:
