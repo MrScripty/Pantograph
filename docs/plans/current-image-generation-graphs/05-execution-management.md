@@ -22125,6 +22125,43 @@ Worker rules:
     should call the explicit resume command from an active running queue item,
     or whether to proceed directly to the deferred backend event-driven
     lifecycle below. Either path must keep retry/readiness policy backend-owned.
+  - 2026-06-03 manual-use re-plan resolution:
+    - Selected next option: implement a typed backend-owned run projection/
+      read-model fact for dependency-readiness-pending resume eligibility, then
+      add a manual Scheduler UI action that displays that fact and forwards
+      only `session_id` plus `workflow_run_id` to the existing backend command.
+      This is the shortest standards-compliant proof path for the explicit
+      resume API because the UI does not infer business state from generic run
+      status, reason strings, error text, graph paths, selector summaries, or
+      Tauri state.
+    - Rejected option: do not add a frontend heuristic button based on
+      `running`, `scheduler_reason`, `runtime_not_ready`, or other string/
+      status combinations. That would move scheduler/readiness policy into the
+      frontend, violate backend-owned data and boundary-invariant standards,
+      and create a caller-owned retry path.
+    - Required follow-up option: after the manual proof path demonstrates a
+      complete inference resume through backend-owned state and command
+      forwarding, implement the event-driven backend readiness lifecycle below.
+      The manual action is not a long-term fallback; it is an operator-visible
+      command surface for the same backend lifecycle state.
+    - Smallest useful next source slice: append the backend run-list/run-detail
+      projection contract with a typed resumable dependency-readiness state,
+      populate it from workflow-service scheduler/run state, mirror the new
+      field in TypeScript contracts, add a presenter predicate that reads only
+      the typed field, and render/call the manual Scheduler action. The action
+      must wait for the backend response/projection refresh and must not apply
+      optimistic backend-owned state locally.
+    - Allowed write set for the next slice: workflow-service diagnostics/
+      projection contracts and focused tests; TypeScript diagnostic/workflow
+      contracts; Scheduler page presenter/UI files and focused tests; this
+      plan. Do not edit embedded-runtime providers, Pumas, runtime selectors,
+      dependency estimators, lockfiles, generated fixtures, or saved workflows
+      in that slice unless a re-plan explicitly expands scope.
+    - Verification target: add Rust projection/contract tests proving only
+      backend scheduler state sets resume eligibility, add TypeScript presenter
+      and command-service tests proving the frontend displays/forwards only the
+      typed fact and active-run identity, run the relevant Rust checks/tests,
+      run the targeted Node tests, and run frontend typecheck.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes
