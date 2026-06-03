@@ -599,7 +599,13 @@ upgrade after this path is working.
   shared executable contract area. Tauri/frontend may query and display the
   resulting diagnostics, but must not own lifecycle decisions, infer model
   identity from `modelPath`, resolve Pumas artifacts, or repair missing backend
-  proofs.
+  proofs. 2026-06-03 progress: active node-engine and embedded-runtime Rust
+  source and tests no longer mention the retired concrete contract names
+  `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
+  `build_model_ref_v2`, or `PlannedInferenceExecutionHost`. Remaining
+  fail-closed diagnostics describe retired dependency/model-reference
+  contracts generically and still block before legacy dependency request,
+  resolver, model-reference, or adapter dispatch behavior can run.
 - [x] Add backend-owned runtime session/load-proof state in
   `pantograph-embedded-runtime` keyed by workflow/task identity and populated
   from canonical inference planning, Pumas artifact/load-target decisions, and

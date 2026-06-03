@@ -106,7 +106,7 @@ async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Dependency preflight blocked execution"));
             assert!(message.contains("dependency_preflight_retired"));
-            assert!(message.contains("ModelDependencyResolver"));
+            assert!(message.contains("legacy_dependency_resolver"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }

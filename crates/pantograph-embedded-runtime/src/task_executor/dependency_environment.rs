@@ -41,9 +41,9 @@ impl TauriTaskExecutor {
             "environment_ref_gate": environment_gate_enabled,
             "message": "embedded-runtime dependency_preflight is diagnostic-only for retired Python runtime execution paths; runtime execution requires scheduler task state/results and runtime-host readiness",
             "blocked_before": [
-                "ModelDependencyResolver",
-                "ModelDependencyRequest",
-                "ModelRefV2",
+                "legacy_dependency_resolver",
+                "legacy_dependency_request",
+                "legacy_model_reference",
                 "python_runtime_adapter"
             ],
         });

@@ -149,7 +149,7 @@ async fn enforce_dependency_preflight_inner(
         .map(|model_id| format!(" Model id: {model_id}."))
         .unwrap_or_default();
     let message = format!(
-        "Node-engine dependency_preflight is diagnostic-only for retired runtime execution path '{node_type}'. Runtime execution requires scheduler task state/results and runtime-host readiness; legacy ModelDependencyRequest/ModelRefV2 preflight is retired.{model_suffix}"
+        "Node-engine dependency_preflight is diagnostic-only for retired runtime execution path '{node_type}'. Runtime execution requires scheduler task state/results and runtime-host readiness; legacy dependency preflight contracts are retired.{model_suffix}"
     );
     record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
     Err(NodeEngineError::ExecutionFailed(message))

@@ -2358,7 +2358,7 @@ async fn test_unload_model_fails_closed_before_model_ref_validation() {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Retired unload-model node"));
             assert!(message.contains("scheduler/runtime-host owned"));
-            assert!(message.contains("ModelRefV2"));
+            assert!(message.contains("legacy model reference inputs"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2537,9 +2537,7 @@ async fn test_dependency_preflight_blocks_canonical_pytorch_without_resolver() {
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("dependency_preflight is diagnostic-only"));
-            assert!(
-                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
-            );
+            assert!(message.contains("legacy dependency preflight contracts are retired"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2586,9 +2584,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("dependency_preflight is diagnostic-only"));
-            assert!(
-                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
-            );
+            assert!(message.contains("legacy dependency preflight contracts are retired"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2667,9 +2663,7 @@ async fn test_dependency_preflight_fails_closed_before_resolver_request() {
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("dependency_preflight is diagnostic-only"));
-            assert!(
-                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
-            );
+            assert!(message.contains("legacy dependency preflight contracts are retired"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -2947,9 +2941,7 @@ async fn test_dependency_preflight_rejects_explicit_hf_transformers_before_reque
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("dependency_preflight is diagnostic-only"));
-            assert!(
-                message.contains("legacy ModelDependencyRequest/ModelRefV2 preflight is retired")
-            );
+            assert!(message.contains("legacy dependency preflight contracts are retired"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }

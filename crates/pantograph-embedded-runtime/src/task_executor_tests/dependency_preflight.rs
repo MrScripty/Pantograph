@@ -27,9 +27,9 @@ async fn onnx_nodes_block_when_dependency_preflight_is_not_ready() {
             assert!(message.contains("Dependency preflight blocked execution"));
             assert!(message.contains("dependency_preflight_retired"));
             assert!(message.contains("diagnostic-only"));
-            assert!(message.contains("ModelDependencyResolver"));
-            assert!(message.contains("ModelDependencyRequest"));
-            assert!(message.contains("ModelRefV2"));
+            assert!(message.contains("legacy_dependency_resolver"));
+            assert!(message.contains("legacy_dependency_request"));
+            assert!(message.contains("legacy_model_reference"));
             assert!(message.contains("python_runtime_adapter"));
         }
         other => panic!("unexpected error variant: {other:?}"),

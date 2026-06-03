@@ -231,6 +231,14 @@ retired node-engine/planned-inference launch paths, then continuing
 dependency-readiness producer lifecycle and durable scheduler hardening in
 separate validated slices.
 
+2026-06-03 retired dependency contract diagnostic cleanup update: active
+node-engine and embedded-runtime Rust source/tests no longer mention the
+retired concrete contract names `ModelDependencyRequest`,
+`ModelDependencyResolver`, `ModelRefV2`, `build_model_ref_v2`, or
+`PlannedInferenceExecutionHost`. Fail-closed diagnostics now use generic
+retired dependency/model-reference contract language while still blocking
+before legacy request, resolver, model-reference, or adapter dispatch behavior.
+
 ## Standards Rule
 
 The standards constraints in

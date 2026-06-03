@@ -22399,6 +22399,47 @@ Worker rules:
       scheduler/runtime-host image inference path is proven, then continue
       dependency-readiness producer lifecycle and durable scheduler
       lease/retry/cancellation hardening in separate thin slices.
+  - 2026-06-03 retired dependency contract diagnostic-name deletion slice:
+    - Smallest useful vertical slice: remove remaining active Rust source/test
+      references to retired concrete dependency/model-ref contract names from
+      node-engine and embedded-runtime diagnostic-only fail-closed paths.
+    - Files touched:
+      `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+      `crates/node-engine/src/core_executor/inference_nodes.rs`,
+      `crates/node-engine/src/core_executor/inference_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_preflight.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_fail_closed.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan log.
+    - Implementation: replaced diagnostic text and assertions that named
+      `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
+      `build_model_ref_v2`, or `PlannedInferenceExecutionHost` with generic
+      retired dependency/model-reference contract language. Embedded-runtime
+      still reports the explicit blocked stages as generic
+      `legacy_dependency_resolver`, `legacy_dependency_request`,
+      `legacy_model_reference`, and `python_runtime_adapter` markers.
+    - No-fallback/no-legacy result: behavior remains fail-closed and
+      diagnostic-only before dependency request/resolver/model-reference
+      construction or Python adapter dispatch. No readiness adapter,
+      compatibility shim, graph path source, Tauri policy, or legacy execution
+      branch was added.
+    - Focused tests:
+      `cargo test --manifest-path crates/node-engine/Cargo.toml --features inference-nodes,pytorch-nodes,audio-nodes dependency_preflight`
+      and
+      `cargo test --manifest-path crates/pantograph-embedded-runtime/Cargo.toml dependency_preflight`.
+    - Verification passed:
+      `cargo fmt --manifest-path crates/node-engine/Cargo.toml`;
+      `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      the focused tests above;
+      `cargo check --manifest-path crates/node-engine/Cargo.toml --features inference-nodes,pytorch-nodes,audio-nodes`;
+      `cargo check --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      `rg -n "ModelDependencyRequest|ModelDependencyResolver|ModelRefV2|build_model_ref_v2|PlannedInferenceExecutionHost" crates/node-engine/src crates/pantograph-embedded-runtime/src -g '*.rs'`
+      returned no active Rust source/test hits.
+    - Remaining follow-up: continue deleting or replacing the broader retired
+      node-engine and frontend/Tauri path-era surfaces now that active
+      node-engine/embedded-runtime diagnostics no longer keep the old concrete
+      contracts alive.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

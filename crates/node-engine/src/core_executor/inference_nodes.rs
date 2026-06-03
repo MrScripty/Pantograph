@@ -1233,7 +1233,7 @@ pub(crate) async fn execute_unload_model(
     _inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
     Err(NodeEngineError::ExecutionFailed(
-        "Retired unload-model node is no longer executable from node-engine. Runtime lifecycle is scheduler/runtime-host owned and cannot consume legacy ModelRefV2 model_ref inputs."
+        "Retired unload-model node is no longer executable from node-engine. Runtime lifecycle is scheduler/runtime-host owned and cannot consume legacy model reference inputs."
             .to_string(),
     ))
 }
