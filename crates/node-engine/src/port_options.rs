@@ -2,8 +2,8 @@
 //!
 //! Nodes can register a `PortOptionsProvider` for specific ports, enabling
 //! hosts to query available values at configuration time. For example, the
-//! `puma-lib` node registers a provider for its `model_path` port that
-//! returns available models from the pumas-library.
+//! `puma-lib` node registers a provider for its `pumas_model_ref` port that
+//! returns path-free model references from the Pumas library.
 //!
 //! # Registration
 //!
@@ -223,7 +223,7 @@ pub trait PortOptionsProvider: Send + Sync {
 /// ```ignore
 /// inventory::submit!(node_engine::PortQueryFn {
 ///     node_type: "puma-lib",
-///     port_id: "model_path",
+///     port_id: "pumas_model_ref",
 ///     provider: || Box::new(PumaLibOptionsProvider),
 /// });
 /// ```

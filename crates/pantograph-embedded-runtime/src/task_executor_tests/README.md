@@ -12,7 +12,7 @@ input normalization, and Puma-Lib coverage below the large-file threshold.
 | File | Description |
 | ---- | ----------- |
 | `dependency_fallback.rs` | Environment-ref gate and local Python fallback behavior for dependency preflight. |
-| `dependency_preflight.rs` | Blocking, successful model-ref resolution, and ONNX routing through dependency preflight. |
+| `dependency_preflight.rs` | Fail-closed coverage for retired dependency preflight paths that must route through scheduler readiness instead. |
 | `input_helpers.rs` | Inference setting defaults, runtime environment id collection, stable hashing, and dependency request shaping. |
 | `puma_lib.rs` | Puma-Lib owner and selector-access model lookup plus stale model-path, backend metadata, and selected-detail inference-settings rebinding coverage. |
 | `recorder_stream.rs` | Python runtime recorder identity/health coverage and stream event replay behavior. |

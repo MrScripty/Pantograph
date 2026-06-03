@@ -530,6 +530,19 @@ defining an image-only inference-node interface.
          the same commit; do not leave deprecated branches, compatibility
          shims, or successful path-shaped fixtures for later cleanup unless the
          plan records an explicit unresolved re-plan boundary.
+      - 2026-06-03 runtime-preflight documentation cleanup slice completed:
+        updated `node-engine` port-options docs so `puma-lib` examples refer
+        to `pumas_model_ref` instead of retired `model_path`, and updated the
+        embedded-runtime task-executor test README so dependency preflight is
+        documented as fail-closed coverage rather than successful model-ref
+        resolution.
+      - No-fallback/no-legacy gate: the slice changes only stale documentation
+        and does not restore a `model_path` provider, successful dependency
+        preflight, `ModelDependencyRequest`, or `ModelRefV2` path.
+      - Verification passed: `cargo fmt -p node-engine -p
+        pantograph-embedded-runtime -- --check`; targeted documentation search
+        for stale `model_path` provider and successful dependency-preflight
+        wording; `git diff --check`.
 - [x] 2026-05-26 scheduler task-state readiness gate slice completed:
   - Smallest useful vertical slice: reuse the existing scheduler-owned
     readiness proof/runtime handoff contracts and remove the premature `Ready`

@@ -22866,6 +22866,22 @@ Worker rules:
       embedded-runtime dependency-environment execution deletion, Tauri direct
       model-dependency command deletion, and frontend dependency-environment
       source cleanup slices.
+  - 2026-06-03 Milestone 5d runtime-preflight documentation cleanup slice:
+    - Smallest useful vertical slice: correct stale docs that still described
+      `puma-lib` port options as `model_path` and dependency preflight tests as
+      successful model-ref resolution.
+    - Files touched: `crates/node-engine/src/port_options.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests/README.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - No-fallback/no-legacy result: docs now describe the path-free
+      `pumas_model_ref` provider and fail-closed dependency-preflight coverage;
+      no provider, runtime preflight, `ModelDependencyRequest`, or `ModelRefV2`
+      compatibility path was added.
+    - Verification passed: `cargo fmt -p node-engine -p
+      pantograph-embedded-runtime -- --check`; targeted documentation search
+      for stale `model_path` provider and successful dependency-preflight
+      wording; `git diff --check`.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port
