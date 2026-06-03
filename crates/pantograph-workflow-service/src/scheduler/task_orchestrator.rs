@@ -915,6 +915,62 @@ impl WorkflowSchedulerTaskOrchestrator {
             .and_then(applied_task_state_record)
     }
 
+    pub(crate) fn retry_deferred_runtime_dependency_readiness(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    )),
+                )
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a runtime inference task",
+                    task_id
+                )),
+            ));
+        }
+        let record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no active task-state record",
+                        task_id
+                    )),
+                )
+            })?;
+        let transition = retry_dependency_readiness_transition(record)?;
+        store
+            .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
+    }
+
     pub(crate) fn fail_runtime_dispatch_not_wired_for_active_run(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -1726,6 +1782,47 @@ fn readiness_admission_transition_from_waiting(
         "dependency-readiness",
         SchedulerTaskStateKind::WaitingDependencyReadiness,
         next_state,
+    )
+}
+
+fn retry_dependency_readiness_transition(
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    let (previous_state, execution_intent) = match &record.state {
+        SchedulerTaskState::PausedDeferred {
+            execution_intent, ..
+        } => (
+            SchedulerTaskStateKind::PausedDeferred,
+            execution_intent.clone(),
+        ),
+        SchedulerTaskState::RetryableFailed {
+            execution_intent, ..
+        } => (
+            SchedulerTaskStateKind::RetryableFailed,
+            execution_intent.clone(),
+        ),
+        _ => {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' must be deferred or retryable before dependency readiness retry",
+                    record.task_id.as_str()
+                )),
+            ));
+        }
+    };
+    if execution_intent.runtime_task_intent().is_none() {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' dependency readiness retry requires a runtime task intent",
+                record.task_id.as_str()
+            )),
+        ));
+    }
+    task_state_transition(
+        record,
+        "dependency-readiness-retry",
+        previous_state,
+        SchedulerTaskState::WaitingDependencyReadiness { execution_intent },
     )
 }
 

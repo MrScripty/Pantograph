@@ -113,6 +113,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
         self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
         self.run_progress_loop(session_id, workflow_run_id).await?;
+        self.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
         let readiness_admission =
             self.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
         if !readiness_admission.deferred_task_ids.is_empty() {
@@ -424,6 +425,38 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             admitted: admitted_runtime_readiness,
             deferred_task_ids,
         })
+    }
+
+    fn retry_deferred_runtime_dependency_readiness(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let runtime_task_ids =
+            runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
+                matches!(
+                    kind,
+                    SchedulerTaskStateKind::PausedDeferred
+                        | SchedulerTaskStateKind::RetryableFailed
+                )
+            })?;
+        for task_id in runtime_task_ids {
+            let mut store = self.service.session_store_guard()?;
+            self.service
+                .scheduler_task_orchestrator
+                .retry_deferred_runtime_dependency_readiness(
+                    &mut store,
+                    session_id,
+                    workflow_run_id,
+                    &task_id,
+                )
+                .map_err(|error| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler dependency readiness retry failed: {error}"
+                    ))
+                })?;
+        }
+        Ok(())
     }
 
     fn defer_runtime_dependency_readiness(

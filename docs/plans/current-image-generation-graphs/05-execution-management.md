@@ -21931,6 +21931,37 @@ Worker rules:
     dependency-readiness tests in that run had already passed before the
     interruption. No source changes were made outside the focused slice.
 
+- 2026-06-03 dependency-readiness retry transition slice:
+  - Slice scope: add the scheduler-orchestrator transition needed by the
+    option 2 event-driven readiness path after a task has been deferred or
+    marked retryable for dependency readiness. Allowed files touched:
+    workflow-service scheduler orchestrator, its focused tests, the session
+    runner call site, and this plan note.
+  - No-fallback confirmation: the transition only moves an existing runtime
+    execution intent from `PausedDeferred` or `RetryableFailed` back to
+    `WaitingDependencyReadiness`. It does not synthesize readiness proofs,
+    dependency requirements, runtime candidates, graph paths, Tauri state,
+    selector summaries, or legacy preflight facts.
+  - Implementation: added
+    `WorkflowSchedulerTaskOrchestrator::retry_deferred_runtime_dependency_readiness`
+    and wired `WorkflowSchedulerSessionRunner` to retry active deferred or
+    retryable runtime dependency-readiness tasks before another readiness
+    admission pass. Non-runtime tasks remain filtered out by the runner's
+    runtime-task lookup, and the orchestrator still rejects non-runtime task
+    classes at the transition boundary.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p pantograph-workflow-service orchestrator_retries_deferred_runtime_dependency_readiness`;
+    `cargo test -p pantograph-workflow-service orchestrator_retries_retryable_runtime_dependency_readiness_failure`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
+    `cargo check -p pantograph-workflow-service`.
+  - Remaining follow-up: the public runtime session API still finishes runtime
+    runs after returning `RuntimeNotReady`. A later active-run lifecycle slice
+    must decide the typed pending response/resume API or scheduler-tick owner
+    that keeps or reopens a deferred run, then combine this retry transition
+    with a production provider that seeds concrete requirements and consumes
+    fresh producer snapshots.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

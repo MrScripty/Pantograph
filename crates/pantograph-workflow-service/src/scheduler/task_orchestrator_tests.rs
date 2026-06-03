@@ -367,6 +367,100 @@ fn orchestrator_defers_runtime_task_when_dependency_proof_is_missing() {
 }
 
 #[test]
+fn orchestrator_retries_deferred_runtime_dependency_readiness() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = WorkflowExecutionSessionStore::new(4, 2);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let deferred = orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+            None,
+        )
+        .expect("missing dependency proof should defer runtime task");
+
+    let retried = orchestrator
+        .retry_deferred_runtime_dependency_readiness(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+        )
+        .expect("deferred runtime task should re-enter dependency readiness");
+
+    assert_eq!(
+        deferred.state.kind(),
+        SchedulerTaskStateKind::PausedDeferred
+    );
+    assert_eq!(retried.state_version, deferred.state_version + 1);
+    let SchedulerTaskState::WaitingDependencyReadiness { execution_intent } = retried.state else {
+        panic!("expected waiting dependency readiness");
+    };
+    assert!(execution_intent.runtime_task_intent().is_some());
+}
+
+#[test]
+fn orchestrator_retries_retryable_runtime_dependency_readiness_failure() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = WorkflowExecutionSessionStore::new(4, 2);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let mut proof = ready_readiness_proof();
+    proof.preflight_result.readiness_state = DependencyEnvironmentReadinessState::Failed;
+    let retryable = orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+            Some(proof),
+        )
+        .expect("failed dependency proof should produce retryable task state");
+
+    let retried = orchestrator
+        .retry_deferred_runtime_dependency_readiness(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+        )
+        .expect("retryable runtime task should re-enter dependency readiness");
+
+    assert_eq!(
+        retryable.state.kind(),
+        SchedulerTaskStateKind::RetryableFailed
+    );
+    assert_eq!(retried.state_version, retryable.state_version + 1);
+    assert!(matches!(
+        retried.state,
+        SchedulerTaskState::WaitingDependencyReadiness { .. }
+    ));
+}
+
+#[test]
 fn orchestrator_defers_non_ready_dependency_proof_without_legacy_bridge() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_intent = runtime_host_request_fixture().handoff.task_intent;
