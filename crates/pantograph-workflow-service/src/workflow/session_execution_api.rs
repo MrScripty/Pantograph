@@ -597,6 +597,13 @@ impl WorkflowService {
         run_result
     }
 
+    pub fn workflow_execution_session_runtime_dependency_readiness_resume_candidates(
+        &self,
+    ) -> Result<Vec<WorkflowExecutionSessionResumeRequest>, WorkflowServiceError> {
+        let store = self.session_store_guard()?;
+        Ok(store.dependency_readiness_resume_candidates())
+    }
+
     fn finish_failed_workflow_run_after_admission(
         &self,
         session_id: &str,

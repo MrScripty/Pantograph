@@ -440,6 +440,15 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
         detail.workflow_execution_session_resume_state,
         Some(pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState::DependencyReadinessPending)
     );
+    assert_eq!(
+        service
+            .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+            .expect("resume candidates"),
+        vec![WorkflowExecutionSessionResumeRequest {
+            session_id,
+            workflow_run_id,
+        }]
+    );
 }
 
 #[tokio::test]
@@ -863,6 +872,10 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
         .run
         .expect("run detail after resumed dispatch");
     assert_eq!(detail.workflow_execution_session_resume_state, None);
+    assert!(service
+        .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+        .expect("resume candidates after resumed dispatch")
+        .is_empty());
 }
 
 #[tokio::test]

@@ -22209,6 +22209,33 @@ Worker rules:
       release, overlap prevention, and observability while reusing the same
       backend resume/readiness state instead of adding a frontend polling or
       heuristic fallback.
+  - 2026-06-03 completed event-driven lifecycle prerequisite slice:
+    - Smallest useful vertical slice: add a workflow-service active-run
+      candidate query for runtime dependency-readiness resume work so the later
+      composition-root lifecycle can avoid diagnostic projection staleness and
+      frontend/read-model policy.
+    - Implementation result:
+      `workflow_execution_session_runtime_dependency_readiness_resume_candidates`
+      now returns `WorkflowExecutionSessionResumeRequest` values from
+      workflow-service scheduler store state only. A run is included only when
+      its active runtime scheduler task is `PausedDeferred` or
+      `WaitingDependencyReadiness`, matching the typed read-model eligibility
+      field added in the prior slice.
+    - No-fallback/no-legacy confirmation: the candidate query does not inspect
+      graph paths, diagnostic projection rows, scheduler reason strings,
+      frontend status, Tauri state, Pumas paths, selector summaries, reduced
+      execution plans, legacy model refs, or caller-supplied proofs. It does
+      not run probes or resume work; it only exposes backend-owned active-run
+      identity for the lifecycle owner.
+    - Verification passed:
+      `cargo fmt -p pantograph-workflow-service`;
+      `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
+      `cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run`;
+      `cargo check -p pantograph-workflow-service`.
+    - Remaining follow-up: wire the composition-root-owned backend
+      worker/listener around the snapshot producer and this candidate query,
+      with tracked task ownership, shutdown, freshness, retry/backoff,
+      reservation release, overlap prevention, and observability.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

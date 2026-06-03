@@ -1,8 +1,8 @@
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskGraph, WorkflowServiceError,
+    WorkflowExecutionSessionResumeRequest, WorkflowExecutionSessionRunRequest,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowServiceError,
 };
 #[cfg(test)]
 use crate::WorkflowRunId;
@@ -363,6 +363,25 @@ impl WorkflowExecutionSessionStore {
             });
         has_pending_runtime_readiness_task
             .then_some(WorkflowExecutionSessionResumeState::DependencyReadinessPending)
+    }
+
+    pub(crate) fn dependency_readiness_resume_candidates(
+        &self,
+    ) -> Vec<WorkflowExecutionSessionResumeRequest> {
+        self.active
+            .iter()
+            .filter_map(|(session_id, state)| {
+                let active_run = state.active_run.as_ref()?;
+                self.active_run_dependency_readiness_resume_state(
+                    session_id,
+                    active_run.workflow_run_id.as_str(),
+                )?;
+                Some(WorkflowExecutionSessionResumeRequest {
+                    session_id: session_id.clone(),
+                    workflow_run_id: active_run.workflow_run_id.clone(),
+                })
+            })
+            .collect()
     }
 
     #[allow(dead_code)]
