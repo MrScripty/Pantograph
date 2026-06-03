@@ -144,7 +144,7 @@ upgrade after this path is working.
   environment ref, and Pumas model/artifact identity without exposing
   `ModelRefV2`, `model_path`, executable load targets, reservations, batching
   groups, or worker launch internals to graph/node-engine contracts.
-- [ ] Consume the canonical `DependencyReadinessProofEnvelope` through the
+- [x] Consume the canonical `DependencyReadinessProofEnvelope` through the
   remaining production runtime-host dispatch and legacy-retirement path. The
   proof must come from backend validation summaries, dependency-planning facts,
   selected runtime/device facts, descriptor fingerprints, explicit user
@@ -152,8 +152,14 @@ upgrade after this path is working.
   freshness/correlation ids, selected environment identity when one exists,
   and bounded diagnostics without graph-visible paths, executable load targets,
   scheduler policy in Tauri/frontend code, or a second adapter-local readiness
-  proof type.
-- [ ] Add the production dependency-readiness snapshot composition and producer
+  proof type. 2026-06-03 reconciliation: workflow-service resolves the
+  canonical envelope through `WorkflowDependencyReadinessLifecycle`, threads it
+  through session scheduler dispatch source refresh, runtime dispatch candidate
+  collection, scheduler selection, and `RuntimeHostExecutionRequest`, and
+  embedded-runtime consumes that request behind `EmbeddedRuntimeHostExecutionPort`.
+  No adapter-local proof type or Tauri/frontend readiness policy remains in the
+  dispatch path.
+- [x] Add the production dependency-readiness snapshot composition and producer
   lifecycle before runtime-host dispatch wiring. The application composition
   root must create a single
   `DependencyEnvironmentReadinessSnapshotProvider`, inject it into
@@ -196,7 +202,14 @@ upgrade after this path is working.
   Workflow-service, scheduler, node-engine, Tauri, frontend, and runtime-host
   adapters must consume the resulting typed readiness state; they must not own
   package probing, install policy, filesystem/process checks, or readiness
-  fallback synthesis.
+  fallback synthesis. 2026-06-03 reconciliation: embedded-runtime composition
+  now creates the shared snapshot provider, work queue, and requirements
+  registry before workflow-service is wrapped in `Arc`; standalone and hosted
+  construction own tracked producer handles that resolve queued work through
+  the backend registry and dependency inventory boundary, publish typed
+  snapshots, and shut down explicitly. The companion auto-resume lifecycle
+  consumes workflow-service resume candidates and the typed backend resume API;
+  Tauri only stores and shuts down returned handles.
 - [x] Add the host-owned Pumas load-target resolution service. It must resolve
   executable load targets only from scheduler-selected Pumas refs/artifact
   identity at runtime dispatch, and return typed unavailable/stale/invalid
@@ -679,9 +692,15 @@ upgrade after this path is working.
   Tauri as an event forwarder only. Display activity still cannot produce
   runtime launch facts, dependency readiness, scheduler policy, or model-load
   authority.
-- [ ] Update README/crate documentation for every new host-facing contract,
+- [x] Update README/crate documentation for every new host-facing contract,
   Pumas load-target boundary, runtime migration, deleted legacy path, and
-  fixture replacement.
+  fixture replacement. 2026-06-03 reconciliation: embedded-runtime,
+  runtime-host-contracts, and workflow-service READMEs now document the
+  runtime-host execution port, runtime session load-proof contract,
+  dependency-readiness producer and auto-resume lifecycle, Pumas load-target
+  and package-facts boundaries, media artifact sink, inference facts/resource
+  estimate provider, deleted resolver/preflight authority, and path-free
+  fixture/contract constraints.
 
 **Verification:**
 

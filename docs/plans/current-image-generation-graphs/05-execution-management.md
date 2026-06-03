@@ -22617,6 +22617,43 @@ Worker rules:
       `enforce_dependency_preflight`, `DependencyPreflightResult`,
       `ModelRefV2`, `ModelDependencyRequest`, and dependency-preflight symbols
       in node-engine/embedded-runtime source; `git diff --check`.
+  - 2026-06-03 readiness lifecycle and documentation checklist reconciliation
+    slice:
+    - Smallest useful vertical slice: reconcile stale Milestone 5b checklist
+      entries for canonical dependency-readiness proof consumption,
+      production dependency-readiness snapshot producer lifecycle, and
+      README/crate documentation after those source/documentation boundaries
+      were already implemented.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`
+      and this plan log.
+    - Implementation: marked the canonical
+      `DependencyReadinessProofEnvelope` consumption item complete because
+      workflow-service resolves the shared envelope through
+      `WorkflowDependencyReadinessLifecycle`, threads it through dispatch source
+      refresh, dispatch candidate collection, scheduler selection, and
+      `RuntimeHostExecutionRequest`, and embedded-runtime consumes that request
+      through `EmbeddedRuntimeHostExecutionPort`. Marked the production
+      dependency-readiness producer item complete because embedded-runtime
+      composition creates the shared snapshot provider, work queue, and
+      requirements registry before service sharing, owns tracked producer
+      handles over the backend dependency inventory boundary, and owns the
+      companion auto-resume lifecycle through typed workflow-service resume
+      candidates. Marked the documentation item complete because the
+      embedded-runtime, runtime-host-contracts, and workflow-service READMEs
+      document the new host contracts, Pumas load-target/package-facts
+      boundaries, runtime migration, deleted legacy authority, and path-free
+      fixture constraints.
+    - No-fallback/no-legacy result: this slice only reconciles documentation
+      against already verified canonical source boundaries. It adds no
+      adapter-local readiness proof, scheduler policy in Tauri/frontend code,
+      graph-path fallback, compatibility shim, or legacy dependency resolver
+      path.
+    - Verification passed: source evidence search for
+      `DependencyReadinessProofEnvelope`, `RuntimeHostExecutionRequest`,
+      `EmbeddedDependencyReadinessSnapshotProducer`,
+      `EmbeddedDependencyReadinessAutoResume`, and README ownership entries;
+      `git diff --check`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes
