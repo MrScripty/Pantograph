@@ -311,12 +311,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       label: 'run_agent',
       description: 'Execute AI agent with tools'
     },
-    {
-      id: 'command:start_sidecar_llm',
-      category: 'command',
-      label: 'start_sidecar_llm',
-      description: 'Start local LLM server'
-    },
     // RAG commands
     {
       id: 'command:search_rag',
@@ -378,7 +372,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c33', source: 'service:WorkflowService', target: 'command:save_workflow', connectionType: 'command' },
     { id: 'c34', source: 'service:WorkflowService', target: 'command:load_workflow', connectionType: 'command' },
     { id: 'c35', source: 'service:LLMService', target: 'command:send_vision_prompt', connectionType: 'command' },
-    { id: 'c36', source: 'service:LLMService', target: 'command:start_sidecar_llm', connectionType: 'command' },
     { id: 'c37', source: 'service:AgentService', target: 'command:run_agent', connectionType: 'command' },
     { id: 'c38', source: 'service:RagService', target: 'command:search_rag', connectionType: 'command' },
     { id: 'c39', source: 'service:RagService', target: 'command:index_rag_documents', connectionType: 'command' },
@@ -392,7 +385,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c53', source: 'command:save_workflow', target: 'backend:workflow', connectionType: 'uses' },
     { id: 'c54', source: 'command:load_workflow', target: 'backend:workflow', connectionType: 'uses' },
     { id: 'c55', source: 'command:send_vision_prompt', target: 'backend:llm', connectionType: 'uses' },
-    { id: 'c56', source: 'command:start_sidecar_llm', target: 'backend:llm', connectionType: 'uses' },
     { id: 'c57', source: 'command:run_agent', target: 'backend:agent', connectionType: 'uses' },
     { id: 'c58', source: 'command:search_rag', target: 'backend:agent', connectionType: 'uses' },
     { id: 'c59', source: 'command:index_rag_documents', target: 'backend:agent', connectionType: 'uses' },

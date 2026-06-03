@@ -22711,6 +22711,24 @@ Worker rules:
     matching pending runs when readiness facts arrive. That later slice must
     own tracked tasks, cancellation/shutdown, freshness, timeout, retry,
     reservation release, overlap prevention, and observability.
+  - 2026-06-03 Milestone 5d frontend direct-sidecar exposure cleanup slice:
+    - Smallest useful vertical slice: remove the unused frontend
+      `LLMService.startSidecar(modelPath, mmprojPath)` API and stale
+      architecture graph command node/edges for `start_sidecar_llm`.
+    - Files touched: `src/services/LLMService.ts`,
+      `src/config/architecture.ts`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - No-fallback/no-legacy result: deleted the path-shaped frontend entry
+      point instead of adapting it to another command or model-ref shim.
+      Existing configured start modes remain the frontend runtime lifecycle
+      path.
+    - Verification passed: `npm run typecheck`; targeted frontend/config search
+      for `startSidecar`, `start_sidecar_llm`, `modelPath`, and `mmprojPath`;
+      `git diff --check`.
+    - Discovered follow-up: the Tauri `start_sidecar_llm` command is still
+      defined and registered server-side. It is now unreferenced from frontend
+      source, but deleting it requires a separate Tauri/backend command slice.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port

@@ -76,26 +76,6 @@ class LLMServiceClass {
     }
   }
 
-  public async startSidecar(modelPath: string, mmprojPath: string): Promise<void> {
-    try {
-      this.state.error = null;
-      this.notify();
-
-      const status = await invoke<ServerModeInfo>('start_sidecar_llm', {
-        modelPath,
-        mmprojPath,
-      });
-      this.state.status = status;
-      Logger.log('LLM_SIDECAR_STARTED', { modelPath, mmprojPath });
-      this.notify();
-    } catch (error) {
-      this.state.error = String(error);
-      Logger.log('LLM_SIDECAR_ERROR', { error: String(error) }, 'error');
-      this.notify();
-      throw error;
-    }
-  }
-
   public async refreshStatus(): Promise<ServerModeInfo> {
     try {
       const status = await invoke<ServerModeInfo>('get_llm_status');

@@ -3319,6 +3319,24 @@ defining an image-only inference-node interface.
       occurrences must be classified as unrelated non-workflow configuration,
       test fixtures being rewritten, or deletion targets before the milestone can
       claim no-legacy completion.
+  - 2026-06-03 frontend direct-sidecar exposure slice completed: removed the
+    unused `LLMService.startSidecar(modelPath, mmprojPath)` frontend API and
+    the stale architecture graph command node/edges for `start_sidecar_llm`.
+    The active frontend/config surface no longer exposes a camelCase
+    model-path direct sidecar start path.
+  - No-fallback/no-legacy gate: the slice deletes the unused path-shaped
+    frontend entry point and does not translate it to another command,
+    synthesize model refs, or add a compatibility shim. Existing backend-owned
+    configured start modes remain the frontend runtime lifecycle path.
+  - Verification passed: `npm run typecheck`; targeted frontend/config search
+    for `startSidecar`, `start_sidecar_llm`, `modelPath`, and `mmprojPath`;
+    `git diff --check`.
+  - Discovered follow-up: `src-tauri/src/llm/commands/server.rs` still defines
+    and `src-tauri/src/app_setup.rs` still registers the path-shaped
+    `start_sidecar_llm` command. It is no longer referenced by frontend source
+    after this slice, but removing it is a separate Tauri/backend command slice
+    that must verify no command registration or direct path-shaped runtime
+    startup remains.
   - 2026-05-29 re-plan boundary: the search gate found multiple distinct
     retired surfaces with different owners, so a single deletion slice would
     cross too much code:
