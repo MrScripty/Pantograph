@@ -179,6 +179,14 @@ resume state derived from live active-run scheduler task state, and the
 Scheduler UI manual action only renders that typed fact and forwards
 `session_id` plus `workflow_run_id`. The remaining lifecycle work is the
 event-driven composition-root-owned backend worker/listener described above.
+2026-06-03 auto-resume lifecycle re-plan resolution: implement that lifecycle
+as an embedded-runtime-owned handle returned by hosted/standalone composition.
+It should reuse the existing snapshot producer, workflow-service
+resume-candidate query, embedded backend host, and backend resume command.
+Tauri may store and shut down the returned handle, but must not own the
+business loop. A producer/snapshot notification stream is recorded as the later
+event-first improvement after the bounded polling lifecycle proves the complete
+path.
 
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing

@@ -2084,6 +2084,19 @@ typed backend fact and forwards `session_id` plus `workflow_run_id` to the
 existing backend command. The next production lifecycle slice remains the
 composition-root-owned event-driven backend readiness worker/listener.
 
+2026-06-03 auto-resume lifecycle re-plan resolution: choose the
+embedded-runtime lifecycle-handle path for the next implementation slice. The
+handle belongs beside the existing dependency-readiness snapshot producer and
+owns a bounded poll/resume loop over workflow-service resume candidates. It
+must call the existing backend resume API with the embedded backend host,
+prevent concurrent resumes for the same active run, treat still-pending
+runtime-not-ready results as non-terminal, log typed failures at the lifecycle
+owner, and shut down idempotently. Rejected: a Tauri-owned loop, because that
+complects transport/startup with scheduler readiness policy and violates the
+thin binding/composition-root standards. Deferred improvement: add a typed
+snapshot notification channel and convert the loop from polling to event-first
+delivery once the working lifecycle is in place.
+
 2026-05-30 runtime dispatch-selection boundary slice completed. Workflow-service
 now has a focused runtime dispatch candidate provider seam and a path-free
 request assembly helper that combines an admitted runtime task, the readiness

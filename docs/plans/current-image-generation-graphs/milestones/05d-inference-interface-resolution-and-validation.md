@@ -225,6 +225,13 @@ defining an image-only inference-node interface.
         worker/listener lifecycle with tracked tasks, cancellation/shutdown,
         freshness, timeout, retry, reservation-release, overlap-prevention,
         and observability behavior.
+      - 2026-06-03 auto-resume lifecycle re-plan resolution: the next slice
+        implements that worker/listener as an embedded-runtime-owned lifecycle
+        handle. It reuses workflow-service scheduler state and resume
+        candidates, the existing backend resume API, and the embedded backend
+        host. Tauri/frontend stay display/forward-only and may not own the
+        loop. A typed snapshot notification channel remains a later
+        event-first improvement after the bounded polling lifecycle lands.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

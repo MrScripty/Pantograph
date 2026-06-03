@@ -126,6 +126,16 @@ first complete inference path is proven through this explicit backend resume
 path, implement the later event-driven backend worker/listener lifecycle from
 the composition root with tracked tasks, cancellation/shutdown, freshness,
 timeout, retry, reservation release, overlap prevention, and observability.
+2026-06-03 auto-resume lifecycle re-plan resolution: implement that later
+lifecycle as an embedded-runtime-owned handle returned by composition, not as a
+Tauri-owned timer and not as a workflow-service internal host loop. The handle
+must reuse the existing snapshot producer, workflow-service resume-candidate
+query, embedded backend host, and explicit backend resume command. It may poll
+on a bounded interval initially, but must prevent overlapping resume attempts
+for the same active run, treat pending readiness as non-terminal, expose
+idempotent shutdown, and log cancellation/panic/failure paths at the lifecycle
+owner. A typed snapshot notification stream remains the future event-first
+upgrade after this path is working.
 
 **Tasks:**
 
@@ -1254,6 +1264,16 @@ timeout, retry, reservation release, overlap prevention, and observability.
   `set_active_run_execution_plan` warning. Remaining follow-up: add the real
   host package/runtime probe producer behind this lifecycle with retry/backoff,
   typed probe failures, and validated snapshot publication.
+- 2026-06-03 auto-resume lifecycle re-plan resolution: the next lifecycle
+  owner should be a second embedded-runtime handle beside the snapshot
+  producer, not Tauri and not workflow-service host ownership. It will poll the
+  workflow-service resume-candidate query, call the existing backend resume API
+  through the embedded backend host, track in-flight run identities to prevent
+  overlap, and participate in composition-owned shutdown. This keeps concrete
+  infrastructure and long-lived workers in the composition boundary while
+  preserving workflow-service as scheduler state owner and Tauri as a thin
+  handle manager. A snapshot notification/event channel is deferred until after
+  the polling lifecycle proves the complete inference resume path.
 - 2026-05-29 re-plan boundary before real dependency-readiness snapshot
   publication: the lifecycle shell has a provider and tracked task owner, but
   no standards-compliant source of readiness work. A real producer must know

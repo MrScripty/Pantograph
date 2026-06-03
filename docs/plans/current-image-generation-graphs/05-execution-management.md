@@ -22236,6 +22236,49 @@ Worker rules:
       worker/listener around the snapshot producer and this candidate query,
       with tracked task ownership, shutdown, freshness, retry/backoff,
       reservation release, overlap prevention, and observability.
+  - 2026-06-03 auto-resume lifecycle re-plan resolution:
+    - Re-plan trigger: the snapshot producer publishes readiness facts and
+      workflow-service now exposes backend resume candidates, but the plan did
+      not name the single lifecycle owner that should observe those facts and
+      call the backend resume API. Starting the next code slice without that
+      decision would risk moving scheduler/readiness business policy into
+      Tauri or splitting ownership between workflow-service, embedded-runtime,
+      and frontend state.
+    - Standards applied:
+      `CODING-STANDARDS.md` requires simplicity by separating lifecycle,
+      transport, runtime policy, UI state, and diagnostics concerns; it also
+      requires a single owner for stateful flows. `ARCHITECTURE-PATTERNS.md`
+      places workers, timers, startup, and shutdown in a composition root or
+      another single lifecycle owner. `RUST-ASYNC-STANDARDS.md` requires owned
+      task handles, cancellation/shutdown, idempotent shutdown, and owner-level
+      logging for cancellation/panic paths. `LANGUAGE-BINDINGS-STANDARDS.md`
+      keeps Tauri/binding layers thin and out of business logic.
+    - Selected option: add an embedded-runtime-owned
+      `DependencyReadinessAutoResume` lifecycle handle beside the existing
+      dependency-readiness snapshot producer. Hosted and standalone composition
+      should create and return/manage this handle. The loop should use
+      workflow-service's resume-candidate query, call the existing backend
+      resume API with the embedded backend host, prevent overlapping resumes
+      per `(session_id, workflow_run_id)`, treat still-pending runtime-not-ready
+      as non-terminal, use bounded polling/backoff initially, and shut down
+      idempotently.
+    - Rejected option: do not implement the loop in Tauri. Tauri may store and
+      shut down the returned handle, but it must not own retry timing,
+      readiness policy, scheduler state, package/resource facts, or resume
+      decisions.
+    - Deferred option: do not start by extending the snapshot provider/producer
+      with an event notification stream. Record that as the future event-first
+      improvement after the bounded polling lifecycle works, if responsiveness
+      or idle overhead justifies the larger contract change.
+    - Out of scope for the next slice: frontend polling, graph-path inference,
+      diagnostic-projection heuristics, Tauri policy, caller-supplied proofs,
+      synchronous probes in workflow-service, replacement workflow runs, or any
+      legacy model/dependency reference route.
+    - Smallest useful next source slice: add the embedded-runtime lifecycle
+      handle and focused tests proving idempotent shutdown, no-op when no
+      candidates exist, one resume attempt for one eligible active run after a
+      producer-published fresh snapshot, no overlapping duplicate resume for
+      the same run, and non-terminal behavior when readiness is still pending.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

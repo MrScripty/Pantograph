@@ -189,12 +189,18 @@ only displays that backend fact and forwards `session_id` plus
 resumability from generic `running` status, scheduler reason strings, error
 text, graph paths, selector summaries, or Tauri state. The next implementation
 step is the deferred event-driven backend readiness lifecycle: a
-composition-root-owned worker/listener with tracked tasks,
-cancellation/shutdown, freshness, timeout, retry, reservation release, and
-overlap-prevention behavior that resumes waiting tasks when readiness facts
-arrive. Missing, stale, or insufficient facts remain typed fail-closed
-diagnostics, not graph-path, Tauri, frontend, selector-summary, synchronous
-probe, client rerun, or legacy preflight fallback.
+composition-root-owned embedded-runtime lifecycle handle that coordinates the
+existing snapshot producer, workflow-service resume-candidate query, embedded
+backend host, and explicit backend resume API. It must track tasks, support
+idempotent shutdown, prevent overlapping resumes for the same active run,
+apply bounded retry/backoff behavior, and log lifecycle failures at the owner.
+Tauri remains a thin composition/handle manager and must not own retry,
+readiness, scheduler, package, or resource policy. Missing, stale, or
+insufficient facts remain typed fail-closed diagnostics, not graph-path,
+Tauri, frontend, selector-summary, synchronous probe, client rerun, or legacy
+preflight fallback. Future improvement: replace bounded polling with a typed
+snapshot notification/event channel after the lifecycle is working, if
+responsiveness or idle overhead requires it.
 
 ## Standards Rule
 
