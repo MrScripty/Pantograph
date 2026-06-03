@@ -2597,6 +2597,90 @@ defining an image-only inference-node interface.
       if stale provider results cannot be rejected after fact lookup, or if a
       dedicated graph-validation transport would require duplicating validation
       resolver logic outside workflow-service.
+      Re-plan decision recorded 2026-06-03: use option 2. Before wiring graph
+      mutations or frontend overlays into event-driven validation, add a focused
+      workflow-service validation task owner around the existing publisher. The
+      task owner owns spawned validation work, tracked handles, cancellation,
+      supersession, close cleanup, shutdown, and panic/error observation. It
+      must call the existing publisher and lifecycle owner rather than creating
+      a second descriptor resolver or publication path. Tauri and frontend may
+      only request validation, receive typed events/read models, and render
+      display state; they must not own validation freshness, fact resolution,
+      retry policy, submit authority, cancellation policy, or graph mutation
+      policy.
+      Standards-aligned implementation sequence:
+      1. Add a backend-only task-owner module that can start one validation task
+         for a typed graph session/revision/snapshot request, store the tracked
+         handle, cancel/supersede previous work for the same graph session, and
+         observe completion, cancellation, and panic/error outcomes at the
+         owner. Use existing Tokio primitives unless the implementation records
+         why a narrow new dependency is required.
+      2. Wire `GraphSessionStore` to compose the task owner without adding more
+         lifecycle logic to `graph/session.rs`. The existing synchronous refresh
+         path remains available and must still route through the shared
+         publisher; the new owner is an async shell around that publisher, not a
+         replacement resolver.
+      3. Add deterministic backend tests using fakes/channels rather than sleeps
+         to prove supersession cancels in-flight work, close cleanup prevents
+         late writes, task completion is observed, task panic/error is recorded
+         as bounded typed lifecycle diagnostics, and no validation task is left
+         detached.
+      4. After backend task ownership is verified, wire graph-mutation or
+         explicit-validation triggers in separate thin slices. Trigger slices
+         pass only typed session/revision intent and graph snapshots; they do
+         not pass raw resolver facts, Pumas facts, runtime facts, package
+         summaries, local paths, or frontend state.
+      5. After trigger slices pass, refine dedicated graph-validation transport
+         and frontend overlay consumption. Transport must carry only typed,
+         bounded lifecycle/validation DTOs, and frontend state must filter by
+         graph session id, graph revision, validation session id, event
+         sequence, and node scope.
+      Rejected options:
+      - Defer event-driven validation indefinitely: standards-compliant only as
+        a temporary scope reduction, but it leaves the planned live-validation
+        UX incomplete.
+      - Implement task owner, graph mutation triggers, transport delivery, and
+        frontend overlays in one slice: too broad and likely to complect
+        lifecycle ownership, graph mutation policy, transport, and display
+        state.
+      - Put validation scheduling or freshness policy in Tauri/frontend:
+        rejected because business logic belongs to workflow-service and Tauri is
+        transport/composition only.
+      - 2026-06-03 backend validation task-owner foundation slice completed:
+        `pantograph-workflow-service` now owns
+        `inference_validation_task_owner.rs`, a backend-only async shell around
+        the existing validation publisher. The slice starts tracked validation
+        tasks from typed graph-session/revision requests, supersedes any active
+        task for the same graph session, records bounded terminal diagnostics
+        for completion, cancellation, publisher rejection, join errors, and
+        panics, and cleans task state on graph-session close. `GraphSessionStore`
+        composes the owner and exposes test-only drain/event inspection helpers
+        without moving task lifecycle policy into Tauri, frontend, graph
+        mutation code, or a second descriptor resolver.
+        Files touched:
+        `crates/pantograph-workflow-service/src/graph/inference_validation_task_owner.rs`,
+        `crates/pantograph-workflow-service/src/graph/mod.rs`,
+        `crates/pantograph-workflow-service/src/graph/session.rs`,
+        `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+        `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+        `crates/pantograph-workflow-service/src/graph/README.md`, this
+        milestone, the inference-interface plan, and the execution log.
+        No-fallback/no-legacy confirmation: the owner calls the canonical
+        publisher and lifecycle owner only; it does not accept frontend/Tauri
+        resolver facts, raw Pumas facts, graph paths, runtime summaries,
+        compatibility aliases, transport retry policy, or alternate validation
+        routes. Verification passed: `cargo fmt -p
+        pantograph-workflow-service -- --check`; `cargo test -p
+        pantograph-workflow-service validation_task_owner --lib`; `cargo test
+        -p pantograph-workflow-service inference_validation_lifecycle --lib`;
+        `cargo test -p pantograph-workflow-service current_validation_summary
+        --lib`; `cargo test -p pantograph-workflow-service
+        publish_inference_validation_session --lib`; `cargo check -p
+        pantograph-workflow-service`; touched-source standards search; and
+        `git diff --check`.
+        Remaining follow-up: wire graph-mutation or explicit-validation
+        triggers to the task owner in the next thin slice, then refine bounded
+        transport/frontend overlay consumption separately.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit

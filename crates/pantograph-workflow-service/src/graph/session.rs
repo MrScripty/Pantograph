@@ -34,6 +34,7 @@ use super::inference_validation_state::{
     CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
     DependencyEnvironmentActionIntentStateResolution,
 };
+use super::inference_validation_task_owner::WorkflowGraphValidationTaskOwner;
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::session_contract::WorkflowGraphEditSessionGraphResponse;
 use super::session_event::{
@@ -61,7 +62,7 @@ mod session_inference_validation_api;
 #[path = "session_node_api.rs"]
 mod session_node_api;
 
-type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
+pub(crate) type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
 
 fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
@@ -74,8 +75,9 @@ fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]
 
 pub struct GraphSessionStore {
     sessions: RwLock<HashMap<String, GraphSessionHandle>>,
-    validation_state: CurrentInferenceValidationStateStore,
-    validation_lifecycle: WorkflowGraphValidationLifecycleOwner,
+    validation_state: Arc<CurrentInferenceValidationStateStore>,
+    validation_lifecycle: Arc<WorkflowGraphValidationLifecycleOwner>,
+    validation_tasks: WorkflowGraphValidationTaskOwner,
     inference_interface_facts_provider: Arc<dyn InferenceInterfaceFactsProvider>,
     dependency_environment_service: SharedDependencyEnvironmentService,
     stale_timeout: Duration,
@@ -134,8 +136,9 @@ impl GraphSessionStore {
     ) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
-            validation_state: CurrentInferenceValidationStateStore::new(),
-            validation_lifecycle: WorkflowGraphValidationLifecycleOwner::new(),
+            validation_state: Arc::new(CurrentInferenceValidationStateStore::new()),
+            validation_lifecycle: Arc::new(WorkflowGraphValidationLifecycleOwner::new()),
+            validation_tasks: WorkflowGraphValidationTaskOwner::new(),
             inference_interface_facts_provider: inference_provider,
             dependency_environment_service: DependencyEnvironmentService::new(dependency_provider),
             stale_timeout: timeout,
@@ -184,6 +187,9 @@ impl GraphSessionStore {
                 session_id
             )));
         }
+        self.validation_tasks
+            .close_graph_session(&graph_session_id)
+            .await;
         self.validation_lifecycle
             .close_graph_session(&graph_session_id)
             .await;

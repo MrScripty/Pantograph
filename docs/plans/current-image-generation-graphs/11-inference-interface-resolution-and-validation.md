@@ -163,6 +163,24 @@ Out of scope:
   bounded queues or bounded state records, define overflow/backpressure behavior,
   cancel or supersede work on graph revision changes and session close, observe
   task errors/panics at the owner, and clean up subscriptions deterministically.
+- 2026-06-03 live-validation task-owner sequence decision: implement the next
+  event-driven validation step as a backend-only workflow-service task owner
+  around the existing validation publisher before wiring graph-mutation triggers
+  or frontend overlays. The owner must track spawned handles, cancel/supersede
+  in-flight work, clean up on graph-session close/shutdown, observe completion,
+  cancellation, errors, and panics, and publish only bounded typed lifecycle
+  diagnostics. This keeps descriptor publication as one shared path and avoids
+  complecting graph mutation policy, transport, and frontend display state.
+  Tauri/frontend remain transport/presentation only and may not supply resolver
+  facts, infer validation freshness, own cancellation policy, or gate submit
+  independently of the backend summary.
+- 2026-06-03 task-owner foundation implemented: workflow-service now has a
+  backend-only validation task owner around the shared publisher with tracked
+  handles, supersession cancellation, graph-session close cleanup, bounded
+  terminal diagnostics, and deterministic backend tests for completion,
+  supersession, and panic observation. The next slices remain trigger wiring and
+  transport/frontend consumption; those slices must keep freshness, resolver
+  facts, and submit authority backend-owned.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

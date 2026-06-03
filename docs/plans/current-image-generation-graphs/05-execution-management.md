@@ -23000,6 +23000,64 @@ Worker rules:
       `cargo check -p pantograph-workflow-service`; touched-source search for
       retired workflow events, model paths, raw JSON, `anyhow`,
       `Result<T, String>`, and spawned task calls; and `git diff --check`.
+  - 2026-06-03 Milestone 5d live-validation task-owner re-plan update:
+    - Decision: use option 2 from the re-plan discussion. The next source slice
+      adds a backend-only workflow-service validation task owner around the
+      existing publisher before wiring graph-mutation triggers, transport
+      delivery refinements, or frontend overlays.
+    - Standards alignment: this keeps one owner for validation lifecycle/state
+      transitions, keeps descriptor publication in the existing shared
+      publisher, uses a sync-core/async-shell split, requires tracked spawned
+      handles with cancellation/shutdown and panic/error observation, and avoids
+      complecting graph mutation policy, Tauri transport, and frontend display
+      state.
+    - No-fallback/no-legacy result: the selected path does not allow
+      frontend/Tauri resolver facts, transport-owned freshness, graph-path
+      inference, alternate validation resolvers, compatibility aliases, or
+      direct submit authority outside the backend validation summary.
+    - Files updated: `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Verification: plan review only; no source implementation in this update.
+  - 2026-06-03 Milestone 5d backend validation task-owner foundation slice:
+    - Smallest useful vertical slice: add a workflow-service task owner around
+      the existing validation publisher so backend-started validation work has
+      tracked handles, supersession, close cleanup, and observed terminal
+      outcomes before graph-mutation triggers or frontend overlays are wired.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/inference_validation_task_owner.rs`,
+      `crates/pantograph-workflow-service/src/graph/mod.rs`,
+      `crates/pantograph-workflow-service/src/graph/session.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Implementation: introduced `WorkflowGraphValidationTaskOwner` as the
+      backend-only async shell around the shared publisher; `GraphSessionStore`
+      composes it, cancels/cleans it on graph-session close, and exposes
+      test-only drain/event inspection methods. Deterministic tests cover
+      completed validation, superseded in-flight validation, and provider panic
+      observation without sleeps.
+    - No-fallback/no-legacy result: validation still routes through the
+      canonical publisher and lifecycle owner. The slice adds no alternate
+      resolver, graph-path inference, raw Pumas/runtime facts from transport,
+      frontend/Tauri freshness policy, compatibility alias, or submit authority
+      outside the backend validation summary.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      validation_task_owner --lib`; `cargo test -p
+      pantograph-workflow-service inference_validation_lifecycle --lib`;
+      `cargo test -p pantograph-workflow-service current_validation_summary
+      --lib`; `cargo test -p pantograph-workflow-service
+      publish_inference_validation_session --lib`; `cargo check -p
+      pantograph-workflow-service`; touched-source search for retired workflow
+      events, model paths, raw JSON, `anyhow`, `Result<T, String>`, and spawned
+      task calls; and `git diff --check`.
+    - Remaining follow-up: wire graph-mutation or explicit-validation triggers
+      to the task owner in a separate thin slice, then refine bounded transport
+      and frontend overlay consumption separately.
 
 ### Traceability Links
 

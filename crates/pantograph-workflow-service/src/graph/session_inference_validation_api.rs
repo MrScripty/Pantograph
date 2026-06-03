@@ -24,6 +24,9 @@ use super::super::inference_validation_state::{
     WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphCurrentValidationSummaryStateRequest,
 };
+#[cfg(test)]
+use super::super::inference_validation_task_owner::WorkflowGraphValidationTaskEvent;
+use super::super::inference_validation_task_owner::WorkflowGraphValidationTaskStartRequest;
 use super::super::memory_impact::graph_memory_impact_from_graph_change;
 use super::super::session_contract::WorkflowGraphEditSessionGraphResponse;
 use super::super::session_event::{dirty_tasks_from_seed_nodes, graph_modified_event};
@@ -100,8 +103,8 @@ impl GraphSessionStore {
                 graph,
             },
             self.inference_interface_facts_provider.as_ref(),
-            &self.validation_lifecycle,
-            &self.validation_state,
+            self.validation_lifecycle.as_ref(),
+            self.validation_state.as_ref(),
             || self.current_graph_revision_for_validation(&request.graph_session_id),
         )
         .await?;
@@ -256,6 +259,65 @@ impl GraphSessionStore {
             .await)
     }
 
+    pub async fn start_current_validation_task(
+        &self,
+        request: WorkflowGraphCurrentValidationRefreshRequest,
+    ) -> Result<DraftGraphValidationSessionId, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(&request.graph_session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(&request.graph_session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let graph = state.graph.clone();
+        let current_graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        if current_graph_revision != request.graph_revision {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "validation task request graph revision is stale".to_string(),
+            ));
+        }
+
+        let validation_session_id =
+            DraftGraphValidationSessionId::parse(format!("validation.session.{}", Uuid::new_v4()))
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        self.validation_tasks
+            .start_validation_task(
+                WorkflowGraphValidationTaskStartRequest {
+                    graph_session_id,
+                    graph_revision: current_graph_revision,
+                    validation_session_id: validation_session_id.clone(),
+                    graph,
+                },
+                self.inference_interface_facts_provider.clone(),
+                self.validation_lifecycle.clone(),
+                self.validation_state.clone(),
+                handle,
+            )
+            .await;
+        Ok(validation_session_id)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn drain_validation_tasks_for_tests(&self) {
+        self.validation_tasks.await_all_tasks().await;
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn validation_task_events_for_tests(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<WorkflowGraphValidationTaskEvent>, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        Ok(self
+            .validation_tasks
+            .event_snapshot(&graph_session_id)
+            .await)
+    }
+
     pub async fn record_inference_validation_session(
         &self,
         session_id: &str,
@@ -311,8 +373,8 @@ impl GraphSessionStore {
                 graph,
             },
             self.inference_interface_facts_provider.as_ref(),
-            &self.validation_lifecycle,
-            &self.validation_state,
+            self.validation_lifecycle.as_ref(),
+            self.validation_state.as_ref(),
             || self.current_graph_revision_for_validation(session_id),
         )
         .await?

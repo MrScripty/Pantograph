@@ -19,6 +19,7 @@ mod inference_interface_validation;
 mod inference_validation_lifecycle;
 mod inference_validation_publisher;
 mod inference_validation_state;
+mod inference_validation_task_owner;
 mod inspection;
 mod memory_impact;
 mod persistence;

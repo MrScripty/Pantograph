@@ -1,3 +1,4 @@
+use super::super::inference_validation_task_owner::WorkflowGraphValidationTaskTerminalState;
 use super::super::types::InsertNodePositionHint;
 use super::*;
 use crate::graph::types::{
@@ -633,6 +634,161 @@ async fn refresh_current_validation_summary_generates_backend_validation_session
     assert_ne!(validation_session_id.as_str(), "validation.session.1");
     assert_eq!(response.node_projections.len(), 1);
     assert_eq!(response.node_projections[0].node_id.as_str(), "infer");
+}
+
+#[tokio::test]
+async fn validation_task_owner_records_completed_backend_validation_task() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let validation_session_id = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("start validation task");
+
+    store.drain_validation_tasks_for_tests().await;
+
+    let current = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("current validation summary");
+    assert_eq!(
+        current.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert_eq!(
+        current.validation_session_id.as_ref(),
+        Some(&validation_session_id)
+    );
+
+    let task_events = store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events");
+    assert_eq!(task_events.len(), 1);
+    assert_eq!(
+        task_events[0].terminal_state,
+        WorkflowGraphValidationTaskTerminalState::Completed
+    );
+}
+
+#[tokio::test]
+async fn validation_task_owner_supersedes_active_backend_validation_task() {
+    let first_entered = Arc::new(Notify::new());
+    let first_release = Arc::new(Notify::new());
+    let second_entered = Arc::new(Notify::new());
+    let second_release = Arc::new(Notify::new());
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        SequencedBlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            calls: std::sync::Mutex::new(0),
+            first_entered: Arc::clone(&first_entered),
+            first_release,
+            second_entered: Arc::clone(&second_entered),
+            second_release: Arc::clone(&second_release),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let graph_revision: WorkflowGraphRevision = session
+        .graph_revision
+        .parse()
+        .expect("valid graph revision");
+    let first_validation_session_id = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: graph_revision.clone(),
+        })
+        .await
+        .expect("start first validation task");
+    first_entered.notified().await;
+
+    let second_validation_session_id = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision,
+        })
+        .await
+        .expect("start second validation task");
+    second_entered.notified().await;
+    second_release.notify_one();
+
+    store.drain_validation_tasks_for_tests().await;
+
+    let task_events = store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events");
+    assert_eq!(task_events.len(), 2);
+    assert_eq!(
+        task_events[0].validation_session_id,
+        first_validation_session_id
+    );
+    assert_eq!(
+        task_events[0].terminal_state,
+        WorkflowGraphValidationTaskTerminalState::Cancelled {
+            reason: super::super::inference_validation_lifecycle::WorkflowGraphValidationCancellationReason::Superseded,
+        }
+    );
+    assert_eq!(
+        task_events[1].validation_session_id,
+        second_validation_session_id
+    );
+    assert_eq!(
+        task_events[1].terminal_state,
+        WorkflowGraphValidationTaskTerminalState::Completed
+    );
+}
+
+#[tokio::test]
+async fn validation_task_owner_records_backend_validation_task_panic() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        PanickingInferenceFactsProvider,
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let validation_session_id = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("start validation task");
+
+    store.drain_validation_tasks_for_tests().await;
+
+    let task_events = store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events");
+    assert_eq!(task_events.len(), 1);
+    assert_eq!(task_events[0].validation_session_id, validation_session_id);
+    assert_eq!(
+        task_events[0].terminal_state,
+        WorkflowGraphValidationTaskTerminalState::Panicked
+    );
 }
 
 #[tokio::test]
@@ -2720,6 +2876,22 @@ impl InferenceInterfaceFactsProvider for SequencedBlockingInferenceFactsProvider
                     .map(|facts| (input.node_id.clone(), facts))
             })
             .collect())
+    }
+}
+
+#[derive(Debug)]
+struct PanickingInferenceFactsProvider;
+
+#[async_trait]
+impl InferenceInterfaceFactsProvider for PanickingInferenceFactsProvider {
+    async fn facts_for_resolution_inputs(
+        &self,
+        _inputs: &[InferenceInterfaceGraphResolutionInput],
+    ) -> Result<
+        BTreeMap<String, InferenceInterfaceResolverFacts>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        panic!("validation fact provider panicked for test");
     }
 }
 
