@@ -525,9 +525,15 @@ durable task orchestration path.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
-- [ ] Update README/crate documentation for task orchestration ownership,
+- [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
-  dispatch scope, and no-fallback removal boundaries.
+  dispatch scope, and no-fallback removal boundaries. 2026-06-03
+  reconciliation: scheduler, workflow-service scheduler/workflow, and
+  node-engine READMEs now document phase-aware task state, scheduler-owned
+  dispatch selection, source-input materialization, non-runtime
+  `single_task` adapter scope, runtime-host dispatch through shared contracts,
+  reservation lifecycle ownership, no whole-run output-demand fallback, and
+  the still-open retry/defer/cancellation/replay lifecycle hardening boundary.
 
 **Verification:**
 

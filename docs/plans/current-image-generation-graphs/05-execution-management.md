@@ -22682,6 +22682,29 @@ Worker rules:
       scheduler/runtime-host session execution, runtime-host response mapping,
       active execution-plan deletion, and whole-run execution deletion slices;
       `git diff --check`.
+  - 2026-06-03 Milestone 5c README checklist reconciliation slice:
+    - Smallest useful vertical slice: reconcile the Milestone 5c README/crate
+      documentation item with current source-directory documentation, without
+      editing production behavior.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`
+      and this plan log.
+    - Implementation: marked the task-orchestration documentation item
+      complete because scheduler, workflow-service scheduler/workflow, and
+      node-engine READMEs document phase-aware task state, scheduler-owned
+      dispatch selection, source-input materialization, non-runtime
+      `single_task` adapter scope, runtime-host dispatch through shared
+      contracts, reservation lifecycle ownership, no whole-run output-demand
+      fallback, and the remaining retry/defer/cancellation/replay lifecycle
+      hardening boundary.
+    - No-fallback/no-legacy result: this only records documentation coverage
+      for the canonical ownership boundaries. It does not preserve a legacy
+      launch path, add a compatibility shim, or move scheduler/runtime policy
+      into Tauri/frontend/node-engine.
+    - Verification passed: targeted README search for scheduler-task,
+      task-state, runtime-host dispatch, node-engine `single_task`,
+      whole-run fallback removal, reservation lifecycle, cancellation, retry,
+      replay, and no-fallback ownership terms; `git diff --check`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes
