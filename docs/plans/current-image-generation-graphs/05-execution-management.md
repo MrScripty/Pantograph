@@ -22969,6 +22969,37 @@ Worker rules:
       Node's strip-types loader fails on production `.js` ESM import specifiers,
       so the focused test is a source-contract deletion gate and TypeScript
       project checking covers the changed module.
+  - 2026-06-03 Milestone 5d validation publisher mid-lookup cancellation
+    slice:
+    - Smallest useful vertical slice: make the workflow-service validation
+      publisher race inference fact lookup against lifecycle cancellation so a
+      superseded validation session completes without waiting for the old fact
+      provider call to return.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - Implementation: introduced a focused publisher helper that returns either
+      resolved facts with the post-provider graph revision or a typed cancelled
+      outcome. Updated supersession tests so cancelled refresh and publish calls
+      finish before the blocked provider fake is released.
+    - No-fallback/no-legacy result: cancellation remains backend
+      workflow-service lifecycle state. No frontend/Tauri policy, transport
+      retry, alternate resolver, graph-path inference, compatibility alias, or
+      legacy validation path was added.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      refresh_current_validation_summary_rejects_superseded_validation_session
+      --lib`; `cargo test -p pantograph-workflow-service
+      publish_inference_validation_session_rejects_superseded_validation_session
+      --lib`; `cargo test -p pantograph-workflow-service
+      current_validation_summary --lib`; `cargo test -p
+      pantograph-workflow-service publish_inference_validation_session --lib`;
+      `cargo check -p pantograph-workflow-service`; touched-source search for
+      retired workflow events, model paths, raw JSON, `anyhow`,
+      `Result<T, String>`, and spawned task calls; and `git diff --check`.
 
 ### Traceability Links
 

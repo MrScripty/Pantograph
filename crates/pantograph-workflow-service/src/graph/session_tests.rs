@@ -1014,6 +1014,18 @@ async fn refresh_current_validation_summary_rejects_superseded_validation_sessio
             .await
     });
     second_entered.notified().await;
+
+    let first_response = first
+        .await
+        .expect("first refresh task should not panic")
+        .expect("first refresh response");
+    assert_eq!(
+        first_response.summary.state,
+        WorkflowGraphCurrentValidationSummaryState::Missing
+    );
+    assert!(first_response.node_projections.is_empty());
+    assert!(first_response.summary.validation_session_id.is_none());
+
     second_release.notify_one();
     let second_response = second
         .await
@@ -1022,21 +1034,6 @@ async fn refresh_current_validation_summary_rejects_superseded_validation_sessio
     assert_eq!(
         second_response.summary.state,
         WorkflowGraphCurrentValidationSummaryState::Current
-    );
-
-    first_release.notify_one();
-    let first_response = first
-        .await
-        .expect("first refresh task should not panic")
-        .expect("first refresh response");
-    assert_eq!(
-        first_response.summary.state,
-        WorkflowGraphCurrentValidationSummaryState::Current
-    );
-    assert!(first_response.node_projections.is_empty());
-    assert_eq!(
-        first_response.summary.validation_session_id,
-        second_response.summary.validation_session_id
     );
 }
 
@@ -2207,7 +2204,6 @@ async fn publish_inference_validation_session_rejects_superseded_validation_sess
         DraftGraphValidationStatus::Executable
     );
 
-    first_release.notify_one();
     let error = first
         .await
         .expect("first publish task should not panic")

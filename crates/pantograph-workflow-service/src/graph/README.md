@@ -290,8 +290,9 @@ the summary/gate remains the only submit authority.
   publication entrypoints share that publisher so fact lookup, lifecycle
   freshness checks, descriptor publication, and current-state recording cannot
   drift into parallel implementations. The publisher observes lifecycle
-  cancellation after fact lookup and stops before publication acceptance or
-  current-state recording when a session was superseded or closed.
+  cancellation while fact lookup is pending and again after fact lookup
+  completes, then stops before publication acceptance or current-state recording
+  when a session was superseded or closed.
 - Validation-session lifecycle identity is workflow-service owned. Starting a
   validation session supersedes any active validation session for the graph edit
   session, publication is accepted only for the active graph revision and

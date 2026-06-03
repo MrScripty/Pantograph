@@ -4545,6 +4545,44 @@ defining an image-only inference-node interface.
   - Remaining follow-up: use the same cancellation receiver from tracked
     spawned validation tasks and observe task completion, cancellation, and
     panic paths at the lifecycle owner.
+- [x] 2026-06-03 validation publisher mid-lookup cancellation slice completed:
+  - Smallest useful vertical slice: update the shared validation publisher so
+    lifecycle cancellation races the backend inference fact-provider await and
+    returns a typed cancellation outcome without waiting for a superseded
+    provider call to finish. The publisher still re-checks cancellation after a
+    provider result returns before publication acceptance or current-state
+    recording.
+  - Files touched by the slice:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_publisher.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`, this milestone,
+    and the execution log.
+  - No-fallback/no-legacy confirmation: superseded validation work is stopped
+    by the workflow-service lifecycle receiver and shared publisher. No
+    frontend/Tauri cancellation policy, transport retry, alternate resolver,
+    graph-path inference, compatibility alias, or legacy validation path was
+    added.
+  - Standards result: the slice keeps cancellation and fact lookup in the
+    focused publisher module, uses existing Tokio watch/select primitives, adds
+    no dependency, and updates deterministic tests so cancelled refresh/publish
+    calls complete before the blocked provider fake is released.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    refresh_current_validation_summary_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    publish_inference_validation_session_rejects_superseded_validation_session
+    --lib`; `cargo test -p pantograph-workflow-service
+    current_validation_summary --lib`; `cargo test -p
+    pantograph-workflow-service publish_inference_validation_session --lib`;
+    `cargo check -p pantograph-workflow-service`; touched-source search for
+    retired workflow events, model paths, raw JSON, `anyhow`,
+    `Result<T, String>`, and spawned task calls; and `git diff --check`.
+    Search hits were classified as pre-existing test fixtures, graph mutation
+    event assertions outside the validation transport path, or README guardrail
+    wording; no added production line introduced those terms.
+  - Remaining follow-up: use the same cancellation receiver from tracked
+    spawned validation tasks and observe task completion, cancellation, and
+    panic paths at the lifecycle owner.
 - [x] 2026-05-28 graph revision validation cancellation slice completed:
   - Smallest useful vertical slice: add an explicit graph-revision-changed
     cancellation reason to the validation lifecycle owner and wire the
