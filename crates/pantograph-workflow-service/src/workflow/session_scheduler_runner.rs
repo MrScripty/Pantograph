@@ -117,10 +117,13 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         let readiness_admission =
             self.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
         if !readiness_admission.deferred_task_ids.is_empty() {
-            return Err(WorkflowServiceError::RuntimeNotReady(format!(
-                "runtime dependency readiness is pending for scheduler task(s): {}",
-                readiness_admission.deferred_task_ids.join(", ")
-            )));
+            return Err(WorkflowServiceError::RuntimeDependencyReadinessPending {
+                message: format!(
+                    "runtime dependency readiness is pending for scheduler task(s): {}",
+                    readiness_admission.deferred_task_ids.join(", ")
+                ),
+                task_ids: readiness_admission.deferred_task_ids,
+            });
         }
         self.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
         self.run_runtime_dispatch_ready_tasks(

@@ -1032,6 +1032,12 @@ pub enum WorkflowServiceError {
     #[error("runtime_not_ready: {0}")]
     RuntimeNotReady(String),
 
+    #[error("runtime_not_ready: {message}")]
+    RuntimeDependencyReadinessPending {
+        message: String,
+        task_ids: Vec<String>,
+    },
+
     #[error("cancelled: {0}")]
     Cancelled(String),
 
@@ -1115,7 +1121,10 @@ impl WorkflowServiceError {
             WorkflowServiceError::InvalidRequest(_) => WorkflowErrorCode::InvalidRequest,
             WorkflowServiceError::WorkflowNotFound(_) => WorkflowErrorCode::WorkflowNotFound,
             WorkflowServiceError::CapabilityViolation(_) => WorkflowErrorCode::CapabilityViolation,
-            WorkflowServiceError::RuntimeNotReady(_) => WorkflowErrorCode::RuntimeNotReady,
+            WorkflowServiceError::RuntimeNotReady(_)
+            | WorkflowServiceError::RuntimeDependencyReadinessPending { .. } => {
+                WorkflowErrorCode::RuntimeNotReady
+            }
             WorkflowServiceError::Cancelled(_) => WorkflowErrorCode::Cancelled,
             WorkflowServiceError::SessionNotFound(_) => WorkflowErrorCode::SessionNotFound,
             WorkflowServiceError::SessionEvicted(_) => WorkflowErrorCode::SessionEvicted,
@@ -1143,6 +1152,7 @@ impl WorkflowServiceError {
             | WorkflowServiceError::OutputNotProduced(message)
             | WorkflowServiceError::RuntimeTimeout(message)
             | WorkflowServiceError::Internal(message) => message,
+            WorkflowServiceError::RuntimeDependencyReadinessPending { message, .. } => message,
             WorkflowServiceError::SchedulerBusy { message, .. } => message,
             WorkflowServiceError::StaleWorkflowGraph { message, .. } => message,
             WorkflowServiceError::WithDiagnostics { source, .. } => source.message(),
@@ -1172,6 +1182,17 @@ impl WorkflowServiceError {
             WorkflowServiceError::WithDiagnostics { diagnostics, .. } => Some(diagnostics),
             WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.diagnostics(),
             _ => None,
+        }
+    }
+
+    pub(crate) fn is_runtime_dependency_readiness_pending(&self) -> bool {
+        match self {
+            WorkflowServiceError::RuntimeDependencyReadinessPending { .. } => true,
+            WorkflowServiceError::WithDiagnostics { source, .. }
+            | WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => {
+                source.is_runtime_dependency_readiness_pending()
+            }
+            _ => false,
         }
     }
 

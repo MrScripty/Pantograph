@@ -398,6 +398,12 @@ impl WorkflowService {
             } else {
                 run_future.await
             };
+            if run_result
+                .as_ref()
+                .is_err_and(WorkflowServiceError::is_runtime_dependency_readiness_pending)
+            {
+                return run_result;
+            }
             self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             if let Err(record_error) = self.record_run_terminal_event_if_configured(
                 &session,

@@ -22010,6 +22010,33 @@ Worker rules:
     reservation release, and overlap prevention under one backend lifecycle
     manager. It must replace manual or request-driven resume pressure without
     preserving terminal `RuntimeNotReady` as the production path.
+  - Implementation result: workflow-service now distinguishes dependency
+    readiness pending from generic `RuntimeNotReady` with a typed internal
+    `RuntimeDependencyReadinessPending` error that still maps to the public
+    `runtime_not_ready` code. The public runtime session path returns that
+    pending result without calling `finish_run` or recording a terminal run
+    event, leaving the active scheduler task graph inspectable. The runner
+    still blocks runtime dispatch and does not synthesize proofs or fall back
+    to legacy readiness inputs.
+  - Focused regression coverage now proves a first-run missing-readiness case
+    queues dependency-readiness work, keeps the run active, projects the run as
+    a running queue item, exposes the runtime task as `PausedDeferred`, emits a
+    run-started event, emits no terminal event for that pending run, and does
+    not attempt runtime load or execution.
+  - Verification:
+    `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`;
+    `cargo test -p pantograph-workflow-service orchestrator_retries_deferred_runtime_dependency_readiness`;
+    `cargo check -p pantograph-workflow-service`.
+  - Verification deviation recorded: an adjacent diagnostic terminal-error
+    test,
+    `workflow_execution_session_run_records_failed_terminal_event_with_sanitized_error`,
+    was run as a nearby guard and failed with existing `InvalidRequest` versus
+    expected `RuntimeNotReady` behavior. That path is not the typed
+    dependency-readiness pending branch changed by this slice and remains a
+    separate follow-up if terminal runtime-error diagnostics are resumed.
 
 ### Traceability Links
 

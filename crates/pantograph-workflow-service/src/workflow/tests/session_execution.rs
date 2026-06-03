@@ -34,7 +34,7 @@ use pantograph_scheduler::{
     SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerEstimateHint,
     SchedulerEstimateHintKind, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
     SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
-    SchedulerTaskStateRecord,
+    SchedulerTaskStateKind, SchedulerTaskStateRecord,
 };
 
 use super::*;
@@ -243,6 +243,7 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
         .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone());
     let workflow_id = "wf-runtime-dispatch-boundary";
     let workflow_semantic_version = "1.2.3";
@@ -296,13 +297,43 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
             .contains("runtime dependency readiness is pending for scheduler task(s): infer"),
         "unexpected error: {error}"
     );
+    let workflow_run_id = {
+        let store = service.session_store_guard().expect("session store");
+        let active_run_ids = store.active_workflow_run_ids();
+        assert_eq!(
+            active_run_ids.len(),
+            1,
+            "readiness-pending runtime run must stay active"
+        );
+        active_run_ids[0].clone()
+    };
+    let task_states = service
+        .workflow_get_scheduler_task_state_read_models(
+            WorkflowSchedulerTaskStateReadModelQueryRequest {
+                session_id: session_id.clone(),
+                workflow_run_id: workflow_run_id.clone(),
+            },
+        )
+        .await
+        .expect("read readiness-pending task states");
+    let infer_task = task_states
+        .tasks
+        .iter()
+        .find(|task| task.task_id == "infer")
+        .expect("runtime inference task state");
+    assert_eq!(infer_task.state, SchedulerTaskStateKind::PausedDeferred);
     let queue = service
         .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
             session_id: session_id.clone(),
         })
         .await
         .expect("list queue after deferred runtime inference run");
-    assert!(queue.items.is_empty());
+    assert_eq!(queue.items.len(), 1);
+    assert_eq!(queue.items[0].workflow_run_id, workflow_run_id);
+    assert_eq!(
+        queue.items[0].status,
+        WorkflowExecutionSessionQueueItemStatus::Running
+    );
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     let work_item = dependency_readiness_work_queue
         .pop_next()
@@ -315,6 +346,31 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
     );
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    assert!(
+        diagnostic_events.iter().any(|event| {
+            event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunStarted
+                && event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    == Some(workflow_run_id.as_str())
+        }),
+        "readiness-pending runtime run should still have a run-started event"
+    );
+    assert!(
+        diagnostic_events.iter().all(|event| {
+            event.event_kind != pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
+                || event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    != Some(workflow_run_id.as_str())
+        }),
+        "readiness-pending runtime run must not record a terminal event"
+    );
 }
 
 #[tokio::test]
