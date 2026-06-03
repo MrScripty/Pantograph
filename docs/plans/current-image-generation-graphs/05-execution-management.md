@@ -22711,6 +22711,35 @@ Worker rules:
     matching pending runs when readiness facts arrive. That later slice must
     own tracked tasks, cancellation/shutdown, freshness, timeout, retry,
     reservation release, overlap prevention, and observability.
+  - 2026-06-03 Milestone 5d package mock inference-port cleanup slice:
+    - Smallest useful vertical slice: align the reusable
+      `packages/svelte-graph` mock backend with the canonical intent-only
+      Pumas inference contract without changing production runtime behavior.
+    - Files touched:
+      `packages/svelte-graph/src/backends/MockWorkflowBackend.ts`,
+      `packages/svelte-graph/src/backends/MockWorkflowBackend.test.ts`,
+      `packages/svelte-graph/src/backends/README.md`,
+      `package.json`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - Implementation: removed stale graph-visible `backend_key`,
+      `resolved_model_source`, `resolved_model_package_facts`, and
+      `inference_settings` inputs from package mock `llm-inference`; added
+      scheduler-vocabulary `runtime` and `device` mock inputs; wired the
+      focused deletion-gate test into `npm run test:frontend`; and documented
+      that those inputs are UI selection vocabulary only, not backend
+      availability or dependency-readiness proof.
+    - No-fallback/no-legacy result: this deletes stale package mock authority
+      instead of translating it. No compatibility shim, resolved package facts
+      port, model-source port, or settings port remains in the touched mock.
+    - Verification passed: `node --experimental-strip-types --test
+      packages/svelte-graph/src/backends/MockWorkflowBackend.test.ts`; `npm run
+      test:frontend`; `npm run typecheck`; targeted package mock search for
+      retired port IDs; `git diff --check`.
+    - Verification caveat: direct raw import of `MockWorkflowBackend.ts` under
+      Node's strip-types loader fails on production `.js` ESM import specifiers,
+      so the focused test is a source-contract deletion gate and TypeScript
+      project checking covers the changed module.
 
 ### Traceability Links
 

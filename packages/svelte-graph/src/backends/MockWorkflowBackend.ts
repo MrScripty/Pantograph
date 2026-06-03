@@ -161,10 +161,9 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     io_binding_origin: 'integrated',
     inputs: [
       { id: 'task_kind', label: 'Task Kind', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
-      { id: 'backend_key', label: 'Backend Key', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'runtime', label: 'Runtime', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'device', label: 'Device', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
       { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
-      { id: 'resolved_model_source', label: 'Resolved Model Source', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
-      { id: 'resolved_model_package_facts', label: 'Resolved Model Package Facts', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
       { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false, inference_payloads: EMBEDDING_TEXT_PAYLOADS },
       { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false, inference_payloads: RERANK_INPUT_PAYLOADS },
       { id: 'documents', label: 'Documents', data_type: 'json', required: false, multiple: false, inference_payloads: RERANK_INPUT_PAYLOADS },
@@ -177,7 +176,6 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
       { id: 'kv_cache_in', label: 'KV Cache In', data_type: 'kv_cache', required: false, multiple: false },
       { id: 'generation_options', label: 'Generation Options', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_OPTIONS_PAYLOADS },
       { id: 'task_options', label: 'Task Options', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
-      { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
     ],
     outputs: [
       { id: 'response', label: 'Response', data_type: 'string', required: false, multiple: false, inference_payloads: RESPONSE_PAYLOADS },

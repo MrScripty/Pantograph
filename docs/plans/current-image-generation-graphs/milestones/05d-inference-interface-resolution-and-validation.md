@@ -3418,6 +3418,30 @@ defining an image-only inference-node interface.
          --no-default-features`; targeted source search for
          `model-provider`/`ModelProviderTask` with `model_path` and
          `inference_settings`.
+       - 2026-06-03 implementation slice completed: aligned the reusable
+         package `MockWorkflowBackend` with the canonical app mock by removing
+         graph-visible `backend_key`, `resolved_model_source`,
+         `resolved_model_package_facts`, and `inference_settings` inputs from
+         canonical `llm-inference`; added scheduler-vocabulary `runtime` and
+         `device` mock inputs for UI selection only; wired the focused
+         deletion-gate test into `npm run test:frontend`; and documented that
+         mock runtime/device inputs are not backend availability or dependency
+         readiness proof.
+       - No-fallback/no-legacy gate: no compatibility alias, resolved package
+         facts port, model-source port, or settings port was retained in the
+         package mock. Backend inference-interface descriptors and scheduler
+         decisions remain the owners for executable ports, runtime choice, and
+         readiness.
+       - Verification passed: `node --experimental-strip-types --test
+         packages/svelte-graph/src/backends/MockWorkflowBackend.test.ts`; `npm
+         run test:frontend`; `npm run typecheck`; targeted package mock search
+         for retired port IDs; `git diff --check`.
+       - Verification caveat: raw `node --experimental-strip-types --test`
+         cannot import `MockWorkflowBackend.ts` directly because the production
+         package source correctly uses `.js` import specifiers for emitted ESM
+         paths. The focused test is therefore a source-contract deletion gate,
+         while `npm run typecheck` verifies the changed module through the
+         TypeScript project.
     3. Retire legacy graph-visible processing inference nodes with path-shaped
        ports (`audio-generation`, `onnx-inference`, `depth-estimation`) in a
        separate registry slice, or explicitly reclassify any retained node as a
