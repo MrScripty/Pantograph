@@ -21838,6 +21838,53 @@ Worker rules:
     event-driven validation delivery, queue/admission execution-session proof,
     and the successful production inference-session path.
 
+- 2026-06-03 production inference-session dependency-readiness sequencing
+  re-plan:
+  - Re-plan trigger: the production-composed execution-session path still
+    cannot prove a first run because
+    `WorkflowSchedulerSessionRunner::admit_runtime_dependency_readiness`
+    requires a dependency requirements seed and readiness proof before dispatch
+    selection. The runner currently asks the configured provider for a seed,
+    stores that dependency requirements payload, then enqueues
+    `DependencyReadinessWorkItem`. The embedded-runtime async snapshot
+    producer consumes that queue, so the queued producer cannot create the
+    first seed/proof before admission has already failed closed.
+  - Selected option for the next slice: option 1. Add a backend-owned
+    production dependency-readiness provider in embedded-runtime composition
+    that can answer the existing workflow-service readiness provider contract
+    from canonical Pantograph backend facts. The provider may reuse the same
+    dependency requirements, inventory, snapshot, and proof projection helpers
+    as the async producer, but it must not move policy into Tauri/frontend,
+    derive readiness from graph paths, `ModelDependencyRequest`, `ModelRefV2`,
+    reduced execution plans, selector summaries, or caller-supplied proofs, or
+    treat missing facts as ready. Missing, stale, or insufficient facts remain
+    typed fail-closed diagnostics.
+  - Standards guardrails: keep workflow-service as the readiness lifecycle and
+    scheduler-admission owner; keep embedded-runtime as the concrete
+    production provider/composition owner; do not hold session/graph locks
+    across backend fact lookup; do not create untracked tasks, ad hoc runtimes,
+    or hidden global infrastructure in feature modules; keep parse-once typed
+    request/proof contracts at the boundary.
+  - Smallest useful next implementation slice: wire a resource-backed
+    dependency-readiness provider through the hosted workflow-service
+    composition and add a focused production-composed session test that reaches
+    scheduler dispatch selection/readiness proof using Pumas package facts,
+    runtime-registry capability facts, conservative estimate hints, and the
+    provider-produced dependency readiness seed/proof. Allowed write set should
+    stay limited to the embedded-runtime provider/composition/tests, minimal
+    workflow-service provider-contract changes only if required for typed
+    diagnostics, and plan notes.
+  - Explicit follow-up after the complete production inference path is proven:
+    implement option 3 as the event-driven dependency-readiness lifecycle.
+    That later slice must enqueue readiness work before requiring a proof,
+    record typed pending/deferred scheduler state instead of failing a
+    first-run request with a missing seed, let the single backend lifecycle
+    owner publish readiness facts/events, resume waiting tasks on readiness
+    arrival or scheduler tick, and define freshness, timeout, cancellation,
+    retry, and reservation-release behavior. This is intentionally after the
+    complete inference path so it can replace the temporary synchronous
+    first-run requirement without preserving it as a fallback.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

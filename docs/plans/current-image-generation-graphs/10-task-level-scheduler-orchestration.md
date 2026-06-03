@@ -2055,6 +2055,24 @@ current injected-ready provider remains test/dev scaffolding only and must not
 be treated as production readiness authority while dispatch selection and
 runtime-host request construction are wired.
 
+2026-06-03 dependency-readiness sequencing refinement: use option 1 for the
+next complete production inference-session slice. The current session runner
+requires a dependency requirements seed and readiness proof before it can
+enqueue dependency-readiness work, so the async snapshot producer cannot
+produce the first proof in time for first-run admission. To complete the first
+working inference path without changing the scheduler state machine yet,
+embedded-runtime composition must install a production provider that can answer
+the existing synchronous workflow-service readiness contract from canonical
+backend facts and shared dependency-inventory/proof projection code. This does
+not permit graph-path, Tauri/frontend, `ModelDependencyRequest`, `ModelRefV2`,
+reduced-plan, selector-summary, or caller-supplied-proof fallback. If canonical
+facts are missing or stale, the provider returns typed fail-closed diagnostics.
+After the first complete production inference path is proven, return to option
+3: change readiness admission to enqueue work first, record typed
+pending/deferred scheduler state, resume waiting tasks when readiness facts
+arrive, and define freshness, timeout, cancellation, retry, and reservation
+release under one backend lifecycle owner.
+
 2026-05-30 runtime dispatch-selection boundary slice completed. Workflow-service
 now has a focused runtime dispatch candidate provider seam and a path-free
 request assembly helper that combines an admitted runtime task, the readiness

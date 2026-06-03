@@ -196,6 +196,28 @@ defining an image-only inference-node interface.
         pantograph-embedded-runtime
         resource_backed_hosted_service_refreshes_validation_from_production_facts`;
         `cargo check -p pantograph-embedded-runtime`.
+      - 2026-06-02 resource-backed executable snapshot publication coverage
+        completed: `pantograph-embedded-runtime` now has a composition test
+        proving resource-backed validation can resolve the dependency
+        environment sidecar proof through the workflow-service API, publish
+        the compact graph-session executable validation snapshot, and project
+        queue-facing scheduler inference task records from that saved
+        snapshot. This still stops before production execution-session
+        dispatch.
+      - 2026-06-03 dependency-readiness sequencing re-plan selected: use
+        option 1 for the next slice. Add a backend-owned production dependency
+        readiness provider through embedded-runtime composition that answers
+        the existing scheduler admission seed/proof contract from canonical
+        Pantograph backend facts. The provider must fail closed with typed
+        diagnostics when facts are missing, stale, or insufficient, and must
+        not derive readiness from graph paths, selector summaries, UI state,
+        Tauri policy, `ModelRefV2`, `ModelDependencyRequest`, reduced
+        execution plans, or caller-supplied proofs. After the first complete
+        production inference path is proven, return to option 3 and replace
+        the synchronous first-run readiness requirement with event-driven
+        readiness work queuing, typed pending/deferred scheduler state,
+        readiness arrival resume, and explicit freshness, timeout,
+        cancellation, and retry behavior.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

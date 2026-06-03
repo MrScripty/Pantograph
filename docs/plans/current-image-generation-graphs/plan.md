@@ -165,6 +165,19 @@ runtime, task, or estimate facts continue to fail closed through canonical
 resolver/admission diagnostics instead of graph-path or selector-summary
 fallbacks.
 
+2026-06-03 dependency-readiness sequencing re-plan update: use option 1 for
+the next implementation slice. The immediate complete production inference
+path must add a backend-owned production dependency-readiness provider that can
+answer the existing scheduler admission seed/proof request from canonical
+Pantograph backend facts without graph-path, Tauri, frontend, or legacy
+preflight fallback. This keeps the current workflow-service session runner
+shape stable long enough to prove the end-to-end inference path. After that
+complete inference path is proven, return to option 3: replace the synchronous
+first-run readiness requirement with an event-driven readiness lifecycle that
+queues readiness work, records typed pending/deferred scheduler state, resumes
+dispatch when readiness facts arrive, and defines timeout, cancellation,
+freshness, and retry behavior under one backend lifecycle owner.
+
 ## Standards Rule
 
 The standards constraints in
