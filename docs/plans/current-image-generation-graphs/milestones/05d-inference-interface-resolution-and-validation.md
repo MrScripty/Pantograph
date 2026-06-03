@@ -102,7 +102,7 @@ defining an image-only inference-node interface.
       facts, and optional graph-authored constraints into one descriptor. It
       must return typed unavailable/not-implemented diagnostics when facts or
       runtime support are missing rather than guessing from names or paths.
-- [ ] Add the production inference facts provider and conservative resource
+- [x] Add the production inference facts provider and conservative resource
       estimator before completing the successful production inference session
       path. The provider must be injected through backend composition, consume
       Pumas static artifact facts plus runtime/device/task-shape and proven
@@ -232,6 +232,14 @@ defining an image-only inference-node interface.
         host. Tauri/frontend stay display/forward-only and may not own the
         loop. A typed snapshot notification channel remains a later
         event-first improvement after the bounded polling lifecycle lands.
+      - 2026-06-03 reconciliation: the production facts provider and
+        conservative estimator portion of this checklist item is complete.
+        Remaining richer device/task-shape/proven-residency facts and the
+        readiness auto-resume lifecycle are tracked as follow-up execution
+        slices, not blockers for marking the provider/estimator item complete.
+        The no-fallback rule remains: insufficient facts still produce typed
+        diagnostics or deferred readiness, never zero estimates or graph-path
+        estimates.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

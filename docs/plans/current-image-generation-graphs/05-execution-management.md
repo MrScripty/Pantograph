@@ -22820,6 +22820,29 @@ Worker rules:
       starter template tests, `PortOptionsProvider`, `pumaModelOptionsCache`,
       `selectionInputProviderOptions`, descriptor snapshot overlays, and
       inference-interface option DTOs.
+  - 2026-06-03 Milestone 5d production facts provider checklist
+    reconciliation slice:
+    - Smallest useful vertical slice: reconcile the production inference facts
+      provider/conservative estimator checklist item after confirming the
+      provider, estimator, backend composition, workflow-service provider
+      composition, and resource-backed validation coverage are already recorded
+      as completed slices.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`
+      and this plan log.
+    - No-fallback/no-legacy result: marking the provider/estimator item
+      complete does not weaken diagnostics. Missing or insufficient facts
+      remain typed resolver/admission diagnostics or deferred readiness states,
+      never zero estimates, graph-path estimates, selector-summary estimates,
+      UI policy, Tauri policy, `ModelRefV2`, or `ModelDependencyRequest`.
+    - Remaining follow-ups: richer device/task-shape/proven-residency facts
+      and the backend-owned readiness auto-resume lifecycle remain separate
+      execution slices.
+    - Verification passed: source/plan review of
+      `inference_interface_facts_provider`, `inference_resource_estimator`,
+      workflow-service fact-provider composition, resource-backed hosted
+      validation coverage, and the recorded Pumas v3 logical-size projection
+      slices.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port
