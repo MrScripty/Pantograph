@@ -40,7 +40,6 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `selectionInputProviderOptions.ts` | Builds backend-owned provider option queries for selection inputs and discards stale async option responses when target context changes. |
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
-| `RerankerNode.svelte` | Retired specialized renderer retained only for saved-workflow migration reference; new rerank workflows render through `LLMInferenceNode.svelte`. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
 | `inferencePayloadDisplay.ts` | Projects backend-neutral inference payload role metadata into compact task, diagnostics, usage, cache-handle, model-fact, and option display rows for canonical inference nodes. |
 | `inferenceValidationDisplay.ts` | Projects backend validation, drift, update-proposal, and supported apply-action presentation for canonical inference nodes without owning graph patches. |
@@ -87,6 +86,10 @@ and `DepthEstimationNode.svelte` components have been removed. Audio,
 ONNX-backed, and depth task families are exposed through backend-resolved
 generic inference descriptors instead of specialized graph-visible inference
 components.
+The retired direct `PyTorchInferenceNode.svelte`, `LlamaCppInferenceNode.svelte`,
+and `RerankerNode.svelte` components have been removed. Canonical inference
+workflows render through `LLMInferenceNode.svelte` and backend descriptor
+metadata instead of path-era direct runtime node components.
 The retired `ExpandSettingsNode.svelte` component and display helper have been
 removed. Model-specific inference options are rendered from backend descriptor
 ports rather than frontend-owned settings expansion.

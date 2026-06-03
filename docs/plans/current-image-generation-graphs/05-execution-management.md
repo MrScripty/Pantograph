@@ -22508,6 +22508,42 @@ Worker rules:
       and
       `workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`
       coverage; `git diff --check`.
+  - 2026-06-03 retired frontend direct-runtime renderer deletion slice:
+    - Smallest useful vertical slice: delete orphaned direct runtime Svelte
+      node renderers that still derived UI state from `model_path` connectivity
+      after canonical inference moved to `LLMInferenceNode.svelte`.
+    - Files touched:
+      `src/components/nodes/workflow/PyTorchInferenceNode.svelte`,
+      `src/components/nodes/workflow/LlamaCppInferenceNode.svelte`,
+      `src/components/nodes/workflow/RerankerNode.svelte`,
+      `packages/svelte-graph/src/components/nodes/LlamaCppInferenceNode.svelte`,
+      `packages/svelte-graph/src/index.ts`,
+      `src/components/nodes/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this plan log.
+    - Implementation: removed app-local PyTorch, llama.cpp, and reranker
+      specialized renderers that were no longer imported by the active node
+      registry or node-group editor. Removed the unused shared-package
+      llama.cpp node renderer and package export. Updated the workflow node
+      README to state that canonical inference workflows render through
+      backend descriptor metadata rather than path-era direct runtime
+      components.
+    - No-fallback/no-legacy result: no runtime execution, scheduler policy,
+      dependency readiness, Tauri command, graph persistence, or node-engine
+      behavior changed. The slice removes stale UI code that could only
+      inspect `model_path` connection state; it does not add a compatibility
+      branch or path-based launch authority.
+    - Verification passed:
+      `npm run typecheck`;
+      `rg -n "PyTorchInferenceNode|LlamaCppInferenceNode|RerankerNode|model_path input is connected|edge\\.targetHandle === 'model_path'" src/components src/services packages/svelte-graph/src -g '*.{ts,svelte,md}'`
+      returned only the README removal note;
+      `git diff --check`.
+    - Discovered issue / deferred follow-up: the exported
+      `packages/svelte-graph/src/components/nodes/PumaLibNode.svelte` still
+      contains path-shaped mock UI and `modelPath` persistence. It is not used
+      by the app-local registry, but it is a package API surface and must be
+      handled in its own delete-or-rewrite slice rather than folded into this
+      orphaned renderer cleanup.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

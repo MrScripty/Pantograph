@@ -476,7 +476,15 @@ upgrade after this path is working.
   has a branch that can inject a resolved legacy `model_ref` payload into
   runtime inputs. The remaining resolver/model-ref references in this area are
   diagnostic-only tests and transitional helper contracts pending the
-  model-dependency/model-ref deletion slice.
+  model-dependency/model-ref deletion slice. 2026-06-03 progress: deleted the
+  orphaned app-local direct runtime node renderers
+  `PyTorchInferenceNode.svelte`, `LlamaCppInferenceNode.svelte`, and
+  `RerankerNode.svelte`, plus the unused exported package
+  `LlamaCppInferenceNode.svelte`, so active/frontend package node surfaces no
+  longer keep direct runtime `model_path` connection checks alive for those
+  retired components. The exported package `PumaLibNode.svelte` still contains
+  path-shaped mock UI and remains a separate delete-or-rewrite follow-up
+  because it is a public package component surface, not an app-local orphan.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

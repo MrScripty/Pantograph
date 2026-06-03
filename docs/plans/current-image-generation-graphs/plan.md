@@ -248,6 +248,15 @@ dependency-environment node. The activity log remains display/history state
 only and cannot produce runtime launch facts, readiness proofs, scheduler
 policy, or load authority.
 
+2026-06-03 retired frontend renderer cleanup update: app-local direct runtime
+node renderers for PyTorch, llama.cpp, and reranking were deleted, and the
+unused shared-package llama.cpp renderer export was removed. Canonical app
+workflows render through `LLMInferenceNode.svelte` and backend descriptors
+instead of path-era direct runtime node components. The older exported package
+`PumaLibNode.svelte` still carries path-shaped mock UI and is explicitly left
+as a separate delete-or-rewrite follow-up because it is a package API surface,
+not an app-local orphaned renderer.
+
 ## Standards Rule
 
 The standards constraints in
