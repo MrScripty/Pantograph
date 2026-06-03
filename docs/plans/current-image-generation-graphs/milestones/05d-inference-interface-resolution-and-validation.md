@@ -256,7 +256,7 @@ defining an image-only inference-node interface.
       `hydrate_puma_lib_node` Tauri command now accepts only `model_id` and
       selector access for saved-node rehydration, so path-shaped hydration and
       dependency selection state are no longer successful Puma-Lib paths.
-- [ ] Replace the `puma-lib` dependency-requirements hydration boundary before
+- [x] Replace the `puma-lib` dependency-requirements hydration boundary before
       removing graph-authored paths. The chosen design is to use the canonical
       path-free `pantograph-dependency-planning::DependencyPlanningRequest`
       contract, or evolve that contract if a required typed field is missing.
@@ -2393,6 +2393,14 @@ defining an image-only inference-node interface.
         embedded-runtime/node-engine `ModelDependencyRequest` dependency
         preflight/model-ref path, then remove the managed resolver object from
         Tauri app setup once no active runtime path depends on it.
+      - 2026-06-03 reconciliation: the `puma-lib` dependency-requirements
+        hydration boundary is replaced for dependency-environment actions.
+        Current action flow is graph-coordinator intent -> workflow-service
+        sidecar subject resolution -> dependency-planning proof producer ->
+        dependency-environment service result, with Tauri as transport only.
+        The broader Python-backed/runtime `ModelDependencyRequest` preflight
+        path remains tracked by the next scheduler/runtime handoff checklist
+        item and is no longer part of this `puma-lib` hydration boundary.
 - [x] 2026-05-28 dependency-environment frontend source cleanup slice
   completed:
   - Smallest useful vertical slice: retired frontend path-era upstream subject

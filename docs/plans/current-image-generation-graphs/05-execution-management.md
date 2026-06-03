@@ -22843,6 +22843,29 @@ Worker rules:
       workflow-service fact-provider composition, resource-backed hosted
       validation coverage, and the recorded Pumas v3 logical-size projection
       slices.
+  - 2026-06-03 Milestone 5d puma-lib dependency-requirements boundary
+    reconciliation slice:
+    - Smallest useful vertical slice: mark the `puma-lib`
+      dependency-requirements hydration boundary complete after confirming the
+      canonical dependency-environment action path is now graph-coordinator
+      intent -> workflow-service sidecar subject resolution ->
+      dependency-planning proof producer -> dependency-environment service
+      result, with Tauri as transport only.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`
+      and this plan log.
+    - No-fallback/no-legacy result: the reconciled boundary no longer adapts
+      `puma-lib` graph data into `ModelDependencyRequest`, `ModelRefV2`,
+      `model_path`, or Tauri-owned dependency policy for dependency-environment
+      actions.
+    - Remaining follow-up: the broader Python-backed/runtime
+      `ModelDependencyRequest` dependency preflight/model-ref path remains
+      tracked by the scheduler-owned readiness/runtime handoff checklist item.
+    - Verification passed: plan/source review of the completed
+      dependency-planning producer, workflow-service service wiring,
+      embedded-runtime dependency-environment execution deletion, Tauri direct
+      model-dependency command deletion, and frontend dependency-environment
+      source cleanup slices.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port
