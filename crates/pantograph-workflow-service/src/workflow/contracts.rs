@@ -892,6 +892,14 @@ pub struct WorkflowExecutionSessionRunRequest {
     pub priority: Option<i32>,
 }
 
+/// Resume request for an active workflow run paused at runtime dependency readiness.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionResumeRequest {
+    pub session_id: String,
+    pub workflow_run_id: String,
+}
+
 /// Session close request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

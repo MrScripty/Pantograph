@@ -48,6 +48,10 @@ struct WorkflowExecutionSessionActiveRun {
     workflow_run_id: String,
     enqueued_at_ms: u64,
     dequeued_at_ms: u64,
+    workflow_semantic_version: String,
+    inputs: Vec<WorkflowPortBinding>,
+    output_targets: Option<Vec<WorkflowOutputTarget>>,
+    timeout_ms: Option<u64>,
     priority: i32,
     scheduler_decision_reason: WorkflowSchedulerDecisionReason,
     // Milestone 5c stages task-state storage before the orchestrator consumes it.
@@ -107,6 +111,16 @@ pub(crate) struct WorkflowExecutionSessionDequeuedRun {
     pub(crate) enqueued_at_ms: u64,
     pub(crate) dequeued_at_ms: u64,
     pub(crate) scheduler_decision_reason: WorkflowSchedulerDecisionReason,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowExecutionSessionActiveRunContext {
+    pub(crate) workflow_id: String,
+    pub(crate) dequeued_at_ms: u64,
+    pub(crate) workflow_semantic_version: String,
+    pub(crate) inputs: Vec<WorkflowPortBinding>,
+    pub(crate) output_targets: Option<Vec<WorkflowOutputTarget>>,
+    pub(crate) timeout_ms: Option<u64>,
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {

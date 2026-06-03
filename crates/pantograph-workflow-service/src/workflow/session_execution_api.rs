@@ -40,16 +40,40 @@ use super::{
     WorkflowErrorDiagnosticsLink, WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowPortBinding, WorkflowRunResponse,
-    WorkflowRuntimeCapability, WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary, WorkflowService,
-    WorkflowServiceError,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionResumeRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
 const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
 const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
+
+fn remaining_runtime_resume_timeout_ms(
+    timeout_ms: Option<u64>,
+    dequeued_at_ms: u64,
+) -> Result<Option<u64>, WorkflowServiceError> {
+    let Some(timeout_ms) = timeout_ms else {
+        return Ok(None);
+    };
+    let elapsed_ms = unix_timestamp_ms().saturating_sub(dequeued_at_ms);
+    if elapsed_ms >= timeout_ms {
+        return Err(WorkflowServiceError::RuntimeTimeout(format!(
+            "workflow run exceeded timeout_ms {}",
+            timeout_ms
+        )));
+    }
+    Ok(Some(timeout_ms - elapsed_ms))
+}
+
+fn resumed_run_started_at(dequeued_at_ms: u64) -> std::time::Instant {
+    let elapsed_ms = unix_timestamp_ms().saturating_sub(dequeued_at_ms);
+    std::time::Instant::now()
+        .checked_sub(Duration::from_millis(elapsed_ms))
+        .unwrap_or_else(std::time::Instant::now)
+}
 
 impl WorkflowService {
     fn resolve_execution_session_attribution(
@@ -450,6 +474,129 @@ impl WorkflowService {
         run_result
     }
 
+    pub async fn resume_workflow_execution_session_runtime_dependency_readiness<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowExecutionSessionResumeRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim().to_string();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+        let workflow_run_id = request.workflow_run_id.trim().to_string();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+
+        let (session, active_run, scheduler_task_run_summary) = {
+            let store = self.session_store_guard()?;
+            let session = store.session_summary(&session_id)?;
+            let active_run = store.active_run_context(&session_id, &workflow_run_id)?;
+            let (task_graph, records) = store
+                .active_run_scheduler_task_state(&session_id, &workflow_run_id)?
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "workflow run '{}' has no active scheduler task state to resume",
+                        workflow_run_id
+                    ))
+                })?;
+            let summary =
+                workflow_scheduler_task_run_summary(&task_graph, &records).map_err(|error| {
+                    WorkflowServiceError::Internal(format!(
+                        "scheduler task run summary failed before resume: {error}"
+                    ))
+                })?;
+            (session, active_run, summary)
+        };
+        if !scheduler_task_run_summary.has_runtime_inference() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "workflow run '{}' is not a runtime inference run",
+                workflow_run_id
+            )));
+        }
+
+        let workflow_run_id_typed = WorkflowRunId::try_from(workflow_run_id.clone())?;
+        let run_snapshot =
+            self.workflow_run_snapshot_for_execution_resume_if_configured(&workflow_run_id_typed)?;
+        let remaining_timeout_ms =
+            remaining_runtime_resume_timeout_ms(active_run.timeout_ms, active_run.dequeued_at_ms);
+        let started_at = resumed_run_started_at(active_run.dequeued_at_ms);
+        let runner = WorkflowSchedulerSessionRunner::new(self);
+        let run_result = match remaining_timeout_ms {
+            Err(error) => Err(error),
+            Ok(Some(timeout_ms)) => {
+                let run_future = runner.resume_runtime_dependency_readiness(
+                    host,
+                    &session_id,
+                    &workflow_run_id,
+                    &active_run.workflow_id,
+                    active_run.output_targets.as_deref(),
+                    &scheduler_task_run_summary,
+                    started_at,
+                );
+                match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
+                    Ok(result) => result,
+                    Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
+                        "workflow run exceeded timeout_ms {}",
+                        active_run.timeout_ms.unwrap_or(timeout_ms)
+                    ))),
+                }
+            }
+            Ok(None) => {
+                runner
+                    .resume_runtime_dependency_readiness(
+                        host,
+                        &session_id,
+                        &workflow_run_id,
+                        &active_run.workflow_id,
+                        active_run.output_targets.as_deref(),
+                        &scheduler_task_run_summary,
+                        started_at,
+                    )
+                    .await
+            }
+        };
+        if run_result
+            .as_ref()
+            .is_err_and(WorkflowServiceError::is_runtime_dependency_readiness_pending)
+        {
+            return run_result;
+        }
+
+        self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
+        if let Err(record_error) = self.record_run_terminal_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &workflow_run_id,
+            Some(&active_run.workflow_semantic_version),
+            &run_result,
+        ) {
+            if let Err(error) = run_result {
+                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                    workflow_run_id: Some(workflow_run_id),
+                    diagnostic_event_id: None,
+                    diagnostics_unavailable: Some(record_error.message().to_string()),
+                }));
+            }
+            return Err(record_error);
+        }
+        if let Ok(response) = run_result.as_ref() {
+            self.record_workflow_io_artifact_events_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                &active_run.workflow_semantic_version,
+                &active_run.inputs,
+                &response.outputs,
+            )?;
+        }
+        run_result
+    }
+
     fn finish_failed_workflow_run_after_admission(
         &self,
         session_id: &str,
@@ -458,6 +605,19 @@ impl WorkflowService {
         let mut store = self.session_store_guard()?;
         store.finish_run(session_id, workflow_run_id)?;
         Ok(())
+    }
+
+    fn workflow_run_snapshot_for_execution_resume_if_configured(
+        &self,
+        workflow_run_id: &WorkflowRunId,
+    ) -> Result<Option<WorkflowRunSnapshotRecord>, WorkflowServiceError> {
+        if self.attribution_store.is_none() {
+            return Ok(None);
+        }
+        let store = self.attribution_store_guard()?;
+        store
+            .workflow_run_snapshot(workflow_run_id)
+            .map_err(WorkflowServiceError::from)
     }
 
     async fn scheduler_task_graph_for_session_run<H: WorkflowHost>(

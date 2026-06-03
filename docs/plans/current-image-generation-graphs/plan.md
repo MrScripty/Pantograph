@@ -171,21 +171,23 @@ dependency-readiness work, records typed deferred scheduler state, blocks
 runtime dispatch, and returns typed runtime-not-ready diagnostics when no fresh
 backend readiness proof exists. The public runtime session lifecycle now keeps
 dependency-readiness pending as a non-terminal backend-owned active-run state,
-not a finished workflow run. The next re-planned slice is an explicit
-backend-owned resume command for an existing active `session_id` plus
-`workflow_run_id`: it must validate the run is still active and
-readiness-pending, retry dependency-readiness admission from fresh canonical
-backend facts, and either continue toward dispatch or return typed pending/
-fail-closed diagnostics. Tauri/frontend may display backend state or invoke
-that backend command only; they must not own retry, readiness, resource,
-package, or scheduler policy. After the first complete inference path is proven
-through this explicit backend resume path, add the deferred event-driven
-backend readiness lifecycle: a composition-root-owned worker/listener with
-tracked tasks, cancellation/shutdown, freshness, timeout, retry, reservation
-release, and overlap-prevention behavior that resumes waiting tasks when
-readiness facts arrive. Missing, stale, or insufficient facts remain typed
-fail-closed diagnostics, not graph-path, Tauri, frontend, selector-summary,
-synchronous probe, client rerun, or legacy preflight fallback.
+not a finished workflow run. The explicit backend-owned resume API for an
+existing active `session_id` plus `workflow_run_id` is now implemented in
+workflow-service: it validates active runtime scheduler state, retries
+dependency-readiness admission from fresh canonical backend facts, preserves
+the active run when facts are still missing, and completes runtime dispatch
+without requiring a replacement client-created workflow run. Remaining
+host-boundary work may expose/invoke this backend operation, but
+Tauri/frontend may display backend state or forward the command only; they
+must not own retry, readiness, resource, package, or scheduler policy. After
+the first complete inference path is proven through this explicit backend
+resume path at the chosen host boundary, add the deferred event-driven backend
+readiness lifecycle: a composition-root-owned worker/listener with tracked
+tasks, cancellation/shutdown, freshness, timeout, retry, reservation release,
+and overlap-prevention behavior that resumes waiting tasks when readiness
+facts arrive. Missing, stale, or insufficient facts remain typed fail-closed
+diagnostics, not graph-path, Tauri, frontend, selector-summary, synchronous
+probe, client rerun, or legacy preflight fallback.
 
 ## Standards Rule
 

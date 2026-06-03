@@ -19,9 +19,10 @@ use super::super::{
     WorkflowSchedulerDecisionReason,
 };
 use super::{
-    unix_timestamp_ms, WorkflowExecutionSessionActiveRun, WorkflowExecutionSessionDequeuedRun,
-    WorkflowExecutionSessionQueuedRun, WorkflowExecutionSessionRecord,
-    WorkflowExecutionSessionRunFinishState, WorkflowExecutionSessionStore,
+    unix_timestamp_ms, WorkflowExecutionSessionActiveRun, WorkflowExecutionSessionActiveRunContext,
+    WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionQueuedRun,
+    WorkflowExecutionSessionRecord, WorkflowExecutionSessionRunFinishState,
+    WorkflowExecutionSessionStore,
 };
 
 impl WorkflowExecutionSessionStore {
@@ -198,6 +199,10 @@ impl WorkflowExecutionSessionStore {
             workflow_run_id: queued.workflow_run_id.clone(),
             enqueued_at_ms: queued.enqueued_at_ms,
             dequeued_at_ms,
+            workflow_semantic_version: queued.workflow_semantic_version.clone(),
+            inputs: queued.inputs.clone(),
+            output_targets: queued.output_targets.clone(),
+            timeout_ms: queued.timeout_ms,
             priority: queued.priority,
             scheduler_decision_reason,
             scheduler_task_graph: None,
@@ -212,6 +217,36 @@ impl WorkflowExecutionSessionStore {
             scheduler_decision_reason,
             queued,
         }))
+    }
+
+    pub(crate) fn active_run_context(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<WorkflowExecutionSessionActiveRunContext, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_ref() else {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "workflow run '{}' is not the active run in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+        Ok(WorkflowExecutionSessionActiveRunContext {
+            workflow_id: state.workflow_id.clone(),
+            dequeued_at_ms: active_run.dequeued_at_ms,
+            workflow_semantic_version: active_run.workflow_semantic_version.clone(),
+            inputs: active_run.inputs.clone(),
+            output_targets: active_run.output_targets.clone(),
+            timeout_ms: active_run.timeout_ms,
+        })
     }
 
     #[allow(dead_code)]

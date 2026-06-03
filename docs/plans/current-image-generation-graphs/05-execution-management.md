@@ -22068,6 +22068,36 @@ Worker rules:
     an active `PausedDeferred` dependency-readiness task, preserves active-run
     state when facts are still missing, and consumes a fresh producer snapshot
     to advance admission without requiring a client-created replacement run.
+  - 2026-06-03 completed slice: workflow-service now exposes
+    `resume_workflow_execution_session_runtime_dependency_readiness` with a
+    backend-owned `WorkflowExecutionSessionResumeRequest` containing only
+    `session_id` and `workflow_run_id`. Active runs retain their original
+    semantic version, inputs, output targets, and timeout in the scheduler
+    store, so resume never asks Tauri/frontend/callers to resend policy,
+    proofs, graph paths, selector summaries, or output routing. The runner now
+    has a resume entry point that starts from persisted scheduler task state,
+    retries deferred dependency readiness, preserves the active run when facts
+    are still missing, and finishes plus records terminal/IO diagnostics when
+    fresh readiness facts allow dispatch to complete.
+  - Verification passed:
+    `cargo fmt -p pantograph-workflow-service`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_resume_rejects_inactive_and_non_runtime_runs`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`;
+    `cargo check -p pantograph-workflow-service`.
+  - Verification deviation recorded: an exploratory broad
+    `cargo test -p pantograph-workflow-service
+    session_execution::workflow_execution_session` run included known adjacent
+    legacy/runtime tests unrelated to the explicit resume slice and failed in
+    the existing no-legacy transition areas. The new resume tests and adjacent
+    readiness/dispatch tests above passed when run with exact filters.
+  - Remaining follow-up: expose/invoke this backend resume operation at the
+    chosen host boundary only after selecting the standards-compliant command
+    surface; that boundary must remain display/forward-only and must not move
+    readiness, package, scheduler, resource, or retry policy into Tauri or the
+    frontend.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

@@ -112,6 +112,56 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         }
 
         self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
+        self.continue_runtime_dependency_readiness(
+            host,
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            summary,
+            started_at,
+        )
+        .await
+    }
+
+    pub(super) async fn resume_runtime_dependency_readiness(
+        &self,
+        host: &impl WorkflowHost,
+        session_id: &str,
+        workflow_run_id: &str,
+        workflow_id: &str,
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        summary: &WorkflowSchedulerTaskRunSummary,
+        started_at: Instant,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if !summary.has_runtime_inference() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "workflow run '{}' is not a runtime inference run",
+                workflow_run_id
+            )));
+        }
+        self.continue_runtime_dependency_readiness(
+            host,
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            summary,
+            started_at,
+        )
+        .await
+    }
+
+    async fn continue_runtime_dependency_readiness(
+        &self,
+        host: &impl WorkflowHost,
+        session_id: &str,
+        workflow_run_id: &str,
+        workflow_id: &str,
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        summary: &WorkflowSchedulerTaskRunSummary,
+        started_at: Instant,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         self.run_progress_loop(session_id, workflow_run_id).await?;
         self.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
         let readiness_admission =

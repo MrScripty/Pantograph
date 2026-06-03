@@ -344,6 +344,34 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
         work_item.request.as_request().action,
         DependencyEnvironmentAction::Check
     );
+    let resumed_error = service
+        .resume_workflow_execution_session_runtime_dependency_readiness(
+            &host,
+            WorkflowExecutionSessionResumeRequest {
+                session_id: session_id.clone(),
+                workflow_run_id: workflow_run_id.clone(),
+            },
+        )
+        .await
+        .expect_err("resume should remain pending while readiness facts are missing");
+    assert_eq!(resumed_error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert!(
+        resumed_error
+            .message()
+            .contains("runtime dependency readiness is pending for scheduler task(s): infer"),
+        "unexpected resume error: {resumed_error}"
+    );
+    let active_run_ids = {
+        let store = service.session_store_guard().expect("session store");
+        store.active_workflow_run_ids()
+    };
+    assert_eq!(active_run_ids, vec![workflow_run_id.clone()]);
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+    let resumed_work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("dependency-readiness work item should be requeued on pending resume");
+    assert_eq!(resumed_work_item.provenance.session_id.as_str(), session_id);
+    assert_eq!(resumed_work_item.provenance.task_id.as_str(), "infer");
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
     let diagnostic_events = {
@@ -609,6 +637,270 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         source_refresher.model_refs(),
         vec!["image/example/tiny-diffusion"]
     );
+}
+
+#[tokio::test]
+async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run(
+) {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+        .with_runtime_dispatch_source_refresher(source_refresher.clone())
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let workflow_id = "wf-runtime-resume-dispatch";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+
+    let pending_error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session_id.clone(),
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime run should pause before readiness facts exist");
+    assert_eq!(pending_error.code(), WorkflowErrorCode::RuntimeNotReady);
+    let workflow_run_id = {
+        let store = service.session_store_guard().expect("session store");
+        let active_run_ids = store.active_workflow_run_ids();
+        assert_eq!(active_run_ids.len(), 1);
+        active_run_ids[0].clone()
+    };
+    dependency_readiness_work_queue
+        .pop_next()
+        .expect("initial dependency-readiness work item");
+
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let response = service
+        .resume_workflow_execution_session_runtime_dependency_readiness(
+            &host,
+            WorkflowExecutionSessionResumeRequest {
+                session_id: session_id.clone(),
+                workflow_run_id: workflow_run_id.clone(),
+            },
+        )
+        .await
+        .expect("resume should dispatch once dependency readiness facts are fresh");
+
+    assert_eq!(response.workflow_run_id, workflow_run_id);
+    assert_eq!(response.outputs.len(), 1);
+    assert_eq!(response.outputs[0].node_id, "infer");
+    assert_eq!(response.outputs[0].port_id, "image");
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id: session_id.clone(),
+        })
+        .await
+        .expect("list queue after resumed dispatch");
+    assert!(queue.items.is_empty());
+    assert_eq!(runtime_host_port.requests().len(), 1);
+    assert_eq!(
+        source_refresher.model_refs(),
+        vec!["image/example/tiny-diffusion"]
+    );
+    assert_eq!(
+        reservation_lifecycle_port
+            .events()
+            .iter()
+            .map(|event| &event.outcome)
+            .collect::<Vec<_>>(),
+        vec![
+            &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::RuntimeHostCompleted,
+        ]
+    );
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 40,
+        )
+        .expect("diagnostic events")
+    };
+    assert!(diagnostic_events.iter().any(|event| {
+        event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
+            && event.workflow_run_id.as_ref().map(|id| id.as_str())
+                == Some(workflow_run_id.as_str())
+            && event.payload_json.contains("\"status\":\"completed\"")
+    }));
+}
+
+#[tokio::test]
+async fn workflow_execution_session_resume_rejects_inactive_and_non_runtime_runs() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::with_max_sessions(2);
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-resume-reject".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let inactive_error = service
+        .resume_workflow_execution_session_runtime_dependency_readiness(
+            &host,
+            WorkflowExecutionSessionResumeRequest {
+                session_id: created.session_id.clone(),
+                workflow_run_id: "run_00000000-0000-4000-8000-000000000001".to_string(),
+            },
+        )
+        .await
+        .expect_err("resume should reject missing active run");
+    assert_eq!(inactive_error.code(), WorkflowErrorCode::InvalidRequest);
+    assert!(inactive_error.message().contains("is not active"));
+
+    let request = WorkflowExecutionSessionRunRequest {
+        session_id: created.session_id.clone(),
+        workflow_semantic_version: "1.2.3".to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "text-input-1".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("not runtime"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "text-output-1".to_string(),
+            port_id: "text".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let workflow_run_id = {
+        let mut store = service.session_store_guard().expect("session store");
+        let workflow_run_id = store
+            .enqueue_run(&created.session_id, &request)
+            .expect("enqueue non-runtime run");
+        store
+            .begin_queued_run(&created.session_id, &workflow_run_id)
+            .expect("begin non-runtime run")
+            .expect("dequeued non-runtime run");
+        workflow_run_id
+    };
+    let workflow_id =
+        pantograph_scheduler::SchedulerWorkflowId::parse("wf-resume-reject").expect("workflow id");
+    let scheduler_workflow_run_id =
+        pantograph_scheduler::SchedulerWorkflowRunId::parse(&workflow_run_id)
+            .expect("scheduler workflow run id");
+    let scheduler_task_graph = WorkflowSchedulerTaskGraph {
+        schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        workflow_id: workflow_id.clone(),
+        workflow_run_id: scheduler_workflow_run_id.clone(),
+        tasks: vec![WorkflowSchedulerTask {
+            workflow_id,
+            workflow_run_id: scheduler_workflow_run_id,
+            node_id: pantograph_scheduler::SchedulerNodeId::parse("text-input-1").expect("node id"),
+            task_id: pantograph_scheduler::SchedulerTaskId::parse("text-input-1").expect("task id"),
+            node_type: "text-input".to_string(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: None,
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            diagnostics: Vec::new(),
+        }],
+    };
+    let initial_scheduler_task_records = service
+        .scheduler_task_orchestrator
+        .initial_task_state_records(&scheduler_task_graph)
+        .expect("initial non-runtime task state");
+    {
+        let mut store = service.session_store_guard().expect("session store");
+        store
+            .set_active_run_scheduler_task_state(
+                &created.session_id,
+                &workflow_run_id,
+                scheduler_task_graph,
+                initial_scheduler_task_records,
+            )
+            .expect("store active non-runtime task state");
+    }
+
+    let non_runtime_error = service
+        .resume_workflow_execution_session_runtime_dependency_readiness(
+            &host,
+            WorkflowExecutionSessionResumeRequest {
+                session_id: created.session_id,
+                workflow_run_id,
+            },
+        )
+        .await
+        .expect_err("resume should reject non-runtime active run");
+    assert_eq!(non_runtime_error.code(), WorkflowErrorCode::InvalidRequest);
+    assert!(non_runtime_error
+        .message()
+        .contains("is not a runtime inference run"));
 }
 
 #[tokio::test]
