@@ -201,6 +201,15 @@ export function formatSchedulerStatusLabel(status: RunListProjectionRecord['stat
   }
 }
 
+export function schedulerRunSupportsDependencyReadinessResume(
+  run: RunListProjectionRecord | null | undefined,
+): boolean {
+  return Boolean(
+    run?.workflow_execution_session_id
+      && run.workflow_execution_session_resume_state === 'dependency_readiness_pending',
+  );
+}
+
 export function schedulerStatusClass(status: RunListProjectionRecord['status']): string {
   switch (status) {
     case 'completed':

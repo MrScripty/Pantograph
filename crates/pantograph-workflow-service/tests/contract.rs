@@ -9,7 +9,7 @@ use pantograph_diagnostics_ledger::{
     NodeExecutionProjectionStatus, NodeStatusProjectionRecord, ProjectionStateRecord,
     ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListFacetKind,
     RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus, SchedulerModelCacheState,
-    SchedulerTimelineProjectionRecord,
+    SchedulerTimelineProjectionRecord, WorkflowExecutionSessionResumeState,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -898,6 +898,9 @@ fn workflow_run_list_query_contract_snapshot() {
             client_session_id: Some("session-1".to_string().try_into().expect("session id")),
             bucket_id: Some("bucket-1".to_string().try_into().expect("bucket id")),
             workflow_execution_session_id: Some("exec-session-1".to_string()),
+            workflow_execution_session_resume_state: Some(
+                WorkflowExecutionSessionResumeState::DependencyReadinessPending,
+            ),
             scheduler_queue_position: Some(1),
             scheduler_priority: Some(5),
             estimate_confidence: Some("low".to_string()),
@@ -1010,6 +1013,7 @@ fn workflow_run_list_query_contract_snapshot() {
             "client_session_id": "session-1",
             "bucket_id": "bucket-1",
             "workflow_execution_session_id": "exec-session-1",
+            "workflow_execution_session_resume_state": "dependency_readiness_pending",
             "scheduler_queue_position": 1,
             "scheduler_priority": 5,
             "estimate_confidence": "low",
@@ -1095,6 +1099,9 @@ fn workflow_run_detail_query_contract_snapshot() {
             bucket_id: Some("bucket-1".to_string().try_into().expect("bucket id")),
             workflow_run_snapshot_id: Some("snapshot-1".to_string()),
             workflow_execution_session_id: Some("exec-session-1".to_string()),
+            workflow_execution_session_resume_state: Some(
+                WorkflowExecutionSessionResumeState::DependencyReadinessPending,
+            ),
             workflow_presentation_revision_id: Some("presentation-1".to_string()),
             latest_estimate_json: Some(r#"{"confidence":"low"}"#.to_string()),
             latest_queue_placement_json: Some(r#"{"queue_position":1}"#.to_string()),
@@ -1213,6 +1220,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             "bucket_id": "bucket-1",
             "workflow_run_snapshot_id": "snapshot-1",
             "workflow_execution_session_id": "exec-session-1",
+            "workflow_execution_session_resume_state": "dependency_readiness_pending",
             "workflow_presentation_revision_id": "presentation-1",
             "latest_estimate_json": "{\"confidence\":\"low\"}",
             "latest_queue_placement_json": "{\"queue_position\":1}",

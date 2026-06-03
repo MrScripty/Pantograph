@@ -22162,6 +22162,53 @@ Worker rules:
       and command-service tests proving the frontend displays/forwards only the
       typed fact and active-run identity, run the relevant Rust checks/tests,
       run the targeted Node tests, and run frontend typecheck.
+  - 2026-06-03 completed manual Scheduler proof slice:
+    - Backend read-model result: diagnostics run-list/run-detail projection
+      DTOs now include optional
+      `workflow_execution_session_resume_state:
+      dependency_readiness_pending` read-model state. The durable SQLite
+      projection initializes the field as absent; workflow-service overlays
+      the live typed value from active-run scheduler task state when a matching
+      runtime task is `PausedDeferred` or `WaitingDependencyReadiness`. This
+      keeps eligibility backend-owned and avoids ledger string, scheduler
+      reason, status, error text, Tauri, or frontend inference.
+    - Frontend result: TypeScript diagnostics contracts mirror the typed field,
+      `schedulerRunSupportsDependencyReadinessResume` gates on only that field
+      plus `workflow_execution_session_id`, and the Scheduler page renders a
+      manual Resume action that forwards only `session_id` plus
+      `workflow_run_id` to
+      `resumeWorkflowExecutionSessionRuntimeDependencyReadiness` before
+      refreshing backend projections. No optimistic resume state is applied
+      locally.
+    - Scope clarification: this slice touched
+      `pantograph-diagnostics-ledger` because that crate owns the shared
+      run-list/run-detail projection record contracts. Resume eligibility
+      policy still lives in workflow-service active-run state, not in ledger
+      projection SQL or frontend logic.
+    - No-fallback/no-legacy confirmation: no graph path, selector summary,
+      legacy model reference, reduced execution plan, Tauri policy, frontend
+      status heuristic, synchronous probe, caller-supplied proof, or
+      replacement workflow-run path was added.
+    - Verification passed:
+      `cargo fmt -p pantograph-diagnostics-ledger`;
+      `cargo fmt -p pantograph-workflow-service`;
+      `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/services/workflow/WorkflowService.commands.test.ts`;
+      `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
+      `cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run`;
+      `cargo test -p pantograph-workflow-service --test contract workflow_run_list_query_contract_snapshot -- workflow_run_detail_query_contract_snapshot`;
+      `cargo check -p pantograph-diagnostics-ledger`;
+      `cargo check -p pantograph-workflow-service`;
+      `npm run typecheck`.
+    - Verification deviation recorded: an initial contract verification command
+      passed two test-name filters directly to `cargo test`, which Cargo
+      rejected as invalid syntax. The contract test binary was rerun with the
+      correct harness filter form and both snapshots passed.
+    - Remaining follow-up: implement the event-driven backend readiness
+      lifecycle. That slice must be composition-root owned and must track
+      tasks, cancellation/shutdown, freshness, timeout, retry, reservation
+      release, overlap prevention, and observability while reusing the same
+      backend resume/readiness state instead of adding a frontend polling or
+      heuristic fallback.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

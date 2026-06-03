@@ -59,6 +59,7 @@ pub use graph::{
     WorkflowGraphValidationSubmitGate, WorkflowGraphValidationSubmitGateReason,
     WorkflowPresentationEdge, WorkflowPresentationMetadata, WorkflowPresentationNode,
 };
+pub use pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState;
 pub use pantograph_runtime_attribution::{ClientSessionId, WorkflowId, WorkflowRunId};
 pub use scheduler::{
     select_runtime_unload_candidate_by_affinity, WorkflowSchedulerRuntimeCapacityPressure,

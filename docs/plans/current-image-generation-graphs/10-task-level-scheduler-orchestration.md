@@ -2074,6 +2074,16 @@ waiting tasks when readiness facts arrive and owns freshness, timeout,
 cancellation, retry, reservation release, shutdown, overlap prevention, and
 observability.
 
+2026-06-03 manual Scheduler proof update: the explicit backend resume path now
+has an operator-visible read-model and UI command surface. The typed
+`workflow_execution_session_resume_state` field is appended to diagnostics
+run-list/run-detail records but is populated by workflow-service from live
+active-run scheduler task state rather than derived from durable ledger strings
+or frontend status heuristics. The Scheduler page action only displays that
+typed backend fact and forwards `session_id` plus `workflow_run_id` to the
+existing backend command. The next production lifecycle slice remains the
+composition-root-owned event-driven backend readiness worker/listener.
+
 2026-05-30 runtime dispatch-selection boundary slice completed. Workflow-service
 now has a focused runtime dispatch candidate provider seam and a path-free
 request assembly helper that combines an admitted runtime task, the readiness

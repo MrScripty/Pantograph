@@ -180,19 +180,19 @@ without requiring a replacement client-created workflow run. The selected
 host-boundary forwarder is also implemented through embedded-runtime, the
 Tauri command facade, and the TypeScript workflow command service; it forwards
 only `session_id` and `workflow_run_id` and does not own retry, readiness,
-resource, package, or scheduler policy. The manual-use re-plan is resolved:
-next add a typed backend-owned run projection/read-model fact that marks an
-active run as dependency-readiness-pending and resume-eligible, then add a
-Scheduler UI action that only displays that backend fact and forwards
-`session_id` plus `workflow_run_id` to the existing backend command. The UI
-must not infer resumability from generic `running` status, scheduler reason
-strings, error text, graph paths, selector summaries, or Tauri state. After
-that manual proof path validates the complete inference resume path, implement
-the deferred event-driven backend readiness lifecycle: a composition-root-owned
-worker/listener with tracked tasks, cancellation/shutdown, freshness, timeout,
-retry, reservation release, and overlap-prevention behavior that resumes
-waiting tasks when readiness facts arrive. Missing, stale, or insufficient
-facts remain typed fail-closed
+resource, package, or scheduler policy. The manual-use re-plan is now
+implemented: run-list and run-detail projections expose an optional typed
+backend read-model field for dependency-readiness resume eligibility, populated
+by workflow-service from live active-run scheduler task state. The Scheduler UI
+only displays that backend fact and forwards `session_id` plus
+`workflow_run_id` to the existing backend command; it does not infer
+resumability from generic `running` status, scheduler reason strings, error
+text, graph paths, selector summaries, or Tauri state. The next implementation
+step is the deferred event-driven backend readiness lifecycle: a
+composition-root-owned worker/listener with tracked tasks,
+cancellation/shutdown, freshness, timeout, retry, reservation release, and
+overlap-prevention behavior that resumes waiting tasks when readiness facts
+arrive. Missing, stale, or insufficient facts remain typed fail-closed
 diagnostics, not graph-path, Tauri, frontend, selector-summary, synchronous
 probe, client rerun, or legacy preflight fallback.
 

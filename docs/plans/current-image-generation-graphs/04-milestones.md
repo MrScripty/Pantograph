@@ -172,6 +172,14 @@ render backend state only. The later event-driven scheduler worker/listener
 lifecycle belongs after the first complete inference path is proven and must
 be composition-root owned with tracked tasks, cancellation/shutdown, freshness,
 timeout, retry, reservation-release, and overlap-prevention rules.
+
+2026-06-03 manual Scheduler proof update: workflow-service now annotates
+run-list/run-detail read models with an optional typed dependency-readiness
+resume state derived from live active-run scheduler task state, and the
+Scheduler UI manual action only renders that typed fact and forwards
+`session_id` plus `workflow_run_id`. The remaining lifecycle work is the
+event-driven composition-root-owned backend worker/listener described above.
+
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing
 candidate facts, device-resolution decision from Milestone 0 and Milestone 5,

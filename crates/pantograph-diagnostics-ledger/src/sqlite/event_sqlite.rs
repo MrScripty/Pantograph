@@ -3729,6 +3729,7 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
             .transpose()
             .map_err(sqlite_conversion_error)?,
         workflow_execution_session_id: row.get(22)?,
+        workflow_execution_session_resume_state: None,
         scheduler_queue_position: row.get::<_, Option<i64>>(23)?.map(i64_to_u32_saturating),
         scheduler_priority: row.get::<_, Option<i64>>(24)?.map(i64_to_i32_saturating),
         estimate_confidence: row.get(25)?,
@@ -3819,6 +3820,7 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
             .map_err(sqlite_conversion_error)?,
         workflow_run_snapshot_id: row.get(22)?,
         workflow_execution_session_id: row.get(23)?,
+        workflow_execution_session_resume_state: None,
         workflow_presentation_revision_id: row.get(24)?,
         latest_estimate_json: row.get(25)?,
         latest_queue_placement_json: row.get(26)?,

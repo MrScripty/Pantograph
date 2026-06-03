@@ -1,13 +1,15 @@
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTaskGraph, WorkflowServiceError,
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph, WorkflowServiceError,
 };
 #[cfg(test)]
 use crate::WorkflowRunId;
+use pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState;
 use pantograph_scheduler::{
-    apply_scheduler_task_state_transition, SchedulerTaskStateRecord, SchedulerTaskStateTransition,
-    SchedulerTaskStateTransitionApplyResult,
+    apply_scheduler_task_state_transition, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
 };
 
 use super::super::policy::{
@@ -329,6 +331,38 @@ impl WorkflowExecutionSessionStore {
                 .cloned()
                 .collect(),
         )))
+    }
+
+    pub(crate) fn active_run_dependency_readiness_resume_state(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Option<WorkflowExecutionSessionResumeState> {
+        let state = self.active.get(session_id)?;
+        let active_run = state.active_run.as_ref()?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return None;
+        }
+        let task_graph = active_run.scheduler_task_graph.as_ref()?;
+        let runtime_task_ids = task_graph
+            .tasks
+            .iter()
+            .filter(|task| {
+                task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+            })
+            .map(|task| task.task_id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let has_pending_runtime_readiness_task =
+            active_run.scheduler_task_records.values().any(|record| {
+                runtime_task_ids.contains(record.task_id.as_str())
+                    && matches!(
+                        record.state.kind(),
+                        SchedulerTaskStateKind::PausedDeferred
+                            | SchedulerTaskStateKind::WaitingDependencyReadiness
+                    )
+            });
+        has_pending_runtime_readiness_task
+            .then_some(WorkflowExecutionSessionResumeState::DependencyReadinessPending)
     }
 
     #[allow(dead_code)]

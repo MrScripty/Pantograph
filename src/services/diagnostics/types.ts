@@ -105,6 +105,8 @@ export type RunListProjectionStatus =
   | 'failed'
   | 'cancelled';
 
+export type WorkflowExecutionSessionResumeState = 'dependency_readiness_pending';
+
 export interface RunListProjectionRecord {
   workflow_run_id: string;
   workflow_id: string;
@@ -130,6 +132,7 @@ export interface RunListProjectionRecord {
   client_session_id?: string | null;
   bucket_id?: string | null;
   workflow_execution_session_id?: string | null;
+  workflow_execution_session_resume_state?: WorkflowExecutionSessionResumeState | null;
   scheduler_queue_position?: number | null;
   scheduler_priority?: number | null;
   estimate_confidence?: string | null;

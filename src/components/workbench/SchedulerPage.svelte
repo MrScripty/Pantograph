@@ -60,6 +60,7 @@
     schedulerSelectedRuntimeVariantFilterOptions,
     formatSchedulerScopeLabel,
     schedulerRunSupportsAdminQueueControls,
+    schedulerRunSupportsDependencyReadinessResume,
     schedulerRunSupportsQueueControls,
     schedulerTimelinePayloadLabel,
     schedulerTimelineKindFilterOptions,
@@ -128,6 +129,9 @@
   );
   let selectedRunHasQueueControls = $derived(schedulerRunSupportsQueueControls(selectedRunRecord));
   let selectedRunHasAdminQueueControls = $derived(schedulerRunSupportsAdminQueueControls(selectedRunRecord));
+  let selectedRunHasDependencyReadinessResume = $derived(
+    schedulerRunSupportsDependencyReadinessResume(selectedRunRecord),
+  );
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -378,6 +382,31 @@
         priority,
       });
       actionMessage = 'Priority accepted by scheduler';
+      await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
+  }
+
+  async function resumeSelectedRunDependencyReadiness(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsDependencyReadinessResume(run)) {
+      return;
+    }
+    actionBusy = 'dependency-readiness-resume';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.resumeWorkflowExecutionSessionRuntimeDependencyReadiness({
+        session_id: run.workflow_execution_session_id as string,
+        workflow_run_id: run.workflow_run_id,
+      });
+      actionMessage = 'Dependency readiness resume accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
       await refreshRetentionSummary(run.workflow_run_id);
@@ -1127,6 +1156,16 @@
           >
             <SlidersHorizontal size={12} aria-hidden="true" />
             Set
+          </button>
+          <button
+            type="button"
+            title="Resume selected dependency-readiness-pending run"
+            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            onclick={() => void resumeSelectedRunDependencyReadiness()}
+            disabled={!selectedRunHasDependencyReadinessResume || actionBusy !== null}
+          >
+            <RefreshCw size={12} aria-hidden="true" />
+            Resume
           </button>
         </div>
         <div class="mt-3 border-t border-neutral-900 pt-3">

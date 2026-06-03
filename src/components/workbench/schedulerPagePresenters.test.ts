@@ -37,6 +37,7 @@ import {
   schedulerClientFilterOptions,
   schedulerClientSessionFilterOptions,
   schedulerRunSupportsAdminQueueControls,
+  schedulerRunSupportsDependencyReadinessResume,
   schedulerPolicyFilterOptions,
   schedulerRetentionFilterOptions,
   schedulerRunSupportsQueueControls,
@@ -189,6 +190,38 @@ test('scheduler queue and estimate presenters keep unavailable facts explicit', 
   assert.equal(formatSchedulerEstimateDuration(1_500), '1.5 s');
   assert.equal(formatSchedulerReasonLabel('warm_session_reused'), 'warm_session_reused');
   assert.equal(formatSchedulerReasonLabel(''), 'Unavailable');
+});
+
+test('scheduler dependency-readiness resume presenter uses backend typed state', () => {
+  assert.equal(
+    schedulerRunSupportsDependencyReadinessResume(
+      run({
+        status: 'running',
+        scheduler_reason: 'runtime_dependency_readiness_pending',
+        workflow_execution_session_resume_state: 'dependency_readiness_pending',
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    schedulerRunSupportsDependencyReadinessResume(
+      run({
+        workflow_execution_session_id: null,
+        workflow_execution_session_resume_state: 'dependency_readiness_pending',
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    schedulerRunSupportsDependencyReadinessResume(
+      run({
+        status: 'running',
+        scheduler_reason: 'runtime_dependency_readiness_pending',
+        workflow_execution_session_resume_state: null,
+      }),
+    ),
+    false,
+  );
 });
 
 test('buildSchedulerEstimateRows exposes selected-run estimate projection facts', () => {

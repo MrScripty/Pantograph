@@ -399,6 +399,47 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
         }),
         "readiness-pending runtime run must not record a terminal event"
     );
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunList,
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+            ],
+            workflow_run_id: Some(workflow_run_id.clone()),
+            workflow_id: Some(workflow_id.to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 20,
+        })
+        .expect("projection refresh");
+    let run_list = service
+        .workflow_run_list_query(WorkflowRunListQueryRequest {
+            workflow_id: Some(workflow_id.to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(20),
+            ..WorkflowRunListQueryRequest::default()
+        })
+        .expect("run list query");
+    let run = run_list
+        .runs
+        .iter()
+        .find(|run| run.workflow_run_id.as_str() == workflow_run_id)
+        .expect("readiness-pending run list record");
+    assert_eq!(
+        run.workflow_execution_session_resume_state,
+        Some(pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState::DependencyReadinessPending)
+    );
+    let detail = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: workflow_run_id.clone(),
+            projection_batch_size: Some(20),
+        })
+        .expect("run detail query")
+        .run
+        .expect("run detail");
+    assert_eq!(
+        detail.workflow_execution_session_resume_state,
+        Some(pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState::DependencyReadinessPending)
+    );
 }
 
 #[tokio::test]
@@ -787,6 +828,41 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
                 == Some(workflow_run_id.as_str())
             && event.payload_json.contains("\"status\":\"completed\"")
     }));
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunList,
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+            ],
+            workflow_run_id: Some(workflow_run_id.clone()),
+            workflow_id: Some(workflow_id.to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 20,
+        })
+        .expect("projection refresh after resumed dispatch");
+    let run_list = service
+        .workflow_run_list_query(WorkflowRunListQueryRequest {
+            workflow_id: Some(workflow_id.to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(20),
+            ..WorkflowRunListQueryRequest::default()
+        })
+        .expect("run list query after resumed dispatch");
+    let run = run_list
+        .runs
+        .iter()
+        .find(|run| run.workflow_run_id.as_str() == workflow_run_id)
+        .expect("resumed run list record");
+    assert_eq!(run.workflow_execution_session_resume_state, None);
+    let detail = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: workflow_run_id.clone(),
+            projection_batch_size: Some(20),
+        })
+        .expect("run detail query after resumed dispatch")
+        .run
+        .expect("run detail after resumed dispatch");
+    assert_eq!(detail.workflow_execution_session_resume_state, None);
 }
 
 #[tokio::test]

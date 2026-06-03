@@ -2715,6 +2715,8 @@ pub struct RunListProjectionRecord {
     pub client_session_id: Option<ClientSessionId>,
     pub bucket_id: Option<BucketId>,
     pub workflow_execution_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_execution_session_resume_state: Option<WorkflowExecutionSessionResumeState>,
     pub scheduler_queue_position: Option<u32>,
     pub scheduler_priority: Option<i32>,
     pub estimate_confidence: Option<String>,
@@ -2737,6 +2739,12 @@ pub struct RunListProjectionRecord {
     pub warning_count: u64,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowExecutionSessionResumeState {
+    DependencyReadinessPending,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2793,6 +2801,8 @@ pub struct RunDetailProjectionRecord {
     pub bucket_id: Option<BucketId>,
     pub workflow_run_snapshot_id: Option<String>,
     pub workflow_execution_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_execution_session_resume_state: Option<WorkflowExecutionSessionResumeState>,
     pub workflow_presentation_revision_id: Option<String>,
     pub latest_estimate_json: Option<String>,
     pub latest_queue_placement_json: Option<String>,

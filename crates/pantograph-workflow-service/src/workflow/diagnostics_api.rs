@@ -16,10 +16,11 @@ use pantograph_diagnostics_ledger::{
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus, RunTerminalPayload,
     RunTerminalStatus, RuntimeSelectionHistoryQuery, RuntimeSelectionHistorySummary,
     SchedulerModelCacheState, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    UpdateRetentionPolicyCommand, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    UpdateRetentionPolicyCommand, WorkflowExecutionSessionResumeState, IO_ARTIFACT_PROJECTION_NAME,
+    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION,
+    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
+    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -738,7 +739,7 @@ impl WorkflowService {
         let ledger = self.diagnostics_ledger_guard()?;
         let projection_state =
             read_projection_state_or_empty(&*ledger, WorkflowDiagnosticsProjectionKind::RunList)?;
-        let runs = match ledger.query_run_list_projection(query.clone()) {
+        let mut runs = match ledger.query_run_list_projection(query.clone()) {
             Ok(runs) => runs,
             Err(error) => {
                 drop(ledger);
@@ -758,6 +759,8 @@ impl WorkflowService {
                 ));
             }
         };
+        drop(ledger);
+        self.annotate_run_list_resume_state(&mut runs)?;
 
         Ok(WorkflowRunListQueryResponse {
             runs,
@@ -795,7 +798,7 @@ impl WorkflowService {
         let ledger = self.diagnostics_ledger_guard()?;
         let projection_state =
             read_projection_state_or_empty(&*ledger, WorkflowDiagnosticsProjectionKind::RunDetail)?;
-        let run = match ledger.query_run_detail_projection(query.clone()) {
+        let mut run = match ledger.query_run_detail_projection(query.clone()) {
             Ok(run) => run,
             Err(error) => {
                 drop(ledger);
@@ -834,6 +837,14 @@ impl WorkflowService {
                 ));
             }
         };
+        drop(ledger);
+        if let Some(run) = run.as_mut() {
+            run.workflow_execution_session_resume_state = self
+                .run_resume_state_for_projection_record(
+                    run.workflow_execution_session_id.as_deref(),
+                    run.workflow_run_id.as_str(),
+                )?;
+        }
 
         Ok(WorkflowRunDetailQueryResponse {
             run,
@@ -841,6 +852,32 @@ impl WorkflowService {
             projection_state,
             node_projection_state,
         })
+    }
+
+    fn annotate_run_list_resume_state(
+        &self,
+        runs: &mut [RunListProjectionRecord],
+    ) -> Result<(), WorkflowServiceError> {
+        for run in runs {
+            run.workflow_execution_session_resume_state = self
+                .run_resume_state_for_projection_record(
+                    run.workflow_execution_session_id.as_deref(),
+                    run.workflow_run_id.as_str(),
+                )?;
+        }
+        Ok(())
+    }
+
+    fn run_resume_state_for_projection_record(
+        &self,
+        session_id: Option<&str>,
+        workflow_run_id: &str,
+    ) -> Result<Option<WorkflowExecutionSessionResumeState>, WorkflowServiceError> {
+        let Some(session_id) = session_id else {
+            return Ok(None);
+        };
+        let store = self.session_store_guard()?;
+        Ok(store.active_run_dependency_readiness_resume_state(session_id, workflow_run_id))
     }
 
     pub fn workflow_run_inspection_query(
