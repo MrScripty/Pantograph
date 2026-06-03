@@ -20,7 +20,7 @@ public exports out of the service crate.
 | `diagnostic_errors.rs` | Typed workflow error phase registry, scoped diagnostics recorder API, and durable error-event append helpers. |
 | `executable_validation_snapshot.rs` | Durable executable validation snapshot contract, proof freshness validation, attribution-store compaction, and scheduler inference projection helpers. |
 | `execution_plan.rs` | Run-scoped workflow execution-plan DTOs produced by scheduler admission and consumed through embedded-runtime projection. |
-| `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
+| `graph_api.rs` | Graph edit-session, mutation, connection, persistence, backend validation task trigger, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |

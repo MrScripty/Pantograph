@@ -2495,6 +2495,60 @@ async fn workflow_service_graph_session_fact_providers_preserve_inference_and_de
 }
 
 #[tokio::test]
+async fn workflow_service_starts_backend_validation_task_from_typed_graph_revision() {
+    let service = WorkflowService::new().with_graph_session_fact_providers(
+        Arc::new(StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        }),
+        Arc::new(InvalidDependencyEnvironmentProvider),
+    );
+    let session = service
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph: dependency_inference_graph(),
+            workflow_id: None,
+        })
+        .await
+        .expect("create graph edit session");
+    let graph_revision = session
+        .graph_revision
+        .parse()
+        .expect("valid session graph revision");
+    let validation_session_id = service
+        .workflow_graph_start_current_validation_task(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: session.session_id.clone(),
+                graph_revision,
+            },
+        )
+        .await
+        .expect("start backend validation task");
+
+    service
+        .workflow_graph_drain_validation_tasks_for_tests()
+        .await;
+
+    let current = service
+        .workflow_graph_current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid session graph revision"),
+        })
+        .await
+        .expect("current validation summary");
+
+    assert_eq!(
+        current.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert_eq!(
+        current.validation_session_id.as_ref(),
+        Some(&validation_session_id)
+    );
+}
+
+#[tokio::test]
 async fn publish_inference_validation_session_defaults_to_unavailable_facts() {
     let store = GraphSessionStore::new();
     let session = store.create_session(inference_graph(), None).await;

@@ -24,6 +24,7 @@ use crate::graph::{
 use crate::WorkflowRunId;
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
+    DraftGraphValidationSessionId,
 };
 use std::sync::Arc;
 
@@ -92,6 +93,22 @@ impl WorkflowService {
         self.graph_session_store
             .refresh_current_validation_summary(request)
             .await
+    }
+
+    pub async fn workflow_graph_start_current_validation_task(
+        &self,
+        request: WorkflowGraphCurrentValidationRefreshRequest,
+    ) -> Result<DraftGraphValidationSessionId, WorkflowServiceError> {
+        self.graph_session_store
+            .start_current_validation_task(request)
+            .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn workflow_graph_drain_validation_tasks_for_tests(&self) {
+        self.graph_session_store
+            .drain_validation_tasks_for_tests()
+            .await;
     }
 
     pub async fn workflow_graph_apply_inference_interface_update_proposal(

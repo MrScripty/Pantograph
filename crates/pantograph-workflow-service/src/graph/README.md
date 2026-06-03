@@ -118,6 +118,12 @@ still current, and returns the same summary/gate DTO used by submit plus
 bounded per-node projection records from that validation pass. The
 projection records are transport data for editor port rendering and review;
 the summary/gate remains the only submit authority.
+Backend-started explicit validation tasks use the same typed graph-session and
+graph-revision request shape, but return only the backend-issued validation
+session id after task ownership is established. The task owner, publisher,
+lifecycle owner, and current-state store remain workflow-service owned; callers
+do not provide resolver facts, freshness decisions, retry policy, graph paths,
+or frontend state.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.

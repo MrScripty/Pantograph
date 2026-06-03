@@ -181,6 +181,11 @@ Out of scope:
   supersession, and panic observation. The next slices remain trigger wiring and
   transport/frontend consumption; those slices must keep freshness, resolver
   facts, and submit authority backend-owned.
+- 2026-06-03 backend explicit trigger implemented: `WorkflowService` can now
+  start a backend-owned validation task from the existing typed graph-session
+  and graph-revision request and return the backend-issued validation session
+  id. Transport commands, frontend overlays, and graph-mutation auto-triggers
+  remain separate slices and must not accept resolver facts or own freshness.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

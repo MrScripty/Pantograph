@@ -23058,6 +23058,38 @@ Worker rules:
     - Remaining follow-up: wire graph-mutation or explicit-validation triggers
       to the task owner in a separate thin slice, then refine bounded transport
       and frontend overlay consumption separately.
+  - 2026-06-03 Milestone 5d backend explicit validation task trigger slice:
+    - Smallest useful vertical slice: expose the task owner through the
+      workflow-service graph facade so backend callers can start validation
+      work with the existing typed graph-session/revision request before Tauri
+      transport, frontend overlays, or graph-mutation auto-triggers are wired.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Implementation: added
+      `WorkflowService::workflow_graph_start_current_validation_task`, which
+      delegates to `GraphSessionStore::start_current_validation_task` and
+      returns the backend-issued validation session id. Added a deterministic
+      service-boundary test that drains backend validation tasks through a
+      test-only hook and verifies the current validation summary is recorded.
+    - No-fallback/no-legacy result: the service facade accepts only typed
+      session/revision validation intent. It does not accept raw resolver facts,
+      Pumas facts, runtime summaries, graph paths, frontend state, transport
+      retry policy, or an alternate validation resolver.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      workflow_service_starts_backend_validation_task_from_typed_graph_revision
+      --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+      search for retired workflow events, model paths, raw JSON, `anyhow`,
+      `Result<T, String>`, and spawned task calls; and `git diff --check`.
+    - Remaining follow-up: wire graph-mutation auto-triggers and bounded
+      transport/frontend consumption in later thin slices without moving
+      freshness or validation policy outside workflow-service.
 
 ### Traceability Links
 

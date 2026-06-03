@@ -2681,6 +2681,32 @@ defining an image-only inference-node interface.
         Remaining follow-up: wire graph-mutation or explicit-validation
         triggers to the task owner in the next thin slice, then refine bounded
         transport/frontend overlay consumption separately.
+      - 2026-06-03 backend explicit validation task trigger slice completed:
+        `WorkflowService` now exposes a backend-only
+        `workflow_graph_start_current_validation_task` facade method that
+        delegates to `GraphSessionStore::start_current_validation_task` and
+        returns the backend-issued validation session id after the task owner
+        accepts the typed graph-session/revision request. This is the explicit
+        backend trigger slice only; Tauri commands, frontend overlays, and graph
+        mutation auto-triggers remain separate follow-ups.
+        Files touched:
+        `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+        `crates/pantograph-workflow-service/src/workflow/README.md`,
+        `crates/pantograph-workflow-service/src/graph/README.md`,
+        `crates/pantograph-workflow-service/src/graph/session_tests.rs`, this
+        milestone, the inference-interface plan, and the execution log.
+        No-fallback/no-legacy confirmation: the facade accepts only the existing
+        typed graph-session/revision validation request and does not accept raw
+        resolver facts, Pumas facts, runtime summaries, graph paths, transport
+        retry policy, frontend state, or alternate validation routes.
+        Verification passed: `cargo fmt -p pantograph-workflow-service --
+        --check`; `cargo test -p pantograph-workflow-service
+        workflow_service_starts_backend_validation_task_from_typed_graph_revision
+        --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+        standards search; and `git diff --check`.
+        Remaining follow-up: wire graph-mutation auto-triggers and transport/
+        frontend consumption in later slices without moving freshness or
+        validation policy outside workflow-service.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit
