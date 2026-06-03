@@ -3318,16 +3318,56 @@ defining an image-only inference-node interface.
         for the deleted canonicalizer APIs; targeted touched-file search
         classifying remaining retired settings hits as negative regression
         fixture text only; `git diff --check`.
-- [ ] Delete or rewrite retired `puma-lib` path/readiness/inference-settings
+- [x] Delete or rewrite retired `puma-lib` path/readiness/inference-settings
       authoring surfaces after the model-ref-only slice. This includes
       `modelPath`/`model_path`/`entry_path` graph data, option metadata,
       node-engine `puma-lib` output semantics, frontend mocks, templates, and
       tests that still treat paths or `inference_settings` as successful
       inference-interface inputs.
-- [ ] Decide the first implementation slice for existing `PortOptionsProvider`,
+      - 2026-06-03 search-gate reconciliation completed: targeted source
+        review found no successful `puma-lib` graph-authoring output for
+        `modelPath`, `model_path`, `entry_path`, or `inference_settings`.
+        `workflow-nodes` descriptor tests assert those ports are absent,
+        Tauri hydration tests assert selected node data drops retired metadata,
+        frontend mock/template/component tests are negative guards, and
+        remaining `entry_path` strings in `puma-lib` are Pumas selector fixture
+        inputs or non-authoring `display_*` evidence metadata.
+      - No-fallback/no-legacy gate: `display_entry_path`,
+        `display_indexed_path`, `entry_path_state`, `artifact_state`, and
+        `selector_row_executable` remain selector-row evidence for user
+        selection/diagnostics only. They are not graph data, dependency action
+        inputs, inference descriptor inputs, scheduler handoff fields, or
+        runtime load-target authority, and they must not be forwarded into
+        `llm-inference` or dependency-environment requests.
+      - Verification passed: targeted source search over `puma-lib` Rust,
+        Tauri `puma_lib_commands`, frontend puma node state, app/package mocks,
+        and starter template tests for `modelPath`, `model_path`,
+        `entry_path`, and `inference_settings`; classification recorded here
+        instead of deleting display-only evidence.
+- [x] Decide the first implementation slice for existing `PortOptionsProvider`,
       selection-input, and option-cache reuse versus a dedicated descriptor
       option renderer. The decision must preserve typed descriptor ownership
       and avoid duplicating backend semantics.
+      - 2026-06-03 decision: keep `PortOptionsProvider` and
+        `pumaModelOptionsCache` as the Pumas model-selection surface for
+        `puma-lib.pumas_model_ref` only. Do not use that provider/cache as the
+        inference descriptor option renderer, and do not add provider-backed
+        denoising/runtime/device option fallbacks.
+      - First implementation slice when descriptor option rendering is needed:
+        render typed `InferencePortOptions` from the current backend-authored
+        `inference_interface_snapshot`/validation summary at the graph-node
+        presentation boundary. If the descriptor snapshot is missing, stale, or
+        unavailable, render typed diagnostics/disabled controls from validation
+        state rather than querying Pumas or synthesizing option rows in the
+        frontend.
+      - Standards alignment: this keeps Pumas package selection, descriptor
+        validation, frontend presentation, and option caching as separate
+        concerns. It avoids complecting model-library selector rows with
+        inference-interface semantics and preserves one backend owner for
+        model-specific option meaning.
+      - Verification passed: source review of `PortOptionsProvider`,
+        `pumaModelOptionsCache`, `selectionInputProviderOptions`, descriptor
+        snapshot overlays, and inference-interface contract option DTOs.
 - [x] Add a contract-crate decomposition gate before adding more shared DTO
       families. `pantograph-inference-interface-contracts/src/lib.rs` is already
       large enough that validation publication records, node projection DTOs, or

@@ -22795,6 +22795,31 @@ Worker rules:
       --lib`; `cargo check -p pantograph-workflow-service`; targeted
       `connection_intent.rs` search for `expand-settings`,
       `inference_settings`, and dynamic expand wording.
+  - 2026-06-03 Milestone 5d puma-lib authoring and option-renderer
+    reconciliation slice:
+    - Smallest useful vertical slice: classify the remaining `puma-lib`
+      path/settings search hits and record the option-renderer ownership
+      decision before more UI/source edits.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`
+      and this plan log.
+    - No-fallback/no-legacy result: `puma-lib` remains model-ref-only for graph
+      authoring. Remaining `display_entry_path`, `display_indexed_path`,
+      `entry_path_state`, `artifact_state`, and `selector_row_executable`
+      metadata is classified as selector-row evidence for selection and
+      diagnostics only, not graph data, inference descriptor input, dependency
+      action input, scheduler handoff, or runtime load-target authority.
+    - Option-renderer decision: keep `PortOptionsProvider`/
+      `pumaModelOptionsCache` scoped to `puma-lib.pumas_model_ref` selection
+      only. Descriptor option rendering must consume backend-authored
+      `InferencePortOptions` from the current
+      `inference_interface_snapshot`/validation summary and fail closed with
+      typed diagnostics when that snapshot is missing or stale.
+    - Verification passed: targeted source review/search over `puma-lib` Rust,
+      Tauri `puma_lib_commands`, frontend puma node state, app/package mocks,
+      starter template tests, `PortOptionsProvider`, `pumaModelOptionsCache`,
+      `selectionInputProviderOptions`, descriptor snapshot overlays, and
+      inference-interface option DTOs.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port
