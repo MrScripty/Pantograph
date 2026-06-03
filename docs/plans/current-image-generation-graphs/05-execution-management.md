@@ -22481,6 +22481,33 @@ Worker rules:
       path-era surfaces in app configuration, embedding/RAG commands, stale
       fixtures, and legacy node UIs without treating those retained references
       as runtime dependency-action authority.
+  - 2026-06-03 Milestone 5b checklist reconciliation slice:
+    - Smallest useful vertical slice: reconcile stale Milestone 5b checklist
+      entries with already-verified scheduler/runtime-host implementation
+      evidence, without editing production behavior.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`
+      and this plan log.
+    - Implementation: marked the direct scheduler-selected runtime-host
+      dispatch item complete because workflow-service now dispatches runtime
+      tasks through the runtime-host port from a dispatch-selected
+      `SchedulerRuntimeHandoff`, maps runtime-host responses into scheduler
+      task results, and projects requested workflow outputs without reduced-
+      plan launch. Marked the first complete image-generation inference path
+      item complete because embedded-runtime session coverage proves the
+      production-composed runtime-host image path through Pumas load-target
+      resolution, package facts, inference gateway execution, artifact
+      persistence, task-result mapping, and output projection.
+    - No-fallback/no-legacy result: documentation now matches the already
+      verified source boundary. The remaining open work is deletion/
+      replacement of node-engine/planned-inference/path-era surfaces plus
+      producer lifecycle and durable scheduler hardening, not a fallback path
+      for the completed minimal inference workflow.
+    - Verification passed: source evidence from the prior committed
+      `workflow_execution_session_dispatches_through_production_embedded_image_runtime_host`
+      and
+      `workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`
+      coverage; `git diff --check`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

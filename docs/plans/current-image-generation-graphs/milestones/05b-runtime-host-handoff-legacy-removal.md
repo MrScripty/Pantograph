@@ -218,13 +218,18 @@ upgrade after this path is working.
   task graph/state/result progression so runtime-host dispatch receives actual
   dispatch-selected handoff from task state rather than a reduced workflow
   execution-plan projection.
-- [ ] Wire scheduler dispatch to call runtime-host execution directly from the
+- [x] Wire scheduler dispatch to call runtime-host execution directly from the
   actual dispatch-selected `SchedulerRuntimeHandoff`. The reduced
   `WorkflowExecutionPlan` may remain an inspection/diagnostics projection but
   must not be used to launch inference or build handoff. Runtime requests must
   include the canonical dependency readiness proof and workflow-service-owned
   materialized runtime inputs derived from validated upstream task results.
-- [ ] Add the first complete image-generation inference path behind
+  2026-06-03 status reconciliation: workflow-service scheduler orchestration
+  now dispatches runtime tasks through the runtime-host execution port from a
+  dispatch-selected `SchedulerRuntimeHandoff`, maps runtime-host responses
+  into scheduler task results, and projects requested workflow outputs without
+  reduced-plan launch.
+- [x] Add the first complete image-generation inference path behind
   `EmbeddedRuntimeHostExecutionPort`. Selected 2026-05-31 direction: implement
   an image-generation-first embedded-runtime executor as the smallest useful
   vertical slice. Keep the port responsible only for request validation,
