@@ -22543,7 +22543,8 @@ Worker rules:
       contains path-shaped mock UI and `modelPath` persistence. It is not used
       by the app-local registry, but it is a package API surface and must be
       handled in its own delete-or-rewrite slice rather than folded into this
-      orphaned renderer cleanup.
+      orphaned renderer cleanup. Superseded 2026-06-03 by the exported package
+      Puma-Lib path cleanup slice below.
   - 2026-06-03 node-engine dependency-preflight enforcement deletion slice:
     - Smallest useful vertical slice: remove the now-dead node-engine
       dependency-preflight enforcement helper and lifecycle/compatibility
@@ -22576,6 +22577,30 @@ Worker rules:
       `cargo test --manifest-path crates/node-engine/Cargo.toml --features inference-nodes,pytorch-nodes,audio-nodes dependency_preflight --lib`;
       removed-symbol source search for node-engine preflight enforcement
       helpers; and `git diff --check`.
+  - 2026-06-03 exported package Puma-Lib path cleanup slice:
+    - Smallest useful vertical slice: rewrite the reusable
+      `packages/svelte-graph` Puma-Lib node component so it no longer queries
+      or persists path-shaped model selection state.
+    - Files touched:
+      `packages/svelte-graph/src/components/nodes/PumaLibNode.svelte`,
+      `packages/svelte-graph/src/components/nodes/README.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this plan log.
+    - Implementation: changed the exported package component to query
+      `puma-lib.pumas_model_ref`, filter options to those carrying canonical
+      Pumas identity, look up selections by model id, and persist only
+      `modelName`, `model_id`, and `pumas_model_ref`.
+    - No-fallback/no-legacy result: the package component no longer saves
+      `modelPath`, queries `puma-lib.model_path`, displays a model path hint,
+      or persists backend hints/task metadata as lookup contracts. No runtime
+      execution, scheduler policy, dependency readiness, graph persistence
+      migration, Tauri command, or backend behavior changed.
+    - Verification passed:
+      `npm run typecheck`;
+      `npm run build` (passed with the existing Browserslist data-age notice);
+      targeted source-search proving the exported package Puma-Lib component
+      no longer contains `modelPath`, `model_path`, `model-path-hint`, or
+      `queryPortOptions('puma-lib', 'model_path')`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

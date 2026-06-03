@@ -12,22 +12,20 @@
     data: {
       definition?: NodeDefinition;
       label?: string;
-      modelPath?: string;
+      modelName?: string;
       model_id?: string;
-      model_type?: string;
-      task_type_primary?: string;
-      backend_key?: string;
-      recommended_backend?: string;
-      runtime_engine_hints?: string[];
+      pumas_model_ref?: Record<string, unknown>;
     } & Record<string, unknown>;
     selected?: boolean;
   }
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelPath = $derived(data.modelPath || '');
+  let modelId = $derived(typeof data.model_id === 'string' ? data.model_id : '');
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
+  let loadError = $state<string | null>(null);
+  let selectionError = $state<string | null>(null);
   let searchQuery = $state('');
 
   let filteredModels = $derived(
@@ -36,10 +34,15 @@
           const q = searchQuery.toLowerCase();
           return (
             m.label.toLowerCase().includes(q) ||
+            pumasModelOptionKey(m).toLowerCase().includes(q) ||
             (m.description?.toLowerCase().includes(q) ?? false)
           );
         })
       : availableModels,
+  );
+  let selectedModelOption = $derived(findPumasModelOptionById(availableModels, modelId));
+  let selectedModelValue = $derived(
+    selectedModelOption ? pumasModelOptionKey(selectedModelOption) : modelId,
   );
 
   onMount(async () => {
@@ -50,47 +53,74 @@
     if (!backend.queryPortOptions) return;
     isLoading = true;
     try {
-      const result = await backend.queryPortOptions('puma-lib', 'model_path');
-      availableModels = result.options;
-    } catch (e) {
-      console.error('[PumaLibNode] Failed to load models:', e);
+      const result = await backend.queryPortOptions('puma-lib', 'pumas_model_ref');
+      availableModels = result.options.filter(isSelectablePumasModelOption);
+      loadError = null;
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
+      console.error('[PumaLibNode] Failed to load models:', error);
     } finally {
       isLoading = false;
     }
   }
 
-  function metadataString(metadata: Record<string, unknown> | undefined, key: string) {
-    const value = metadata?.[key];
-    return typeof value === 'string' && value.trim() ? value : undefined;
+  function pumasModelRefFromOption(option: PortOption): Record<string, unknown> | null {
+    const metadataModelRef = option.metadata?.pumas_model_ref ?? option.metadata?.model_ref;
+    if (isObjectRecord(metadataModelRef)) return metadataModelRef;
+    if (isObjectRecord(option.value)) return option.value;
+    return null;
   }
 
-  function metadataStringArray(metadata: Record<string, unknown> | undefined, key: string) {
-    const value = metadata?.[key];
-    if (!Array.isArray(value)) return undefined;
-    const strings = value.filter(
-      (item): item is string => typeof item === 'string' && item.trim().length > 0,
-    );
-    return strings.length > 0 ? strings : undefined;
+  function pumasModelIdFromOption(option: PortOption): string | null {
+    const metadataId = readNonEmptyString(option.metadata?.id);
+    if (metadataId) return metadataId;
+
+    const modelRef = pumasModelRefFromOption(option);
+    return readNonEmptyString(modelRef?.model_id);
+  }
+
+  function isSelectablePumasModelOption(option: PortOption): boolean {
+    return pumasModelIdFromOption(option) !== null && pumasModelRefFromOption(option) !== null;
+  }
+
+  function pumasModelOptionKey(option: PortOption): string {
+    return pumasModelIdFromOption(option) ?? option.label;
+  }
+
+  function findPumasModelOptionById(options: PortOption[], nextModelId: string | null | undefined) {
+    const cleanedModelId = readNonEmptyString(nextModelId);
+    if (!cleanedModelId) return null;
+    return options.find((option) => pumasModelIdFromOption(option) === cleanedModelId) ?? null;
+  }
+
+  function isObjectRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function readNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   function handleModelSelect(e: Event) {
     const target = e.target as HTMLSelectElement;
-    const match = availableModels.find((m) => String(m.value) === target.value);
-    if (match) {
-      const nextModelPath = String(match.value);
-      const metadata = match.metadata;
-      const recommendedBackend =
-        metadataString(metadata, 'recommended_backend') ?? metadataString(metadata, 'backend_key');
-      stores.workflow.updateNodeData(id, {
-        modelPath: nextModelPath,
-        model_id: metadataString(metadata, 'id') ?? metadataString(metadata, 'model_id'),
-        model_type: metadataString(metadata, 'model_type'),
-        task_type_primary: metadataString(metadata, 'task_type_primary'),
-        backend_key: metadataString(metadata, 'backend_key') ?? recommendedBackend,
-        recommended_backend: recommendedBackend,
-        runtime_engine_hints: metadataStringArray(metadata, 'runtime_engine_hints'),
-      });
+    const match = findPumasModelOptionById(availableModels, target.value);
+    if (!match) return;
+
+    const nextModelId = pumasModelIdFromOption(match);
+    const nextModelRef = pumasModelRefFromOption(match);
+    if (!nextModelId || !nextModelRef) {
+      selectionError = 'Selected model is missing canonical Pumas identity';
+      return;
     }
+
+    stores.workflow.updateNodeData(id, {
+      modelName: match.label,
+      model_id: nextModelId,
+      pumas_model_ref: nextModelRef,
+    });
+    selectionError = null;
   }
 </script>
 
@@ -131,22 +161,34 @@
         <select
           class="model-select"
           onchange={handleModelSelect}
-          value={modelPath}
+          value={selectedModelValue}
           disabled={isLoading}
         >
           <option value="">
             {isLoading ? 'Loading...' : 'Select a model'}
           </option>
-          {#each filteredModels as model (String(model.value))}
-            <option value={String(model.value)}>
+          {#each filteredModels as model (pumasModelOptionKey(model))}
+            <option value={pumasModelOptionKey(model)}>
               {model.label}
             </option>
           {/each}
         </select>
 
-        {#if modelPath}
-          <div class="model-path-hint" title={modelPath}>
-            {modelPath.split('/').pop()}
+        {#if loadError}
+          <div class="model-id-hint error" title={loadError}>
+            Failed to load models from pumas library
+          </div>
+        {:else if selectionError}
+          <div class="model-id-hint error" title={selectionError}>
+            Failed to select model
+          </div>
+        {:else if !isLoading && availableModels.length === 0}
+          <div class="model-id-hint">
+            No selectable models found in pumas library
+          </div>
+        {:else if modelId}
+          <div class="model-id-hint" title={modelId}>
+            {modelId}
           </div>
         {/if}
       </div>
@@ -251,11 +293,15 @@
     border-color: #d97706;
   }
 
-  .model-path-hint {
+  .model-id-hint {
     font-size: 0.625rem;
     color: #737373;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .model-id-hint.error {
+    color: #f87171;
   }
 </style>

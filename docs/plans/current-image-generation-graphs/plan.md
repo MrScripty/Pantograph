@@ -68,6 +68,9 @@ risk, lifecycle, and execution-management content.
      remaining node-engine preflight code is limited to retired input
      rejection and path-free projection helpers, with embedded-runtime
      Python-backed preflight tracked separately.
+   - 2026-06-03: exported package Puma-Lib node now uses path-free
+     `pumas_model_ref` option lookup and persists only canonical Pumas
+     identity.
 
 8. [Task-Level Scheduler Orchestration](10-task-level-scheduler-orchestration.md)
    - Option 4 target architecture

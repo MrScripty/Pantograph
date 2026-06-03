@@ -492,9 +492,11 @@ upgrade after this path is working.
   `RerankerNode.svelte`, plus the unused exported package
   `LlamaCppInferenceNode.svelte`, so active/frontend package node surfaces no
   longer keep direct runtime `model_path` connection checks alive for those
-  retired components. The exported package `PumaLibNode.svelte` still contains
-  path-shaped mock UI and remains a separate delete-or-rewrite follow-up
-  because it is a public package component surface, not an app-local orphan.
+  retired components. 2026-06-03 progress: rewrote the exported package
+  `PumaLibNode.svelte` to query `puma-lib.pumas_model_ref`, filter out
+  path-shaped options, and persist only `modelName`, `model_id`, and
+  `pumas_model_ref`, so the reusable package surface no longer keeps
+  `modelPath` persistence or `puma-lib.model_path` option lookup alive.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition
