@@ -13,9 +13,8 @@ metadata, execution overlays, and transient connection-intent state.
 | `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
 | `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
 | `defaultWorkflowGraph.ts` | Builds the starter workflow graph used when no saved graph is available. |
-| `canonicalizeWorkflowGraph.ts` | Canonicalizes loaded graphs by reconciling legacy node types, stale inference-setting overlays, and missing expand-setting passthrough edges before a session starts. |
-| `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
-| `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
+| `canonicalizeWorkflowGraph.ts` | Canonicalizes loaded graphs by reconciling retired node types and stale graph overlays before a session starts. |
+| `definitionOverlay.ts` | Projects backend-authored inference-interface snapshots and supported backend-supplied overlays into display definitions during graph materialization. |
 | `runtimeData.ts` | Projects transient execution/runtime data updates into node arrays without touching persisted configuration fields. |
 | `workflowExecutionEvents.ts` | Reduces backend-owned workflow execution events into read-only execution overlays and downstream runtime-data mirrors for GUI consumers. |
 | `workflowExecutionState.ts` | Owns node execution-state overlays and runtime-overlay cleanup when execution state resets. |
@@ -56,14 +55,12 @@ The same store now owns selected-node persistence: `selectedNodeIds` is updated
 from graph selection events, applied back onto freshly materialized node
 snapshots, and reset when workflows or sessions are cleared so backend graph
 replacements do not silently drop the current selection.
-Inference-setting port shaping now lives in `inferenceSettingsPorts.ts` so the
-same additive port contract is reused when syncing expand-setting passthrough
-nodes and downstream inference consumers. That helper now merges upstream
-schema with promoted inference-node defaults, strips duplicate direct inference
-ports from the node-visible definition, and keeps expand-setting schemas stable
-when multiple inference consumers are attached. `definitionOverlay.ts` ensures
-those dynamic ports survive graph rehydration when backend snapshots already
-include per-node `definition.inputs` and `definition.outputs` overlays.
+Inference interface port shaping is backend-owned. `definitionOverlay.ts`
+renders authored inference-interface snapshots from backend validation
+projections and ignores retired frontend-owned `node.data.definition` overlays
+for generic inference nodes. The stores no longer expose an
+inference-settings synchronization entry point or frontend-owned dynamic port
+builder.
 Workflow execution event reduction now lives in
 `workflowExecutionEvents.ts` instead of `WorkflowToolbar.svelte`, keeping the
 component focused on subscription and run-lifecycle ownership while the store
@@ -222,9 +219,9 @@ stores.setConnectionIntent({
 - Runtime overlays may carry `inference_interface_snapshot` for display while a
   backend validation session is current. Store materialization recomputes the
   displayed definition from that overlay but keeps it out of `workflowGraph`.
-- When an inference node is synchronized from an `inference_settings` source,
-  settings promoted into that shared schema surface must not remain duplicated
-  as direct static inputs in the node-visible definition.
+- Generic inference nodes must not be synchronized from a frontend settings
+  source. Their visible ports come from backend-authored
+  `inference_interface_snapshot` data only.
 - Graph load canonicalization must be idempotent: reloading an already current
   graph must not keep appending edges or reshaping definitions beyond the
   current contract.

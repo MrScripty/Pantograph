@@ -80,9 +80,6 @@ export const updateViewport = workflowStores.updateViewport;
 export const setConnectionIntent = workflowStores.setConnectionIntent;
 export const clearConnectionIntent = workflowStores.clearConnectionIntent;
 
-// --- Inference settings actions ---
-export const syncInferencePorts = workflowStores.syncInferencePorts;
-
 // --- Group actions ---
 export const createGroup = workflowStores.createGroup;
 export const ungroupNodes = workflowStores.ungroupNodes;

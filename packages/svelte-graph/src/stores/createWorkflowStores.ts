@@ -32,19 +32,6 @@ import type { WorkflowGraphMutationResult } from './workflowMutationDispatch.ts'
 import { createWorkflowStoreGraphState } from './workflowStoreGraphState.ts';
 import { edgeToGraphEdge } from '../workflowConnections.ts';
 
-interface InferenceParamSchema {
-  key: string;
-  label: string;
-  param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
-  default: unknown;
-  description?: string;
-  constraints?: {
-    min?: number;
-    max?: number;
-    allowed_values?: unknown[];
-  };
-}
-
 export type {
   WorkflowGraphMutationResult,
   WorkflowGraphMutationResultStatus,
@@ -120,9 +107,6 @@ export interface WorkflowStores {
   setConnectionIntent: (intent: ConnectionIntentState | null) => void;
   clearConnectionIntent: () => void;
   setActiveSessionId: (sessionId: string | null) => void;
-
-  // Compatibility no-op while graph canonicalization is backend-owned.
-  syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
 
   // Actions — groups
   createGroup: (name: string, nodeIds: string[]) => Promise<NodeGroup | null>;
@@ -390,13 +374,6 @@ export function createWorkflowStores(
     connectionIntent.set(null);
   }
 
-  function syncInferencePorts(
-    _sourceNodeId: string,
-    _inferenceSettings: InferenceParamSchema[],
-  ) {
-    // Backend-owned graph canonicalization now applies inference port changes.
-  }
-
   const groupActions = createWorkflowGroupActions({
     backend,
     mutationDispatch,
@@ -424,8 +401,6 @@ export function createWorkflowStores(
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
     setConnectionIntent, clearConnectionIntent, setActiveSessionId,
-    // Compatibility no-op
-    syncInferencePorts,
     // Group actions
     createGroup: groupActions.createGroup,
     ungroupNodes: groupActions.ungroupNodes,

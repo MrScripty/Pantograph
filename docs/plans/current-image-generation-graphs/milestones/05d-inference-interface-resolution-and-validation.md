@@ -3265,6 +3265,24 @@ defining an image-only inference-node interface.
       `expand-settings` frontend-owned dynamic port sync. If any of that UI
       remains, it must consume backend descriptors as presentation plumbing and
       cannot remain an alternate inference-interface source.
+      - 2026-06-03 implementation slice completed: removed the dead
+        `syncInferencePorts` compatibility no-op from
+        `packages/svelte-graph/src/stores/createWorkflowStores.ts`, removed
+        the app-level `src/stores/workflowStore.ts` re-export, deleted the
+        private `InferenceParamSchema` type used only by that no-op, and
+        updated the stores README to describe backend-authored
+        `inference_interface_snapshot` display projection instead of
+        frontend-owned dynamic settings-port synchronization.
+      - No-fallback/no-legacy gate: no replacement sync entry point,
+        compatibility no-op, settings schema type, or frontend-owned dynamic
+        port builder remains in the touched store boundary.
+      - Verification passed: `node --experimental-strip-types --test
+        packages/svelte-graph/src/stores/createWorkflowStores.test.ts
+        packages/svelte-graph/src/stores/createSessionStores.test.ts
+        src/stores/workbenchStore.test.ts`; `npm run typecheck`; targeted
+        store search for `syncInferencePorts`, `InferenceParamSchema`,
+        `inferenceSettingsPorts`, and retired settings-source wording; `git
+        diff --check`.
 - [ ] Delete or rewrite retired `puma-lib` path/readiness/inference-settings
       authoring surfaces after the model-ref-only slice. This includes
       `modelPath`/`model_path`/`entry_path` graph data, option metadata,

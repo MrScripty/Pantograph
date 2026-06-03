@@ -22711,6 +22711,30 @@ Worker rules:
     matching pending runs when readiness facts arrive. That later slice must
     own tracked tasks, cancellation/shutdown, freshness, timeout, retry,
     reservation release, overlap prevention, and observability.
+  - 2026-06-03 Milestone 5d retired store sync cleanup slice:
+    - Smallest useful vertical slice: remove the dead frontend
+      `syncInferencePorts` compatibility surface that remained after backend
+      descriptor projection became the inference-port owner.
+    - Files touched:
+      `packages/svelte-graph/src/stores/createWorkflowStores.ts`,
+      `packages/svelte-graph/src/stores/README.md`,
+      `src/stores/workflowStore.ts`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - Implementation: deleted the no-op `syncInferencePorts` method, its
+      app-level re-export, and the private `InferenceParamSchema` type used
+      only by that no-op. Updated the stores README to describe
+      backend-authored `inference_interface_snapshot` display projection.
+    - No-fallback/no-legacy result: no replacement sync entry point,
+      compatibility no-op, settings schema type, or frontend-owned dynamic port
+      builder remains in the touched store boundary.
+    - Verification passed: `node --experimental-strip-types --test
+      packages/svelte-graph/src/stores/createWorkflowStores.test.ts
+      packages/svelte-graph/src/stores/createSessionStores.test.ts
+      src/stores/workbenchStore.test.ts`; `npm run typecheck`; targeted store
+      search for `syncInferencePorts`, `InferenceParamSchema`,
+      `inferenceSettingsPorts`, and retired settings-source wording; `git diff
+      --check`.
   - 2026-06-03 Milestone 5d app mock inference-settings cleanup slice:
     - Smallest useful vertical slice: remove the remaining app-level
       `llm-inference.inference_settings` mock port and tighten the existing
