@@ -303,6 +303,16 @@ upgrade after this path is working.
   Remaining before the complete minimal inference path is fully proven: add
   session-level coverage that dispatches through the production-composed port
   from scheduler task state and verifies task-result/output projection.
+  2026-06-03 progress: embedded-runtime now has session-level coverage proving
+  the scheduler session runner can dispatch through the production-composed
+  `EmbeddedRuntimeHostExecutionPort`, resolve Pumas load targets and package
+  facts, execute image generation through the inference gateway, persist media
+  through the backend artifact writer, map the runtime-host response into
+  scheduler task results, and return the requested workflow output as a
+  path-free artifact reference. Remaining after the complete minimal inference
+  path proof: remove or replace the remaining node-engine/planned-inference
+  launch paths and continue producer lifecycle/durable scheduler hardening in
+  separate slices.
 - [x] Wire the session/runtime runner to call workflow-service runtime input
   advancement after upstream task results are recorded. Selected re-plan:
   implement option 2 first with option 3 discipline. First extract the existing

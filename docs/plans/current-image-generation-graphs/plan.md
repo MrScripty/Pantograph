@@ -219,6 +219,18 @@ returned handle, and shutdown stops auto-resume before tearing down runtime
 resources. The remaining improvement is optional event-first notification
 after the bounded polling path is proven under real inference workflow smoke.
 
+2026-06-03 complete-path proof update: embedded-runtime now has session-level
+coverage proving a workflow-service scheduler session can dispatch through the
+production-composed `EmbeddedRuntimeHostExecutionPort`, resolve Pumas load
+targets and package facts, execute image generation through the inference
+gateway, persist media through the backend artifact writer, map the completed
+runtime-host response into scheduler task results, and return the requested
+workflow output as a path-free artifact reference. This completes the minimal
+image inference path proof. Remaining work moves to deleting/replacing
+retired node-engine/planned-inference launch paths, then continuing
+dependency-readiness producer lifecycle and durable scheduler hardening in
+separate validated slices.
+
 ## Standards Rule
 
 The standards constraints in

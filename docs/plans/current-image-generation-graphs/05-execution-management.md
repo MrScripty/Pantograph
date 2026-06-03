@@ -22363,6 +22363,42 @@ Worker rules:
       image-generation runtime path is available and consider replacing bounded
       polling with a typed snapshot notification channel only if measured
       responsiveness or idle overhead justifies the extra contract.
+  - 2026-06-03 embedded image runtime-host session proof slice:
+    - Smallest useful vertical slice: add session-level embedded-runtime
+      regression coverage proving the complete minimal image inference path
+      from workflow-service scheduler task state through the production
+      embedded runtime-host port, without adding production behavior.
+    - Files touched:
+      `crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan log.
+    - Implementation: added a path-free image workflow fixture with a current
+      executable validation snapshot, fresh dependency-readiness snapshot,
+      scheduler dispatch candidate provider, reservation lifecycle recorder,
+      Pumas-seeded diffusers package facts, production Pumas load-target and
+      package-facts resolvers, `WorkflowServiceRuntimeHostMediaArtifactSink`,
+      and an inference gateway image backend. The test runs a workflow
+      execution session, dispatches through the production-composed
+      `EmbeddedRuntimeHostExecutionPort`, persists generated media through the
+      backend artifact writer, maps the completed runtime-host response into
+      scheduler task results, and returns the requested `infer.image` output as
+      a path-free artifact reference.
+    - No-fallback/no-legacy result: the slice does not use graph-authored
+      paths, selector summaries, UI state, Tauri policy,
+      `ModelDependencyRequest`, `ModelRefV2`, planned-inference execution, or
+      node-engine runtime launch. The only executable load target is resolved
+      inside embedded-runtime from scheduler-selected Pumas identity.
+    - Focused test:
+      `workflow_execution_session_dispatches_through_production_embedded_image_runtime_host`.
+    - Verification passed:
+      `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      `cargo test --manifest-path crates/pantograph-embedded-runtime/Cargo.toml workflow_execution_session_dispatches_through_production_embedded_image_runtime_host`;
+      `cargo check --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`.
+    - Remaining follow-up: delete or replace the remaining
+      node-engine/planned-inference launch paths now that the minimal
+      scheduler/runtime-host image inference path is proven, then continue
+      dependency-readiness producer lifecycle and durable scheduler
+      lease/retry/cancellation hardening in separate thin slices.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes
