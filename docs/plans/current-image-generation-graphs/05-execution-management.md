@@ -22751,6 +22751,32 @@ Worker rules:
     - Verification caveat: Tauri Rust checks still emit pre-existing dead-code
       warnings in workflow diagnostics/event/runtime modules; these are
       unrelated to the removed command.
+  - 2026-06-03 Milestone 5d workflow-service inference-settings
+    canonicalization deletion slice:
+    - Smallest useful vertical slice: delete the retired
+      `inference_settings` JSON canonicalizer and `expand-settings`
+      passthrough hydration path from workflow-service graph canonicalization.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/canonicalization.rs`,
+      `crates/pantograph-workflow-service/src/graph/canonicalization_tests.rs`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      deleted
+      `crates/pantograph-workflow-service/src/graph/canonicalization_inference.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - No-fallback/no-legacy result: graph canonicalization no longer parses
+      saved `node.data.inference_settings`, rebuilds per-node definitions from
+      those settings, creates `expand-settings` passthrough ports, or adds
+      dynamic settings edges. The only remaining canonicalization behavior is
+      the unrelated stale stream-edge repair, and the new regression test
+      proves retired settings edges do not synthesize descriptor ports.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      canonicalize_workflow_graph --lib`; `cargo check -p
+      pantograph-workflow-service`; targeted workflow-service source search
+      for deleted canonicalizer APIs; targeted touched-file search classifying
+      remaining retired settings hits as negative regression fixture text only;
+      `git diff --check`.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port

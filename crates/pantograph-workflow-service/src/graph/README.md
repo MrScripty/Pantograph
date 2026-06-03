@@ -13,8 +13,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `types.rs` | Graph DTOs, edit-session request/response types, and persisted workflow file shapes. |
 | `registry.rs` | Built-in node-definition discovery and canonical node-contract projection. |
 | `canonicalization.rs` | Current saved graph canonicalization orchestration and current-schema response assembly. |
-| `canonicalization_inference.rs` | Dynamic inference-setting schema expansion, per-node definition overlay rebuilds, and passthrough port helpers. |
-| `canonicalization_tests.rs` | Current canonicalization, no-legacy, and inference-overlay regression tests. |
+| `canonicalization_tests.rs` | Current canonicalization and no-legacy regression tests. |
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `effective_definition_tests.rs` | Effective-definition tests for dynamic overlays, inference authored snapshots, and no-fallback inference definition rejection. |
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
@@ -64,9 +63,9 @@ business-logic owners.
 - Edit-session state must serialize mutations per session without global blocking.
 - Active execution metadata, queue projection, and run counters for graph edit
   sessions must stay backend-owned and must not be recomputed in adapters.
-- Saved graphs may persist additive `node.data.definition` port overlays for
-  model-derived settings, but those overlays must never replace registry-owned
-  static contracts wholesale.
+- Saved graphs may persist backend-authored inference interface snapshots, but
+  canonicalization must not synthesize model-derived settings or dynamic ports
+  from retired graph fields.
 
 ## Decision
 Define a dedicated graph-editing module inside `pantograph-workflow-service`

@@ -107,7 +107,7 @@ fn canonicalize_workflow_graph_repairs_llm_stream_edge_to_text_output() {
 }
 
 #[test]
-fn canonicalize_workflow_graph_hydrates_current_image_generation_settings() {
+fn canonicalize_workflow_graph_does_not_hydrate_retired_inference_settings_edges() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {
         nodes: vec![
@@ -155,33 +155,21 @@ fn canonicalize_workflow_graph_hydrates_current_image_generation_settings() {
     };
 
     let canonical = canonicalize_workflow_graph(graph, &registry);
-    let expand_node = canonical
-        .nodes
-        .iter()
-        .find(|node| node.id == "expand")
-        .expect("expand node");
     let image_generation_node = canonical
         .nodes
         .iter()
         .find(|node| node.id == "image-generation")
         .expect("image-generation node");
-    let expand_outputs = expand_node.data["definition"]["outputs"]
-        .as_array()
-        .expect("expand outputs");
-    let image_generation_inputs = image_generation_node.data["definition"]["inputs"]
-        .as_array()
-        .expect("image-generation inputs");
 
-    assert!(expand_outputs
-        .iter()
-        .any(|port| port["id"] == json!("steps")));
-    assert!(image_generation_inputs
-        .iter()
-        .any(|port| port["id"] == json!("steps")));
-    assert!(canonical.edges.iter().any(|edge| {
-        edge.source == "expand"
-            && edge.source_handle == "steps"
-            && edge.target == "image-generation"
-            && edge.target_handle == "steps"
-    }));
+    assert!(
+        image_generation_node.data.get("definition").is_none(),
+        "retired inference_settings edges must not synthesize descriptor ports"
+    );
+    assert!(
+        canonical
+            .edges
+            .iter()
+            .all(|edge| edge.source_handle != "steps" && edge.target_handle != "steps"),
+        "retired inference_settings edges must not synthesize dynamic parameter edges"
+    );
 }

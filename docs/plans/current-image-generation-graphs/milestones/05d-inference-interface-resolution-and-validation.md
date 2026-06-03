@@ -3261,7 +3261,7 @@ defining an image-only inference-node interface.
       surfaces replaced by this resolver. Do not keep compatibility aliases,
       legacy model-path support checks, planned-inference validation branches,
       or image-only graph-editor port tables as successful paths.
-- [ ] Delete or rewrite retired `inference_settings` JSON canonicalization and
+- [x] Delete or rewrite retired `inference_settings` JSON canonicalization and
       `expand-settings` frontend-owned dynamic port sync. If any of that UI
       remains, it must consume backend descriptors as presentation plumbing and
       cannot remain an alternate inference-interface source.
@@ -3283,6 +3283,25 @@ defining an image-only inference-node interface.
         store search for `syncInferencePorts`, `InferenceParamSchema`,
         `inferenceSettingsPorts`, and retired settings-source wording; `git
         diff --check`.
+      - 2026-06-03 workflow-service canonicalization deletion slice completed:
+        removed the retired dynamic inference-settings canonicalizer module
+        from `crates/pantograph-workflow-service/src/graph`, deleted its
+        `node.data.inference_settings` parser, definition-overlay synthesis,
+        `expand-settings` passthrough builder, and dynamic parameter-edge
+        creation path, and updated graph README ownership notes.
+      - No-fallback/no-legacy gate: graph canonicalization now keeps only the
+        unrelated `llm-inference.stream -> text-output.stream` edge repair and
+        no longer treats saved graph settings fields or `expand-settings` edges
+        as successful inference-interface sources. The focused regression test
+        asserts retired settings edges do not synthesize descriptor ports or
+        parameter edges.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service --
+        --check`; `cargo test -p pantograph-workflow-service
+        canonicalize_workflow_graph --lib`; `cargo check -p
+        pantograph-workflow-service`; targeted workflow-service source search
+        for the deleted canonicalizer APIs; targeted touched-file search
+        classifying remaining retired settings hits as negative regression
+        fixture text only; `git diff --check`.
 - [ ] Delete or rewrite retired `puma-lib` path/readiness/inference-settings
       authoring surfaces after the model-ref-only slice. This includes
       `modelPath`/`model_path`/`entry_path` graph data, option metadata,
