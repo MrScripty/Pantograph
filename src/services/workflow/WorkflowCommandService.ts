@@ -40,6 +40,7 @@ import type {
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateRequest,
   WorkflowExecutionSessionCreateResponse,
+  WorkflowExecutionSessionResumeRequest,
   WorkflowExecutionSessionRunRequest,
   WorkflowExecutableValidationSnapshotRecord,
   WorkflowEvent,
@@ -106,6 +107,23 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       request,
       channel,
     });
+  }
+
+  async resumeWorkflowExecutionSessionRuntimeDependencyReadiness(
+    request: WorkflowExecutionSessionResumeRequest,
+  ): Promise<WorkflowRunResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        workflow_run_id: request.workflow_run_id,
+        outputs: [],
+        timing_ms: 0,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowRunResponse>(
+      'workflow_resume_execution_session_runtime_dependency_readiness',
+      { request },
+    );
   }
 
   async publishGraphSessionExecutableValidationSnapshot(

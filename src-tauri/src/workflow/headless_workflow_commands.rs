@@ -34,11 +34,12 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
     WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
-    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
-    WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
-    WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoRequest,
-    WorkflowIoResponse, WorkflowLibraryUsageQueryRequest, WorkflowLibraryUsageQueryResponse,
+    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionResumeRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionStaleCleanupRequest,
+    WorkflowExecutionSessionStaleCleanupResponse, WorkflowExecutionSessionStatusRequest,
+    WorkflowExecutionSessionStatusResponse, WorkflowIoArtifactQueryRequest,
+    WorkflowIoArtifactQueryResponse, WorkflowIoRequest, WorkflowIoResponse,
+    WorkflowLibraryUsageQueryRequest, WorkflowLibraryUsageQueryResponse,
     WorkflowLocalNetworkStatusQueryRequest, WorkflowLocalNetworkStatusQueryResponse,
     WorkflowNodeStatusQueryRequest, WorkflowNodeStatusQueryResponse, WorkflowPreflightRequest,
     WorkflowPreflightResponse, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
@@ -221,6 +222,30 @@ pub async fn workflow_run_execution_session(
     ) as Arc<dyn node_engine::EventSink>;
     runtime
         .run_workflow_execution_session_with_event_sink(request, event_sink)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_resume_execution_session_runtime_dependency_readiness(
+    request: WorkflowExecutionSessionResumeRequest,
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
+    extensions: State<'_, SharedExtensions>,
+    rag_manager: State<'_, SharedRagManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowRunResponse, String> {
+    let runtime = build_runtime(
+        &app,
+        gateway.inner(),
+        runtime_registry.inner(),
+        extensions.inner(),
+        workflow_service.inner(),
+        Some(rag_manager.inner()),
+    )
+    .await?;
+    runtime
+        .resume_workflow_execution_session_runtime_dependency_readiness(request)
         .await
         .map_err(workflow_error_json)
 }

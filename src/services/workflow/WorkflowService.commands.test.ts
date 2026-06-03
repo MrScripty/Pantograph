@@ -625,6 +625,43 @@ test('execution session commands preserve scheduler-backed request boundaries', 
   }
 });
 
+test('resume execution session command forwards only active-run identity', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const resumeResponse: WorkflowRunResponse = {
+    workflow_run_id: 'run-a',
+    outputs: [],
+    timing_ms: 12,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return resumeResponse;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const response = await service.resumeWorkflowExecutionSessionRuntimeDependencyReadiness({
+      session_id: 'execution-session-a',
+      workflow_run_id: 'run-a',
+    });
+
+    assert.deepEqual(response, resumeResponse);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_resume_execution_session_runtime_dependency_readiness',
+        args: {
+          request: {
+            session_id: 'execution-session-a',
+            workflow_run_id: 'run-a',
+          },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
 test('workflow command service forwards current validation summary requests', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];

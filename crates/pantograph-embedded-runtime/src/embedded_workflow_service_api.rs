@@ -17,11 +17,11 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
     WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
-    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
-    WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
-    WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
-    WorkflowRunResponse, WorkflowServiceError,
+    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionResumeRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionStaleCleanupRequest,
+    WorkflowExecutionSessionStaleCleanupResponse, WorkflowExecutionSessionStatusRequest,
+    WorkflowExecutionSessionStatusResponse, WorkflowIoRequest, WorkflowIoResponse,
+    WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunResponse, WorkflowServiceError,
 };
 
 use crate::EmbeddedRuntime;
@@ -187,6 +187,15 @@ impl EmbeddedRuntime {
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         self.workflow_service
             .run_workflow_execution_session(&self.host().with_node_event_sink(event_sink), request)
+            .await
+    }
+
+    pub async fn resume_workflow_execution_session_runtime_dependency_readiness(
+        &self,
+        request: WorkflowExecutionSessionResumeRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.workflow_service
+            .resume_workflow_execution_session_runtime_dependency_readiness(&self.host(), request)
             .await
     }
 

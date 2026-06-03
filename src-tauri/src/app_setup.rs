@@ -467,6 +467,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_preflight,
             crate::workflow::commands::workflow_create_execution_session,
             crate::workflow::commands::workflow_run_execution_session,
+            crate::workflow::commands::workflow_resume_execution_session_runtime_dependency_readiness,
             crate::workflow::commands::workflow_close_execution_session,
             crate::workflow::commands::workflow_get_execution_session_status,
             crate::workflow::commands::workflow_list_execution_session_queue,

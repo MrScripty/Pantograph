@@ -22098,6 +22098,33 @@ Worker rules:
     surface; that boundary must remain display/forward-only and must not move
     readiness, package, scheduler, resource, or retry policy into Tauri or the
     frontend.
+  - 2026-06-03 completed host-boundary slice: embedded-runtime now forwards
+    `WorkflowExecutionSessionResumeRequest` to workflow-service, the Tauri
+    command surface registers
+    `workflow_resume_execution_session_runtime_dependency_readiness`, and the
+    TypeScript workflow command service exposes
+    `resumeWorkflowExecutionSessionRuntimeDependencyReadiness`. The boundary
+    accepts only `session_id` and `workflow_run_id`; it does not carry inputs,
+    output targets, readiness proofs, resource facts, package facts, scheduler
+    decisions, graph paths, selector summaries, or retry policy.
+  - Host-boundary verification passed:
+    `cargo fmt -p pantograph-embedded-runtime`;
+    `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+    `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts`;
+    `cargo check -p pantograph-embedded-runtime`;
+    `cargo check --manifest-path src-tauri/Cargo.toml`;
+    `npm run typecheck`.
+  - Verification deviation recorded: the first `rg` exploration included a
+    non-existent `frontend` path and returned a path error before the search
+    was narrowed to the actual `src`/`src-tauri`/`crates` surfaces. Parallel
+    cargo checks also contended on the shared build lock before completing
+    successfully. Tauri check still reports pre-existing dead-code warnings in
+    workflow diagnostics/event/runtime modules; no new warning was introduced
+    by the resume forwarder.
+  - Remaining manual-use follow-up: decide whether a user-visible action
+    should call the explicit resume command from an active running queue item,
+    or whether to proceed directly to the deferred backend event-driven
+    lifecycle below. Either path must keep retry/readiness policy backend-owned.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

@@ -219,6 +219,28 @@ pub async fn workflow_run_execution_session(
 }
 
 #[command]
+pub async fn workflow_resume_execution_session_runtime_dependency_readiness(
+    request: pantograph_workflow_service::WorkflowExecutionSessionResumeRequest,
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
+    extensions: State<'_, SharedExtensions>,
+    rag_manager: State<'_, SharedRagManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
+    super::headless_workflow_commands::workflow_resume_execution_session_runtime_dependency_readiness(
+        request,
+        app,
+        gateway,
+        runtime_registry,
+        extensions,
+        rag_manager,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
 pub async fn workflow_close_execution_session(
     request: pantograph_workflow_service::WorkflowExecutionSessionCloseRequest,
     app: AppHandle,

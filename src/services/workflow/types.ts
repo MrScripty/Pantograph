@@ -964,6 +964,11 @@ export interface WorkflowExecutionSessionRunRequest {
   priority?: number | null;
 }
 
+export interface WorkflowExecutionSessionResumeRequest {
+  session_id: string;
+  workflow_run_id: string;
+}
+
 export interface WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
   workflow_id: string;
   workflow_semantic_version: string;

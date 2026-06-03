@@ -176,16 +176,17 @@ existing active `session_id` plus `workflow_run_id` is now implemented in
 workflow-service: it validates active runtime scheduler state, retries
 dependency-readiness admission from fresh canonical backend facts, preserves
 the active run when facts are still missing, and completes runtime dispatch
-without requiring a replacement client-created workflow run. Remaining
-host-boundary work may expose/invoke this backend operation, but
-Tauri/frontend may display backend state or forward the command only; they
-must not own retry, readiness, resource, package, or scheduler policy. After
-the first complete inference path is proven through this explicit backend
-resume path at the chosen host boundary, add the deferred event-driven backend
-readiness lifecycle: a composition-root-owned worker/listener with tracked
-tasks, cancellation/shutdown, freshness, timeout, retry, reservation release,
-and overlap-prevention behavior that resumes waiting tasks when readiness
-facts arrive. Missing, stale, or insufficient facts remain typed fail-closed
+without requiring a replacement client-created workflow run. The selected
+host-boundary forwarder is also implemented through embedded-runtime, the
+Tauri command facade, and the TypeScript workflow command service; it forwards
+only `session_id` and `workflow_run_id` and does not own retry, readiness,
+resource, package, or scheduler policy. Remaining planning must decide
+whether to add a user-visible manual resume action for active running queue
+items or proceed directly to the deferred event-driven backend readiness
+lifecycle: a composition-root-owned worker/listener with tracked tasks,
+cancellation/shutdown, freshness, timeout, retry, reservation release, and
+overlap-prevention behavior that resumes waiting tasks when readiness facts
+arrive. Missing, stale, or insufficient facts remain typed fail-closed
 diagnostics, not graph-path, Tauri, frontend, selector-summary, synchronous
 probe, client rerun, or legacy preflight fallback.
 
