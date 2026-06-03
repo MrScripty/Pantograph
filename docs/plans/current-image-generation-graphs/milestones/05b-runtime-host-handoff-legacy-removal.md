@@ -547,7 +547,7 @@ upgrade after this path is working.
   DTOs, or assert resolver call counts. Those tests now prove fail-closed
   behavior through diagnostics and absent Python adapter/recorder effects
   without installing any resolver fixture.
-- [ ] Replace node-engine dependency preflight output with typed readiness or
+- [x] Replace node-engine dependency preflight output with typed readiness or
   scheduler task-state facts after scheduler-to-runtime-host dispatch exists.
   Missing scheduler task state must fail closed with typed diagnostics, not
   repair old inputs. Any old dependency/preflight command reached before its
@@ -561,7 +561,13 @@ upgrade after this path is working.
   `ModelRefV2` output from dependency preflight. This does not add a readiness
   adapter or scheduler/runtime-host fallback; the remaining work is to replace
   or delete the legacy request/helper contracts after canonical task-result
-  coverage is complete.
+  coverage is complete. 2026-06-03 reconciliation: after the minimal
+  scheduler/runtime-host image path and the dead node-engine enforcement
+  deletion, node-engine has no dependency-preflight output-producing helper or
+  lifecycle preflight authority. The remaining dependency-preflight module is
+  limited to retired input rejection and path-free planning projection helpers.
+  Embedded-runtime Python-backed dependency preflight remains a separate
+  fail-closed replacement/deletion target.
 - [x] Remove embedded-runtime `ModelDependencyResolver`/`ModelRefV2` resolution
   paths after runtime host load-target resolution, diagnostic-only legacy
   guardrails, and scheduler task-result/runtime-host response coverage are

@@ -22601,6 +22601,22 @@ Worker rules:
       targeted source-search proving the exported package Puma-Lib component
       no longer contains `modelPath`, `model_path`, `model-path-hint`, or
       `queryPortOptions('puma-lib', 'model_path')`.
+  - 2026-06-03 node-engine preflight checklist reconciliation slice:
+    - Smallest useful vertical slice: reconcile the Milestone 5b checklist item
+      for replacing node-engine dependency-preflight output after the source
+      deletion slices already removed the output-producing node-engine helper.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`
+      and this plan log.
+    - No-fallback/no-legacy result: documentation now reflects that
+      node-engine has no dependency-preflight output-producing helper,
+      `ModelRefV2` return path, resolver lookup, or lifecycle preflight
+      authority. Embedded-runtime Python-backed dependency preflight remains
+      tracked separately as a fail-closed replacement/deletion target.
+    - Verification passed: source search for
+      `enforce_dependency_preflight`, `DependencyPreflightResult`,
+      `ModelRefV2`, `ModelDependencyRequest`, and dependency-preflight symbols
+      in node-engine/embedded-runtime source; `git diff --check`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes
