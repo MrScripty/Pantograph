@@ -22654,6 +22654,34 @@ Worker rules:
       `EmbeddedDependencyReadinessSnapshotProducer`,
       `EmbeddedDependencyReadinessAutoResume`, and README ownership entries;
       `git diff --check`.
+  - 2026-06-03 Milestone 5c runtime cutover checklist reconciliation slice:
+    - Smallest useful vertical slice: reconcile stale Milestone 5c checklist
+      entries for scheduler-selected runtime-host dispatch and dedicated
+      scheduler-task session-runner cutover after later slices completed those
+      source boundaries.
+    - Files touched:
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`
+      and this plan log.
+    - Implementation: marked runtime inference handoff wiring complete because
+      workflow-service session execution now resolves canonical readiness,
+      selects dispatch through `pantograph-scheduler`, calls the shared
+      runtime-host port with `RuntimeHostExecutionRequest`, maps typed
+      runtime-host responses into `WorkflowSchedulerTaskResult`, and projects
+      requested outputs without reduced execution-plan launch. Marked the
+      dedicated scheduler-task session-runner cutover complete because the
+      private whole-run node-engine launch, whole-run artifactization route,
+      and active execution-plan storage/projection bridge have been removed or
+      superseded by scheduler task state/results.
+    - No-fallback/no-legacy result: the plan now distinguishes completed
+      scheduler/runtime-host cutover from still-open lifecycle hardening.
+      Remaining 5c work is retry/defer/cancellation/replay/reservation
+      behavior, attempt/timing facts, and documentation cleanup; it is not a
+      reason to preserve whole-run node-engine output demand or reduced-plan
+      runtime launch.
+    - Verification passed: source and plan evidence from the prior committed
+      scheduler/runtime-host session execution, runtime-host response mapping,
+      active execution-plan deletion, and whole-run execution deletion slices;
+      `git diff --check`.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

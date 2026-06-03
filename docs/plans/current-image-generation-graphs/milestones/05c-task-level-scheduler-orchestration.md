@@ -213,7 +213,7 @@ durable task orchestration path.
   preserved as successful identity, updating the registry options-provider
   test to assert `pumas_model_ref`, and documenting the graph persistence
   invariant.
-- [ ] Wire runtime inference tasks through actual dispatch-selected
+- [x] Wire runtime inference tasks through actual dispatch-selected
   `SchedulerRuntimeHandoff` values and the runtime-host execution port added
   in Milestone 5b. Do not build handoff from reduced execution plans or
   backend projections.
@@ -350,8 +350,15 @@ durable task orchestration path.
   layers. Later option 3 work can replace the request's caller-supplied
   candidate list with provider composition from runtime registry, resource
   observer, Pumas, and history services without moving selection semantics out
-  of the scheduler crate.
-- [ ] Replace workflow/session run execution so the dedicated scheduler-task
+  of the scheduler crate. 2026-06-03 reconciliation: later
+  scheduler/runtime-host slices completed the dispatch-selected runtime
+  handoff path. Workflow-service session execution now resolves runtime
+  readiness through canonical facts, selects dispatch through
+  `pantograph-scheduler`, sends `RuntimeHostExecutionRequest` to the shared
+  runtime-host port, maps typed runtime-host responses into
+  `WorkflowSchedulerTaskResult`, and projects requested outputs without
+  reduced execution-plan launch.
+- [x] Replace workflow/session run execution so the dedicated scheduler-task
   execution path, not node-engine output demand, advances workflow progress.
   A workflow must be able to pause between tasks while another workflow's
   compatible task runs or batches. The cutover must call orchestrator
@@ -507,7 +514,14 @@ durable task orchestration path.
   executable Pumas load targets, backend execution decisions, or direct runtime
   launch details. The runtime-host port receives only a scheduler-built
   handoff for a ready runtime task after upstream scheduler task inputs are
-  materialized.
+  materialized. 2026-06-03 reconciliation: workflow-service no longer keeps a
+  private `workflow_run_internal` whole-run node-engine launch or whole-run
+  artifactization route, and the active execution-plan storage/projection
+  bridge was deleted after session runtime tasks had scheduler-selected
+  runtime-host dispatch coverage. Session progress now proceeds through
+  scheduler task state/results; remaining 5c work is lifecycle hardening,
+  retry/defer/cancellation/replay/reservation behavior, attempt/timing facts,
+  and documentation cleanup.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
   removing legacy launch paths.
