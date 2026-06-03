@@ -2057,20 +2057,22 @@ runtime-host request construction are wired.
 
 2026-06-03 dependency-readiness lifecycle refinement: the earlier
 synchronous-provider first-run option is superseded. The current session runner
-can now enqueue dependency-readiness work, record deferred scheduler state, and
-return `RuntimeNotReady` before dispatch when no fresh proof exists. The next
-complete production inference-session slice must make that pending state
-non-terminal at the public runtime API boundary: keep the active workflow run
-open, preserve scheduler task state for inspection and retry, avoid terminal
-run events for readiness-pending responses, and expose typed backend pending
-diagnostics/read-model state only. This still does not permit graph-path,
-Tauri/frontend, `ModelDependencyRequest`, `ModelRefV2`, reduced-plan,
-selector-summary, static-ready, synchronous-probe, or caller-supplied-proof
-fallback. After the first complete production inference path is proven through
-that active-run lifecycle, return to option 3: add a composition-root-owned
-backend worker/tick/event lifecycle that resumes waiting tasks when readiness
-facts arrive and owns freshness, timeout, cancellation, retry, reservation
-release, shutdown, and overlap prevention.
+can now enqueue dependency-readiness work, record deferred scheduler state, keep
+the active run open, and return `RuntimeNotReady` before dispatch when no fresh
+proof exists. The next complete production inference-session slice is an
+explicit backend-owned resume command for an existing active `session_id` plus
+`workflow_run_id`. It must validate that the run is still active and
+dependency-readiness pending, use scheduler task state as the source of truth,
+retry dependency-readiness admission from fresh canonical backend facts, and
+continue toward dispatch or return typed pending/fail-closed diagnostics. This
+still does not permit graph-path, Tauri/frontend, `ModelDependencyRequest`,
+`ModelRefV2`, reduced-plan, selector-summary, static-ready, synchronous-probe,
+client-rerun, or caller-supplied-proof fallback. After the first complete
+production inference path is proven through that explicit backend resume path,
+add the composition-root-owned backend worker/listener lifecycle that resumes
+waiting tasks when readiness facts arrive and owns freshness, timeout,
+cancellation, retry, reservation release, shutdown, overlap prevention, and
+observability.
 
 2026-05-30 runtime dispatch-selection boundary slice completed. Workflow-service
 now has a focused runtime dispatch candidate provider seam and a path-free

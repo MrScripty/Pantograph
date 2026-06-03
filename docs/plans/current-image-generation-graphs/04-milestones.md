@@ -161,16 +161,17 @@ and embedded-runtime package-facts bridges. The remaining Milestone 5d work is
 the backend-owned production inference facts provider and conservative resource
 estimator that consumes those facts.
 2026-06-03 dependency-readiness lifecycle update: before continuing successful
-production runtime dispatch, the public runtime session path must stop treating
-dependency-readiness pending as terminal. The next Milestone 5b/5d bridge slice
-must preserve the active workflow run when runtime dependency readiness is
-pending, keep scheduler task state as the backend source of truth, avoid
-terminal run events for pending readiness, and expose only typed backend
-pending diagnostics/read-model state to Tauri/frontend. The later option 3
-scheduler worker/tick lifecycle belongs after the first complete inference path
-is proven and must be composition-root owned with tracked tasks,
-cancellation/shutdown, freshness, timeout, retry, and reservation-release
-rules.
+production runtime dispatch, the next Milestone 5b/5d bridge slice must add an
+explicit backend-owned resume command for an existing active `session_id` plus
+`workflow_run_id`. The command must preserve scheduler task state as the
+backend source of truth, reject non-active or non-readiness-pending runs with
+typed diagnostics, retry dependency-readiness admission only from fresh
+canonical backend facts, and continue toward dispatch or return typed pending/
+fail-closed diagnostics. Tauri/frontend may invoke the backend command and
+render backend state only. The later event-driven scheduler worker/listener
+lifecycle belongs after the first complete inference path is proven and must
+be composition-root owned with tracked tasks, cancellation/shutdown, freshness,
+timeout, retry, reservation-release, and overlap-prevention rules.
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing
 candidate facts, device-resolution decision from Milestone 0 and Milestone 5,

@@ -206,23 +206,25 @@ defining an image-only inference-node interface.
         dispatch.
       - 2026-06-03 dependency-readiness lifecycle re-plan selected: the
         earlier synchronous-provider first-run option is superseded. The
-        implemented deferral path queues backend readiness work and records
-        scheduler deferred state when no fresh proof exists; the next slice
-        must make that pending state non-terminal in the public runtime
-        session API. Workflow-service must keep the active run open, preserve
-        scheduler task state as the backend source of truth, avoid terminal
-        run events for readiness-pending responses, and expose typed pending
-        diagnostics/read-model state that Tauri/frontend can only display or
-        forward through backend commands. This task still requires production
-        facts to fail closed when missing, stale, or insufficient, and still
-        forbids graph paths, selector summaries, UI state, Tauri policy,
-        `ModelRefV2`, `ModelDependencyRequest`, reduced execution plans,
-        synchronous probes, or caller-supplied proofs. After the first
-        complete production inference path is proven through that active-run
-        lifecycle, return to option 3 and add the composition-root-owned
-        backend readiness worker/tick lifecycle with tracked tasks,
-        cancellation/shutdown, freshness, timeout, retry, and
-        reservation-release behavior.
+        implemented deferral path queues backend readiness work, records
+        scheduler deferred state, and keeps the active run open when no fresh
+        proof exists. The next slice must add an explicit backend-owned resume
+        command for that active `session_id` plus `workflow_run_id`.
+        Workflow-service must validate the run is active and
+        readiness-pending, preserve scheduler task state as the backend source
+        of truth, retry readiness admission only from canonical backend facts,
+        and continue toward dispatch or expose typed pending/fail-closed
+        diagnostics that Tauri/frontend can only display or forward through
+        backend commands. This task still requires production facts to fail
+        closed when missing, stale, or insufficient, and still forbids graph
+        paths, selector summaries, UI state, Tauri policy, `ModelRefV2`,
+        `ModelDependencyRequest`, reduced execution plans, synchronous probes,
+        client reruns, or caller-supplied proofs. After the first complete
+        production inference path is proven through that explicit backend
+        resume path, add the composition-root-owned backend readiness
+        worker/listener lifecycle with tracked tasks, cancellation/shutdown,
+        freshness, timeout, retry, reservation-release, overlap-prevention,
+        and observability behavior.
 - [x] Retire shared unscoped validation event/stream DTOs from
       `pantograph-inference-interface-contracts` while keeping shared
       descriptor, authored snapshot, drift, diagnostic, option, and validation

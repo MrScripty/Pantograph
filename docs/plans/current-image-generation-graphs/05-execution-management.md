@@ -22003,13 +22003,13 @@ Worker rules:
     tasks, cancellation, shutdown, tracing, and health/failure handling; keep
     contracts typed and append-only where public response/read-model shape
     changes are required.
-  - Deferred option 3 placement: after the first complete inference path works
-    through the non-terminal active-run lifecycle, add the backend
-    scheduler-worker/tick/event lifecycle. That later option 3 slice must own
-    readiness wakeups, freshness windows, timeout, cancellation, retry,
-    reservation release, and overlap prevention under one backend lifecycle
-    manager. It must replace manual or request-driven resume pressure without
-    preserving terminal `RuntimeNotReady` as the production path.
+  - Follow-up placement superseded by the explicit backend resume re-plan
+    below: first add the backend-owned resume command for an existing active
+    readiness-pending run; after the first complete inference path works
+    through that command, add the event-driven backend readiness lifecycle.
+    That later lifecycle must own readiness wakeups, freshness windows,
+    timeout, cancellation, retry, reservation release, overlap prevention, and
+    observability under one backend lifecycle manager.
   - Implementation result: workflow-service now distinguishes dependency
     readiness pending from generic `RuntimeNotReady` with a typed internal
     `RuntimeDependencyReadinessPending` error that still maps to the public
@@ -22037,6 +22037,43 @@ Worker rules:
     expected `RuntimeNotReady` behavior. That path is not the typed
     dependency-readiness pending branch changed by this slice and remains a
     separate follow-up if terminal runtime-error diagnostics are resumed.
+
+- 2026-06-03 dependency-readiness explicit backend resume re-plan:
+  - Re-plan trigger: the active-run lifecycle slice now keeps
+    dependency-readiness pending runs open, but the plan does not yet define
+    who retries that active run after fresh readiness facts arrive. Leaving
+    this to caller reruns would split lifecycle ownership; jumping directly to
+    a background worker would add task lifecycle complexity before the first
+    complete inference path is proven.
+  - Selected immediate option: add an explicit backend-owned resume command or
+    workflow-service API for an existing active `session_id` plus
+    `workflow_run_id`. The command must validate that the run is active and
+    dependency-readiness pending, call the existing retry/admission path, and
+    either continue toward runtime dispatch or return typed pending/
+    fail-closed diagnostics from canonical backend facts.
+  - No-fallback confirmation: the command must not create a new workflow run,
+    finish and reopen the existing run, synthesize readiness proofs, inspect
+    graph paths, selector summaries, UI state, Tauri policy,
+    `ModelDependencyRequest`, `ModelRefV2`, reduced execution plans, or
+    caller-supplied proofs. Missing, stale, or insufficient readiness facts
+    remain typed pending or fail-closed diagnostics.
+  - Standards guardrails: workflow-service remains the single owner of
+    run/task lifecycle transitions; Tauri/frontend may only invoke the backend
+    command and display backend read-model state; async host/package
+    observation stays in embedded-runtime or infrastructure producers; this
+    slice must not spawn background tasks or introduce a runtime outside the
+    composition root.
+  - Smallest useful next source slice: add the workflow-service resume API and
+    focused tests proving it rejects unknown/finished/non-runtime runs, retries
+    an active `PausedDeferred` dependency-readiness task, preserves active-run
+    state when facts are still missing, and consumes a fresh producer snapshot
+    to advance admission without requiring a client-created replacement run.
+  - Deferred event-driven lifecycle: after the first complete inference path is
+    proven through the explicit backend resume command, add the
+    composition-root-owned backend worker/listener that automatically resumes
+    matching pending runs when readiness facts arrive. That later slice must
+    own tracked tasks, cancellation/shutdown, freshness, timeout, retry,
+    reservation release, overlap prevention, and observability.
 
 ### Traceability Links
 
