@@ -141,7 +141,7 @@
   }
 
   function matchesActivityEvent(payload: DependencyActivityEvent): boolean {
-    return matchesDependencyActivityEvent(payload, null);
+    return matchesDependencyActivityEvent(payload, id);
   }
 
   function renderActivityEvent(payload: DependencyActivityEvent): string {

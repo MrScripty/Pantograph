@@ -239,6 +239,15 @@ retired concrete contract names `ModelDependencyRequest`,
 retired dependency/model-reference contract language while still blocking
 before legacy request, resolver, model-reference, or adapter dispatch behavior.
 
+2026-06-03 dependency activity path-key cleanup update: active dependency-
+environment action/activity transport no longer keys user-visible dependency
+activity by `modelPath` or `model_path`. The backend-owned diagnostic activity
+event carries optional `target_node_id`, Tauri forwards the event without
+policy, and the frontend matcher compares that id to the current
+dependency-environment node. The activity log remains display/history state
+only and cannot produce runtime launch facts, readiness proofs, scheduler
+policy, or load authority.
+
 ## Standards Rule
 
 The standards constraints in

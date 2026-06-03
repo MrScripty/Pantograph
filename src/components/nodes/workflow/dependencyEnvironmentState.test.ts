@@ -344,15 +344,15 @@ test('dependency activity helpers filter and render matching backend events', ()
   const event = {
     timestamp: '2026-04-22T00:00:00Z',
     node_type: 'dependency-environment',
-    model_path: '/models/model.gguf',
+    target_node_id: 'dependency-node',
     phase: 'install',
     message: 'Installing torch',
     binding_id: 'binding-a',
     requirement_name: 'torch',
   };
 
-  assert.equal(matchesDependencyActivityEvent(event, '/models/model.gguf'), true);
-  assert.equal(matchesDependencyActivityEvent(event, '/models/other.gguf'), false);
+  assert.equal(matchesDependencyActivityEvent(event, 'dependency-node'), true);
+  assert.equal(matchesDependencyActivityEvent(event, 'other-node'), false);
   assert.equal(renderDependencyActivityEvent(event), 'install | binding-a | torch: Installing torch');
   assert.equal(formatDependencyActivityLine(' done ', '12:00:00'), '[12:00:00] done');
   assert.equal(formatDependencyActivityLine(' ', '12:00:00'), null);
@@ -368,7 +368,7 @@ test('setupDependencyEnvironmentActivityListener wires matching events and auto 
   const matchingEvent = {
     timestamp: '2026-04-22T00:00:00Z',
     node_type: 'dependency-environment',
-    model_path: '/models/model.gguf',
+    target_node_id: 'dependency-node',
     phase: 'check',
     message: 'Checking torch',
   };
@@ -389,7 +389,7 @@ test('setupDependencyEnvironmentActivityListener wires matching events and auto 
       };
     },
     matchesActivityEvent: (payload) =>
-      matchesDependencyActivityEvent(payload, '/models/model.gguf'),
+      matchesDependencyActivityEvent(payload, 'dependency-node'),
     renderActivityEvent: renderDependencyActivityEvent,
     appendActivityLine: (line) => {
       activityLines.push(line);

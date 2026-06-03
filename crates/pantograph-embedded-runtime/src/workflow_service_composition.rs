@@ -1250,7 +1250,7 @@ mod tests {
             .emit(crate::DependencyActivityEvent {
                 timestamp: "2026-05-31T00:00:00Z".to_string(),
                 node_type: "diagnostic".to_string(),
-                model_path: "diagnostic-only".to_string(),
+                target_node_id: Some("diagnostic-only".to_string()),
                 phase: "observed".to_string(),
                 message: "activity boundary".to_string(),
                 binding_id: None,

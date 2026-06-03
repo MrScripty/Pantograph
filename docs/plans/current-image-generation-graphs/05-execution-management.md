@@ -22440,6 +22440,47 @@ Worker rules:
       node-engine and frontend/Tauri path-era surfaces now that active
       node-engine/embedded-runtime diagnostics no longer keep the old concrete
       contracts alive.
+  - 2026-06-03 dependency activity path-key cleanup slice:
+    - Smallest useful vertical slice: remove the remaining active
+      dependency-environment activity correlation keyed by `model_path` while
+      leaving runtime execution, dependency readiness, and scheduler policy
+      untouched.
+    - Files touched:
+      `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`,
+      `crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`,
+      `src/components/nodes/workflow/dependencyEnvironmentTypes.ts`,
+      `src/components/nodes/workflow/dependencyEnvironmentDisplay.ts`,
+      `src/components/nodes/workflow/DependencyEnvironmentNode.svelte`,
+      `src/components/nodes/workflow/dependencyEnvironmentState.test.ts`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/09-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this plan log.
+    - Implementation: replaced the backend diagnostic activity DTO's
+      path-shaped `model_path` field with optional `target_node_id`, updated
+      the Tauri-forwarded test event construction, changed the frontend event
+      type and matcher to correlate activity by dependency-environment node id,
+      and wired `DependencyEnvironmentNode.svelte` to match against its own
+      node id. The active dependency action intent remains graph-session,
+      graph-revision, validation-session, target-node, and action keyed.
+    - No-fallback/no-legacy result: activity events are display/history
+      transport only. They do not produce dependency readiness, scheduler
+      dispatch, runtime-host handoff, load-target identity, executable paths,
+      `ModelDependencyRequest`, `ModelRefV2`, graph-path fallback, or Tauri
+      business policy.
+    - Focused test:
+      `node --experimental-strip-types --test src/components/nodes/workflow/dependencyEnvironmentState.test.ts`.
+    - Verification passed:
+      `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      the focused frontend test above;
+      `npm run typecheck`;
+      `cargo check --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      `rg -n "model_path|modelPath" crates/pantograph-embedded-runtime/src/model_dependency_activity.rs src/components/nodes/workflow/dependencyEnvironmentDisplay.ts src/components/nodes/workflow/dependencyEnvironmentTypes.ts src/components/nodes/workflow/DependencyEnvironmentNode.svelte src/components/nodes/workflow/dependencyEnvironmentState.test.ts`
+      returned only the existing negative upstream-state fixture that proves
+      path-era source data is ignored.
+    - Remaining follow-up: continue classifying and deleting unrelated
+      path-era surfaces in app configuration, embedding/RAG commands, stale
+      fixtures, and legacy node UIs without treating those retained references
+      as runtime dependency-action authority.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes

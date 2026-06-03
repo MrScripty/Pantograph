@@ -638,9 +638,16 @@ upgrade after this path is working.
   2026-05-31 progress: deleted the embedded workflow-host graph path resolver
   helpers and active gateway path matching; fixture migration remains as part
   of the producer/shared-contract follow-up.
-- [ ] Remove frontend/Tauri dependency actions keyed by `modelPath` or
+- [x] Remove frontend/Tauri dependency actions keyed by `modelPath` or
   `model_path` after backend capability and task diagnostics cover the
-  replacement user-visible state.
+  replacement user-visible state. 2026-06-03 progress: the active
+  dependency-environment action intent was already graph-session/revision/node
+  keyed. This slice replaced the remaining path-shaped dependency activity
+  transport identity with a backend-issued `target_node_id`, updated the
+  frontend matcher to use the current dependency-environment node id, and kept
+  Tauri as an event forwarder only. Display activity still cannot produce
+  runtime launch facts, dependency readiness, scheduler policy, or model-load
+  authority.
 - [ ] Update README/crate documentation for every new host-facing contract,
   Pumas load-target boundary, runtime migration, deleted legacy path, and
   fixture replacement.

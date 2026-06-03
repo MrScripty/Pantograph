@@ -86,12 +86,12 @@ export function formatDependencyActivityTimestamp(date: Date): string {
 
 export function matchesDependencyActivityEvent(
   payload: DependencyActivityEvent,
-  upstreamModelPath: string | null
+  targetNodeId: string
 ): boolean {
-  const upstreamPath = (upstreamModelPath ?? '').trim();
-  if (upstreamPath.length === 0) return false;
-  const eventPath = (payload.model_path ?? '').trim();
-  if (eventPath.length === 0 || eventPath !== upstreamPath) return false;
+  const expectedNodeId = targetNodeId.trim();
+  if (expectedNodeId.length === 0) return false;
+  const eventNodeId = (payload.target_node_id ?? '').trim();
+  if (eventNodeId.length === 0 || eventNodeId !== expectedNodeId) return false;
   return (payload.node_type ?? '').trim() === 'dependency-environment';
 }
 

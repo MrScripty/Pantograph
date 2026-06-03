@@ -34,7 +34,8 @@ impl DependencyActivityHub {
 pub struct DependencyActivityEvent {
     pub timestamp: String,
     pub node_type: String,
-    pub model_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_node_id: Option<String>,
     pub phase: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]

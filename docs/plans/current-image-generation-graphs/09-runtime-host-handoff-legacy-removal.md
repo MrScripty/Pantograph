@@ -207,7 +207,11 @@ Use the clean replacement path:
    Tauri only forwards activity events and does not own resolver lifecycle,
    dependency policy, or event attachment policy. Remaining resolver commands,
    probes, or tests must be diagnostic-only or explicitly classified as
-   non-execution configuration/tooling before they are retained.
+   non-execution configuration/tooling before they are retained. 2026-06-03
+   progress: dependency activity events now correlate to the
+   dependency-environment frontend node by path-free `target_node_id`; Tauri
+   still only forwards backend-owned activity events and the frontend action
+   intent remains graph-session/revision/node keyed.
 12. Delete `ModelDependencyResolver`, `ModelDependencyRequest`, `ModelRefV2`,
    `build_model_ref_v2`, path repair helpers, direct old runtime task success
    fixtures, and path-shaped tests once their successful production callers are

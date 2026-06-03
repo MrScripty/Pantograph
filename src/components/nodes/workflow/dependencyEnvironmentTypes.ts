@@ -115,7 +115,7 @@ export interface DependencyOverridePatchV1 {
 export interface DependencyActivityEvent {
   timestamp: string;
   node_type: string;
-  model_path: string;
+  target_node_id?: string;
   phase: string;
   message: string;
   binding_id?: string;
