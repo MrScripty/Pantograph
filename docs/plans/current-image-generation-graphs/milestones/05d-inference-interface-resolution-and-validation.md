@@ -3460,6 +3460,13 @@ defining an image-only inference-node interface.
          paths. The focused test is therefore a source-contract deletion gate,
          while `npm run typecheck` verifies the changed module through the
          TypeScript project.
+       - 2026-06-03 documentation hygiene slice completed: rewrote the package
+         backend README guardrail to avoid exact retired settings-port
+         identifiers while still documenting that mock `llm-inference` must not
+         expose backend policy, resolved model facts, or retired settings
+         payload ports as graph-visible authority.
+       - Verification passed: targeted README source search for exact retired
+         settings identifiers and `git diff --check`.
        - 2026-06-03 implementation slice completed: removed the remaining
          app-level `llm-inference.inference_settings` mock input from
          `src/services/workflow/mocks.ts` and tightened

@@ -22711,6 +22711,21 @@ Worker rules:
     matching pending runs when readiness facts arrive. That later slice must
     own tracked tasks, cancellation/shutdown, freshness, timeout, retry,
     reservation release, overlap prevention, and observability.
+  - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
+    slice:
+    - Smallest useful vertical slice: remove exact retired settings-port
+      identifiers from the package backend README guardrail while preserving
+      the no-policy/no-facts/no-settings authority rule for mock
+      `llm-inference`.
+    - Files touched:
+      `packages/svelte-graph/src/backends/README.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - No-fallback/no-legacy result: documentation still forbids backend policy,
+      resolved model facts, and retired settings payload ports in the mock
+      inference definition; it does not create or preserve any runtime path.
+    - Verification passed: targeted README source search for exact retired
+      settings identifiers and `git diff --check`.
   - 2026-06-03 Milestone 5d retired store sync cleanup slice:
     - Smallest useful vertical slice: remove the dead frontend
       `syncInferencePorts` compatibility surface that remained after backend
