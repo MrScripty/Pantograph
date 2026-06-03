@@ -37,6 +37,11 @@ struct AdmittedRuntimeTaskReadiness {
     readiness_proof: DependencyReadinessProofEnvelope,
 }
 
+struct RuntimeDependencyReadinessAdmissionResult {
+    admitted: Vec<AdmittedRuntimeTaskReadiness>,
+    deferred_task_ids: Vec<String>,
+}
+
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
@@ -108,8 +113,14 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
         self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
         self.run_progress_loop(session_id, workflow_run_id).await?;
-        let admitted_runtime_readiness =
+        let readiness_admission =
             self.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
+        if !readiness_admission.deferred_task_ids.is_empty() {
+            return Err(WorkflowServiceError::RuntimeNotReady(format!(
+                "runtime dependency readiness is pending for scheduler task(s): {}",
+                readiness_admission.deferred_task_ids.join(", ")
+            )));
+        }
         self.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
         self.run_runtime_dispatch_ready_tasks(
             host,
@@ -119,7 +130,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             output_targets,
             summary,
             started_at,
-            &admitted_runtime_readiness,
+            &readiness_admission.admitted,
         )
         .await
     }
@@ -307,7 +318,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         &self,
         session_id: &str,
         workflow_run_id: &str,
-    ) -> Result<Vec<AdmittedRuntimeTaskReadiness>, WorkflowServiceError> {
+    ) -> Result<RuntimeDependencyReadinessAdmissionResult, WorkflowServiceError> {
         let runtime_task_ids =
             runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
                 kind == SchedulerTaskStateKind::WaitingDependencyReadiness
@@ -316,6 +327,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             self.service.scheduler_task_orchestrator.clone(),
         );
         let mut admitted_runtime_readiness = Vec::with_capacity(runtime_task_ids.len());
+        let mut deferred_task_ids = Vec::new();
         for task_id in runtime_task_ids {
             let request = {
                 let store = self.service.session_store_guard()?;
@@ -329,20 +341,41 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )
                     .map_err(dependency_readiness_error)?
             };
-            let seed_result = lifecycle
+            let seed_result = match lifecycle
                 .resolve_dependency_requirements_seed(
                     self.service.dependency_readiness_provider.as_ref(),
                     &request,
                 )
                 .map_err(dependency_readiness_error)?
-                .ok_or_else(|| {
-                    WorkflowServiceError::InvalidRequest(
-                        "scheduler dependency readiness provider did not return a dependency requirements seed result"
-                            .to_string(),
-                    )
-                })?;
-            self.service
-                .store_dependency_requirements_payload_from_result(&seed_result)?;
+            {
+                Some(seed_result) => seed_result,
+                None => {
+                    self.defer_runtime_dependency_readiness(
+                        &lifecycle,
+                        session_id,
+                        workflow_run_id,
+                        &task_id,
+                        &request,
+                    )?;
+                    deferred_task_ids.push(task_id);
+                    continue;
+                }
+            };
+            if self
+                .service
+                .store_dependency_requirements_payload_from_result(&seed_result)
+                .is_err()
+            {
+                self.defer_runtime_dependency_readiness(
+                    &lifecycle,
+                    session_id,
+                    workflow_run_id,
+                    &task_id,
+                    &request,
+                )?;
+                deferred_task_ids.push(task_id);
+                continue;
+            }
             let work_item = dependency_readiness_work_item(
                 session_id,
                 workflow_run_id,
@@ -360,14 +393,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     &request,
                 )
                 .map_err(dependency_readiness_error)?;
-            let dispatch_readiness_proof = readiness_proof.clone().ok_or_else(|| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "runtime scheduler task '{}' has no dependency readiness proof for dispatch selection",
-                    task_id
-                ))
-            })?;
+            let readiness_proof_for_dispatch = readiness_proof.clone();
             let mut store = self.service.session_store_guard()?;
-            lifecycle
+            let admitted_record = lifecycle
                 .admit_active_runtime_task(
                     &mut store,
                     session_id,
@@ -377,12 +405,58 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     readiness_proof,
                 )
                 .map_err(dependency_readiness_error)?;
-            admitted_runtime_readiness.push(AdmittedRuntimeTaskReadiness {
-                task_id,
-                readiness_proof: dispatch_readiness_proof,
-            });
+            if admitted_record.state.kind() == SchedulerTaskStateKind::Ready {
+                let readiness_proof = readiness_proof_for_dispatch.ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "runtime scheduler task '{}' has no dependency readiness proof for dispatch selection",
+                        task_id
+                    ))
+                })?;
+                admitted_runtime_readiness.push(AdmittedRuntimeTaskReadiness {
+                    task_id,
+                    readiness_proof,
+                });
+            } else {
+                deferred_task_ids.push(task_id);
+            }
         }
-        Ok(admitted_runtime_readiness)
+        Ok(RuntimeDependencyReadinessAdmissionResult {
+            admitted: admitted_runtime_readiness,
+            deferred_task_ids,
+        })
+    }
+
+    fn defer_runtime_dependency_readiness(
+        &self,
+        lifecycle: &WorkflowDependencyReadinessLifecycle,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+        request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<(), WorkflowServiceError> {
+        let work_item = dependency_readiness_work_item(
+            session_id,
+            workflow_run_id,
+            task_id,
+            dependency_environment_request_from_readiness_envelope(request)
+                .map_err(dependency_readiness_work_queue_error)?,
+        )
+        .map_err(dependency_readiness_work_queue_error)?;
+        self.service
+            .dependency_readiness_work_queue
+            .enqueue(work_item);
+        let mut store = self.service.session_store_guard()?;
+        lifecycle
+            .admit_active_runtime_task(
+                &mut store,
+                session_id,
+                workflow_run_id,
+                task_id,
+                DependencyReadinessPolicy::CheckOnly,
+                None,
+            )
+            .map_err(dependency_readiness_error)?;
+        Ok(())
     }
 
     fn ensure_runtime_tasks_ready_for_dispatch(

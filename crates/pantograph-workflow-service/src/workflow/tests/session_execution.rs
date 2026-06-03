@@ -237,7 +237,8 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
 }
 
 #[tokio::test]
-async fn workflow_execution_session_runtime_run_requires_dependency_readiness_before_dispatch() {
+async fn workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch(
+) {
     let host = RuntimeInferenceSessionHost::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let service = WorkflowService::with_ephemeral_attribution_store()
@@ -286,13 +287,13 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
             },
         )
         .await
-        .expect_err("runtime-containing scheduler run should fail closed at readiness admission");
+        .expect_err("runtime-containing scheduler run should defer at readiness admission");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
     assert!(
         error
             .message()
-            .contains("dependency requirements registry seed failed"),
+            .contains("runtime dependency readiness is pending for scheduler task(s): infer"),
         "unexpected error: {error}"
     );
     let queue = service
@@ -300,9 +301,18 @@ async fn workflow_execution_session_runtime_run_requires_dependency_readiness_be
             session_id: session_id.clone(),
         })
         .await
-        .expect("list queue after fail-closed runtime inference run");
+        .expect("list queue after deferred runtime inference run");
     assert!(queue.items.is_empty());
-    assert_eq!(dependency_readiness_work_queue.len(), 0);
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+    let work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("dependency-readiness work item should be queued before deferred admission");
+    assert_eq!(work_item.provenance.session_id.as_str(), session_id);
+    assert_eq!(work_item.provenance.task_id.as_str(), "infer");
+    assert_eq!(
+        work_item.request.as_request().action,
+        DependencyEnvironmentAction::Check
+    );
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }

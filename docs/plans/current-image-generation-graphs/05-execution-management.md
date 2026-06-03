@@ -21885,6 +21885,52 @@ Worker rules:
     complete inference path so it can replace the temporary synchronous
     first-run requirement without preserving it as a fallback.
 
+- 2026-06-03 dependency-readiness option 2 correction:
+  - Re-plan trigger: implementation investigation showed that option 1 would
+    require either blocking on async host/package probes inside the synchronous
+    dependency-environment provider or treating static dependency declarations
+    as ready. Both violate the repository async standards and the plan's
+    no-fallback/no-legacy rule.
+  - Selected direction: use option 2 now. First-run dependency readiness is an
+    event-driven scheduler lifecycle. Workflow-service may ask the synchronous
+    provider for already-fresh facts, but missing or unseedable facts must
+    enqueue backend readiness work, apply scheduler deferred admission with no
+    readiness proof, and return typed runtime-not-ready state instead of
+    dispatching or failing before scheduler state can record the deferral.
+  - Smallest useful source slice: update the execution-session runner so a
+    missing or invalid seed/proof queues a `DependencyReadinessWorkItem`,
+    applies the existing scheduler `Deferred` readiness admission path, and
+    exits before runtime dispatch with `RuntimeNotReady`. Preserve the existing
+    fresh-snapshot path, where a valid seed/proof still admits the task to
+    `Ready` and proceeds to scheduler dispatch selection.
+  - Allowed write set: `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+    the focused session execution regression test, and this plan. Do not edit
+    embedded-runtime providers, Tauri, frontend, Pumas, lockfiles, generated
+    DTOs, or saved workflow fixtures in this slice.
+  - Remaining follow-up: add the backend production provider/resume slice that
+    seeds concrete dependency requirements from canonical inference/Pumas facts,
+    lets the embedded-runtime producer publish fresh readiness snapshots, and
+    retries or resumes the deferred scheduler task under one lifecycle owner.
+  - Implementation result: `WorkflowSchedulerSessionRunner` now treats missing
+    or unseedable first-run dependency readiness as event-driven pending work.
+    It queues the canonical `DependencyReadinessWorkItem`, applies scheduler
+    deferred admission with no proof, returns `RuntimeNotReady`, and does not
+    reach runtime dispatch. The existing fresh-snapshot path still stores the
+    seed payload, queues readiness work, admits the task to `Ready`, and uses
+    the provider proof for scheduler dispatch selection.
+  - Verification:
+    `cargo fmt`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary`;
+    `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`;
+    `cargo check -p pantograph-workflow-service`.
+  - Verification caveat: a broad exploratory
+    `cargo test -p pantograph-workflow-service workflow_execution_session_`
+    run was interrupted after it selected unrelated session capacity,
+    attribution, and diagnostics tests with existing failures/slow paths. The
+    dependency-readiness tests in that run had already passed before the
+    interruption. No source changes were made outside the focused slice.
+
 ### Traceability Links
 
 - Module README updated: N/A for Milestone 0 because no production module

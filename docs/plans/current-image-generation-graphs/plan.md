@@ -165,18 +165,18 @@ runtime, task, or estimate facts continue to fail closed through canonical
 resolver/admission diagnostics instead of graph-path or selector-summary
 fallbacks.
 
-2026-06-03 dependency-readiness sequencing re-plan update: use option 1 for
-the next implementation slice. The immediate complete production inference
-path must add a backend-owned production dependency-readiness provider that can
-answer the existing scheduler admission seed/proof request from canonical
-Pantograph backend facts without graph-path, Tauri, frontend, or legacy
-preflight fallback. This keeps the current workflow-service session runner
-shape stable long enough to prove the end-to-end inference path. After that
-complete inference path is proven, return to option 3: replace the synchronous
-first-run readiness requirement with an event-driven readiness lifecycle that
-queues readiness work, records typed pending/deferred scheduler state, resumes
-dispatch when readiness facts arrive, and defines timeout, cancellation,
-freshness, and retry behavior under one backend lifecycle owner.
+2026-06-03 dependency-readiness sequencing re-plan update: option 2 is now
+the active implementation path. The previous synchronous-first-run option is
+insufficient for production first-run inference because host/package
+observation is async and owned by the embedded-runtime readiness producer
+lifecycle; workflow-service must not block on async probes or infer readiness
+from static dependency declarations. The next slices must move first-run
+dependency readiness to the event-driven lifecycle: enqueue readiness work,
+record typed pending/deferred scheduler state, keep runtime dispatch blocked
+until a fresh backend readiness proof exists, and later resume dispatch from
+the single backend lifecycle owner when readiness facts arrive. Missing,
+stale, or insufficient facts remain typed fail-closed diagnostics, not
+graph-path, Tauri, frontend, selector-summary, or legacy preflight fallback.
 
 ## Standards Rule
 
