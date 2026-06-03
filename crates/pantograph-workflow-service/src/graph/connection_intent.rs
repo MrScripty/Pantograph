@@ -652,40 +652,6 @@ mod tests {
         }
     }
 
-    fn expand_target_graph() -> WorkflowGraph {
-        WorkflowGraph {
-            nodes: vec![
-                GraphNode {
-                    id: "number".into(),
-                    node_type: "number-input".into(),
-                    position: Position { x: 0.0, y: 0.0 },
-                    data: serde_json::json!({"label": "Number Input"}),
-                },
-                GraphNode {
-                    id: "expand".into(),
-                    node_type: "expand-settings".into(),
-                    position: Position { x: 160.0, y: 0.0 },
-                    data: serde_json::json!({
-                        "label": "Expand Settings",
-                        "definition": {
-                            "node_type": "expand-settings",
-                            "inputs": [
-                                {"id": "inference_settings", "label": "Inference Settings", "data_type": "json", "required": true, "multiple": false},
-                                {"id": "temperature", "label": "Temperature", "data_type": "number", "required": false, "multiple": false}
-                            ],
-                            "outputs": [
-                                {"id": "inference_settings", "label": "Inference Settings", "data_type": "json", "required": true, "multiple": false},
-                                {"id": "temperature", "label": "Temperature", "data_type": "number", "required": false, "multiple": false}
-                            ]
-                        }
-                    }),
-                },
-            ],
-            edges: Vec::new(),
-            derived_graph: None,
-        }
-    }
-
     #[test]
     fn connection_candidates_return_existing_nodes_and_insertable_types() {
         let registry = NodeRegistry::new();
@@ -721,55 +687,6 @@ mod tests {
                 .iter()
                 .any(|node| node.node_type == "llm-inference"),
             "static llm-inference task ports are descriptor-backed and must not appear as insertable static ports"
-        );
-    }
-
-    #[test]
-    fn connection_candidates_include_dynamic_expand_setting_inputs() {
-        let registry = NodeRegistry::new();
-        let response = connection_candidates(
-            &expand_target_graph(),
-            &registry,
-            ConnectionAnchor {
-                node_id: "number".into(),
-                port_id: "value".into(),
-            },
-            None,
-        )
-        .expect("candidate query should succeed");
-
-        assert!(response.compatible_nodes.iter().any(|node| {
-            node.node_id == "expand"
-                && node
-                    .anchors
-                    .iter()
-                    .any(|port| port.port_id == "temperature")
-        }));
-    }
-
-    #[test]
-    fn commit_connection_accepts_dynamic_expand_setting_inputs() {
-        let registry = NodeRegistry::new();
-        let graph = expand_target_graph();
-        let revision = graph.compute_fingerprint();
-
-        let result = commit_connection(
-            &graph,
-            &registry,
-            &revision,
-            &ConnectionAnchor {
-                node_id: "number".into(),
-                port_id: "value".into(),
-            },
-            &ConnectionAnchor {
-                node_id: "expand".into(),
-                port_id: "temperature".into(),
-            },
-        );
-
-        assert!(
-            result.is_ok(),
-            "dynamic expand input should accept number output"
         );
     }
 

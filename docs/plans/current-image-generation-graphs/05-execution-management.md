@@ -22777,6 +22777,24 @@ Worker rules:
       for deleted canonicalizer APIs; targeted touched-file search classifying
       remaining retired settings hits as negative regression fixture text only;
       `git diff --check`.
+  - 2026-06-03 Milestone 5d connection-intent retired expand-settings fixture
+    cleanup slice:
+    - Smallest useful vertical slice: remove the positive
+      `expand-settings` dynamic `inference_settings` connection fixture and
+      tests from workflow-service connection intent.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/connection_intent.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this plan log.
+    - No-fallback/no-legacy result: connection intent no longer proves
+      `expand-settings.temperature` as a successful candidate or committed
+      connection path. Descriptor-backed inference connection surfaces remain
+      the only successful inference-specific connection tests in that module.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service connection_
+      --lib`; `cargo check -p pantograph-workflow-service`; targeted
+      `connection_intent.rs` search for `expand-settings`,
+      `inference_settings`, and dynamic expand wording.
   - 2026-06-03 Milestone 5d package backend README deletion-search hygiene
     slice:
     - Smallest useful vertical slice: remove exact retired settings-port

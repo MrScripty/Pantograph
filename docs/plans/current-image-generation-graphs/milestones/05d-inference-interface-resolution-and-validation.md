@@ -3261,6 +3261,22 @@ defining an image-only inference-node interface.
       surfaces replaced by this resolver. Do not keep compatibility aliases,
       legacy model-path support checks, planned-inference validation branches,
       or image-only graph-editor port tables as successful paths.
+      - 2026-06-03 connection-intent retired expand-settings fixture slice
+        completed: removed the positive `expand-settings` dynamic
+        `inference_settings` fixture and tests from
+        `crates/pantograph-workflow-service/src/graph/connection_intent.rs`.
+        Descriptor-backed inference connection-surface tests remain the
+        successful inference connection path.
+      - No-fallback/no-legacy gate: the slice deletes the successful
+        `expand-settings.temperature` candidate/commit proof instead of
+        adapting it to a hidden settings edge or static inference port. The
+        connection-intent boundary now has no `expand-settings` or
+        `inference_settings` source hits.
+      - Verification passed: `cargo fmt -p pantograph-workflow-service --
+        --check`; `cargo test -p pantograph-workflow-service connection_
+        --lib`; `cargo check -p pantograph-workflow-service`; targeted
+        `connection_intent.rs` search for `expand-settings`,
+        `inference_settings`, and dynamic expand wording.
 - [x] Delete or rewrite retired `inference_settings` JSON canonicalization and
       `expand-settings` frontend-owned dynamic port sync. If any of that UI
       remains, it must consume backend descriptors as presentation plumbing and
