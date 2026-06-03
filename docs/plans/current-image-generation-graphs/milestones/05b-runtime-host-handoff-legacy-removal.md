@@ -1274,6 +1274,13 @@ upgrade after this path is working.
   preserving workflow-service as scheduler state owner and Tauri as a thin
   handle manager. A snapshot notification/event channel is deferred until after
   the polling lifecycle proves the complete inference resume path.
+- 2026-06-03 auto-resume lifecycle handle slice completed: embedded-runtime
+  now exports the tracked auto-resume lifecycle, config, handle, and resume
+  port with focused tests for idempotent shutdown, no-op empty polls,
+  duplicate candidate suppression, successful resume attempts, pending
+  readiness as non-terminal, and invalid poll-interval rejection. Remaining
+  follow-up: wire the real port and returned handle into hosted and standalone
+  composition beside the snapshot producer.
 - 2026-05-29 re-plan boundary before real dependency-readiness snapshot
   publication: the lifecycle shell has a provider and tracked task owner, but
   no standards-compliant source of readiness work. A real producer must know

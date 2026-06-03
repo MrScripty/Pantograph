@@ -202,6 +202,14 @@ preflight fallback. Future improvement: replace bounded polling with a typed
 snapshot notification/event channel after the lifecycle is working, if
 responsiveness or idle overhead requires it.
 
+2026-06-03 auto-resume lifecycle handle update: embedded-runtime now exports
+the tracked `DependencyReadinessAutoResume` lifecycle component with focused
+tests for shutdown, empty candidate polling, duplicate suppression, successful
+resume attempts, pending-readiness preservation, and poll-interval validation.
+The next source slice must wire a real embedded-runtime resume port through
+hosted and standalone composition so production startup returns/manages this
+handle beside the snapshot producer while Tauri remains a thin handle manager.
+
 ## Standards Rule
 
 The standards constraints in

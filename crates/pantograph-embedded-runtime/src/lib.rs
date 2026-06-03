@@ -33,6 +33,9 @@ mod dependency_inventory_system_package_source;
 #[cfg(test)]
 mod dependency_inventory_tests;
 pub mod dependency_readiness;
+mod dependency_readiness_auto_resume;
+#[cfg(test)]
+mod dependency_readiness_auto_resume_tests;
 mod dependency_readiness_lifecycle;
 #[cfg(test)]
 mod dependency_readiness_lifecycle_tests;
@@ -100,6 +103,10 @@ mod workflow_scheduler_diagnostics;
 #[allow(dead_code)]
 mod workflow_service_composition;
 
+pub use dependency_readiness_auto_resume::{
+    DependencyReadinessAutoResumePort, EmbeddedDependencyReadinessAutoResume,
+    EmbeddedDependencyReadinessAutoResumeConfig, EmbeddedDependencyReadinessAutoResumeHandle,
+};
 pub use dependency_readiness_lifecycle::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle,

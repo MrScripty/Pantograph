@@ -22279,6 +22279,46 @@ Worker rules:
       candidates exist, one resume attempt for one eligible active run after a
       producer-published fresh snapshot, no overlapping duplicate resume for
       the same run, and non-terminal behavior when readiness is still pending.
+  - 2026-06-03 dependency-readiness auto-resume lifecycle handle slice:
+    - Smallest useful vertical slice: add the embedded-runtime-owned
+      auto-resume lifecycle component and focused tests before production
+      composition wiring.
+    - Files touched:
+      `crates/pantograph-embedded-runtime/src/dependency_readiness_auto_resume.rs`,
+      `crates/pantograph-embedded-runtime/src/dependency_readiness_auto_resume_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/lib.rs`,
+      `crates/pantograph-embedded-runtime/src/README.md`, and this plan log.
+    - Implementation: added exported
+      `EmbeddedDependencyReadinessAutoResume`,
+      `EmbeddedDependencyReadinessAutoResumeConfig`,
+      `EmbeddedDependencyReadinessAutoResumeHandle`, and
+      `DependencyReadinessAutoResumePort`. The lifecycle validates its poll
+      interval, owns a tracked async task and shutdown channel, polls typed
+      backend resume candidates through the port, suppresses duplicate
+      `(session_id, workflow_run_id)` candidates within one poll, treats
+      `RuntimeDependencyReadinessPending` as non-terminal, logs owner-level
+      failures, and supports idempotent shutdown.
+    - No-fallback/no-legacy result: the lifecycle has no graph-path, frontend,
+      Tauri-state, selector-summary, synchronous-probe, replacement-run,
+      `ModelDependencyRequest`, or legacy model-reference route. It consumes
+      only typed backend resume candidates and calls the typed backend resume
+      port.
+    - Focused tests:
+      `auto_resume_shutdown_is_idempotent_and_noops_without_candidates`,
+      `auto_resume_retries_one_eligible_candidate_once`,
+      `auto_resume_skips_duplicate_candidates_in_one_poll`,
+      `auto_resume_treats_pending_readiness_as_non_terminal`, and
+      `auto_resume_rejects_zero_poll_interval`.
+    - Verification passed:
+      `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`;
+      `cargo test --manifest-path crates/pantograph-embedded-runtime/Cargo.toml dependency_readiness_auto_resume`;
+      `cargo check --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`.
+    - Discovered issue/follow-up: production composition does not yet create a
+      real auto-resume port or return/manage the handle. The next source slice
+      must wire the exported lifecycle into embedded-runtime hosted and
+      standalone composition using the existing workflow-service
+      resume-candidate query plus embedded backend host resume path, while
+      keeping Tauri limited to storing and shutting down returned handles.
   - Deferred event-driven lifecycle: after the first complete inference path is
     proven through the explicit backend resume command, add the
     composition-root-owned backend worker/listener that automatically resumes
