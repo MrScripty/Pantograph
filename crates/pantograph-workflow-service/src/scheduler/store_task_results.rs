@@ -241,6 +241,7 @@ impl WorkflowExecutionSessionStore {
         &mut self,
         session_id: &str,
         workflow_run_id: &str,
+        attempt_id: WorkflowSchedulerTaskAttemptId,
         transition: SchedulerTaskStateTransition,
     ) -> Result<
         (
@@ -305,7 +306,6 @@ impl WorkflowExecutionSessionStore {
             )));
         };
 
-        let attempt_id = WorkflowSchedulerTaskAttemptId::new();
         active_run
             .scheduler_task_records
             .insert(task_id.clone(), record.clone());
@@ -1163,6 +1163,7 @@ mod tests {
             .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
+                WorkflowSchedulerTaskAttemptId::new(),
                 running_transition(workflow_run_id, task_id, "transition.running"),
             )
             .expect("start task attempt");

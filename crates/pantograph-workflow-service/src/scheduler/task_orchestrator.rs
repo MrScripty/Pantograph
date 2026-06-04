@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use async_trait::async_trait;
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
@@ -22,9 +22,9 @@ use pantograph_scheduler::{
     SchedulerReadinessAdmissionSeverity, SchedulerReadinessAdmissionState,
     SchedulerReservationLeaseId, SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState,
     SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent,
-    SchedulerTaskState, SchedulerTaskStateDiagnostic, SchedulerTaskStateDiagnosticCode,
-    SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind, SchedulerTaskStateRecord,
-    SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
+    SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateDiagnostic,
+    SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
+    SchedulerTaskStateRecord, SchedulerTaskStateTransition, SchedulerTaskStateTransitionId,
     ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_READINESS_ADMISSION_CONTRACT_VERSION,
     SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
 };
@@ -44,6 +44,9 @@ use crate::workflow::{
 };
 
 use super::{
+    task_lifecycle::{
+        WorkflowSchedulerTaskLifecycleManager, WorkflowSchedulerTaskLifecycleOwnerId,
+    },
     WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId,
     WorkflowSchedulerTaskTerminalMutation,
 };
@@ -58,6 +61,7 @@ use super::{
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
+    task_lifecycle: Arc<Mutex<WorkflowSchedulerTaskLifecycleManager>>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +95,10 @@ impl WorkflowSchedulerTaskOrchestrator {
         Self {
             runtime_host_dispatcher,
             reservation_lifecycle_port: Arc::new(UnavailableReservationLifecyclePort),
+            task_lifecycle: Arc::new(Mutex::new(WorkflowSchedulerTaskLifecycleManager::new(
+                WorkflowSchedulerTaskLifecycleOwnerId::parse("workflow-service.scheduler-task")
+                    .expect("default scheduler task lifecycle owner id"),
+            ))),
         }
     }
 
@@ -108,6 +116,56 @@ impl WorkflowSchedulerTaskOrchestrator {
     ) -> Self {
         self.reservation_lifecycle_port = port;
         self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn active_task_lifecycle_handle_count(
+        &self,
+    ) -> Result<usize, WorkflowSchedulerTaskOrchestratorError> {
+        Ok(self.task_lifecycle_manager()?.active_task_handle_count())
+    }
+
+    fn track_task_lifecycle_handle(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        self.task_lifecycle_manager()?
+            .track_task_handle(task_id.clone(), attempt_id.clone())
+            .map(|_record| ())
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    fn release_task_lifecycle_handle(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        self.task_lifecycle_manager()?
+            .complete_task_handle(task_id, attempt_id)
+            .map(|_record| ())
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    fn release_task_lifecycle_handle_without_error(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+    ) {
+        let _ = self.release_task_lifecycle_handle(task_id, attempt_id);
+    }
+
+    fn task_lifecycle_manager(
+        &self,
+    ) -> Result<
+        MutexGuard<'_, WorkflowSchedulerTaskLifecycleManager>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
+        self.task_lifecycle.lock().map_err(|_error| {
+            WorkflowSchedulerTaskOrchestratorError::WorkflowService(WorkflowServiceError::Internal(
+                "scheduler task lifecycle manager lock was poisoned".to_string(),
+            ))
+        })
     }
 
     pub(crate) async fn dispatch_runtime_handoff(
@@ -510,14 +568,20 @@ impl WorkflowSchedulerTaskOrchestrator {
         let ready_execution_intent = ready_non_runtime_execution_intent(ready_record)?;
         let running_transition =
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
+        let attempt_id = WorkflowSchedulerTaskAttemptId::new();
+        self.track_task_lifecycle_handle(&task.task_id, &attempt_id)?;
         let (running_record, attempt_id) = store
             .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
+                attempt_id.clone(),
                 running_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record_with_attempt)?;
+            .and_then(applied_task_state_record_with_attempt)
+            .inspect_err(|_error| {
+                self.release_task_lifecycle_handle_without_error(&task.task_id, &attempt_id);
+            })?;
 
         let materialized_results = store
             .active_run_scheduler_task_results(session_id, workflow_run_id)
@@ -548,7 +612,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         result: WorkflowSchedulerTaskResult,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
         let completion_transition = completion_transition_from_running(&started.running_record)?;
-        store
+        let record = store
             .complete_active_run_scheduler_task(
                 session_id,
                 workflow_run_id,
@@ -557,7 +621,9 @@ impl WorkflowSchedulerTaskOrchestrator {
                 result,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)
+            .and_then(applied_terminal_task_state_record)?;
+        self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
+        Ok(record)
     }
 
     pub(crate) fn fail_started_non_runtime_task(
@@ -572,7 +638,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             &started.running_record,
             non_runtime_adapter_failure_diagnostic(error),
         )?;
-        store
+        let record = store
             .fail_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
@@ -580,7 +646,9 @@ impl WorkflowSchedulerTaskOrchestrator {
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)
+            .and_then(applied_terminal_task_state_record)?;
+        self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
+        Ok(record)
     }
 
     pub(crate) fn start_ready_runtime_task(
@@ -636,14 +704,20 @@ impl WorkflowSchedulerTaskOrchestrator {
         let ready_execution_intent = ready_runtime_execution_intent(ready_record)?;
         let running_transition =
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
+        let attempt_id = WorkflowSchedulerTaskAttemptId::new();
+        self.track_task_lifecycle_handle(&task.task_id, &attempt_id)?;
         let (running_record, attempt_id) = store
             .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
+                attempt_id.clone(),
                 running_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record_with_attempt)?;
+            .and_then(applied_task_state_record_with_attempt)
+            .inspect_err(|_error| {
+                self.release_task_lifecycle_handle_without_error(&task.task_id, &attempt_id);
+            })?;
 
         let materialized_results = store
             .active_run_scheduler_task_results(session_id, workflow_run_id)
@@ -685,7 +759,7 @@ impl WorkflowSchedulerTaskOrchestrator {
     ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowSchedulerTaskOrchestratorError> {
         let completion_transition =
             runtime_result_transition_from_running(&started.running_record, &result)?;
-        store
+        let mutation = store
             .complete_active_run_scheduler_task(
                 session_id,
                 workflow_run_id,
@@ -693,7 +767,9 @@ impl WorkflowSchedulerTaskOrchestrator {
                 completion_transition,
                 result,
             )
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
+        Ok(mutation)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_selection(
@@ -726,14 +802,16 @@ impl WorkflowSchedulerTaskOrchestrator {
             &started.running_record,
             runtime_dispatch_selection_task_diagnostics(selection),
         )?;
-        store
+        let mutation = store
             .fail_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
                 &started.attempt_id,
                 failure_transition,
             )
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
+        Ok(mutation)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_error(
@@ -766,14 +844,16 @@ impl WorkflowSchedulerTaskOrchestrator {
             &started.running_record,
             runtime_dispatch_failure_diagnostic(error),
         )?;
-        store
+        let mutation = store
             .fail_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
                 &started.attempt_id,
                 failure_transition,
             )
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
+        Ok(mutation)
     }
 
     pub(crate) fn advance_awaiting_non_runtime_task_inputs(

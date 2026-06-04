@@ -988,6 +988,12 @@ async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() 
     let started = orchestrator
         .start_ready_non_runtime_task(&mut store, &session_id, &workflow_run_id, "text-output")
         .expect("start ready non-runtime task");
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        1
+    );
     let (_stored_graph, records) = store
         .active_run_scheduler_task_state(&session_id, &workflow_run_id)
         .expect("active run task state")
@@ -1017,6 +1023,12 @@ async fn orchestrator_executes_ready_non_runtime_task_and_persists_completion() 
     assert_eq!(
         completed.state.kind(),
         pantograph_scheduler::SchedulerTaskStateKind::Completed
+    );
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        0
     );
 
     assert_eq!(result.task_id, "text-output");
@@ -1118,6 +1130,12 @@ fn orchestrator_persists_started_runtime_task_result() {
 
     assert_eq!(started.task.task_id.as_str(), task_id);
     assert!(started.materialized_results.is_empty());
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        1
+    );
     let (_stored_graph, running_records) = store
         .active_run_scheduler_task_state(&session_id, &workflow_run_id)
         .expect("active run task state")
@@ -1138,6 +1156,12 @@ fn orchestrator_persists_started_runtime_task_result() {
         .expect("complete runtime task");
 
     assert_eq!(completed.state.kind(), SchedulerTaskStateKind::Completed);
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        0
+    );
     let results = store
         .active_run_scheduler_task_results(&session_id, &workflow_run_id)
         .expect("stored task results");
@@ -1184,6 +1208,12 @@ fn orchestrator_rejects_duplicate_runtime_task_attempt_start() {
         .attempt_id
         .as_str()
         .starts_with("scheduler-task-attempt."));
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        1
+    );
 
     let error = orchestrator
         .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
@@ -1193,6 +1223,12 @@ fn orchestrator_rejects_duplicate_runtime_task_attempt_start() {
         panic!("expected workflow-service error");
     };
     assert!(!error.message().is_empty());
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        1
+    );
     let (_stored_graph, records) = store
         .active_run_scheduler_task_state(&session_id, &workflow_run_id)
         .expect("active run task state")

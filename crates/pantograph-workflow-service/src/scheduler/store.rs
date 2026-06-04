@@ -73,7 +73,7 @@ struct WorkflowExecutionSessionActiveRun {
 pub(crate) struct WorkflowSchedulerTaskAttemptId(String);
 
 impl WorkflowSchedulerTaskAttemptId {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(format!("scheduler-task-attempt.{}", Uuid::new_v4()))
     }
 

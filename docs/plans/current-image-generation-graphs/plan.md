@@ -155,6 +155,18 @@ Tauri/frontend lifecycle logic, or graph-path/reduced-plan fallback. The next
 slice is durable duplicate-dispatch/task lease guardrails and runner
 integration through the lifecycle owner.
 
+2026-06-04 scheduler lifecycle duplicate-dispatch guardrail update:
+`WorkflowSchedulerTaskOrchestrator` now owns a shared task lifecycle manager.
+Runtime and non-runtime task starts generate the scheduler attempt id before
+the running transition, claim the lifecycle handle, and roll the claim back if
+the store transition fails. Matching terminal completion/failure releases the
+handle only after the store mutation succeeds. This extends the attempt/lease
+core with one lifecycle owner for overlapping runner calls without adding
+retry/defer policy, replay/bootstrap, diagnostics-ledger writes,
+runtime-host API changes, graph-path fallback, reduced-plan launch, or
+Tauri/frontend lifecycle behavior. The next slice is cancellation/shutdown
+token ownership through the same lifecycle owner.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

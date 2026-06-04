@@ -157,13 +157,16 @@ asynchronous, spawned work, cancellation, retries, shutdown, and tracing must
 be owned by this module rather than by Tauri, frontend code, node-engine, or
 runtime adapters.
 The task lifecycle manager is the workflow-service owner for task handle and
-shutdown state. Its first slice is synchronous and does not spawn work, retry,
-replay, write diagnostics-ledger facts, dispatch runtime-host work, or change
-scheduler task-state policy. Later slices must compose cancellation tokens,
-durable duplicate-dispatch guards, retry/defer policy, replay/bootstrap, and
-attempt/timing ledger facts through this owner instead of distributing
-lifecycle behavior across the session runner, Tauri, frontend code, runtime
-adapters, or diagnostics projections.
+shutdown state. It is synchronous and does not spawn work, retry, replay,
+write diagnostics-ledger facts, dispatch runtime-host work, or change
+scheduler task-state policy. The scheduler task orchestrator now claims a
+lifecycle handle before applying a running attempt transition and releases
+that handle only after the matching terminal store mutation succeeds, so
+overlapping runner calls cannot bypass the shared lifecycle owner. Later
+slices must compose cancellation tokens, retry/defer policy,
+replay/bootstrap, and attempt/timing ledger facts through this owner instead
+of distributing lifecycle behavior across the session runner, Tauri, frontend
+code, runtime adapters, or diagnostics projections.
 The first concrete lifecycle provider adapter is the canonical
 `DependencyEnvironmentService` facade. It converts the readiness request into a
 path-free dependency-environment resolve request, validates provider output,

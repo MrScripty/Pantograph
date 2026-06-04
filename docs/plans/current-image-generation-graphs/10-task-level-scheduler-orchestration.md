@@ -648,10 +648,17 @@ Option 3 thin implementation sequence:
      duplicate/stale handles, and remains detached from async worker spawning,
      retry, replay, ledger persistence, runtime dispatch, and frontend/Tauri
      policy until the next slices wire it into session execution.
-2. [ ] Durable duplicate-dispatch/task lease guardrail: extend the active-run
+2. [x] Durable duplicate-dispatch/task lease guardrail: extend the active-run
    lifecycle state so a task cannot be dispatched twice across runner resume,
    stale attempts, or overlapping calls. Keep it synchronous and fail closed
    with typed diagnostics.
+   - 2026-06-04 implementation update: the orchestrator now owns a shared
+     task lifecycle manager. Task starts generate the attempt id before the
+     store transition, claim the lifecycle handle, roll the claim back on
+     failed start, and release only after matching terminal store mutation.
+     This keeps the store as the synchronous task-state owner and keeps
+     runtime-host awaits outside store locks while routing duplicate/overlap
+     guardrails through one lifecycle owner.
 3. [ ] Cancellation and shutdown ownership: add cancellation tokens or equivalent
    task-stop signals, propagate shutdown from the supervisor, and await or
    abort tracked tasks at the lifecycle owner. Do not hide cancellation in

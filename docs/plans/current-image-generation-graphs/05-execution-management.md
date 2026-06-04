@@ -23922,6 +23922,38 @@ Worker rules:
       through the lifecycle owner, then cancellation/shutdown tokens,
       retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
       attempt/timing facts.
+  - 2026-06-04 Milestone 5c durable duplicate-dispatch/task lease guardrail
+    slice:
+    - Smallest vertical slice: wire the existing scheduler task orchestrator
+      into the task lifecycle manager for runtime and non-runtime started task
+      attempts. Allowed write set used: `scheduler/task_orchestrator.rs`,
+      focused orchestrator/store tests, `scheduler/store_task_results.rs`,
+      `scheduler/store.rs`, scheduler README, and this plan set.
+    - No-fallback confirmation: the slice only changes attempt id ownership
+      and lifecycle claim/release ordering. It does not add retry/defer,
+      replay/bootstrap, diagnostics-ledger writes, runtime-host API changes,
+      graph-path inference, reduced-plan launch, node-engine runtime launch,
+      Pumas calls, or Tauri/frontend lifecycle policy.
+    - Implementation summary: orchestrator-generated attempt ids are claimed
+      in the lifecycle manager before the store applies `Running`; failed
+      starts roll back the claim; matching terminal completion/failure releases
+      the handle after store mutation succeeds. Runtime-host and non-runtime
+      awaits remain outside store locks.
+    - Tests/verification:
+      - `cargo test -p pantograph-workflow-service scheduler::task_orchestrator --lib`
+      - `cargo test -p pantograph-workflow-service active_run_complete_scheduler_task --lib`
+      - `cargo test -p pantograph-workflow-service active_run_cancel_scheduler_task_attempt --lib`
+      - `cargo test -p pantograph-workflow-service active_run_bind_scheduler_task_reservation --lib`
+      - `cargo test -p pantograph-workflow-service task_lifecycle --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/deleted-symbol search over touched scheduler
+        files. Only an existing README invariant mentions
+        `ModelDependencyRequest`/`ModelRefV2` as forbidden legacy contracts.
+    - Remaining follow-up: cancellation/shutdown token ownership through the
+      same lifecycle manager, then retry/defer idempotency, replay/bootstrap,
+      and diagnostics-ledger attempt/timing facts.
 
 ### Traceability Links
 

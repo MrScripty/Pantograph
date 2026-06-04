@@ -582,6 +582,12 @@ durable task orchestration path.
   Remaining immediate follow-up: wire durable duplicate-dispatch/task lease
   guardrails through this owner without adding retry, replay, ledger writes,
   runtime-host API changes, or adapter-owned lifecycle policy.
+  2026-06-04 duplicate-dispatch guardrail update: the orchestrator now claims
+  and releases lifecycle handles around runtime and non-runtime started task
+  attempts. Attempt ids are generated before store start transitions, failed
+  starts roll back the lifecycle claim, and matching terminal mutations release
+  the handle after the store update. Remaining immediate follow-up:
+  cancellation/shutdown token ownership through the same lifecycle owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
