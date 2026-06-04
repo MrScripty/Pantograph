@@ -1984,3 +1984,36 @@ durable task orchestration path.
   runner that consumes this report to reconcile incomplete attempts without
   duplicate dispatch, then add diagnostics-ledger attempt/timing facts after
   replay ordering is proven.
+- 2026-06-04 bootstrap recovery planning slice completed. Smallest useful
+  vertical slice: add a workflow-service-owned read-only recovery plan over the
+  canonical bootstrap recovery report so replay/recovery owners can consume
+  typed decisions without embedding policy in adapters. Allowed write set used:
+  `workflow/contracts.rs`, `workflow/session_execution_api.rs`,
+  `workflow/tests/session_execution.rs`, `lib.rs`, and the plan docs.
+  No-fallback/no-legacy confirmation: no replay, task-state mutation,
+  runtime-host call, reservation release, diagnostics-ledger write,
+  Tauri/frontend policy, graph-path execution, node-engine path, reduced-plan
+  path, Pumas/package fact change, lockfile change, generated rewrite, or
+  workflow fixture rewrite was added.
+  Implementation summary: workflow contracts now expose recovery decision and
+  plan DTOs. `WorkflowService` exposes
+  `workflow_execution_session_bootstrap_recovery_plan`; the pure planner maps
+  dependency-readiness retry actions to deduplicated resume requests, blocks
+  ready runtime redispatch with a duplicate-dispatch guard diagnostic, and
+  emits typed blocking decisions for runtime recovery required, terminal
+  diagnostic, and missing task-state records.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard
+  --lib`; `cargo test -p pantograph-workflow-service
+  workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
+  --lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery
+  --lib`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+  no-fallback/no-legacy source search. Search matches were existing diagnostics
+  compatibility payload fields, existing negative legacy tests, and existing
+  Pumas test fixtures only.
+  Remaining follow-up: implement the workflow-service-owned bootstrap/replay
+  runner that applies safe plan decisions with durable
+  duplicate-dispatch/idempotency protection, then add diagnostics-ledger
+  attempt/timing facts after replay ordering is proven.

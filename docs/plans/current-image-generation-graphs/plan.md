@@ -641,6 +641,29 @@ workflow-service-owned bootstrap/replay runner that consumes this report and
 reconciles incomplete attempts without duplicate dispatch, then add
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 bootstrap recovery planning update: workflow-service now exposes a
+backend-owned `workflow_execution_session_bootstrap_recovery_plan` API that
+turns the canonical recovery report into typed reconciliation decisions and
+deduplicated dependency-readiness resume requests. The planner is read-only and
+performs no replay, task-state mutation, runtime-host call, reservation
+release, diagnostics-ledger write, Tauri/frontend policy, or graph-path/
+node-engine/reduced-plan fallback. Ready runtime redispatch is intentionally
+blocked with a duplicate-dispatch guard diagnostic until durable dispatch
+idempotency is implemented; unsafe runtime recovery, terminal, and missing
+task-state conditions are also typed blocking decisions. Verification passed:
+`cargo fmt -p pantograph-workflow-service`; `cargo test -p
+pantograph-workflow-service
+bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard --lib`;
+`cargo test -p pantograph-workflow-service
+workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
+--lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: implement the
+workflow-service-owned bootstrap/replay runner that applies safe plan decisions
+with durable duplicate-dispatch/idempotency protection, then add
+diagnostics-ledger attempt/timing facts after replay ordering is proven.
+
 ## Standards Rule
 
 The standards constraints in

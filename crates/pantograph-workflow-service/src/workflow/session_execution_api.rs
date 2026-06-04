@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::Duration,
+};
 
 use crate::graph::{
     workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
@@ -44,14 +47,16 @@ use super::{
     WorkflowErrorDiagnosticsLink, WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionBootstrapRecoveryAction,
-    WorkflowExecutionSessionBootstrapRecoveryReport, WorkflowExecutionSessionBootstrapRecoveryRun,
-    WorkflowExecutionSessionBootstrapRecoveryTask, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionResumeRequest, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowPortBinding, WorkflowRunResponse,
-    WorkflowRuntimeCapability, WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary, WorkflowService,
-    WorkflowServiceError,
+    WorkflowExecutionSessionBootstrapRecoveryDecision,
+    WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
+    WorkflowExecutionSessionBootstrapRecoveryPlan, WorkflowExecutionSessionBootstrapRecoveryReport,
+    WorkflowExecutionSessionBootstrapRecoveryRun, WorkflowExecutionSessionBootstrapRecoveryTask,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionResumeRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -621,6 +626,13 @@ impl WorkflowService {
             .map(workflow_bootstrap_recovery_run_from_scheduler)
             .collect();
         Ok(WorkflowExecutionSessionBootstrapRecoveryReport { active_runs })
+    }
+
+    pub fn workflow_execution_session_bootstrap_recovery_plan(
+        &self,
+    ) -> Result<WorkflowExecutionSessionBootstrapRecoveryPlan, WorkflowServiceError> {
+        let report = self.workflow_execution_session_bootstrap_recovery_report()?;
+        Ok(workflow_bootstrap_recovery_plan_from_report(report))
     }
 
     fn finish_failed_workflow_run_after_admission(
@@ -1439,6 +1451,124 @@ fn workflow_bootstrap_recovery_action_from_scheduler(
     }
 }
 
+fn workflow_bootstrap_recovery_plan_from_report(
+    report: WorkflowExecutionSessionBootstrapRecoveryReport,
+) -> WorkflowExecutionSessionBootstrapRecoveryPlan {
+    let mut decisions = Vec::new();
+    let mut resume_requests = Vec::new();
+    let mut resume_request_keys = BTreeSet::new();
+    let mut blocking_decision_count = 0;
+
+    for run in report.active_runs {
+        for task in run.runtime_tasks {
+            let decision_kind = workflow_bootstrap_recovery_decision_kind(task.action);
+            let diagnostic = workflow_bootstrap_recovery_diagnostic(decision_kind, &task);
+            if workflow_bootstrap_recovery_decision_blocks(decision_kind) {
+                blocking_decision_count += 1;
+            }
+            if decision_kind
+                == WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
+            {
+                let key = (run.session_id.clone(), run.workflow_run_id.clone());
+                if resume_request_keys.insert(key) {
+                    resume_requests.push(WorkflowExecutionSessionResumeRequest {
+                        session_id: run.session_id.clone(),
+                        workflow_run_id: run.workflow_run_id.clone(),
+                    });
+                }
+            }
+            decisions.push(WorkflowExecutionSessionBootstrapRecoveryDecision {
+                session_id: run.session_id.clone(),
+                workflow_run_id: run.workflow_run_id.clone(),
+                task_id: task.task_id,
+                state_kind: task.state_kind,
+                recovery_action: task.action,
+                decision_kind,
+                diagnostic,
+            });
+        }
+    }
+
+    WorkflowExecutionSessionBootstrapRecoveryPlan {
+        decisions,
+        resume_requests,
+        blocking_decision_count,
+    }
+}
+
+fn workflow_bootstrap_recovery_decision_kind(
+    action: WorkflowExecutionSessionBootstrapRecoveryAction,
+) -> WorkflowExecutionSessionBootstrapRecoveryDecisionKind {
+    match action {
+        WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+        }
+        WorkflowExecutionSessionBootstrapRecoveryAction::RetryDependencyReadiness => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
+        }
+        WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired
+        }
+        WorkflowExecutionSessionBootstrapRecoveryAction::RuntimeRecoveryRequired => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired
+        }
+        WorkflowExecutionSessionBootstrapRecoveryAction::Completed => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::NoopCompleted
+        }
+        WorkflowExecutionSessionBootstrapRecoveryAction::TerminalDiagnostic => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedTerminalDiagnostic
+        }
+        WorkflowExecutionSessionBootstrapRecoveryAction::MissingTaskStateRecord => {
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedMissingTaskStateRecord
+        }
+    }
+}
+
+fn workflow_bootstrap_recovery_decision_blocks(
+    decision_kind: WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
+) -> bool {
+    matches!(
+        decision_kind,
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired
+            | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired
+            | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedTerminalDiagnostic
+            | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedMissingTaskStateRecord
+    )
+}
+
+fn workflow_bootstrap_recovery_diagnostic(
+    decision_kind: WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
+    task: &WorkflowExecutionSessionBootstrapRecoveryTask,
+) -> Option<String> {
+    match decision_kind {
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired => {
+            Some(format!(
+                "runtime task '{}' is ready for dispatch; bootstrap recovery must prove duplicate-dispatch guard state before redispatch",
+                task.task_id
+            ))
+        }
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired => {
+            Some(format!(
+                "runtime task '{}' requires runtime recovery before bootstrap can resume work",
+                task.task_id
+            ))
+        }
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedTerminalDiagnostic => {
+            Some(format!(
+                "runtime task '{}' is in a terminal diagnostic state and cannot be replayed",
+                task.task_id
+            ))
+        }
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedMissingTaskStateRecord => {
+            Some(format!(
+                "runtime task '{}' is missing canonical scheduler task state and cannot be replayed",
+                task.task_id
+            ))
+        }
+        _ => None,
+    }
+}
+
 fn queue_position_u32(
     queued_item: &WorkflowExecutionSessionQueueItem,
 ) -> Result<u32, WorkflowServiceError> {
@@ -1876,6 +2006,36 @@ mod tests {
 
         assert!(truncated.len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN);
         assert!(truncated.ends_with(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX));
+    }
+
+    #[test]
+    fn bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard() {
+        let report = WorkflowExecutionSessionBootstrapRecoveryReport {
+            active_runs: vec![WorkflowExecutionSessionBootstrapRecoveryRun {
+                session_id: "session-a".to_string(),
+                workflow_run_id: "run-a".to_string(),
+                runtime_tasks: vec![WorkflowExecutionSessionBootstrapRecoveryTask {
+                    task_id: "infer".to_string(),
+                    state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::Ready),
+                    action: WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime,
+                }],
+            }],
+        };
+
+        let plan = workflow_bootstrap_recovery_plan_from_report(report);
+
+        assert!(plan.resume_requests.is_empty());
+        assert_eq!(plan.blocking_decision_count, 1);
+        assert_eq!(plan.decisions.len(), 1);
+        assert_eq!(
+            plan.decisions[0].decision_kind,
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired
+        );
+        assert!(plan.decisions[0]
+            .diagnostic
+            .as_deref()
+            .expect("blocking diagnostic")
+            .contains("duplicate-dispatch guard"));
     }
 
     #[test]

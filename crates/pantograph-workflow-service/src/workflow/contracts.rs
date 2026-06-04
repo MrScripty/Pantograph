@@ -938,6 +938,42 @@ pub struct WorkflowExecutionSessionBootstrapRecoveryReport {
     pub active_runs: Vec<WorkflowExecutionSessionBootstrapRecoveryRun>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowExecutionSessionBootstrapRecoveryDecisionKind {
+    ResumeProgressLoop,
+    ResumeRuntimeDependencyReadiness,
+    BlockedDuplicateDispatchGuardRequired,
+    BlockedRuntimeRecoveryRequired,
+    NoopCompleted,
+    BlockedTerminalDiagnostic,
+    BlockedMissingTaskStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionBootstrapRecoveryDecision {
+    pub session_id: String,
+    pub workflow_run_id: String,
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_kind: Option<SchedulerTaskStateKind>,
+    pub recovery_action: WorkflowExecutionSessionBootstrapRecoveryAction,
+    pub decision_kind: WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionBootstrapRecoveryPlan {
+    #[serde(default)]
+    pub decisions: Vec<WorkflowExecutionSessionBootstrapRecoveryDecision>,
+    #[serde(default)]
+    pub resume_requests: Vec<WorkflowExecutionSessionResumeRequest>,
+    pub blocking_decision_count: usize,
+}
+
 /// Session close request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

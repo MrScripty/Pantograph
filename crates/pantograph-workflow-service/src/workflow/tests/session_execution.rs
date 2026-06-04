@@ -472,6 +472,22 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
         recovery_report.active_runs[0].runtime_tasks[0].action,
         WorkflowExecutionSessionBootstrapRecoveryAction::RetryDependencyReadiness
     );
+    let recovery_plan = service
+        .workflow_execution_session_bootstrap_recovery_plan()
+        .expect("bootstrap recovery plan");
+    assert_eq!(recovery_plan.blocking_decision_count, 0);
+    assert_eq!(
+        recovery_plan.resume_requests,
+        vec![WorkflowExecutionSessionResumeRequest {
+            session_id,
+            workflow_run_id,
+        }]
+    );
+    assert_eq!(recovery_plan.decisions.len(), 1);
+    assert_eq!(
+        recovery_plan.decisions[0].decision_kind,
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
+    );
 }
 
 #[tokio::test]
