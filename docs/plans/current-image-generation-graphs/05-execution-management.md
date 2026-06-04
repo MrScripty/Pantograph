@@ -23954,6 +23954,51 @@ Worker rules:
     - Remaining follow-up: cancellation/shutdown token ownership through the
       same lifecycle manager, then retry/defer idempotency, replay/bootstrap,
       and diagnostics-ledger attempt/timing facts.
+  - 2026-06-04 Milestone 5c cancellation/shutdown re-plan decision:
+    - Re-plan trigger: the current `RuntimeHostExecutionPort` accepts only a
+      `RuntimeHostExecutionRequest`, and the session runner awaits runtime-host
+      dispatch inline. There is no typed cancellation/shutdown signal crossing
+      the workflow-service to runtime-host boundary, so a direct
+      cancellation-token slice would either only reject new work or rely on
+      best-effort future dropping.
+    - Standards check: `CODING-STANDARDS.md` requires one lifecycle/state
+      owner; `RUST-ASYNC-STANDARDS.md` requires long-running async work to
+      receive cancellation, shutdown propagation, and await/abort ownership;
+      `TESTING-STANDARDS.md` requires cancellation, cleanup, overlap, and
+      lifecycle regressions when those paths change. Tauri/frontend and
+      runtime adapters must not own workflow lifecycle/business policy.
+    - Options considered:
+      1. Workflow-service-only cancellation gate: simple and backend-owned, but
+         insufficient because in-flight runtime-host work cannot observe the
+         shutdown/cancel signal.
+      2. Cancellable runtime-host execution contract: selected. Extend the
+         backend runtime-host execution boundary so workflow-service passes
+         typed cancellation/shutdown context, adapters observe it, and
+         workflow-service owns task-state mutation and diagnostics.
+      3. Full workflow-service task supervisor: schedule after option 2. Add
+         tracked handles, child cancellation tokens, shutdown draining,
+         timeout/abort behavior, and panic observation once runtime-host work
+         can cooperatively observe cancellation.
+      4. Adapter-owned cancellation: rejected because it splits lifecycle and
+         business ownership across execution adapters or transport code.
+    - Next source-slice allowed write set: runtime-host execution contracts and
+      focused contract tests, workflow-service scheduler/orchestrator runner
+      wiring needed to pass the typed cancellation context, concrete
+      runtime-host test fixtures/adapters that must compile against the
+      contract, scheduler/workflow READMEs if ownership boundaries change, and
+      this plan set. Frontend/Tauri lifecycle policy, retry/defer policy,
+      replay/bootstrap, diagnostics-ledger schema/storage, lockfiles, saved
+      workflow fixtures, and Pumas model-fact logic are out of scope unless a
+      direct boundary need is recorded first.
+    - Required verification for the next slice: runtime-host contract serde/
+      validation tests, focused workflow-service scheduler/orchestrator
+      cancellation tests proving in-flight runtime tasks receive the signal and
+      terminally mutate through workflow-service, no store lock held across
+      awaits, no Tauri/frontend lifecycle branch, targeted no-fallback/deleted
+      symbol searches, `cargo fmt -p pantograph-runtime-host-contracts -- --check`,
+      `cargo fmt -p pantograph-workflow-service -- --check`, focused cargo
+      tests, `cargo check -p pantograph-workflow-service`, and
+      `git diff --check`.
 
 ### Traceability Links
 

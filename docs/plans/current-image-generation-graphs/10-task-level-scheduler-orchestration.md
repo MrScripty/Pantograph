@@ -663,6 +663,17 @@ Option 3 thin implementation sequence:
    task-stop signals, propagate shutdown from the supervisor, and await or
    abort tracked tasks at the lifecycle owner. Do not hide cancellation in
    leaf runtime-host or reservation code.
+   - 2026-06-04 re-plan decision: use the cancellable runtime-host execution
+     contract path before adding the full task supervisor. The current
+     `RuntimeHostExecutionPort::execute(request)` has no cancellation input,
+     so workflow-service cannot cooperatively stop in-flight runtime work
+     without a typed backend contract. The next slice must keep
+     workflow-service as lifecycle/business owner, add cancellation/shutdown
+     propagation to the runtime-host execution boundary, update contract tests
+     and adapters to observe the signal, and fail closed with typed
+     diagnostics. After that contract is in place, implement the full
+     workflow-service task supervisor with tracked handles, child cancellation
+     tokens, shutdown draining, timeout/abort behavior, and panic observation.
 4. [ ] Retry/defer policy boundary: add typed retry/defer decisions and
    idempotency keys after cancellation ownership exists. Keep retry scheduling
    separate from dispatch selection and reservation release.
@@ -689,6 +700,29 @@ Option 3 standards gates:
   Tauri/frontend lifecycle policy.
 - Persistence/replay: replay must be explicit, testable, and idempotent before
   durable worker restart behavior is considered complete.
+
+Cancellation/shutdown re-plan options:
+
+- Option 1 workflow-service-only cancellation gate: reject new task starts
+  during shutdown and terminally cancel active attempts after the current await
+  returns. Standards fit is partial because workflow-service remains owner, but
+  it cannot stop in-flight runtime-host work and therefore does not satisfy
+  cooperative cancellation for long-running runtime tasks.
+- Option 2 cancellable runtime-host execution contract (selected): extend the
+  backend runtime-host execution boundary so workflow-service passes typed
+  cancellation/shutdown context into runtime execution. Runtime-host adapters
+  observe the signal and return typed cancelled/failure results, while
+  workflow-service owns the lifecycle decision, task-state mutation, and
+  diagnostics. This is the smallest standards-compliant path before a full
+  supervisor because it preserves a clean business/execution split.
+- Option 3 full workflow-service task supervisor (scheduled after option 2):
+  run task executions under lifecycle-owned handles with child cancellation
+  tokens, shutdown draining, timeout/abort behavior, and panic observation.
+  This is the long-term lifecycle shape, but it should follow option 2 so
+  aborting a Rust future is not the only way to stop underlying runtime work.
+- Option 4 adapter-owned cancellation: rejected because it moves lifecycle and
+  business policy into runtime adapters/Tauri/frontend and creates multiple
+  state owners.
 
 Rejected or deferred alternatives:
 

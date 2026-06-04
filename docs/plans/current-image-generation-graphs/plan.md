@@ -167,6 +167,20 @@ runtime-host API changes, graph-path fallback, reduced-plan launch, or
 Tauri/frontend lifecycle behavior. The next slice is cancellation/shutdown
 token ownership through the same lifecycle owner.
 
+2026-06-04 scheduler cancellation/shutdown contract re-plan decision: use the
+cancellable runtime-host execution contract path next. The current
+runtime-host execution port accepts only an execution request and cannot
+observe workflow-service cancellation or shutdown, so task cancellation cannot
+be standards-compliant if it is hidden in Tauri/frontend, runtime adapters, or
+best-effort future dropping. The next thin slice must add backend-owned,
+typed cancellation/shutdown propagation at the runtime-host contract boundary
+while workflow-service remains the lifecycle/business owner. After that
+contract exists, implement the full workflow-service task supervisor with
+tracked handles, child cancellation tokens, shutdown draining, timeout/abort
+behavior, and panic observation. A workflow-service-only gate may reject new
+work but is insufficient for in-flight runtime tasks; adapter-owned
+cancellation is rejected because it splits lifecycle/business ownership.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

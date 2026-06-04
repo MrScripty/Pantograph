@@ -588,6 +588,14 @@ durable task orchestration path.
   starts roll back the lifecycle claim, and matching terminal mutations release
   the handle after the store update. Remaining immediate follow-up:
   cancellation/shutdown token ownership through the same lifecycle owner.
+  2026-06-04 cancellation/shutdown re-plan decision: the next slice must first
+  add a cancellable runtime-host execution contract so workflow-service can
+  propagate typed cancellation/shutdown to in-flight runtime tasks while
+  retaining lifecycle/business ownership. A workflow-service-only new-work gate
+  is insufficient for in-flight runtime tasks, and adapter-owned cancellation
+  is rejected. After the cancellable contract exists, implement the full
+  workflow-service task supervisor with tracked handles, child cancellation
+  tokens, shutdown draining, timeout/abort behavior, and panic observation.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
