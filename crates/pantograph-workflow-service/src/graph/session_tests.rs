@@ -659,6 +659,110 @@ async fn refresh_current_validation_summary_generates_backend_validation_session
 }
 
 #[tokio::test]
+async fn current_validation_projection_reads_published_node_projections_without_refreshing() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let refresh = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+
+    let projection = store
+        .current_validation_projection(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("current validation projection");
+
+    assert_eq!(
+        projection.summary.state,
+        WorkflowGraphCurrentValidationSummaryState::Current
+    );
+    assert_eq!(
+        projection.summary.validation_session_id,
+        refresh.summary.validation_session_id
+    );
+    assert_eq!(projection.node_projections.len(), 1);
+    assert_eq!(projection.node_projections[0].node_id.as_str(), "infer");
+    assert!(store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events")
+        .is_empty());
+}
+
+#[tokio::test]
+async fn current_validation_projection_rejects_stale_revision_without_projections() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let _refresh = store
+        .refresh_current_validation_summary(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("refresh current validation summary");
+    let updated = store
+        .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+            session_id: session.session_id.clone(),
+            node_id: "infer".to_string(),
+            data: serde_json::json!({
+                "runtime": "cuda"
+            }),
+        })
+        .await
+        .expect("update semantic inference node data");
+
+    assert_ne!(updated.graph_revision, session.graph_revision);
+
+    let projection = store
+        .current_validation_projection(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid stale graph revision"),
+        })
+        .await
+        .expect("stale current validation projection");
+
+    assert_eq!(
+        projection.summary.state,
+        WorkflowGraphCurrentValidationSummaryState::Stale
+    );
+    assert_eq!(projection.node_projections, Vec::new());
+    assert_eq!(
+        projection.summary.diagnostics[0].code,
+        InferenceDiagnosticCode::GraphRevisionMismatch
+    );
+}
+
+#[tokio::test]
 async fn validation_task_owner_records_completed_backend_validation_task() {
     let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
         StaticInferenceFactsProvider {

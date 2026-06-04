@@ -6487,3 +6487,33 @@ defining an image-only inference-node interface.
     sites so selected-model hydration receives `pumas_model_ref` only, then
     implement the canonical path-free dependency-environment hydration service
     boundary and remove the legacy `ModelDependencyRequest` dependency path.
+- [x] 2026-06-03 validation projection read-model slice completed:
+  - Smallest useful vertical slice: expose a backend-owned current validation
+    projection read model before wiring frontend lifecycle consumption.
+  - Allowed files touched:
+    `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+    `crates/pantograph-workflow-service/src/graph/README.md`,
+    `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+    `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`,
+    `src/services/workflow/WorkflowCommandService.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/README.md`, plan summary files, and execution log.
+  - No-fallback/no-legacy confirmation: the read model returns stored
+    workflow-service summary/projection state only; stale or missing state
+    returns typed diagnostics with no projections. Tauri and frontend do not
+    mint validation sessions, rerun validation, derive descriptor overlays,
+    inspect graph paths, or interpret selector/runtime facts.
+  - Verification passed: `cargo fmt -p pantograph-workflow-service --
+    --check`; `cargo test -p pantograph-workflow-service
+    current_validation_projection --lib`; `cargo check -p
+    pantograph-workflow-service`; `npm run test:frontend --
+    WorkflowService.commands.test.ts`; `npm run typecheck`; `cargo check
+    --manifest-path src-tauri/Cargo.toml` with existing unrelated dead-code
+    warnings; touched-source no-fallback/no-legacy/path-authority search; and
+    `git diff --check`.
+  - Remaining follow-up: make the graph editor lifecycle handler consume this
+    read model and update runtime overlays from backend projections without
+    calling validation refresh from lifecycle events.

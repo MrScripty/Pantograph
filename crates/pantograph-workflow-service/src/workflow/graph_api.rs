@@ -86,6 +86,15 @@ impl WorkflowService {
             .await
     }
 
+    pub async fn workflow_graph_current_validation_projection(
+        &self,
+        request: WorkflowGraphCurrentValidationSummaryRequest,
+    ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
+        self.graph_session_store
+            .current_validation_projection(request)
+            .await
+    }
+
     pub async fn workflow_graph_refresh_current_validation_summary(
         &self,
         request: WorkflowGraphCurrentValidationRefreshRequest,

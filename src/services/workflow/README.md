@@ -110,6 +110,11 @@ the backend refresh response exactly so stale revisions and unavailable facts
 remain backend-owned gate states. The refresh response may include typed
 descriptor/authored-port projection records for editor rendering; service code
 must not turn those records into local submit or scheduler eligibility policy.
+Current graph validation projection reads are forwarded as typed graph-session
+commands using the caller-observed graph revision. They consume only the
+backend's stored current validation read model and must not trigger validation,
+mint validation session ids, infer freshness, or rebuild node projection
+records from local graph state.
 Current graph validation task starts are forwarded as typed graph-session
 commands using the caller-observed graph revision. The service returns the
 backend-issued validation session id unchanged and does not mint ids, resolve

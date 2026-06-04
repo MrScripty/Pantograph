@@ -62,6 +62,31 @@ impl GraphSessionStore {
             .await)
     }
 
+    pub async fn current_validation_projection(
+        &self,
+        request: WorkflowGraphCurrentValidationSummaryRequest,
+    ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
+        let graph_session_id = WorkflowGraphSessionId::parse(&request.graph_session_id)
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let handle = self.get_session_handle(&request.graph_session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        state.canonicalize_graph();
+        let current_graph_revision =
+            WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        drop(state);
+
+        Ok(self
+            .validation_state
+            .current_validation_projection(WorkflowGraphCurrentValidationSummaryStateRequest {
+                graph_session_id,
+                requested_graph_revision: request.graph_revision,
+                current_graph_revision,
+            })
+            .await)
+    }
+
     pub async fn refresh_current_validation_summary(
         &self,
         request: WorkflowGraphCurrentValidationRefreshRequest,

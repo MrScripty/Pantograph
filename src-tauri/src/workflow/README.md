@@ -171,6 +171,11 @@ workflow-service refresh API. They do not accept caller-minted validation
 session ids, raw descriptor facts, Pumas facts, dependency proofs, or runtime
 facts, and they must not reinterpret returned node projections as submit
 policy.
+Current graph validation projection commands are thin wrappers over the
+workflow-service current projection read model. They return stored backend
+summary/projection state without starting validation, and they must not derive
+descriptor overlays from frontend graph data, Tauri timing, raw Pumas facts,
+runtime facts, or scheduler state.
 Current graph validation task-start commands are thin wrappers over the
 workflow-service task-owner facade. They do not accept caller-minted validation
 session ids, raw descriptor facts, Pumas facts, dependency proofs, runtime

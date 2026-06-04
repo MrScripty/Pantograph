@@ -387,6 +387,11 @@ or frontend state.
   gating, and scheduler admission must consume that owner instead of carrying
   separate validation-summary caches or reconstructing freshness in Tauri or
   frontend code.
+- Current inference-validation projection reads are also workflow-service-owned
+  read models. They may return stored node projection records for the current
+  graph revision without running validation, and stale or missing state must
+  return typed summary diagnostics with no projections instead of deriving
+  overlays from frontend graph data or transport timing.
 - Closing a graph edit session clears that session's current inference-
   validation state before reporting success. Later validation lifecycle owners
   must use the same workflow-service cleanup boundary for cancellation,

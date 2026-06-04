@@ -272,6 +272,15 @@ previews remain non-triggering. Validation freshness, task lifecycle, and
 typed rejection behavior stay backend-owned; Tauri/frontend overlay consumption
 remains a later presentation slice.
 
+2026-06-03 validation projection read-model update: workflow-service now owns a
+read-only current validation projection query that returns the stored backend
+summary plus node projections for the caller-observed current graph revision
+without starting validation. Stale or missing state returns typed summary
+diagnostics and no projections. Tauri and frontend service code forward the
+query by graph session/revision only, so the next presentation slice can
+consume validation lifecycle events without re-running validation or deriving
+descriptor overlays locally.
+
 ## Standards Rule
 
 The standards constraints in

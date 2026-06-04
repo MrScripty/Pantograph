@@ -713,6 +713,59 @@ test('workflow command service forwards current validation summary requests', as
   }
 });
 
+test('workflow command service forwards current validation projection requests', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const projectionResponse: WorkflowGraphCurrentValidationRefreshResponse = {
+    summary: {
+      graph_session_id: 'graph-session-a',
+      requested_graph_revision: 'graph-revision-a',
+      current_graph_revision: 'graph-revision-a',
+      validation_session_id: 'validation-session-current',
+      state: 'current',
+      summary: {
+        status: 'executable',
+        executable: true,
+        enqueue_disabled_reasons: [],
+        diagnostics_count: 0,
+        blocking_diagnostics_count: 0,
+      },
+      submit_gate: {
+        allowed: true,
+      },
+      diagnostics: [],
+    },
+    node_projections: [],
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return projectionResponse;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const projection = await service.currentGraphValidationProjection({
+      graph_session_id: 'graph-session-a',
+      graph_revision: 'graph-revision-a',
+    });
+
+    assert.deepEqual(projection, projectionResponse);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'current_graph_validation_projection',
+        args: {
+          request: {
+            graph_session_id: 'graph-session-a',
+            graph_revision: 'graph-revision-a',
+          },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
 test('workflow command service forwards current validation refresh requests', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];

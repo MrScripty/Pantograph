@@ -343,6 +343,17 @@ pub async fn current_graph_validation_summary(
 }
 
 #[command]
+pub async fn current_graph_validation_projection(
+    request: WorkflowGraphCurrentValidationSummaryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphCurrentValidationRefreshResponse, String> {
+    workflow_service
+        .workflow_graph_current_validation_projection(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
+#[command]
 pub async fn refresh_current_graph_validation_summary(
     request: WorkflowGraphCurrentValidationRefreshRequest,
     workflow_service: State<'_, SharedWorkflowService>,

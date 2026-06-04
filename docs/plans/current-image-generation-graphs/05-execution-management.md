@@ -23288,6 +23288,54 @@ Worker rules:
       validation lifecycle/state as a separate presentation slice. Tauri and
       frontend must only forward or render backend-issued validation session,
       revision, sequence, summary, and diagnostics facts.
+  - 2026-06-03 Milestone 5d validation projection read-model slice:
+    - Smallest useful vertical slice: expose the stored backend current
+      validation projection as a read-only graph-session query so lifecycle
+      event consumers do not call validation refresh and create validation
+      loops.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/inference_validation_state.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+      `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+      `src-tauri/src/app_setup.rs`, `src-tauri/src/workflow/README.md`,
+      `src/services/workflow/WorkflowCommandService.ts`,
+      `src/services/workflow/WorkflowService.commands.test.ts`,
+      `src/services/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - Implementation: workflow-service now exposes
+      `current_validation_projection`/`workflow_graph_current_validation_projection`
+      using the existing graph-session/revision request and refresh-response
+      shape. The query returns stored summary plus node projections for the
+      current graph revision without starting validation. Stale or missing
+      state returns the existing typed summary gate/diagnostics with no node
+      projections. Tauri registers a direct command forwarder, and the
+      TypeScript workflow command service forwards the command unchanged.
+    - No-fallback/no-legacy result: no graph-path, selector-summary, raw Pumas
+      fact, runtime fact, frontend-state, Tauri-policy, local descriptor
+      overlay, validation-session minting, or compatibility-shim path was
+      added. Read-model misses fail closed with typed diagnostics instead of
+      revalidating or deriving projections locally.
+    - Standards alignment: workflow-service remains the single validation
+      state owner; Tauri remains transport-only; frontend service code remains
+      an invoke wrapper. The slice separates validation execution from
+      projection consumption, reducing lifecycle/read-model complection before
+      the presentation wiring slice.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      current_validation_projection --lib`; `cargo check -p
+      pantograph-workflow-service`; `npm run test:frontend --
+      WorkflowService.commands.test.ts`; `npm run typecheck`; `cargo check
+      --manifest-path src-tauri/Cargo.toml` (existing unrelated Tauri dead-code
+      warnings only); touched-source no-fallback/no-legacy/path-authority
+      search; and `git diff --check`.
+    - Remaining follow-up: wire `WorkflowToolbar.svelte` lifecycle refresh to
+      call the current validation projection read model and apply returned node
+      overlays, without calling validation refresh from lifecycle events.
 
 ### Traceability Links
 

@@ -1169,6 +1169,11 @@ instead of falling back to previously rendered ports.
   ignored by session id, graph fingerprint revision, sequence, and node scope;
   graph display/editing remains available while validation is pending; and event
   subscriptions or any temporary timers are cleaned up on graph/session changes.
+- Editor lifecycle projection consumption must read the backend current
+  validation projection read model instead of calling refresh from lifecycle
+  events. The read model returns stored backend summary plus node projections
+  for the current graph revision, and returns typed stale/missing diagnostics
+  with no projections when current state is unavailable.
 - Dependency ownership checks for any new crate/package or feature added by this
   milestone, including workspace dependency placement, minimal default features,
   and package-local command verification for touched frontend workspaces.

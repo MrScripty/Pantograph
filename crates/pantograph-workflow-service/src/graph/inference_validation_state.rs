@@ -178,6 +178,73 @@ impl CurrentInferenceValidationStateStore {
         )
     }
 
+    pub(crate) async fn current_validation_projection(
+        &self,
+        request: WorkflowGraphCurrentValidationSummaryStateRequest,
+    ) -> WorkflowGraphCurrentValidationRefreshResponse {
+        if request.requested_graph_revision != request.current_graph_revision {
+            return WorkflowGraphCurrentValidationRefreshResponse {
+                summary: current_validation_summary_response(
+                    request.graph_session_id,
+                    request.requested_graph_revision,
+                    request.current_graph_revision,
+                    None,
+                    WorkflowGraphCurrentValidationSummaryState::Stale,
+                    None,
+                    vec![summary_diagnostic(
+                        InferenceDiagnosticCode::GraphRevisionMismatch,
+                        "Graph validation projection was requested for a stale graph revision.",
+                        Some(
+                            "Refresh validation for the current graph revision before rendering projections.",
+                        ),
+                    )],
+                ),
+                node_projections: Vec::new(),
+            };
+        }
+
+        let summaries = self.summaries.read().await;
+        let key = CurrentInferenceValidationStateKey {
+            graph_session_id: request.graph_session_id.clone(),
+            graph_revision: request.current_graph_revision.clone(),
+        };
+        let Some(record) = summaries.get(&key) else {
+            return WorkflowGraphCurrentValidationRefreshResponse {
+                summary: current_validation_summary_response(
+                    request.graph_session_id,
+                    request.requested_graph_revision,
+                    request.current_graph_revision,
+                    None,
+                    WorkflowGraphCurrentValidationSummaryState::Missing,
+                    None,
+                    vec![summary_diagnostic(
+                        InferenceDiagnosticCode::ValidationSummaryMissing,
+                        "Inference validation projections have not completed for this graph revision.",
+                        Some("Run graph validation before rendering inference projections."),
+                    )],
+                ),
+                node_projections: Vec::new(),
+            };
+        };
+
+        WorkflowGraphCurrentValidationRefreshResponse {
+            summary: current_validation_summary_response(
+                request.graph_session_id,
+                request.requested_graph_revision,
+                request.current_graph_revision,
+                Some(record.validation_session_id.clone()),
+                current_validation_summary_state(record.summary.status),
+                Some(record.summary.clone()),
+                bounded_current_validation_diagnostics(record),
+            ),
+            node_projections: record
+                .nodes
+                .values()
+                .map(|node| node.projection.clone())
+                .collect(),
+        }
+    }
+
     pub(crate) async fn current_connection_surfaces(
         &self,
         request: WorkflowGraphCurrentConnectionSurfacesStateRequest,
@@ -1212,7 +1279,6 @@ pub(crate) struct CurrentInferenceValidationNodeRecord {
     pub runtime_constraint: Option<RuntimeIntentId>,
     pub device_constraint: Option<DeviceIntentId>,
     pub estimate_hints: Vec<SchedulerEstimateHint>,
-    #[allow(dead_code)]
     pub projection: InferenceInterfaceNodeProjectionRecord,
     pub dependency_requirements_proof: Option<CurrentDependencyRequirementsProof>,
 }
