@@ -22,6 +22,9 @@ fn shutdown_window_runtime(window: &Window) {
     let workflow_execution_session_cleanup_worker = app
         .try_state::<workflow::commands::SharedWorkflowExecutionSessionStaleCleanupWorker>()
         .map(|state| state.inner().clone());
+    let workflow_service = app
+        .try_state::<workflow::commands::SharedWorkflowService>()
+        .map(|state| state.inner().clone());
     let dependency_readiness_snapshot_producer = app
         .try_state::<workflow::commands::SharedDependencyReadinessSnapshotProducer>()
         .map(|state| state.inner().clone());
@@ -52,6 +55,12 @@ fn shutdown_window_runtime(window: &Window) {
 
         if let Some(recovery_manager) = recovery_manager {
             recovery_manager.stop_auto_recovery_task();
+        }
+
+        if let Some(workflow_service) = workflow_service {
+            workflow_service
+                .workflow_graph_shutdown_validation_tasks()
+                .await;
         }
 
         if let Some(workflow_execution_session_cleanup_worker) =

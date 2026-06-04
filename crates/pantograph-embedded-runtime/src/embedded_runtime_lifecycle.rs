@@ -355,6 +355,9 @@ impl EmbeddedRuntime {
         if let Some(auto_resume) = self.dependency_readiness_auto_resume.as_ref() {
             auto_resume.shutdown().await;
         }
+        self.workflow_service
+            .workflow_graph_shutdown_validation_tasks()
+            .await;
         if let Err(error) = self.workflow_service.invalidate_all_session_runtimes() {
             log::warn!(
                 "failed to invalidate workflow execution session runtimes before shutdown: {}",

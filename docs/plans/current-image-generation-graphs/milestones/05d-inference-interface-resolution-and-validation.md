@@ -2787,6 +2787,16 @@ defining an image-only inference-node interface.
         before graph-mutation auto-triggering, so Tauri/frontend command
         handlers still do not own lifecycle, retry, freshness, or validation
         policy.
+      - 2026-06-03 composition-root shutdown wiring slice completed:
+        `EmbeddedRuntime::shutdown` and Tauri window shutdown now call
+        `WorkflowService::workflow_graph_shutdown_validation_tasks` before
+        runtime/gateway teardown. This completes the shutdown/drain prerequisite
+        for graph-mutation auto-triggering while preserving the boundary that
+        Tauri/frontend do not own validation lifecycle, retry, freshness,
+        descriptor resolution, or submit policy. The next implementation slice
+        may wire semantic graph mutations through the existing backend mutation
+        helper; layout-only mutations and read-only candidate lookups must not
+        auto-start validation.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit

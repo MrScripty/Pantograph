@@ -263,6 +263,58 @@ async fn embedded_runtime_shutdown_marks_loaded_sessions_unloaded() {
 }
 
 #[tokio::test]
+async fn embedded_runtime_shutdown_stops_workflow_graph_validation_tasks() {
+    let temp = TempDir::new().expect("temp dir");
+    write_test_workflow(temp.path(), "runtime-text");
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        Arc::new(inference::InferenceGateway::new()),
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        Arc::new(WorkflowService::new()),
+        None,
+    );
+    let graph_session = runtime
+        .workflow_service()
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph: multi_python_edit_session_graph(),
+            workflow_id: None,
+        })
+        .await
+        .expect("create graph edit session");
+
+    runtime.shutdown().await;
+
+    let error = runtime
+        .workflow_service()
+        .workflow_graph_start_current_validation_task(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: graph_session.session_id,
+                graph_revision: graph_session
+                    .graph_revision
+                    .parse()
+                    .expect("valid graph revision"),
+            },
+        )
+        .await
+        .expect_err("validation task start should reject after runtime shutdown");
+    assert!(matches!(
+        error,
+        WorkflowServiceError::InvalidRequest(message)
+            if message.contains("validation task owner is shut down")
+    ));
+}
+
+#[tokio::test]
 async fn workflow_capabilities_include_injected_runtime_capabilities() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");

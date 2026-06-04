@@ -207,8 +207,14 @@ Out of scope:
   validation work, cancels active lifecycle state with a typed shutdown reason,
   aborts/awaits tracked validation task handles, records bounded terminal
   diagnostics, and exposes `GraphSessionStore`/`WorkflowService` lifecycle
-  methods. Remaining before auto-triggering: wire service-owning composition
-  roots to call the lifecycle boundary before dropping workflow-service.
+  methods. The follow-up composition-root slice wires those methods into
+  service-owning shutdown paths before graph-mutation auto-triggering.
+- 2026-06-03 composition-root shutdown wiring implemented: embedded-runtime
+  shutdown and Tauri window shutdown now call the backend workflow-service
+  validation task lifecycle boundary before runtime/gateway teardown. The next
+  source slice may wire semantic graph mutations to auto-start backend-owned
+  validation tasks; layout-only mutations and read-only candidate lookups must
+  remain non-triggering.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

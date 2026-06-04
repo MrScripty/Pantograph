@@ -66,6 +66,10 @@ while still handling desktop runtime execution concerns.
   forwards the same graph-session/revision request and returns the backend-
   issued validation session id; workflow-service owns task tracking,
   cancellation, freshness, descriptor publication, and submit authority.
+- Tauri window shutdown may call the workflow-service validation task shutdown
+  lifecycle boundary, but it must remain a composition-root cleanup call only.
+  Command handlers and frontend state must not own validation freshness, retry,
+  descriptor resolution, or submit policy.
 - Public GUI workflow submission must enter through scheduler execution-session
   commands. The legacy edit-session run command must stay unregistered.
 - Retention cleanup command handlers must stay transport-thin and delegate to

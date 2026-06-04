@@ -23199,6 +23199,44 @@ Worker rules:
       auto-triggering. The next source slice should wire hosted/standalone
       workflow-service shutdown ownership, then semantic graph-mutation
       auto-triggering can proceed.
+  - 2026-06-03 Milestone 5d validation task composition-root shutdown slice:
+    - Smallest useful vertical slice: wire the newly exposed
+      workflow-service validation task shutdown boundary into service-owning
+      composition roots before graph-mutation auto-triggering.
+    - Files touched:
+      `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`,
+      `crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/lib_tests/runtime_lifecycle_capability_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/README.md`,
+      `src-tauri/src/app_lifecycle.rs`, `src-tauri/src/README.md`,
+      `src-tauri/src/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Implementation: `EmbeddedRuntime::shutdown` and Tauri window shutdown now
+      call `WorkflowService::workflow_graph_shutdown_validation_tasks` before
+      runtime/gateway teardown. Added embedded-runtime lifecycle coverage
+      proving runtime shutdown makes later backend validation task starts reject
+      through the workflow-service shutdown diagnostic.
+    - No-fallback/no-legacy result: the composition roots call one backend
+      lifecycle boundary only. No Tauri command handler, frontend state,
+      graph-path source, selector-summary fallback, legacy resolver/model-ref
+      path, retry policy, freshness policy, or descriptor policy was added.
+    - Standards alignment: startup/shutdown wiring lives in composition roots;
+      workflow-service remains the task lifecycle owner; embedded-runtime and
+      Tauri remain host lifecycle coordinators.
+    - Verification passed: `cargo fmt -p pantograph-embedded-runtime --
+      --check`; `cargo test -p pantograph-embedded-runtime
+      embedded_runtime_shutdown_stops_workflow_graph_validation_tasks --lib`;
+      `cargo check -p pantograph-embedded-runtime`; `cargo check
+      --manifest-path src-tauri/Cargo.toml` (existing unrelated dead-code
+      warnings only); touched-source search for model paths, raw JSON,
+      fallback/legacy resolver strings, retired model-ref contracts, untracked
+      spawned task calls, and `Result<T, String>`; and `git diff --check`.
+    - Remaining follow-up: graph-mutation auto-triggering can proceed in the
+      next source slice. It must be limited to successful semantic mutations in
+      the backend mutation helper; layout-only mutations and read-only
+      candidate lookups must not auto-start validation.
 
 ### Traceability Links
 

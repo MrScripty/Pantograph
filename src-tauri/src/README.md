@@ -13,7 +13,7 @@ the canonical owner of workflow, runtime registry, or node execution policy.
 | ----------- | ----------- |
 | `main.rs` | Thin crate-root launcher, module declarations, logging bootstrap, and fatal startup error reporting. |
 | `app_setup.rs` | Tauri builder composition, managed state registration, setup-time resource initialization, and command registration. |
-| `app_lifecycle.rs` | Window lifecycle shutdown hook that stops owned workers, invalidates loaded workflow runtimes, and syncs runtime-registry state. |
+| `app_lifecycle.rs` | Window lifecycle shutdown hook that stops owned workers, shuts down workflow-service validation tasks, invalidates loaded workflow runtimes, and syncs runtime-registry state. |
 | `app_tasks.rs` | App-owned async task registry for startup/setup work that must be stopped during shutdown. |
 | `config.rs` | Desktop configuration structures and persistence integration. |
 | `constants.rs` | Tauri backend constants shared across modules. |
@@ -60,6 +60,9 @@ installation, dependency-readiness production, and resource-backed dispatch
 composition.
 Window shutdown also stops health monitoring and any tracked automatic recovery
 task before workflow cleanup and runtime process shutdown.
+Window shutdown calls the backend workflow-service validation task lifecycle
+boundary before runtime workers and model processes are stopped; Tauri does not
+own validation freshness, retry, descriptor, or submit policy.
 Media conversion business logic is not owned by Tauri. If scheduler task
 outputs need conversion, the backend must expose a host-agnostic conversion
 service boundary and Tauri may only supply infrastructure such as managed tool
