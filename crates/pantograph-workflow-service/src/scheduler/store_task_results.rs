@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use pantograph_scheduler::{
-    apply_scheduler_task_state_transition, SchedulerTaskExecutionIntent, SchedulerTaskStateKind,
-    SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
+    apply_scheduler_task_state_transition, SchedulerDispatchCandidateId,
+    SchedulerReservationLeaseId, SchedulerTaskExecutionIntent, SchedulerTaskId,
+    SchedulerTaskStateKind, SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
 };
 
 use crate::workflow::{
@@ -11,8 +12,18 @@ use crate::workflow::{
 
 use super::{
     unix_timestamp_ms, WorkflowExecutionSessionStore, WorkflowExecutionSessionTaskAttempt,
-    WorkflowSchedulerTaskAttemptId,
+    WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskReservationBinding,
+    WorkflowSchedulerTaskReservationReleaseIntent,
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowSchedulerTaskTerminalMutation {
+    pub(crate) apply_result: SchedulerTaskStateTransitionApplyResult,
+    // Milestone 5c stores the typed release intent before the async runner
+    // applies reservation lifecycle events outside the store lock.
+    #[allow(dead_code)]
+    pub(crate) reservation_release_intent: Option<WorkflowSchedulerTaskReservationReleaseIntent>,
+}
 
 impl WorkflowExecutionSessionStore {
     /// Stage scheduler task results on the active run until durable ledger
@@ -95,7 +106,7 @@ impl WorkflowExecutionSessionStore {
         attempt_id: &WorkflowSchedulerTaskAttemptId,
         transition: SchedulerTaskStateTransition,
         result: WorkflowSchedulerTaskResult,
-    ) -> Result<SchedulerTaskStateTransitionApplyResult, WorkflowServiceError> {
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowServiceError> {
         let tick = self.next_tick();
         validate_task_result_for_active_run(&result, workflow_run_id)?;
         validate_completion_transition_for_result(&transition, &result)?;
@@ -163,10 +174,66 @@ impl WorkflowExecutionSessionStore {
         active_run
             .scheduler_task_records
             .insert(task_id.clone(), record.clone());
-        active_run.scheduler_task_attempts.remove(&task_id);
+        let reservation_release_intent = active_run
+            .scheduler_task_attempts
+            .remove(&task_id)
+            .and_then(release_intent_from_attempt);
         active_run.scheduler_task_results.insert(task_id, result);
         Self::mark_session_access(state, tick);
-        Ok(apply_result)
+        Ok(WorkflowSchedulerTaskTerminalMutation {
+            apply_result,
+            reservation_release_intent,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn bind_active_run_scheduler_task_reservation(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        reservation_lease_id: SchedulerReservationLeaseId,
+        candidate_id: Option<SchedulerDispatchCandidateId>,
+    ) -> Result<(), WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_mut().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+
+        let task_id_key = task_id.as_str().to_string();
+        let attempt = validate_matching_task_attempt_mut(
+            &mut active_run.scheduler_task_attempts,
+            &task_id_key,
+            attempt_id,
+            "reservation binding",
+        )?;
+        if attempt.reservation.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' already has a reservation bound to active attempt '{}'",
+                task_id.as_str(),
+                attempt_id.as_str()
+            )));
+        }
+        attempt.reservation = Some(WorkflowSchedulerTaskReservationBinding {
+            task_id: task_id.clone(),
+            reservation_lease_id,
+            candidate_id,
+        });
+        Self::mark_session_access(state, tick);
+        Ok(())
     }
 
     /// Atomically start a scheduler task attempt on the active run.
@@ -247,6 +314,7 @@ impl WorkflowExecutionSessionStore {
             WorkflowExecutionSessionTaskAttempt {
                 attempt_id: attempt_id.clone(),
                 started_at_ms: unix_timestamp_ms(),
+                reservation: None,
             },
         );
         Self::mark_session_access(state, tick);
@@ -260,7 +328,7 @@ impl WorkflowExecutionSessionStore {
         workflow_run_id: &str,
         attempt_id: &WorkflowSchedulerTaskAttemptId,
         transition: SchedulerTaskStateTransition,
-    ) -> Result<SchedulerTaskStateTransitionApplyResult, WorkflowServiceError> {
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowServiceError> {
         let tick = self.next_tick();
         validate_terminal_attempt_transition(&transition, "failure")?;
 
@@ -320,9 +388,94 @@ impl WorkflowExecutionSessionStore {
         active_run
             .scheduler_task_records
             .insert(task_id.clone(), record.clone());
-        active_run.scheduler_task_attempts.remove(&task_id);
+        let reservation_release_intent = active_run
+            .scheduler_task_attempts
+            .remove(&task_id)
+            .and_then(release_intent_from_attempt);
         Self::mark_session_access(state, tick);
-        Ok(apply_result)
+        Ok(WorkflowSchedulerTaskTerminalMutation {
+            apply_result,
+            reservation_release_intent,
+        })
+    }
+
+    /// Atomically cancel the matching active scheduler task attempt.
+    #[allow(dead_code)]
+    pub(crate) fn cancel_active_run_scheduler_task_attempt(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        transition: SchedulerTaskStateTransition,
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowServiceError> {
+        let tick = self.next_tick();
+        validate_terminal_attempt_transition(&transition, "cancel")?;
+
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_mut().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+
+        let task_id = transition.task_id.as_str().to_string();
+        validate_matching_task_attempt(
+            &active_run.scheduler_task_attempts,
+            &task_id,
+            attempt_id,
+            "cancel",
+        )?;
+        let current = active_run
+            .scheduler_task_records
+            .get(&task_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no active task-state record",
+                    task_id
+                ))
+            })?;
+        if current.state.kind() != SchedulerTaskStateKind::Running {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be running before cancel, found {:?}",
+                task_id,
+                current.state.kind()
+            )));
+        }
+
+        let apply_result = apply_scheduler_task_state_transition(Some(current), transition)
+            .map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "invalid scheduler task attempt cancel transition: {error}"
+                ))
+            })?;
+        let SchedulerTaskStateTransitionApplyResult::Applied(record) = &apply_result else {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' cancel transition was already applied",
+                task_id
+            )));
+        };
+
+        active_run
+            .scheduler_task_records
+            .insert(task_id.clone(), record.clone());
+        let reservation_release_intent = active_run
+            .scheduler_task_attempts
+            .remove(&task_id)
+            .and_then(release_intent_from_attempt);
+        Self::mark_session_access(state, tick);
+        Ok(WorkflowSchedulerTaskTerminalMutation {
+            apply_result,
+            reservation_release_intent,
+        })
     }
 
     /// Atomically materialize a request-provided source input as a completed
@@ -520,6 +673,40 @@ fn validate_matching_task_attempt(
     Ok(())
 }
 
+#[allow(dead_code)]
+fn validate_matching_task_attempt_mut<'a>(
+    attempts: &'a mut BTreeMap<String, WorkflowExecutionSessionTaskAttempt>,
+    task_id: &str,
+    attempt_id: &WorkflowSchedulerTaskAttemptId,
+    operation: &str,
+) -> Result<&'a mut WorkflowExecutionSessionTaskAttempt, WorkflowServiceError> {
+    let attempt = attempts.get_mut(task_id).ok_or_else(|| {
+        WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task '{task_id}' has no active attempt for {operation}"
+        ))
+    })?;
+    if attempt.attempt_id != *attempt_id {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task '{task_id}' {operation} attempt '{}' does not match active attempt '{}'",
+            attempt_id.as_str(),
+            attempt.attempt_id.as_str()
+        )));
+    }
+    Ok(attempt)
+}
+
+fn release_intent_from_attempt(
+    attempt: WorkflowExecutionSessionTaskAttempt,
+) -> Option<WorkflowSchedulerTaskReservationReleaseIntent> {
+    attempt.reservation.map(
+        |reservation| WorkflowSchedulerTaskReservationReleaseIntent {
+            task_id: reservation.task_id,
+            reservation_lease_id: reservation.reservation_lease_id,
+            candidate_id: reservation.candidate_id,
+        },
+    )
+}
+
 fn validate_task_result_for_active_run(
     result: &WorkflowSchedulerTaskResult,
     workflow_run_id: &str,
@@ -645,7 +832,8 @@ fn validate_transition_result_correlation(
 mod tests {
     use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
     use pantograph_scheduler::{
-        SchedulableTaskIntent, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
+        SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerNodeId,
+        SchedulerReservationLeaseId, SchedulerRuntimeDeviceConstraints,
         SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind, SchedulerTaskExecutionIntent,
         SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
         SchedulerTaskStateTransition, SchedulerTaskStateTransitionApplyResult,
@@ -878,6 +1066,31 @@ mod tests {
         }
     }
 
+    fn terminal_failure_transition(
+        workflow_run_id: &str,
+        task_id: &str,
+        transition_id: &str,
+    ) -> SchedulerTaskStateTransition {
+        SchedulerTaskStateTransition {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            transition_id: SchedulerTaskStateTransitionId::parse(transition_id)
+                .expect("transition id"),
+            workflow_id: SchedulerWorkflowId::parse("workflow-task-results").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+            expected_previous_state: Some(SchedulerTaskStateKind::Running),
+            next_state: SchedulerTaskState::TerminalFailed {
+                diagnostics: vec![pantograph_scheduler::SchedulerTaskStateDiagnostic {
+                    severity: pantograph_scheduler::SchedulerTaskStateDiagnosticSeverity::Error,
+                    code: pantograph_scheduler::SchedulerTaskStateDiagnosticCode::TerminalFailure,
+                    message: format!("scheduler task '{task_id}' was cancelled"),
+                    hint: Some("Release any bound runtime reservation lease.".to_string()),
+                }],
+            },
+        }
+    }
+
     fn running_transition(
         workflow_run_id: &str,
         task_id: &str,
@@ -1027,9 +1240,10 @@ mod tests {
             .expect("complete task");
 
         assert!(matches!(
-            applied,
+            applied.apply_result,
             SchedulerTaskStateTransitionApplyResult::Applied(_)
         ));
+        assert!(applied.reservation_release_intent.is_none());
         let (_, records) = store
             .active_run_scheduler_task_state(&session_id, &workflow_run_id)
             .expect("task state")
@@ -1041,6 +1255,186 @@ mod tests {
             .expect("read results");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].task_id, "model-task");
+    }
+
+    #[test]
+    fn active_run_complete_scheduler_task_returns_bound_reservation_release_intent() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        let attempt_id =
+            store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let task_id = SchedulerTaskId::parse("model-task").expect("task id");
+        let reservation_lease_id =
+            SchedulerReservationLeaseId::parse("reservation.model-task").expect("reservation id");
+        let candidate_id =
+            SchedulerDispatchCandidateId::parse("candidate.model-task").expect("candidate id");
+        store
+            .bind_active_run_scheduler_task_reservation(
+                &session_id,
+                &workflow_run_id,
+                &task_id,
+                &attempt_id,
+                reservation_lease_id.clone(),
+                Some(candidate_id.clone()),
+            )
+            .expect("bind reservation");
+
+        let applied = store
+            .complete_active_run_scheduler_task(
+                &session_id,
+                &workflow_run_id,
+                &attempt_id,
+                completion_transition(&workflow_run_id, "model-task", "transition.completed"),
+                task_result("model-task", &workflow_run_id),
+            )
+            .expect("complete task");
+
+        let release_intent = applied
+            .reservation_release_intent
+            .expect("release intent for leased attempt");
+        assert_eq!(release_intent.task_id, task_id);
+        assert_eq!(release_intent.reservation_lease_id, reservation_lease_id);
+        assert_eq!(release_intent.candidate_id, Some(candidate_id));
+    }
+
+    #[test]
+    fn active_run_bind_scheduler_task_reservation_rejects_duplicate_binding() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        let attempt_id =
+            store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let task_id = SchedulerTaskId::parse("model-task").expect("task id");
+        let reservation_lease_id =
+            SchedulerReservationLeaseId::parse("reservation.model-task").expect("reservation id");
+
+        store
+            .bind_active_run_scheduler_task_reservation(
+                &session_id,
+                &workflow_run_id,
+                &task_id,
+                &attempt_id,
+                reservation_lease_id.clone(),
+                None,
+            )
+            .expect("bind reservation");
+
+        let error = store
+            .bind_active_run_scheduler_task_reservation(
+                &session_id,
+                &workflow_run_id,
+                &task_id,
+                &attempt_id,
+                reservation_lease_id,
+                None,
+            )
+            .expect_err("duplicate reservation binding should be rejected");
+
+        assert!(error.message().contains("already has a reservation"));
+    }
+
+    #[test]
+    fn active_run_bind_scheduler_task_reservation_rejects_stale_attempt() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let task_id = SchedulerTaskId::parse("model-task").expect("task id");
+        let stale_attempt_id = WorkflowSchedulerTaskAttemptId::new();
+
+        let error = store
+            .bind_active_run_scheduler_task_reservation(
+                &session_id,
+                &workflow_run_id,
+                &task_id,
+                &stale_attempt_id,
+                SchedulerReservationLeaseId::parse("reservation.model-task")
+                    .expect("reservation id"),
+                None,
+            )
+            .expect_err("stale reservation binding should be rejected");
+
+        assert!(error.message().contains("does not match active attempt"));
+    }
+
+    #[test]
+    fn active_run_cancel_scheduler_task_attempt_returns_bound_reservation_release_intent() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        let attempt_id =
+            store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let task_id = SchedulerTaskId::parse("model-task").expect("task id");
+        let reservation_lease_id =
+            SchedulerReservationLeaseId::parse("reservation.model-task").expect("reservation id");
+        let candidate_id =
+            SchedulerDispatchCandidateId::parse("candidate.model-task").expect("candidate id");
+        store
+            .bind_active_run_scheduler_task_reservation(
+                &session_id,
+                &workflow_run_id,
+                &task_id,
+                &attempt_id,
+                reservation_lease_id.clone(),
+                Some(candidate_id.clone()),
+            )
+            .expect("bind reservation");
+
+        let mutation = store
+            .cancel_active_run_scheduler_task_attempt(
+                &session_id,
+                &workflow_run_id,
+                &attempt_id,
+                terminal_failure_transition(&workflow_run_id, "model-task", "transition.cancel"),
+            )
+            .expect("cancel task");
+
+        assert!(matches!(
+            mutation.apply_result,
+            SchedulerTaskStateTransitionApplyResult::Applied(_)
+        ));
+        let release_intent = mutation
+            .reservation_release_intent
+            .expect("release intent for leased attempt");
+        assert_eq!(release_intent.task_id, task_id);
+        assert_eq!(release_intent.reservation_lease_id, reservation_lease_id);
+        assert_eq!(release_intent.candidate_id, Some(candidate_id));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(
+            records[0].state.kind(),
+            SchedulerTaskStateKind::TerminalFailed
+        );
+    }
+
+    #[test]
+    fn active_run_cancel_scheduler_task_attempt_rejects_stale_attempt_without_release() {
+        let (mut store, session_id, workflow_run_id) = active_store();
+        let active_attempt_id =
+            store_running_task(&mut store, &session_id, &workflow_run_id, "model-task");
+        let task_id = SchedulerTaskId::parse("model-task").expect("task id");
+        store
+            .bind_active_run_scheduler_task_reservation(
+                &session_id,
+                &workflow_run_id,
+                &task_id,
+                &active_attempt_id,
+                SchedulerReservationLeaseId::parse("reservation.model-task")
+                    .expect("reservation id"),
+                None,
+            )
+            .expect("bind reservation");
+
+        let error = store
+            .cancel_active_run_scheduler_task_attempt(
+                &session_id,
+                &workflow_run_id,
+                &WorkflowSchedulerTaskAttemptId::new(),
+                terminal_failure_transition(&workflow_run_id, "model-task", "transition.cancel"),
+            )
+            .expect_err("stale cancel should be rejected");
+
+        assert!(error.message().contains("does not match active attempt"));
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("task state")
+            .expect("active task state");
+        assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Running);
     }
 
     #[test]

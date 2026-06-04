@@ -23737,6 +23737,53 @@ Worker rules:
       searches over touched files; `cargo fmt -p pantograph-workflow-service
       -- --check`; focused workflow-service scheduler tests; `cargo check -p
       pantograph-workflow-service`; and `git diff --check`.
+  - 2026-06-03 Milestone 5c reservation binding/cancel store source slice:
+    - Smallest useful vertical slice: add store-owned reservation metadata
+      binding to active task attempts, explicit matching-attempt cancel
+      mutation, and typed reservation-release intent emission from terminal
+      completion/failure/cancel store mutations.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/scheduler/store.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this execution log.
+    - No-fallback/no-legacy result: terminal mutations require the matching
+      active attempt before emitting release intent or mutating task state/
+      results. Duplicate reservation binding, stale reservation binding, and
+      stale cancel attempts fail closed. Cancellation is represented as an
+      explicit terminal-failed diagnostic in the current scheduler task-state
+      contract; no graph-path fallback, reduced-plan launch, node-engine
+      runtime launch, Tauri/frontend policy branch, compatibility shim, or
+      separate scheduler cancelled-state branch was added.
+    - Standards alignment: workflow-service active-run store remains the
+      single synchronous owner of task attempt state, while reservation-port
+      I/O remains deferred to the async orchestrator/session-runner shell.
+      The staged `#[allow(dead_code)]` annotations are limited to the
+      store-side release intent/cancel API that the next slice will consume.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service`;
+      `cargo test -p pantograph-workflow-service
+      active_run_bind_scheduler_task_reservation --lib`; `cargo test -p
+      pantograph-workflow-service active_run_cancel_scheduler_task_attempt
+      --lib`; `cargo test -p pantograph-workflow-service
+      active_run_complete_scheduler_task --lib`; `cargo test -p
+      pantograph-workflow-service scheduler::task_orchestrator --lib`;
+      `cargo fmt -p pantograph-workflow-service -- --check`; `cargo check -p
+      pantograph-workflow-service`; targeted no-fallback scan over touched
+      scheduler files; and `git diff --check`.
+    - Verification note: the no-fallback scan found only the existing
+      test-helper `panic!` for unsupported fixture states in
+      `store_task_results.rs`; no production fallback or legacy execution
+      branch was found.
+    - Remaining follow-up: wire the async orchestrator/session runner to apply
+      reservation lifecycle release events after terminal store mutation
+      returns release intent and outside the store lock. Retry/defer
+      idempotency, replay/recovery, worker supervision/cancellation tokens,
+      durable duplicate-dispatch prevention, and diagnostics-ledger
+      attempt/timing facts remain later lifecycle hardening slices.
 
 ### Traceability Links
 

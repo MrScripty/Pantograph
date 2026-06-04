@@ -109,6 +109,18 @@ slice. Cancellation may map to the existing terminal task-state diagnostic
 until `pantograph-scheduler` grows a distinct cancelled state; that future
 state expansion remains deferred unless shared scheduler semantics require it.
 
+2026-06-03 scheduler reservation binding/cancel store update:
+workflow-service active-run task attempts now carry typed reservation lease
+metadata, terminal completion/failure/cancel store mutations return typed
+reservation-release intent for leased attempts, and cancel uses the same
+matching-attempt validation as completion/failure. Stale or duplicate
+reservation binding fails closed. This does not apply release events yet; the
+next slice must wire the async orchestrator/session runner to call the
+reservation lifecycle port after the store mutation releases its lock. No
+graph path fallback, reduced-plan launch, node-engine runtime launch,
+Tauri/frontend policy, compatibility shim, or separate scheduler cancelled
+state was added.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

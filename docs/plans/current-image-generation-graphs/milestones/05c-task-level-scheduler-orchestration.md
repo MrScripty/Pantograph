@@ -553,7 +553,15 @@ durable task orchestration path.
   transitions while applying reservation lifecycle events outside the store
   lock. Keep retry/defer idempotency, replay/recovery, worker supervision,
   ledger timing facts, and any distinct scheduler cancelled-state expansion as
-  follow-up work.
+  follow-up work. 2026-06-03 source update: workflow-service active-run task
+  attempts now store typed reservation lease/candidate metadata, completion/
+  failure/cancel terminal mutations return typed release intent for leased
+  attempts, explicit cancel uses matching-attempt validation, and stale or
+  duplicate reservation/cancel attempts fail closed. Remaining immediate
+  follow-up: wire async reservation lifecycle application from the orchestrator
+  or session runner after the store mutation releases the lock, then continue
+  retry/defer idempotency, replay/recovery, worker supervision, and ledger
+  timing facts in later slices.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

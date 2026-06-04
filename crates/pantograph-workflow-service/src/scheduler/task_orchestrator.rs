@@ -43,7 +43,10 @@ use crate::workflow::{
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
 };
 
-use super::{WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId};
+use super::{
+    WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId,
+    WorkflowSchedulerTaskTerminalMutation,
+};
 
 /// Workflow-service async shell for scheduler task orchestration.
 ///
@@ -475,7 +478,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 result,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn fail_started_non_runtime_task(
@@ -498,7 +501,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn start_ready_runtime_task(
@@ -593,7 +596,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 result,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_selection(
@@ -616,7 +619,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_error(
@@ -639,7 +642,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn advance_awaiting_non_runtime_task_inputs(
@@ -1867,6 +1870,12 @@ fn applied_task_state_record(
             ))
         }
     }
+}
+
+fn applied_terminal_task_state_record(
+    mutation: WorkflowSchedulerTaskTerminalMutation,
+) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+    applied_task_state_record(mutation.apply_result)
 }
 
 fn applied_task_state_record_with_attempt(

@@ -3,7 +3,10 @@ use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
 use pantograph_diagnostics_ledger::SchedulerModelCacheState;
-use pantograph_scheduler::SchedulerTaskStateRecord;
+use pantograph_scheduler::{
+    SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerTaskId,
+    SchedulerTaskStateRecord,
+};
 
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
@@ -27,6 +30,8 @@ mod store_diagnostics;
 mod store_queue;
 #[path = "store_task_results.rs"]
 mod store_task_results;
+
+pub(crate) use store_task_results::WorkflowSchedulerTaskTerminalMutation;
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowExecutionSessionQueuedRun {
@@ -82,6 +87,21 @@ struct WorkflowExecutionSessionTaskAttempt {
     attempt_id: WorkflowSchedulerTaskAttemptId,
     #[allow(dead_code)]
     started_at_ms: u64,
+    reservation: Option<WorkflowSchedulerTaskReservationBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSchedulerTaskReservationBinding {
+    pub(crate) task_id: SchedulerTaskId,
+    pub(crate) reservation_lease_id: SchedulerReservationLeaseId,
+    pub(crate) candidate_id: Option<SchedulerDispatchCandidateId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSchedulerTaskReservationReleaseIntent {
+    pub(crate) task_id: SchedulerTaskId,
+    pub(crate) reservation_lease_id: SchedulerReservationLeaseId,
+    pub(crate) candidate_id: Option<SchedulerDispatchCandidateId>,
 }
 
 #[derive(Debug, Clone)]

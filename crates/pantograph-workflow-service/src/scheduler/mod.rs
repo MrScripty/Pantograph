@@ -38,7 +38,8 @@ pub(crate) use readiness_lifecycle::{
 };
 pub(crate) use store::{
     unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionPreflightCache,
-    WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId, WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId,
+    WorkflowSchedulerTaskTerminalMutation, WORKFLOW_SESSION_QUEUE_POLL_MS,
 };
 pub(crate) use task_orchestrator::{
     WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError,

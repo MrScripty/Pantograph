@@ -563,9 +563,16 @@ Completed sub-slice on 2026-06-03:
 - Started runtime-host dispatch errors now terminally fail through the
   matching attempt id, and the obsolete broad active-run
   `runtime-dispatch-not-wired` helper was removed.
-- The remaining attempt-core work is explicit cancel transition support and
-  reservation-release intent wiring, followed by retry/defer idempotency,
-  replay/recovery, worker supervision, and timing/attempt ledger facts.
+- Workflow-service active-run task attempts now carry typed reservation lease
+  and selected-candidate metadata. Completion, failure, and explicit cancel
+  terminal store mutations return typed reservation-release intent for leased
+  attempts. Duplicate reservation binding and stale reservation/cancel attempts
+  fail closed before task-state/result mutation.
+- The remaining immediate attempt/lease work is async reservation lifecycle
+  application from the orchestrator/session runner after the store mutation
+  returns release intent. Retry/defer idempotency, replay/recovery, worker
+  supervision, cancellation tokens for in-flight runtime-host work, and
+  timing/attempt ledger facts remain later slices.
 
 Selected next path for cancellation/reservation release:
 
@@ -585,6 +592,10 @@ Selected next path for cancellation/reservation release:
 - Apply reservation lifecycle events from the async orchestrator/session runner
   after the store transition returns release intent. Do not hold the store lock
   while calling the reservation lifecycle port.
+- Completed store-side on 2026-06-03: reservation metadata binding, typed
+  release-intent emission for completion/failure/cancel, explicit cancel
+  transition support, stale/mismatched attempt rejection, and duplicate binding
+  rejection.
 - Keep retry/defer idempotency, replay/recovery, worker supervision,
   cancellation tokens for in-flight runtime-host work, and diagnostics ledger
   attempt/timing facts out of this slice.
