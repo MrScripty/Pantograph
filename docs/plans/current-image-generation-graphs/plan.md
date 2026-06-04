@@ -11,6 +11,15 @@ path. Verification passed with Tauri fmt/check, frontend command tests,
 typecheck, and deleted-symbol search; unrelated diagnostics/Pumas dead-code
 warnings remain future cleanup candidates.
 
+2026-06-03 Tauri event-adapter execution-graph hook deletion update: removed
+the now-unused `TauriEventAdapter::with_execution_graph` builder and optional
+adapter graph state left behind by the deleted edit-session launcher. This
+does not add a graph snapshot fallback or scheduler adapter; graph snapshots
+and diagnostics projection stay backend-owned. Verification passed with Tauri
+fmt/check, event-adapter tests, and deleted-symbol search. The deletion exposes
+`WorkflowDiagnosticsStore::set_execution_graph` as a separate dead diagnostics
+helper cleanup candidate.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

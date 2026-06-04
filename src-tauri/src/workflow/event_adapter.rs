@@ -16,7 +16,6 @@ use node_engine::{EventError, EventSink};
 use pantograph_workflow_service::{
     ArtifactAttribution, ArtifactFormatMetadata, ArtifactPayloadKind,
     ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
-    WorkflowGraph,
 };
 use tauri::ipc::Channel;
 
@@ -30,7 +29,6 @@ use diagnostics_bridge::translate_node_event_with_diagnostics;
 pub struct TauriEventAdapter {
     channel: Channel<TauriWorkflowEvent>,
     workflow_id: String,
-    execution_graph: Option<WorkflowGraph>,
     diagnostics_store: SharedWorkflowDiagnosticsStore,
     workflow_service: Option<SharedWorkflowService>,
     media_streams: Mutex<HashMap<MediaStreamKey, MediaStreamState>>,
@@ -46,17 +44,10 @@ impl TauriEventAdapter {
         Self {
             channel,
             workflow_id: workflow_id.into(),
-            execution_graph: None,
             diagnostics_store,
             workflow_service: None,
             media_streams: Mutex::new(HashMap::new()),
         }
-    }
-
-    /// Attach the graph that belongs to runtime execution events.
-    pub fn with_execution_graph(mut self, graph: WorkflowGraph) -> Self {
-        self.execution_graph = Some(graph);
-        self
     }
 
     /// Attach the workflow service used for backend artifact stream storage.
@@ -73,10 +64,6 @@ impl TauriEventAdapter {
         let execution_id = node_engine_execution_id(&event);
         self.diagnostics_store
             .set_execution_metadata(execution_id, Some(self.workflow_id.clone()));
-        if let Some(graph) = &self.execution_graph {
-            self.diagnostics_store
-                .set_execution_graph(execution_id, graph);
-        }
         self.replace_inline_media_stream_body(event)
     }
 

@@ -658,6 +658,12 @@ upgrade after this path is working.
   Successful GUI submission remains scheduler-owned through execution-session
   commands; Tauri no longer retains an internal graph-snapshot runtime launch
   branch.
+  2026-06-03 progress: removed the now-unused
+  `TauriEventAdapter::with_execution_graph` builder and execution-graph field
+  that only served the deleted edit-session launcher. Active event translation
+  still records backend execution metadata, artifact stream references, and
+  diagnostics projection updates; graph snapshots remain owned by backend
+  diagnostics/projection APIs rather than a Tauri adapter-local runtime hook.
 - [x] Add backend-owned runtime session/load-proof state in
   `pantograph-embedded-runtime` keyed by workflow/task identity and populated
   from canonical inference planning, Pumas artifact/load-target decisions, and
@@ -852,6 +858,25 @@ upgrade after this path is working.
   dead-code warnings for diagnostics runtime/scheduler snapshot event helpers
   and Pumas helper functions; keep those as separate cleanup candidates because
   they are not part of this edit-session launcher deletion slice.
+- 2026-06-03 Tauri event-adapter execution-graph hook deletion slice
+  completed. Smallest useful vertical slice: remove the unused
+  `TauriEventAdapter::with_execution_graph` builder and adapter-local optional
+  graph state left behind by the deleted edit-session launcher. Allowed write
+  set: `src-tauri/src/workflow/event_adapter.rs`, this milestone, the
+  execution log, and the top-level plan. No-fallback confirmation: this does
+  not add any graph snapshot fallback or scheduler adapter; it deletes
+  Tauri-local graph attachment state so runtime graph snapshots remain
+  backend-owned. Verification passed: `cargo fmt --manifest-path
+  src-tauri/Cargo.toml -- --check`, `cargo check --manifest-path
+  src-tauri/Cargo.toml`, `cargo test --manifest-path src-tauri/Cargo.toml
+  event_adapter`, and deleted-symbol search for the removed adapter hook.
+  Verification correction: `cargo test --manifest-path src-tauri/Cargo.toml
+  event_adapter --lib` was invalid because the Tauri package has no library
+  target; the non-`--lib` command passed. Discovered issue: deleting the
+  adapter graph hook exposes `WorkflowDiagnosticsStore::set_execution_graph`
+  as another dead diagnostics helper in the Tauri binary; keep it as a
+  separate cleanup candidate with its diagnostics tests and projection
+  ownership reviewed before deletion.
 - 2026-05-22: Created from the Milestone 5a node-engine legacy boundary
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy

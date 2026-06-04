@@ -23402,6 +23402,33 @@ Worker rules:
       warnings for diagnostics runtime/scheduler snapshot event helpers and
       Pumas helper functions. They remain separate cleanup candidates because
       they are outside this launcher deletion slice.
+  - 2026-06-03 Milestone 5b Tauri event-adapter execution-graph hook deletion
+    slice:
+    - Smallest useful vertical slice: delete the unused
+      `TauriEventAdapter::with_execution_graph` builder and adapter-local
+      optional graph state left behind by the deleted edit-session launcher.
+    - Files touched: `src-tauri/src/workflow/event_adapter.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - No-fallback/no-legacy result: the slice removes Tauri-local graph
+      attachment state and does not replace it with a graph snapshot fallback,
+      scheduler adapter, or runtime launch branch. Active event translation
+      still records backend execution metadata and artifact stream references.
+    - Standards alignment: graph snapshots and diagnostics projection remain
+      backend-owned; the Tauri adapter no longer carries dead state from the
+      retired edit-session launcher.
+    - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+      --check`; `cargo check --manifest-path src-tauri/Cargo.toml`; `cargo
+      test --manifest-path src-tauri/Cargo.toml event_adapter`; and
+      deleted-symbol search for the removed adapter hook.
+    - Verification correction: `cargo test --manifest-path src-tauri/Cargo.toml
+      event_adapter --lib` was invalid because the Tauri package has no library
+      target; the corrected non-`--lib` command passed.
+    - Discovered issue: `WorkflowDiagnosticsStore::set_execution_graph` is now
+      reported as dead code in the Tauri binary. It remains a separate cleanup
+      candidate because it has diagnostics tests and projection ownership that
+      should be reviewed in its own slice.
 
 ### Traceability Links
 
