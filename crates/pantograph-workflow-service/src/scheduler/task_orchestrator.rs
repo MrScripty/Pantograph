@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
@@ -48,6 +49,7 @@ use crate::workflow::{
 use super::{
     task_lifecycle::{
         WorkflowSchedulerTaskLifecycleManager, WorkflowSchedulerTaskLifecycleOwnerId,
+        WorkflowSchedulerTaskLifecycleShutdownState,
     },
     WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId,
     WorkflowSchedulerTaskTerminalMutation,
@@ -90,6 +92,25 @@ pub(crate) struct SelectedRuntimeTaskDispatch {
     handoff: SchedulerRuntimeHandoff,
     reservation_lease_id: SchedulerReservationLeaseId,
     candidate_id: Option<SchedulerDispatchCandidateId>,
+}
+
+#[must_use]
+pub(crate) struct WorkflowSchedulerStartedRuntimeTaskSupervisor {
+    join_handle: tokio::task::JoinHandle<
+        Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError>,
+    >,
+}
+
+impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
+    pub(crate) async fn join(
+        self,
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        self.join_handle.await.map_err(|error| {
+            WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorJoin {
+                message: runtime_task_supervisor_join_error_message(error),
+            }
+        })?
+    }
 }
 
 impl WorkflowSchedulerTaskOrchestrator {
@@ -157,6 +178,17 @@ impl WorkflowSchedulerTaskOrchestrator {
         let _ = self.release_task_lifecycle_handle(task_id, attempt_id);
     }
 
+    fn track_task_supervisor_abort_handle(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        abort_handle: tokio::task::AbortHandle,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        self.task_lifecycle_manager()?
+            .track_task_supervisor_abort_handle(task_id, attempt_id, abort_handle)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
     fn runtime_host_cancellation(
         &self,
         task_id: &SchedulerTaskId,
@@ -183,6 +215,70 @@ impl WorkflowSchedulerTaskOrchestrator {
         self.task_lifecycle_manager()?
             .request_task_cancellation(task_id, attempt_id, reason)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    pub(crate) async fn shutdown_task_lifecycle(
+        &self,
+        cooperative_drain_timeout: Duration,
+        abort_drain_timeout: Duration,
+    ) -> Result<WorkflowSchedulerTaskLifecycleShutdownState, WorkflowSchedulerTaskOrchestratorError>
+    {
+        self.begin_task_lifecycle_shutdown()?;
+        if !self
+            .drain_task_lifecycle_handles_until_empty(cooperative_drain_timeout)
+            .await?
+        {
+            self.abort_active_task_supervisors()?;
+            let _ = self
+                .drain_task_lifecycle_handles_until_empty(abort_drain_timeout)
+                .await?;
+        }
+        self.task_lifecycle_manager()?
+            .finish_shutdown()
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    fn begin_task_lifecycle_shutdown(
+        &self,
+    ) -> Result<WorkflowSchedulerTaskLifecycleShutdownState, WorkflowSchedulerTaskOrchestratorError>
+    {
+        Ok(self.task_lifecycle_manager()?.begin_shutdown())
+    }
+
+    fn abort_active_task_supervisors(
+        &self,
+    ) -> Result<usize, WorkflowSchedulerTaskOrchestratorError> {
+        Ok(self.task_lifecycle_manager()?.abort_task_supervisors())
+    }
+
+    async fn drain_task_lifecycle_handles_until_empty(
+        &self,
+        timeout: Duration,
+    ) -> Result<bool, WorkflowSchedulerTaskOrchestratorError> {
+        if self.task_lifecycle_manager()?.active_task_handle_count() == 0 {
+            return Ok(true);
+        }
+        if timeout.is_zero() {
+            return Ok(false);
+        }
+
+        let drained = tokio::time::timeout(timeout, async {
+            loop {
+                if self
+                    .task_lifecycle_manager()
+                    .map(|manager| manager.active_task_handle_count())?
+                    == 0
+                {
+                    return Ok::<bool, WorkflowSchedulerTaskOrchestratorError>(true);
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        match drained {
+            Ok(result) => result,
+            Err(_elapsed) => Ok(false),
+        }
     }
 
     fn task_lifecycle_manager(
@@ -364,6 +460,33 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)?;
         runtime_host_response_to_task_result(&response)
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
+    }
+
+    pub(crate) fn spawn_started_runtime_task_supervisor(
+        &self,
+        execution_request_id: impl Into<String>,
+        started: StartedRuntimeTaskExecution,
+        selected_dispatch: SelectedRuntimeTaskDispatch,
+    ) -> Result<WorkflowSchedulerStartedRuntimeTaskSupervisor, WorkflowSchedulerTaskOrchestratorError>
+    {
+        let task_id = started.task.task_id.clone();
+        let attempt_id = started.attempt_id.clone();
+        let orchestrator = self.clone();
+        let execution_request_id = execution_request_id.into();
+        let join_handle = tokio::spawn(async move {
+            orchestrator
+                .dispatch_started_runtime_task(execution_request_id, &started, &selected_dispatch)
+                .await
+        });
+        if let Err(error) = self.track_task_supervisor_abort_handle(
+            &task_id,
+            &attempt_id,
+            join_handle.abort_handle(),
+        ) {
+            join_handle.abort();
+            return Err(error);
+        }
+        Ok(WorkflowSchedulerStartedRuntimeTaskSupervisor { join_handle })
     }
 
     pub(crate) async fn apply_runtime_task_result_reservation_lifecycle(
@@ -1661,6 +1784,16 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     NonRuntimeTaskAdapter(WorkflowSchedulerNonRuntimeTaskAdapterError),
     #[error("runtime task supervisor join failed: {message}")]
     RuntimeTaskSupervisorJoin { message: String },
+}
+
+fn runtime_task_supervisor_join_error_message(error: tokio::task::JoinError) -> String {
+    if error.is_panic() {
+        "runtime dispatch task panicked before completion".to_string()
+    } else if error.is_cancelled() {
+        "runtime dispatch task was cancelled before completion".to_string()
+    } else {
+        format!("runtime dispatch task join failed: {error}")
+    }
 }
 
 #[derive(Debug)]

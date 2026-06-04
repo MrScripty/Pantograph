@@ -13,9 +13,7 @@ use pantograph_dependency_planning::{
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 
 use crate::scheduler::{
-    task_orchestrator::{SelectedRuntimeTaskDispatch, StartedRuntimeTaskExecution},
     WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
-    WorkflowSchedulerTaskOrchestratorError,
 };
 
 use super::io_contract::validate_workflow_io;
@@ -26,7 +24,7 @@ use super::validation::{
 use super::{
     project_scheduler_task_results_to_outputs, runtime_dispatch_selection_request, WorkflowHost,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
@@ -730,11 +728,19 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             let execution_request_id =
                 format!("workflow-runtime-task:{}:{}", workflow_run_id, task_id);
             let dispatch_result = self
-                .dispatch_started_runtime_task_supervised(
+                .service
+                .scheduler_task_orchestrator
+                .spawn_started_runtime_task_supervisor(
                     execution_request_id,
                     started_runtime_task.clone(),
                     selected_dispatch.clone(),
                 )
+                .map_err(|error| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime task supervisor start failed: {error}"
+                    ))
+                })?
+                .join()
                 .await;
             match dispatch_result {
                 Ok(result) => {
@@ -828,35 +834,6 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             outputs,
             timing_ms: started_at.elapsed().as_millis(),
         })
-    }
-
-    async fn dispatch_started_runtime_task_supervised(
-        &self,
-        execution_request_id: String,
-        started: StartedRuntimeTaskExecution,
-        selected_dispatch: SelectedRuntimeTaskDispatch,
-    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
-        let orchestrator = self.service.scheduler_task_orchestrator.clone();
-        let join_handle = tokio::spawn(async move {
-            orchestrator
-                .dispatch_started_runtime_task(execution_request_id, &started, &selected_dispatch)
-                .await
-        });
-        join_handle.await.map_err(|error| {
-            WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorJoin {
-                message: runtime_task_supervisor_join_error_message(error),
-            }
-        })?
-    }
-}
-
-fn runtime_task_supervisor_join_error_message(error: tokio::task::JoinError) -> String {
-    if error.is_panic() {
-        "runtime dispatch task panicked before completion".to_string()
-    } else if error.is_cancelled() {
-        "runtime dispatch task was cancelled before completion".to_string()
-    } else {
-        format!("runtime dispatch task join failed: {error}")
     }
 }
 

@@ -294,6 +294,30 @@ fn task_lifecycle_manager_refuses_final_shutdown_with_active_handles() {
     assert!(error.to_string().contains("ActiveTaskHandlesRemain"));
 }
 
+#[tokio::test]
+async fn task_lifecycle_manager_aborts_tracked_task_supervisors() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+    let join_handle = tokio::spawn(async {
+        std::future::pending::<()>().await;
+    });
+
+    manager
+        .track_task_supervisor_abort_handle(&task_id, &attempt_id, join_handle.abort_handle())
+        .expect("track supervisor abort handle");
+    manager.begin_shutdown();
+
+    assert_eq!(manager.abort_task_supervisors(), 1);
+    let error = join_handle
+        .await
+        .expect_err("supervisor join should be cancelled");
+    assert!(error.is_cancelled());
+}
+
 #[test]
 fn task_lifecycle_owner_id_rejects_blank_value() {
     let error =

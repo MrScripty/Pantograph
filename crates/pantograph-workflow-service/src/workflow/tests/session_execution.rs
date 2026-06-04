@@ -22,13 +22,14 @@ use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
     ReservationLifecyclePortError, RuntimeHostExecutionCancellationHandle,
-    RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
-    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionInputValue,
-    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
-    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
-    WorkflowSessionRuntimeLoadProofDiagnosticPhase, WorkflowSessionRuntimeLoadProofReadinessState,
-    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionInputValue, RuntimeHostExecutionMediaArtifactRef,
+    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionState, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
+    WorkflowSessionRuntimeLoadProofReadinessState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerEstimateHint,
@@ -1173,6 +1174,128 @@ async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_t
             .message()
             .contains("runtime task supervisor join failed"),
         "unexpected error: {error}"
+    );
+    let lifecycle_events = reservation_lifecycle_port.events();
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .map(|event| &event.outcome)
+            .collect::<Vec<_>>(),
+        vec![
+            &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
+        ]
+    );
+}
+
+#[tokio::test]
+async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(BlockingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+        .with_runtime_dispatch_source_refresher(source_refresher)
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let workflow_id = "wf-runtime-host-shutdown-abort";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let runtime_request_started = runtime_host_port.request_started.notified();
+    let run_service = service.clone();
+    let run_handle = tokio::spawn(async move {
+        run_service
+            .run_workflow_execution_session(
+                &host,
+                WorkflowExecutionSessionRunRequest {
+                    session_id: created.session_id,
+                    workflow_semantic_version: workflow_semantic_version.to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "prompt".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("paint a red cube"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "infer".to_string(),
+                        port_id: "image".to_string(),
+                    }]),
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+            )
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(1), runtime_request_started)
+        .await
+        .expect("runtime dispatch should start");
+
+    service
+        .workflow_shutdown_scheduler_task_lifecycle(
+            std::time::Duration::from_millis(1),
+            std::time::Duration::from_secs(1),
+        )
+        .await
+        .expect("shutdown should abort blocked runtime dispatch");
+    let error = run_handle
+        .await
+        .expect("run task should not panic")
+        .expect_err("aborted runtime dispatch should fail the workflow run");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(
+        error
+            .message()
+            .contains("runtime task supervisor join failed"),
+        "unexpected error: {error}"
+    );
+    let cancellation_snapshot = runtime_host_port
+        .cancellation_snapshot()
+        .expect("runtime host should retain cancellation handle");
+    assert_eq!(
+        cancellation_snapshot.state,
+        pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationState::ShutdownRequested
     );
     let lifecycle_events = reservation_lifecycle_port.events();
     assert_eq!(
@@ -3537,6 +3660,40 @@ impl RuntimeHostExecutionPort for PanickingRuntimeHostPort {
         _cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         panic!("runtime host panicked during test dispatch")
+    }
+}
+
+#[derive(Default)]
+struct BlockingRuntimeHostPort {
+    request_started: tokio::sync::Notify,
+    cancellation: Mutex<Option<RuntimeHostExecutionCancellationHandle>>,
+}
+
+impl BlockingRuntimeHostPort {
+    fn cancellation_snapshot(&self) -> Option<RuntimeHostExecutionCancellationSnapshot> {
+        self.cancellation
+            .lock()
+            .expect("runtime host cancellation lock")
+            .as_ref()
+            .map(RuntimeHostExecutionCancellationHandle::snapshot)
+    }
+}
+
+#[async_trait::async_trait]
+impl RuntimeHostExecutionPort for BlockingRuntimeHostPort {
+    async fn execute_runtime_host_request(
+        &self,
+        _request: RuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        *self
+            .cancellation
+            .lock()
+            .expect("runtime host cancellation lock") = Some(cancellation);
+        self.request_started.notify_one();
+        std::future::pending::<Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError>>(
+        )
+        .await
     }
 }
 

@@ -24272,6 +24272,65 @@ Worker rules:
       long-running image gateway/provider calls, then resume retry/defer
       idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing
       facts.
+  - 2026-06-04 Milestone 5c runtime shutdown drain/abort slice:
+    - Smallest vertical slice: make the existing runtime dispatch supervisor
+      lifecycle-owned by moving supervisor spawn/join into the
+      workflow-service orchestrator, registering each supervisor abort handle
+      with the active task lifecycle record, and adding a backend-owned
+      shutdown method that requests lifecycle shutdown, drains cooperatively
+      for a bounded timeout, aborts still-active runtime dispatch supervisors,
+      then waits for the existing session runner terminal mutation path to
+      release handles. Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_lifecycle_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and this plan set. The unrelated Pumas proposal Markdown files already
+      dirty in the worktree were ignored and are not part of this slice.
+    - No-fallback confirmation: shutdown policy remains workflow-service
+      owned, runtime adapters only observe cancellation/abort effects,
+      Tauri/frontend are untouched, and no retry, replay, graph-path launch,
+      reduced-plan launch, node-engine runtime launch, compatibility shim,
+      Pumas fact change, lockfile edit, or saved workflow fixture rewrite was
+      added.
+    - Implementation summary: lifecycle handle records can now retain a
+      runtime dispatch supervisor abort handle. The orchestrator exposes a
+      supervised runtime task spawn wrapper and maps panic/cancelled joins to
+      the existing typed `RuntimeTaskSupervisorJoin` diagnostic. The
+      workflow-service lifecycle shutdown method requests cooperative
+      shutdown, performs bounded drain, aborts lingering supervisors, then
+      lets the already-existing runner/store/reservation terminal path clear
+      active handles. A full-path test proves a blocked runtime-host dispatch
+      receives shutdown cancellation, is force-aborted, records terminal
+      dispatch rejection, and clears lifecycle handles.
+    - Tests/verification:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo test -p pantograph-workflow-service task_lifecycle_manager_aborts_tracked_task_supervisors --lib`
+      - `cargo test -p pantograph-workflow-service workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+      - `cargo test -p pantograph-workflow-service task_lifecycle --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `git diff --check`
+      - Targeted spawn ownership search:
+        `rg -n "runtime_task_supervisor_join_error_message|dispatch_started_runtime_task_supervised|tokio::spawn" crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`
+        confirmed the runner-local supervisor was removed and the remaining
+        runtime dispatch spawn is owned by the orchestrator.
+    - Deviation/discovered issue: the shutdown method depends on the existing
+      session runner terminal mutation path to release lifecycle handles after
+      abort, because store mutation and reservation release still require the
+      active run context. That preserves the current single state owner but
+      means future composition-root shutdown callers must keep the run task
+      alive until the method drains or returns a typed active-handle error.
+    - Remaining follow-up: pass cooperative cancellation deeper into
+      long-running image gateway/provider calls, then resume retry/defer
+      idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing
+      facts.
 
 ### Traceability Links
 

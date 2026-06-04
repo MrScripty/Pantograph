@@ -247,6 +247,22 @@ Remaining lifecycle work: shutdown drain/abort, deeper image gateway/provider
 cooperative cancellation, retry/defer idempotency, replay/bootstrap, and
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 workflow-service runtime shutdown drain/abort update:
+runtime dispatch supervisor spawning is now owned by the workflow-service
+orchestrator instead of the session runner, and each supervised runtime task
+registers an abort handle with the scheduler task lifecycle owner. A new
+backend-owned lifecycle shutdown method requests cooperative shutdown, waits
+for a bounded drain, aborts still-active runtime dispatch supervisors, then
+waits for the existing session-runner terminal mutation and reservation
+release path to clear handles. This adds no Tauri/frontend policy, adapter
+lifecycle ownership, retry/replay behavior, graph-path/reduced-plan launch
+fallback, or compatibility shim. Focused verification passed for lifecycle
+abort handles, full-path blocked runtime dispatch shutdown abort, runtime
+success/failure/panic regressions, orchestrator/lifecycle suites, fmt/check,
+and diff hygiene. Remaining lifecycle work: pass cooperative cancellation
+deeper into long-running image gateway/provider calls, then retry/defer
+idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::scheduler::unix_timestamp_ms;
 
@@ -12,6 +13,22 @@ use super::{
 };
 
 impl WorkflowService {
+    pub async fn workflow_shutdown_scheduler_task_lifecycle(
+        &self,
+        cooperative_drain_timeout: Duration,
+        abort_drain_timeout: Duration,
+    ) -> Result<(), WorkflowServiceError> {
+        self.scheduler_task_orchestrator
+            .shutdown_task_lifecycle(cooperative_drain_timeout, abort_drain_timeout)
+            .await
+            .map(|_state| ())
+            .map_err(|error| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task lifecycle shutdown failed: {error}"
+                ))
+            })
+    }
+
     pub async fn workflow_cleanup_stale_execution_sessions(
         &self,
         request: WorkflowExecutionSessionStaleCleanupRequest,

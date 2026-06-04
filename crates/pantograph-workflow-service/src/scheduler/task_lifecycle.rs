@@ -12,6 +12,7 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionCancellationState,
 };
 use pantograph_scheduler::SchedulerTaskId;
+use tokio::task::AbortHandle;
 
 use crate::workflow::WorkflowServiceError;
 
@@ -99,9 +100,21 @@ impl WorkflowSchedulerTaskLifecycleManager {
             runtime_host_cancellation_state: RuntimeHostExecutionCancellationState::Running,
             runtime_host_cancellation_reason: None,
             runtime_host_cancellation_signal: None,
+            task_supervisor_abort_handle: None,
         };
         self.active_task_handles.insert(task_key, record.clone());
         Ok(record)
+    }
+
+    pub(crate) fn track_task_supervisor_abort_handle(
+        &mut self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        abort_handle: AbortHandle,
+    ) -> Result<(), WorkflowServiceError> {
+        let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
+        tracked.task_supervisor_abort_handle = Some(abort_handle);
+        Ok(())
     }
 
     pub(crate) fn runtime_host_cancellation(
@@ -225,6 +238,17 @@ impl WorkflowSchedulerTaskLifecycleManager {
         self.shutdown_state
     }
 
+    pub(crate) fn abort_task_supervisors(&mut self) -> usize {
+        let mut aborted = 0;
+        for record in self.active_task_handles.values_mut() {
+            if let Some(abort_handle) = record.task_supervisor_abort_handle.as_ref() {
+                abort_handle.abort();
+                aborted += 1;
+            }
+        }
+        aborted
+    }
+
     pub(crate) fn finish_shutdown(
         &mut self,
     ) -> Result<WorkflowSchedulerTaskLifecycleShutdownState, WorkflowServiceError> {
@@ -326,6 +350,7 @@ pub(crate) struct WorkflowSchedulerTaskLifecycleHandleRecord {
     runtime_host_cancellation_reason: Option<String>,
     runtime_host_cancellation_signal:
         Option<Arc<WorkflowSchedulerTaskRuntimeHostCancellationSignal>>,
+    task_supervisor_abort_handle: Option<AbortHandle>,
 }
 
 #[derive(Debug)]
