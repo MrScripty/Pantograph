@@ -576,6 +576,12 @@ durable task orchestration path.
   recovery, and diagnostics-ledger attempt/timing facts. Each slice must keep
   one lifecycle owner, sync-core/async-shell separation, no Tauri/frontend
   business logic, and no graph-path/reduced-plan/node-engine runtime fallback.
+  2026-06-04 lifecycle manager skeleton update: the first option 3 slice added
+  the workflow-service task lifecycle manager skeleton and focused tests for
+  handle ownership, duplicate/stale handle failure, and shutdown idempotency.
+  Remaining immediate follow-up: wire durable duplicate-dispatch/task lease
+  guardrails through this owner without adding retry, replay, ledger writes,
+  runtime-host API changes, or adapter-owned lifecycle policy.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

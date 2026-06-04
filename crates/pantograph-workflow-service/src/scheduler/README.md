@@ -14,6 +14,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `readiness_lifecycle.rs` | Workflow-service lifecycle owner that builds typed dependency-readiness requests for admitted runtime tasks, calls a readiness provider, and applies scheduler readiness admission without owning dependency policy. |
+| `task_lifecycle.rs` | Workflow-service task lifecycle owner skeleton for active task handles, shutdown state, and typed lifecycle diagnostics before durable lease, cancellation, retry, replay, and ledger slices are wired. |
 | `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 | `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, active-run scheduler task-state transition storage, and active-run finish transitions. |
 | `store_task_results.rs` | Staged active-run scheduler task-result storage used by Milestone 5c before durable diagnostics-ledger replay replaces the storage backend. |
@@ -155,6 +156,14 @@ currently owns no background tasks; if future provider I/O becomes
 asynchronous, spawned work, cancellation, retries, shutdown, and tracing must
 be owned by this module rather than by Tauri, frontend code, node-engine, or
 runtime adapters.
+The task lifecycle manager is the workflow-service owner for task handle and
+shutdown state. Its first slice is synchronous and does not spawn work, retry,
+replay, write diagnostics-ledger facts, dispatch runtime-host work, or change
+scheduler task-state policy. Later slices must compose cancellation tokens,
+durable duplicate-dispatch guards, retry/defer policy, replay/bootstrap, and
+attempt/timing ledger facts through this owner instead of distributing
+lifecycle behavior across the session runner, Tauri, frontend code, runtime
+adapters, or diagnostics projections.
 The first concrete lifecycle provider adapter is the canonical
 `DependencyEnvironmentService` facade. It converts the readiness request into a
 path-free dependency-environment resolve request, validates provider output,

@@ -3,6 +3,7 @@ mod policy;
 mod readiness_lifecycle;
 mod store;
 mod store_admission;
+mod task_lifecycle;
 pub(crate) mod task_orchestrator;
 
 pub(crate) use contracts::scheduler_snapshot_workflow_run_id;

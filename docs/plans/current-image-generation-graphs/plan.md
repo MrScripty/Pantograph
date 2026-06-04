@@ -144,6 +144,17 @@ Tauri/frontend, do not reintroduce graph-path or reduced-plan launch fallback,
 and do not combine retry, replay, worker lifecycle, and ledger facts into one
 source slice.
 
+2026-06-04 scheduler lifecycle manager skeleton update: workflow-service now
+has a synchronous task lifecycle owner skeleton for active task handles,
+shutdown state, and typed lifecycle diagnostics. Focused tests cover manager
+construction, handle tracking, duplicate handle rejection, stale completion
+rejection, matching completion, shutdown idempotency, and active-handle
+shutdown blocking. This slice intentionally does not add retry/defer policy,
+replay/bootstrap, diagnostics-ledger writes, runtime-host dispatch changes,
+Tauri/frontend lifecycle logic, or graph-path/reduced-plan fallback. The next
+slice is durable duplicate-dispatch/task lease guardrails and runner
+integration through the lifecycle owner.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

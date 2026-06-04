@@ -638,25 +638,31 @@ Selected next path: Option 3 durable lifecycle supervisor:
 
 Option 3 thin implementation sequence:
 
-1. Lifecycle manager skeleton: introduce the workflow-service-owned supervisor
+1. [x] Lifecycle manager skeleton: introduce the workflow-service-owned supervisor
    module and DTOs for task lifecycle ownership, active task handles, shutdown
    state, and typed lifecycle diagnostics. This slice must not add retry,
    replay, ledger writes, or new dispatch policy.
-2. Durable duplicate-dispatch/task lease guardrail: extend the active-run
+   - 2026-06-04 implementation update: added
+     `scheduler/task_lifecycle.rs` and focused tests. The skeleton owns active
+     task handle records and shutdown state synchronously, fails closed on
+     duplicate/stale handles, and remains detached from async worker spawning,
+     retry, replay, ledger persistence, runtime dispatch, and frontend/Tauri
+     policy until the next slices wire it into session execution.
+2. [ ] Durable duplicate-dispatch/task lease guardrail: extend the active-run
    lifecycle state so a task cannot be dispatched twice across runner resume,
    stale attempts, or overlapping calls. Keep it synchronous and fail closed
    with typed diagnostics.
-3. Cancellation and shutdown ownership: add cancellation tokens or equivalent
+3. [ ] Cancellation and shutdown ownership: add cancellation tokens or equivalent
    task-stop signals, propagate shutdown from the supervisor, and await or
    abort tracked tasks at the lifecycle owner. Do not hide cancellation in
    leaf runtime-host or reservation code.
-4. Retry/defer policy boundary: add typed retry/defer decisions and
+4. [ ] Retry/defer policy boundary: add typed retry/defer decisions and
    idempotency keys after cancellation ownership exists. Keep retry scheduling
    separate from dispatch selection and reservation release.
-5. Replay/bootstrap recovery: reconstruct supervisor-visible lifecycle state
+5. [ ] Replay/bootstrap recovery: reconstruct supervisor-visible lifecycle state
    from persisted active-run/task facts and reconcile incomplete attempts
    without re-running completed tasks or releasing unowned reservations.
-6. Diagnostics ledger attempt/timing facts: persist started/completed/failed/
+6. [ ] Diagnostics ledger attempt/timing facts: persist started/completed/failed/
    cancelled attempt timings, retry/defer decisions, replay outcomes, and
    worker lifecycle events only after the ordering and replay semantics are
    stable.

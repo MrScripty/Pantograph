@@ -23887,6 +23887,41 @@ Worker rules:
       pantograph-workflow-service -- --check`; focused workflow-service
       scheduler/session tests; `cargo check -p pantograph-workflow-service`;
       and `git diff --check`.
+  - 2026-06-04 Milestone 5c lifecycle manager skeleton implementation slice:
+    - Smallest vertical slice: added a workflow-service-owned synchronous task
+      lifecycle manager skeleton and focused tests. Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+      scheduler module/README updates, a test-only attempt-id parse helper,
+      and this plan set.
+    - No-fallback confirmation: the slice does not spawn tasks, retry, replay,
+      write diagnostics-ledger facts, dispatch runtime-host work, call Pumas,
+      read graph paths, synthesize runtime candidates, or add Tauri/frontend
+      lifecycle policy. Failures are typed `WorkflowServiceError`
+      diagnostics.
+    - Implementation summary: `WorkflowSchedulerTaskLifecycleManager` owns a
+      lifecycle owner id, active task-handle records keyed by
+      `SchedulerTaskId`, matching `WorkflowSchedulerTaskAttemptId`, and
+      shutdown state. It rejects duplicate tracked handles, stale completion,
+      new handles during shutdown, blank owner ids, and final shutdown while
+      handles remain active.
+    - Tests/verification:
+      - `cargo test -p pantograph-workflow-service task_lifecycle --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/deleted-symbol search over touched scheduler
+        lifecycle files. Only an existing README invariant mentions
+        `ModelDependencyRequest`/`ModelRefV2` as forbidden legacy contracts.
+    - Deviation/discovered issue: the skeleton is intentionally staged before
+      session-runner integration, so `task_lifecycle.rs` carries a scoped
+      `cfg_attr(not(test), allow(dead_code))` with an explanatory comment.
+      The next durable duplicate-dispatch/task lease slice must remove or
+      narrow that staged allowance by making the runner consume the owner.
+    - Remaining follow-up: durable duplicate-dispatch/task lease guardrail
+      through the lifecycle owner, then cancellation/shutdown tokens,
+      retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
+      attempt/timing facts.
 
 ### Traceability Links
 

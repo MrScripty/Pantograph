@@ -77,6 +77,17 @@ impl WorkflowSchedulerTaskAttemptId {
         Self(format!("scheduler-task-attempt.{}", Uuid::new_v4()))
     }
 
+    #[cfg(test)]
+    pub(crate) fn parse(value: impl Into<String>) -> Result<Self, WorkflowServiceError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "scheduler task attempt id must not be blank".to_string(),
+            ));
+        }
+        Ok(Self(value))
+    }
+
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
