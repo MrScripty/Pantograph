@@ -62,6 +62,20 @@ fmt/check, diagnostics tests, event-adapter tests, deleted-symbol search, and
 diff hygiene. No graph snapshot fallback, scheduler adapter, runtime launch
 branch, frontend-derived policy, or compatibility event shim was added.
 
+2026-06-03 scheduler lifecycle hardening re-plan decision: use Option 2, the
+attempt/lease state core path, before broader durable lifecycle work.
+Workflow-service active-run orchestration must add scheduler-owned
+attempt/lease transitions for claim/start/complete/fail/cancel, stale-attempt
+rejection, duplicate-dispatch prevention, and reservation release hooks while
+keeping runtime-host awaits outside store locks. This is the next thin
+implementation path because it creates a single lifecycle/state owner without
+folding retry policy, replay/recovery, worker supervision, and timing ledger
+integration into one slice. Option 1, minimal in-memory guardrails, is
+rejected as insufficient for the open lifecycle boundary. Option 3, a full
+lifecycle supervisor, remains the target architecture after the attempt/lease
+core exists. Option 4, moving contracts into `pantograph-scheduler`, is
+deferred unless shared ownership is proven.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

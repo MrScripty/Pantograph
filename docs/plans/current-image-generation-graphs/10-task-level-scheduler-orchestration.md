@@ -522,6 +522,89 @@ Required verification for the option 2 runner:
   `pantograph-workflow-service`, focused session/orchestrator tests, `cargo
   fmt` checks, and `git diff --check`.
 
+## Attempt/Lease Lifecycle Replan
+
+The next lifecycle hardening boundary is too broad to implement as one
+source slice. Cancellation, retry/defer idempotency, duplicate-dispatch
+prevention, reservation release, replay/recovery, and attempt/timing facts
+touch scheduler task state, workflow-service orchestration, runtime-host
+dispatch, reservation lifecycle, diagnostics/ledger timing, and async
+shutdown behavior. The selected path is Option 2: implement the
+workflow-service attempt/lease state core first.
+
+Option 2 immediate implementation:
+
+- Add a scheduler-owned active-run attempt/lease contract in
+  workflow-service for claim/start/complete/fail/cancel transitions.
+- Store attempt id, task id, workflow/run/session correlation, expected prior
+  state, started/completed timestamps when available, and reservation release
+  intent without adding retry policy or replay workers in the same slice.
+- Require every runtime-host dispatch start, completion, failure, and cancel
+  update to present the current attempt id. Stale, missing, duplicate, or
+  mismatched attempts must fail closed with typed diagnostics and must not
+  mutate task results or terminal state.
+- Keep the active-run store mutation synchronous and atomic. Runtime-host
+  awaits, reservation-port calls, ledger writes, and future worker-pool I/O
+  must happen outside store locks and return to explicit completion/failure
+  transitions.
+- Add reservation release hooks as typed intent emitted by the state
+  transition boundary; the next slice may wire the actual reservation lifecycle
+  port. Do not silently drop reservations, and do not let Tauri/frontend own
+  release policy.
+
+Deferred Option 3 target:
+
+- Add a single lifecycle owner for bounded workers, cancellation tokens,
+  retry/defer policy, duplicate-dispatch prevention across restarts,
+  reservation release execution, replay/recovery, diagnostics ledger writes,
+  task panic handling, and shutdown.
+- Promote attempt/timing facts into diagnostics read models only after the
+  attempt/lease state core is validated.
+
+Rejected or deferred alternatives:
+
+- Option 1 minimal in-memory guardrails is rejected as the primary path
+  because it does not establish durable attempt identity, stale-attempt
+  rejection, or the state owner needed before removing more legacy launch
+  paths.
+- Option 4 contract-first scheduler crate extraction is deferred until there
+  is a proven shared owner outside workflow-service. Extracting now would add
+  abstraction before the workflow-service active-run lifecycle shape is
+  validated.
+
+Standards gates for the attempt/lease core:
+
+- Keep sync-core/async-shell separation: store transitions are synchronous;
+  async runtime-host, reservation, ledger, and worker lifecycle work stays at
+  orchestration boundaries.
+- Keep one lifecycle/state owner: workflow-service active-run orchestration
+  owns task attempt state; Tauri and frontend only forward commands or render
+  diagnostics.
+- Keep no-fallback/no-legacy behavior: do not reintroduce whole-run output
+  demand, reduced execution-plan launch, `ModelRefV2`,
+  `ModelDependencyRequest`, graph `model_path`, node-engine runtime launch,
+  or a compatibility retry branch.
+- Keep decomposition simple: attempt contract/state transitions, runtime-host
+  dispatch awaits, reservation execution, retry policy, replay/recovery, and
+  diagnostics timing must stay separately owned slices.
+
+Required verification for the attempt/lease core:
+
+- Focused active-run store tests for successful claim/start/complete/fail/
+  cancel, stale attempt rejection, duplicate start rejection, duplicate
+  completion rejection, wrong task/run/session rejection, and no partial
+  result/state persistence.
+- Orchestrator tests proving runtime-host dispatch uses an attempt id, drops
+  store locks before awaiting the port, completes/fails only with the matching
+  attempt, and fails closed for stale attempts.
+- Reservation hook tests proving release intent is produced on terminal
+  completion/failure/cancel and not produced for stale rejected attempts.
+- Targeted source searches proving no legacy runtime launch, graph path,
+  reduced-plan handoff, or Tauri/frontend policy path was added.
+- `cargo fmt`, focused workflow-service scheduler tests, default/all-features/
+  no-default-features `cargo check` for workflow-service when public feature
+  contracts change, and `git diff --check`.
+
 ## Runtime-Host Contract Crate Replan
 
 The scheduler task orchestrator belongs in `pantograph-workflow-service`, but

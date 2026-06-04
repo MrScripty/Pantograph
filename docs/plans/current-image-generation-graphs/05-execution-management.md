@@ -23584,6 +23584,45 @@ Worker rules:
       duplicate-dispatch prevention, reservation release, replay, recovery,
       and attempt/timing facts remain the open scheduler lifecycle hardening
       work.
+  - 2026-06-03 Milestone 5c attempt/lease lifecycle core re-plan decision:
+    - Selected path: Option 2. The next implementation slice must add the
+      workflow-service active-run attempt/lease state core before broader
+      durable lifecycle work.
+    - Smallest useful vertical slice: scheduler-owned attempt/lease
+      transitions for claim/start/complete/fail/cancel, stale or mismatched
+      attempt rejection, duplicate-dispatch prevention, and reservation release
+      intent hooks.
+    - Allowed next implementation write set: workflow-service scheduler
+      active-run store/orchestrator files, focused workflow-service scheduler
+      store/orchestrator tests, workflow-service scheduler documentation, and
+      this plan set. Shared contracts, generated DTOs, lockfiles, saved
+      workflow fixtures, Tauri, frontend, runtime-host, runtime-registry, and
+      diagnostics-ledger files remain out of scope unless the next source slice
+      proves a direct boundary requirement and records it before editing.
+    - Explicitly out of scope for that next slice: retry/defer scheduling
+      policy, replay/recovery workers, background supervisor ownership,
+      diagnostics ledger timing/attempt fact persistence, and broad
+      reservation allocator redesign. Those remain follow-up slices after the
+      attempt/lease state core is validated.
+    - No-fallback/no-legacy guardrails: no graph path fallback, reduced
+      execution-plan launch, node-engine runtime launch, legacy planned
+      inference host, compatibility retry branch, or Tauri/frontend lifecycle
+      policy may be added. Canonical planning failures must remain typed
+      diagnostics.
+    - Standards alignment: this keeps one lifecycle/state owner in
+      workflow-service active-run orchestration, keeps synchronous store
+      mutations separate from async runtime-host/reservation/ledger I/O, and
+      avoids hiding cancellation, retry, replay, reservation, and diagnostics
+      policy in one complected slice.
+    - Required verification for the next source slice: focused active-run
+      store tests for claim/start/complete/fail/cancel and stale/duplicate
+      rejection; orchestrator tests proving matching-attempt completion/failure
+      and no store lock held across runtime-host awaits; reservation release
+      intent tests; targeted deleted-symbol/no-fallback searches over touched
+      workflow-service files; `cargo fmt -p pantograph-workflow-service --
+      --check`; focused workflow-service scheduler tests; relevant
+      workflow-service `cargo check` feature matrix when public contracts
+      change; and `git diff --check`.
 
 ### Traceability Links
 

@@ -524,7 +524,18 @@ durable task orchestration path.
   and documentation cleanup.
 - [ ] Add cancellation, retry/defer idempotency, duplicate-dispatch
   prevention, reservation release, replay, and recovery behavior before
-  removing legacy launch paths.
+  removing legacy launch paths. 2026-06-03 re-plan decision: implement Option
+  2 first, the attempt/lease state core. The next source slice must add a
+  scheduler-owned active-run attempt/lease contract and store transitions for
+  claim/start/complete/fail/cancel, stale-attempt rejection,
+  duplicate-dispatch prevention, and reservation release hooks. It must keep
+  runtime-host awaits outside store locks and fail closed for stale or
+  mismatched attempt ids. Durable retry/defer policy, replay/recovery, worker
+  supervision, and timing/attempt ledger facts remain follow-up slices after
+  this state core exists. Option 1 is rejected because minimal in-memory
+  guardrails are not enough to complete the lifecycle boundary. Option 3
+  remains the final durable lifecycle supervisor target. Option 4 is deferred
+  unless the attempt/lease contract must be shared outside workflow-service.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
