@@ -397,7 +397,11 @@ async fn current_validation_summary_allows_executable_summary() {
 
 #[tokio::test]
 async fn current_validation_summary_marks_semantic_node_data_edit_stale() {
-    let store = GraphSessionStore::new();
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
     let session = store
         .create_session(dependency_inference_graph(), None)
         .await;
@@ -447,9 +451,11 @@ async fn current_validation_summary_marks_semantic_node_data_edit_stale() {
         Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
     );
 
+    store.drain_validation_tasks_for_tests().await;
+
     let current_response = store
         .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
-            graph_session_id: session.session_id,
+            graph_session_id: session.session_id.clone(),
             graph_revision: updated
                 .graph_revision
                 .parse()
@@ -460,12 +466,22 @@ async fn current_validation_summary_marks_semantic_node_data_edit_stale() {
 
     assert_eq!(
         current_response.state,
-        WorkflowGraphCurrentValidationSummaryState::Missing
+        WorkflowGraphCurrentValidationSummaryState::Invalid
     );
-    assert!(!current_response.submit_gate.allowed);
+    assert!(current_response.validation_session_id.is_some());
+
+    let task_events = store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events");
+    assert_eq!(task_events.len(), 1);
     assert_eq!(
-        current_response.submit_gate.reason_code,
-        Some(WorkflowGraphValidationSubmitGateReason::ValidationSummaryMissing)
+        task_events[0].graph_revision.as_str(),
+        updated.graph_revision.as_str()
+    );
+    assert_eq!(
+        task_events[0].terminal_state,
+        WorkflowGraphValidationTaskTerminalState::Completed
     );
 }
 
@@ -500,7 +516,7 @@ async fn current_validation_summary_survives_layout_only_position_edit() {
 
     let response = store
         .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
-            graph_session_id: session.session_id,
+            graph_session_id: session.session_id.clone(),
             graph_revision: updated
                 .graph_revision
                 .parse()
@@ -514,6 +530,12 @@ async fn current_validation_summary_survives_layout_only_position_edit() {
         WorkflowGraphCurrentValidationSummaryState::Current
     );
     assert!(response.submit_gate.allowed);
+
+    assert!(store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events")
+        .is_empty());
 }
 
 #[tokio::test]
@@ -1260,8 +1282,9 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
         .expect("current validation summary response");
     assert_eq!(
         current.state,
-        WorkflowGraphCurrentValidationSummaryState::Missing
+        WorkflowGraphCurrentValidationSummaryState::Current
     );
+    assert!(current.validation_session_id.is_some());
 }
 
 #[tokio::test]

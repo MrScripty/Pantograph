@@ -199,7 +199,7 @@ impl GraphSessionStore {
         Ok(WorkflowGraphEditSessionCloseResponse { ok: true })
     }
 
-    async fn cancel_active_validation_after_graph_mutation(
+    async fn start_validation_after_semantic_graph_mutation(
         &self,
         session_id: &str,
     ) -> Result<(), WorkflowServiceError> {
@@ -208,6 +208,9 @@ impl GraphSessionStore {
         self.validation_lifecycle
             .cancel_active_validation_for_graph_change(&graph_session_id)
             .await;
+        let _validation_session_id = self
+            .start_validation_task_for_current_graph_revision(graph_session_id, None)
+            .await?;
         Ok(())
     }
 
@@ -410,7 +413,7 @@ impl GraphSessionStore {
                 projection,
             )
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -459,7 +462,7 @@ impl GraphSessionStore {
                 projection,
             )
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -506,7 +509,7 @@ impl GraphSessionStore {
                 projection,
             )
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -544,7 +547,7 @@ impl GraphSessionStore {
                 projection,
             )
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -581,7 +584,7 @@ impl GraphSessionStore {
                 projection,
             )
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -624,7 +627,7 @@ impl GraphSessionStore {
                 projection,
             )
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -638,7 +641,7 @@ impl GraphSessionStore {
             let mut state = handle.lock().await;
             state.undo(&request.session_id)?
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -652,7 +655,7 @@ impl GraphSessionStore {
             let mut state = handle.lock().await;
             state.redo(&request.session_id)?
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }

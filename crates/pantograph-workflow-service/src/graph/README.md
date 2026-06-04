@@ -206,6 +206,11 @@ or frontend state.
   event projection, and memory-impact tests stay in `session_tests.rs` so
   `session.rs` remains focused on production session orchestration.
 - Connection candidate lookup never mutates session state.
+- Successful semantic graph mutations now cancel stale validation lifecycle
+  state and start a backend-owned validation task for the committed current
+  graph revision through the workflow-service task owner. Layout-only
+  position edits, previews, and connection candidate lookups remain
+  non-triggering.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Workflow execution fingerprints are computed from executable topology only:
   sorted node ids, node types, node behavior versions, and sorted port

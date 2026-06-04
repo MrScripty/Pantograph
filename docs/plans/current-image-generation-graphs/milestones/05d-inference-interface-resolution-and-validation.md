@@ -2797,6 +2797,35 @@ defining an image-only inference-node interface.
         may wire semantic graph mutations through the existing backend mutation
         helper; layout-only mutations and read-only candidate lookups must not
         auto-start validation.
+      - 2026-06-03 backend graph-mutation validation auto-trigger slice
+        completed: successful semantic graph mutations now use the existing
+        workflow-service mutation completion hook to cancel stale validation
+        and start one backend-owned validation task for the committed current
+        graph revision. The explicit trigger path and auto-trigger path share
+        the same current-revision task-start helper. Layout-only node-position
+        edits, connection candidate lookups, and insertion previews remain
+        non-triggering.
+        No-fallback/no-legacy confirmation: graph paths, selector summaries,
+        frontend state, Tauri policy, legacy model-ref/resolver contracts,
+        raw Pumas facts, and caller-supplied freshness are not accepted as
+        validation authority. Backend task-owner rejection remains a typed
+        workflow-service error instead of silently preserving stale validation.
+        Verification passed: `cargo fmt -p
+        pantograph-workflow-service -- --check`; `cargo test -p
+        pantograph-workflow-service
+        current_validation_summary_marks_semantic_node_data_edit_stale --lib`;
+        `cargo test -p pantograph-workflow-service
+        current_validation_summary_survives_layout_only_position_edit --lib`;
+        `cargo test -p pantograph-workflow-service validation_task_owner
+        --lib`; `cargo test -p pantograph-workflow-service
+        changed_during_fact_lookup --lib`; `cargo test -p
+        pantograph-workflow-service semantic_node_data_stale_summary --lib`;
+        and `cargo test -p pantograph-workflow-service
+        apply_inference_interface_update_proposal_replaces_authored_snapshot
+        --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+        no-fallback/no-legacy search; and `git diff --check`.
+        Remaining follow-up: frontend overlay consumption of backend
+        validation lifecycle/state remains a separate presentation slice.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit

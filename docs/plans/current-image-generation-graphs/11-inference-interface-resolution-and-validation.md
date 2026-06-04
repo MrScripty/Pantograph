@@ -215,6 +215,14 @@ Out of scope:
   source slice may wire semantic graph mutations to auto-start backend-owned
   validation tasks; layout-only mutations and read-only candidate lookups must
   remain non-triggering.
+- 2026-06-03 backend graph-mutation validation auto-trigger implemented:
+  successful semantic graph mutations now use the existing backend mutation
+  completion hook to cancel stale validation and start one workflow-service
+  owned validation task for the committed current graph revision. Layout-only
+  node-position edits, connection candidates, and insertion previews remain
+  non-triggering. The slice keeps validation freshness and task lifecycle in
+  workflow-service; Tauri and frontend overlay consumption remain later
+  presentation/transport work.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

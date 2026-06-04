@@ -122,7 +122,7 @@ impl GraphSessionStore {
                 rejection: None,
             }
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -240,7 +240,7 @@ impl GraphSessionStore {
                 rejection: None,
             }
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }
@@ -337,7 +337,7 @@ impl GraphSessionStore {
                 rejection: None,
             }
         };
-        self.cancel_active_validation_after_graph_mutation(&request.session_id)
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
             .await?;
         Ok(response)
     }

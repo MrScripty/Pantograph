@@ -264,6 +264,14 @@ instead of path-era direct runtime node components. The older exported package
 as a separate delete-or-rewrite follow-up because it is a package API surface,
 not an app-local orphaned renderer.
 
+2026-06-03 backend graph-mutation validation auto-trigger update:
+workflow-service semantic graph mutations now cancel stale validation and start
+one backend-owned validation task for the committed current graph revision.
+Layout-only node-position edits, connection candidate lookup, and insertion
+previews remain non-triggering. Validation freshness, task lifecycle, and
+typed rejection behavior stay backend-owned; Tauri/frontend overlay consumption
+remains a later presentation slice.
+
 ## Standards Rule
 
 The standards constraints in

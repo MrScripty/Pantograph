@@ -242,7 +242,7 @@ impl GraphSessionStore {
             let projection = super::phase6_memory_impact_projection(memory_impact);
             state.snapshot_response_with_state(&session_id, Some(workflow_event), projection)
         };
-        self.cancel_active_validation_after_graph_mutation(&session_id)
+        self.start_validation_after_semantic_graph_mutation(&session_id)
             .await?;
         Ok(response)
     }
@@ -265,7 +265,19 @@ impl GraphSessionStore {
     ) -> Result<DraftGraphValidationSessionId, WorkflowServiceError> {
         let graph_session_id = WorkflowGraphSessionId::parse(&request.graph_session_id)
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-        let handle = self.get_session_handle(&request.graph_session_id).await?;
+        self.start_validation_task_for_current_graph_revision(
+            graph_session_id,
+            Some(request.graph_revision),
+        )
+        .await
+    }
+
+    pub(super) async fn start_validation_task_for_current_graph_revision(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        requested_graph_revision: Option<WorkflowGraphRevision>,
+    ) -> Result<DraftGraphValidationSessionId, WorkflowServiceError> {
+        let handle = self.get_session_handle(graph_session_id.as_str()).await?;
         let mut state = handle.lock().await;
         state.touch();
         state.canonicalize_graph();
@@ -274,7 +286,10 @@ impl GraphSessionStore {
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
-        if current_graph_revision != request.graph_revision {
+        if requested_graph_revision
+            .as_ref()
+            .is_some_and(|requested| requested != &current_graph_revision)
+        {
             return Err(WorkflowServiceError::InvalidRequest(
                 "validation task request graph revision is stale".to_string(),
             ));

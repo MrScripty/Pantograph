@@ -23237,6 +23237,57 @@ Worker rules:
       next source slice. It must be limited to successful semantic mutations in
       the backend mutation helper; layout-only mutations and read-only
       candidate lookups must not auto-start validation.
+  - 2026-06-03 Milestone 5d backend graph-mutation validation auto-trigger
+    slice:
+    - Smallest useful vertical slice: upgrade the existing workflow-service
+      semantic graph-mutation completion hook so successful semantic edits
+      cancel stale validation and start one backend-owned validation task for
+      the committed current graph revision.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/session.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_node_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - Implementation: the semantic mutation helper now parses the typed graph
+      session id, cancels active validation with the existing graph-revision
+      changed reason, and starts a validation task through the same
+      workflow-service task owner used by explicit validation starts. The
+      explicit start path and auto-trigger path share the current-revision
+      task-start helper. Layout-only node-position edits, candidate lookup, and
+      previews do not call the helper.
+    - No-fallback/no-legacy result: the slice does not add graph-path,
+      selector-summary, UI-state, Tauri-owned freshness, frontend retry, legacy
+      resolver/model-ref, or compatibility-shim behavior. If the backend task
+      owner rejects task start, the mutation path returns the typed
+      `WorkflowServiceError` instead of silently preserving stale validation.
+    - Standards alignment: workflow-service remains the single owner of
+      validation freshness and task lifecycle. Locks are released before task
+      fact lookup, no new dependencies were added, and async behavior remains
+      at the backend task boundary rather than in frontend/Tauri policy.
+    - Verification passed: `cargo fmt -p
+      pantograph-workflow-service -- --check`; `cargo test -p
+      pantograph-workflow-service
+      current_validation_summary_marks_semantic_node_data_edit_stale --lib`;
+      `cargo test -p pantograph-workflow-service
+      current_validation_summary_survives_layout_only_position_edit --lib`;
+      `cargo test -p pantograph-workflow-service validation_task_owner --lib`;
+      `cargo test -p pantograph-workflow-service
+      changed_during_fact_lookup --lib`; `cargo test -p
+      pantograph-workflow-service semantic_node_data_stale_summary --lib`;
+      and `cargo test -p pantograph-workflow-service
+      apply_inference_interface_update_proposal_replaces_authored_snapshot
+      --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+      no-fallback/no-legacy search; and `git diff --check`.
+    - Remaining follow-up: add editor overlay consumption of backend
+      validation lifecycle/state as a separate presentation slice. Tauri and
+      frontend must only forward or render backend-issued validation session,
+      revision, sequence, summary, and diagnostics facts.
 
 ### Traceability Links
 
