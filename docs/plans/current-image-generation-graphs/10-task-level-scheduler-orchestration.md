@@ -567,6 +567,43 @@ Completed sub-slice on 2026-06-03:
   reservation-release intent wiring, followed by retry/defer idempotency,
   replay/recovery, worker supervision, and timing/attempt ledger facts.
 
+Selected next path for cancellation/reservation release:
+
+- Use Option 2. Extend the workflow-service active-run attempt record with
+  selected runtime reservation metadata after dispatch selection succeeds:
+  reservation lease id, selected candidate id when present, and the task/run
+  correlation already owned by the active attempt.
+- Add synchronous store transitions for terminal attempt outcomes that return
+  typed reservation-release intent when the attempt has an attached lease.
+  Completion, failure, and cancel must all use the same matching-attempt
+  validation before task-state/result mutation.
+- Represent cancellation in the current scheduler task-state contract as a
+  terminal task-state diagnostic with explicit cancellation messaging. Do not
+  add a separate `Cancelled` state in this slice; that belongs to a future
+  shared scheduler-contract expansion if the semantics need to be consumed
+  outside workflow-service.
+- Apply reservation lifecycle events from the async orchestrator/session runner
+  after the store transition returns release intent. Do not hold the store lock
+  while calling the reservation lifecycle port.
+- Keep retry/defer idempotency, replay/recovery, worker supervision,
+  cancellation tokens for in-flight runtime-host work, and diagnostics ledger
+  attempt/timing facts out of this slice.
+
+Required verification for this next path:
+
+- Store tests for reservation metadata binding to the active attempt, stale or
+  mismatched attempt rejection, duplicate binding rejection, cancel transition,
+  and release-intent emission only for leased terminal attempts.
+- Orchestrator/session-runner tests proving reservation lifecycle events are
+  applied after the store transition and that stale cancel/terminal attempts do
+  not emit release events or mutate results.
+- Focused deleted-symbol/no-fallback searches proving no graph path fallback,
+  reduced-plan launch, node-engine runtime launch, compatibility retry branch,
+  or Tauri/frontend lifecycle policy was added.
+- `cargo fmt -p pantograph-workflow-service -- --check`, focused
+  workflow-service scheduler tests, `cargo check -p pantograph-workflow-service`,
+  and `git diff --check`.
+
 Deferred Option 3 target:
 
 - Add a single lifecycle owner for bounded workers, cancellation tokens,

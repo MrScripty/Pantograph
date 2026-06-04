@@ -546,7 +546,14 @@ durable task orchestration path.
   timing/attempt ledger facts. 2026-06-03 follow-up source update: started
   runtime-host dispatch errors now terminally fail through the matching task
   attempt id, and the obsolete broad `runtime-dispatch-not-wired` active-run
-  helper was deleted.
+  helper was deleted. 2026-06-03 cancellation/reservation re-plan decision:
+  use Option 2 next. Bind selected reservation lease/candidate metadata to the
+  active runtime task attempt, add a matching-attempt cancel transition, and
+  return typed reservation-release intent from synchronous terminal store
+  transitions while applying reservation lifecycle events outside the store
+  lock. Keep retry/defer idempotency, replay/recovery, worker supervision,
+  ledger timing facts, and any distinct scheduler cancelled-state expansion as
+  follow-up work.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

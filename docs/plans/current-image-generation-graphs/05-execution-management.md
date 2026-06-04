@@ -23694,6 +23694,49 @@ Worker rules:
     - Remaining follow-up: explicit cancel attempt transition,
       reservation-release intent wiring, retry/defer idempotency,
       replay/recovery, worker supervision, and timing/attempt ledger facts.
+  - 2026-06-03 Milestone 5c cancellation/reservation release re-plan
+    decision:
+    - Selected path: Option 2. The next implementation slice must bind
+      scheduler reservation metadata to active runtime task attempts, add a
+      matching-attempt cancel transition, and have synchronous terminal store
+      transitions return typed reservation-release intent.
+    - Smallest useful vertical slice: extend workflow-service active-run
+      attempt state with selected reservation lease/candidate metadata,
+      produce release intent for leased completion/failure/cancel outcomes,
+      and apply reservation lifecycle events from the async orchestrator or
+      session runner after the store transition releases the lock.
+    - Allowed next implementation write set:
+      `crates/pantograph-workflow-service/src/scheduler/store.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      focused workflow-service scheduler tests, and this plan set. Tauri,
+      frontend, runtime-host contract, runtime-registry, diagnostics-ledger,
+      lockfile, generated DTO, and workflow fixture edits remain out of scope
+      unless the next source slice proves a direct boundary need and records it
+      first.
+    - Explicitly out of scope for that slice: retry/defer scheduling policy,
+      replay/recovery workers, worker supervision/cancellation tokens,
+      diagnostics ledger timing/attempt facts, broad reservation allocator
+      redesign, and a new shared scheduler `Cancelled` task state.
+    - No-fallback/no-legacy guardrails: no graph path fallback, reduced
+      execution-plan launch, node-engine runtime launch, legacy planned
+      inference host, compatibility retry branch, or Tauri/frontend lifecycle
+      policy may be added.
+    - Standards alignment: workflow-service active-run store remains the
+      synchronous state owner; orchestrator/session runner remains the async
+      shell for reservation-port I/O; cancellation and release intent stay
+      decomposed from retry, replay, worker lifecycle, and ledger facts.
+    - Required verification for the next source slice: store tests for
+      reservation metadata binding, stale/mismatched attempt rejection,
+      duplicate binding rejection, cancel transition, and release-intent
+      emission only for leased terminal attempts; orchestrator/session-runner
+      tests proving release events apply outside the store lock and stale
+      attempts do not emit release; targeted no-fallback/deleted-symbol
+      searches over touched files; `cargo fmt -p pantograph-workflow-service
+      -- --check`; focused workflow-service scheduler tests; `cargo check -p
+      pantograph-workflow-service`; and `git diff --check`.
 
 ### Traceability Links
 

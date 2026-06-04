@@ -95,6 +95,20 @@ selection no-candidate and runtime-host dispatch error paths both return to
 attempt-aware terminal mutation without recording task results or adding any
 legacy runtime launch branch.
 
+2026-06-03 scheduler cancellation/reservation re-plan decision: use Option 2.
+The next source slice must bind scheduler reservation metadata to the active
+runtime task attempt after dispatch selection, add an explicit cancel
+transition for the matching active attempt, and have synchronous store
+transitions return typed reservation-release intent when a leased attempt ends
+through cancel/failure/completion. The async orchestrator/session runner must
+apply that intent through the reservation lifecycle port outside the store
+lock. This keeps workflow-service as the single lifecycle/state owner without
+moving business logic into Tauri/frontend or folding retry policy,
+replay/recovery, worker supervision, and ledger timing facts into the same
+slice. Cancellation may map to the existing terminal task-state diagnostic
+until `pantograph-scheduler` grows a distinct cancelled state; that future
+state expansion remains deferred unless shared scheduler semantics require it.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.
