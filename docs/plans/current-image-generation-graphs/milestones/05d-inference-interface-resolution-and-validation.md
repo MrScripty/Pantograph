@@ -2775,6 +2775,18 @@ defining an image-only inference-node interface.
         - Put lifecycle, freshness, or retry policy in Tauri/frontend:
           rejected because business logic and validation authority belong to
           workflow-service.
+      - 2026-06-03 backend validation task shutdown/drain slice completed:
+        `WorkflowGraphValidationTaskOwner` now owns an explicit shutdown state,
+        rejects post-shutdown validation starts through typed
+        `WorkflowServiceError::InvalidRequest` diagnostics, cancels active
+        lifecycle state with `Shutdown`, aborts/awaits tracked handles, records
+        bounded terminal task diagnostics, and exposes one backend lifecycle
+        boundary through `GraphSessionStore::shutdown_validation_tasks` and
+        `WorkflowService::workflow_graph_shutdown_validation_tasks`.
+        Composition-root shutdown call wiring remains a separate follow-up
+        before graph-mutation auto-triggering, so Tauri/frontend command
+        handlers still do not own lifecycle, retry, freshness, or validation
+        policy.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit

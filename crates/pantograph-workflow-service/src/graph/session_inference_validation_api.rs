@@ -296,7 +296,7 @@ impl GraphSessionStore {
                 self.validation_state.clone(),
                 handle,
             )
-            .await;
+            .await?;
         Ok(validation_session_id)
     }
 

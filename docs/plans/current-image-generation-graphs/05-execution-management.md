@@ -23154,6 +23154,51 @@ Worker rules:
       `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
       and this execution log.
     - Verification: plan review only; no source implementation in this update.
+  - 2026-06-03 Milestone 5d backend validation task shutdown/drain slice:
+    - Smallest useful vertical slice: implement workflow-service-owned
+      shutdown/drain state for backend validation tasks and expose the backend
+      lifecycle boundary before graph mutations auto-start validation tasks.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/graph/inference_validation_task_owner.rs`,
+      `crates/pantograph-workflow-service/src/graph/inference_validation_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/graph/session.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_inference_validation_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/graph_api.rs`,
+      `crates/pantograph-workflow-service/src/graph/session_tests.rs`,
+      `crates/pantograph-workflow-service/src/graph/README.md`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Implementation: `WorkflowGraphValidationTaskOwner` now tracks accepting
+      state plus active handles in one owner state, stops accepting work during
+      shutdown, drains completed handles, cancels active validation lifecycle
+      state with `WorkflowGraphValidationCancellationReason::Shutdown`,
+      aborts/awaits active handles, and records bounded task terminal events.
+      `GraphSessionStore` and `WorkflowService` expose one backend lifecycle
+      boundary for service owners.
+    - No-fallback/no-legacy result: post-shutdown starts fail closed through
+      typed `WorkflowServiceError::InvalidRequest` diagnostics. The slice does
+      not add graph-path, selector-summary, Tauri, frontend, legacy resolver,
+      model-ref, or client retry fallback behavior.
+    - Standards alignment: spawned validation tasks remain tracked by a single
+      workflow-service owner. Shutdown is idempotent, stops new work before
+      draining active work, awaits/aborts task handles deliberately, and keeps
+      lifecycle/freshness policy out of Tauri/frontend.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      validation_task_owner --lib`; `cargo test -p pantograph-workflow-service
+      workflow_service_shutdown_validation_tasks_rejects_later_task_start
+      --lib`; `cargo check -p pantograph-workflow-service`; touched-source
+      search for model paths, raw JSON, fallback/legacy resolver strings,
+      retired model-ref contracts, untracked spawned task calls, and
+      `Result<T, String>`; and `git diff --check`.
+    - Deviation/follow-up: this slice exposed the backend lifecycle boundary but
+      did not yet wire each service-owning composition root to call it before
+      dropping workflow-service. That remains required before graph-mutation
+      auto-triggering. The next source slice should wire hosted/standalone
+      workflow-service shutdown ownership, then semantic graph-mutation
+      auto-triggering can proceed.
 
 ### Traceability Links
 

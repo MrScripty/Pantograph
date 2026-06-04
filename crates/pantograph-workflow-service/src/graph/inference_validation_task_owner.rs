@@ -23,7 +23,7 @@ use super::session::GraphSessionHandle;
 use super::types::WorkflowGraph;
 
 pub(crate) struct WorkflowGraphValidationTaskOwner {
-    active: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationTaskRecord>>,
+    state: RwLock<WorkflowGraphValidationTaskOwnerState>,
     events: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationTaskEventLog>>,
     max_events_per_session: usize,
 }
@@ -31,7 +31,7 @@ pub(crate) struct WorkflowGraphValidationTaskOwner {
 impl WorkflowGraphValidationTaskOwner {
     pub(crate) fn new() -> Self {
         Self {
-            active: RwLock::new(HashMap::new()),
+            state: RwLock::new(WorkflowGraphValidationTaskOwnerState::default()),
             events: RwLock::new(HashMap::new()),
             max_events_per_session: DEFAULT_MAX_VALIDATION_TASK_EVENTS_PER_SESSION,
         }
@@ -44,26 +44,43 @@ impl WorkflowGraphValidationTaskOwner {
         validation_lifecycle: Arc<WorkflowGraphValidationLifecycleOwner>,
         validation_state: Arc<CurrentInferenceValidationStateStore>,
         session_handle: GraphSessionHandle,
-    ) {
+    ) -> Result<(), WorkflowServiceError> {
+        let WorkflowGraphValidationTaskStartRequest {
+            graph_session_id,
+            graph_revision,
+            validation_session_id,
+            graph,
+        } = request;
         self.drain_finished_tasks().await;
-        self.abort_active_task(
-            &request.graph_session_id,
-            WorkflowGraphValidationTaskTerminalState::Cancelled {
-                reason: WorkflowGraphValidationCancellationReason::Superseded,
-            },
-        )
-        .await;
+        let previous = {
+            let mut state = self.state.write().await;
+            if !state.accepting_work {
+                return Err(validation_task_owner_shutdown_error());
+            }
+            state.active.remove(&graph_session_id)
+        };
+        if let Some(record) = previous {
+            self.abort_task_record(
+                graph_session_id.clone(),
+                record,
+                WorkflowGraphValidationTaskTerminalState::Cancelled {
+                    reason: WorkflowGraphValidationCancellationReason::Superseded,
+                },
+            )
+            .await;
+        }
 
-        let graph_session_id = request.graph_session_id.clone();
-        let graph_revision = request.graph_revision.clone();
-        let validation_session_id = request.validation_session_id.clone();
+        let task_graph_session_id = graph_session_id.clone();
+        let task_graph_revision = graph_revision.clone();
+        let task_validation_session_id = validation_session_id.clone();
+        let shutdown_race_lifecycle = Arc::clone(&validation_lifecycle);
         let handle = tokio::spawn(async move {
             publish_workflow_graph_validation_attempt(
                 WorkflowGraphValidationPublishAttempt {
-                    graph_session_id,
-                    graph_revision,
-                    validation_session_id,
-                    graph: request.graph,
+                    graph_session_id: task_graph_session_id,
+                    graph_revision: task_graph_revision,
+                    validation_session_id: task_validation_session_id,
+                    graph,
                 },
                 facts_provider.as_ref(),
                 validation_lifecycle.as_ref(),
@@ -79,14 +96,73 @@ impl WorkflowGraphValidationTaskOwner {
             .await
         });
 
-        self.active.write().await.insert(
-            request.graph_session_id,
-            WorkflowGraphValidationTaskRecord {
-                graph_revision: request.graph_revision,
-                validation_session_id: request.validation_session_id,
-                handle,
-            },
-        );
+        let record = WorkflowGraphValidationTaskRecord {
+            graph_revision,
+            validation_session_id,
+            handle,
+        };
+        let rejected = {
+            let mut state = self.state.write().await;
+            if !state.accepting_work {
+                Some(record)
+            } else {
+                state.active.insert(graph_session_id.clone(), record);
+                None
+            }
+        };
+        if let Some(record) = rejected {
+            shutdown_race_lifecycle
+                .cancel_active_validation(
+                    &graph_session_id,
+                    WorkflowGraphValidationCancellationReason::Shutdown,
+                )
+                .await;
+            self.abort_task_record(
+                graph_session_id,
+                record,
+                WorkflowGraphValidationTaskTerminalState::Cancelled {
+                    reason: WorkflowGraphValidationCancellationReason::Shutdown,
+                },
+            )
+            .await;
+            return Err(validation_task_owner_shutdown_error());
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn is_shut_down(&self) -> bool {
+        !self.state.read().await.accepting_work
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn active_task_count(&self) -> usize {
+        self.state.read().await.active.len()
+    }
+
+    pub(crate) async fn shutdown_with_lifecycle(
+        &self,
+        validation_lifecycle: &WorkflowGraphValidationLifecycleOwner,
+    ) {
+        let active = self.stop_accepting_and_drain_active_tasks().await;
+        for (graph_session_id, _) in active.iter() {
+            validation_lifecycle
+                .cancel_active_validation(
+                    graph_session_id,
+                    WorkflowGraphValidationCancellationReason::Shutdown,
+                )
+                .await;
+        }
+        for (graph_session_id, record) in active {
+            self.abort_task_record(
+                graph_session_id,
+                record,
+                WorkflowGraphValidationTaskTerminalState::Cancelled {
+                    reason: WorkflowGraphValidationCancellationReason::Shutdown,
+                },
+            )
+            .await;
+        }
     }
 
     pub(crate) async fn close_graph_session(&self, graph_session_id: &WorkflowGraphSessionId) {
@@ -103,8 +179,9 @@ impl WorkflowGraphValidationTaskOwner {
 
     async fn drain_finished_tasks(&self) {
         let finished = {
-            let mut active = self.active.write().await;
-            let finished_keys = active
+            let mut state = self.state.write().await;
+            let finished_keys = state
+                .active
                 .iter()
                 .filter_map(|(graph_session_id, record)| {
                     record
@@ -116,7 +193,8 @@ impl WorkflowGraphValidationTaskOwner {
             finished_keys
                 .into_iter()
                 .filter_map(|graph_session_id| {
-                    active
+                    state
+                        .active
                         .remove(&graph_session_id)
                         .map(|record| (graph_session_id, record))
                 })
@@ -135,11 +213,20 @@ impl WorkflowGraphValidationTaskOwner {
         }
     }
 
+    async fn stop_accepting_and_drain_active_tasks(
+        &self,
+    ) -> Vec<(WorkflowGraphSessionId, WorkflowGraphValidationTaskRecord)> {
+        self.drain_finished_tasks().await;
+        let mut state = self.state.write().await;
+        state.accepting_work = false;
+        state.active.drain().collect()
+    }
+
     #[cfg(test)]
     pub(crate) async fn await_all_tasks(&self) {
         let active = {
-            let mut active = self.active.write().await;
-            active.drain().collect::<Vec<_>>()
+            let mut state = self.state.write().await;
+            state.active.drain().collect::<Vec<_>>()
         };
 
         for (graph_session_id, record) in active {
@@ -172,18 +259,28 @@ impl WorkflowGraphValidationTaskOwner {
         graph_session_id: &WorkflowGraphSessionId,
         terminal_state: WorkflowGraphValidationTaskTerminalState,
     ) {
-        let active = self.active.write().await.remove(graph_session_id);
+        let active = self.state.write().await.active.remove(graph_session_id);
         if let Some(record) = active {
-            record.handle.abort();
-            let _ = record.handle.await;
-            self.push_event(
-                graph_session_id.clone(),
-                record.graph_revision,
-                record.validation_session_id,
-                terminal_state,
-            )
-            .await;
+            self.abort_task_record(graph_session_id.clone(), record, terminal_state)
+                .await;
         }
+    }
+
+    async fn abort_task_record(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        record: WorkflowGraphValidationTaskRecord,
+        terminal_state: WorkflowGraphValidationTaskTerminalState,
+    ) {
+        record.handle.abort();
+        let _ = record.handle.await;
+        self.push_event(
+            graph_session_id,
+            record.graph_revision,
+            record.validation_session_id,
+            terminal_state,
+        )
+        .await;
     }
 
     async fn push_event(
@@ -230,6 +327,26 @@ struct WorkflowGraphValidationTaskRecord {
     graph_revision: WorkflowGraphRevision,
     validation_session_id: DraftGraphValidationSessionId,
     handle: JoinHandle<Result<WorkflowGraphValidationPublishAttemptOutcome, WorkflowServiceError>>,
+}
+
+struct WorkflowGraphValidationTaskOwnerState {
+    accepting_work: bool,
+    active: HashMap<WorkflowGraphSessionId, WorkflowGraphValidationTaskRecord>,
+}
+
+impl Default for WorkflowGraphValidationTaskOwnerState {
+    fn default() -> Self {
+        Self {
+            accepting_work: true,
+            active: HashMap::new(),
+        }
+    }
+}
+
+fn validation_task_owner_shutdown_error() -> WorkflowServiceError {
+    WorkflowServiceError::InvalidRequest(
+        "workflow graph validation task owner is shut down".to_string(),
+    )
 }
 
 #[derive(Debug, Default)]

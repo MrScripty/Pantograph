@@ -169,9 +169,20 @@ impl WorkflowGraphValidationLifecycleOwner {
         &self,
         graph_session_id: &WorkflowGraphSessionId,
     ) -> Option<DraftGraphValidationSessionId> {
+        self.cancel_active_validation(
+            graph_session_id,
+            WorkflowGraphValidationCancellationReason::GraphRevisionChanged,
+        )
+        .await
+    }
+
+    pub(crate) async fn cancel_active_validation(
+        &self,
+        graph_session_id: &WorkflowGraphSessionId,
+        reason: WorkflowGraphValidationCancellationReason,
+    ) -> Option<DraftGraphValidationSessionId> {
         let cancelled = self.active.write().await.remove(graph_session_id);
         if let Some(record) = cancelled.as_ref() {
-            let reason = WorkflowGraphValidationCancellationReason::GraphRevisionChanged;
             let _ = record.cancellation_tx.send(Some(reason));
             self.push_event(
                 graph_session_id.clone(),
@@ -262,6 +273,8 @@ pub enum WorkflowGraphValidationCancellationReason {
     GraphRevisionChanged,
     #[error("graph validation session is closed")]
     GraphSessionClosed,
+    #[error("workflow graph validation task owner is shutting down")]
+    Shutdown,
 }
 
 #[derive(Debug, Default)]

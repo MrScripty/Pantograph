@@ -36,7 +36,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `inference_interface_validation.rs` | Workflow-service live inference-validation session and scoped event envelope contracts, including descriptor, drift, diagnostic, update-proposal, and summary events. |
 | `inference_validation_lifecycle.rs` | Workflow-service validation lifecycle owner for active validation-session identity, supersession, session-close rejection, bounded lifecycle event retention, typed event-sink publication, and publication freshness checks. |
 | `inference_validation_publisher.rs` | Workflow-service async validation publication attempt owner that coordinates graph snapshots, fact-provider calls, lifecycle freshness checks, descriptor publication, and current-state recording for refresh and explicit publication entrypoints. |
-| `inference_validation_task_owner.rs` | Backend-only workflow-service validation task owner that wraps the shared publisher, tracks spawned validation handles, supersedes in-flight work, cleans up on session close, and records bounded task terminal diagnostics. |
+| `inference_validation_task_owner.rs` | Backend-only workflow-service validation task owner that wraps the shared publisher, tracks spawned validation handles, supersedes in-flight work, shuts down deterministically, cleans up on session close, and records bounded task terminal diagnostics. |
 | `dependency_environment_subject.rs` | Workflow-service-owned dependency-environment action subject resolver for typed sidecar associations between dependency-environment control nodes and inference nodes. |
 | `inference_validation_state.rs` | Workflow-service current inference-validation state owner for graph-revision freshness checks, dependency-environment action diagnostics, submit-gate summaries, and proof-aware scheduler/executable snapshot projections. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
@@ -303,11 +303,13 @@ or frontend state.
 - Backend-started validation tasks are owned by
   `inference_validation_task_owner.rs`. The task owner is an async shell around
   the shared publisher: it stores tracked task handles by graph edit-session id,
-  aborts and records superseded work, drains finished task results, observes
-  task completion, join errors, and panics as bounded terminal diagnostics, and
-  cleans up task state on graph-session close. It must not resolve descriptors,
-  infer freshness, own graph mutation policy, or expose transport/frontend
-  retry behavior outside workflow-service.
+  aborts and records superseded work, drains finished task results, rejects new
+  work after shutdown starts, cancels lifecycle state with a typed shutdown
+  reason, observes task completion, join errors, and panics as bounded terminal
+  diagnostics, and cleans up task state on graph-session close or workflow
+  shutdown. It must not resolve descriptors, infer freshness, own graph
+  mutation policy, or expose transport/frontend retry behavior outside
+  workflow-service.
 - Validation-session lifecycle identity is workflow-service owned. Starting a
   validation session supersedes any active validation session for the graph edit
   session, publication is accepted only for the active graph revision and

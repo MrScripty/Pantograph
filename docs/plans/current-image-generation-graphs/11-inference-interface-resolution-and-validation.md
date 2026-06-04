@@ -202,6 +202,13 @@ Out of scope:
   graph mutations call the task owner automatically. Tauri/frontend remain
   transport/presentation only and must not own task lifecycle, validation
   freshness, retry policy, resolver facts, or submit authority.
+- 2026-06-03 task-owner shutdown slice implemented: workflow-service now has
+  backend-owned validation task shutdown state. Shutdown stops accepting new
+  validation work, cancels active lifecycle state with a typed shutdown reason,
+  aborts/awaits tracked validation task handles, records bounded terminal
+  diagnostics, and exposes `GraphSessionStore`/`WorkflowService` lifecycle
+  methods. Remaining before auto-triggering: wire service-owning composition
+  roots to call the lifecycle boundary before dropping workflow-service.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

@@ -792,6 +792,148 @@ async fn validation_task_owner_records_backend_validation_task_panic() {
 }
 
 #[tokio::test]
+async fn validation_task_owner_shutdown_cancels_active_backend_validation_task() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release,
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let validation_session_id = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("start validation task");
+    entered.notified().await;
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        store.shutdown_validation_tasks(),
+    )
+    .await
+    .expect("shutdown should not wait for blocked facts provider release");
+
+    assert!(store.validation_task_owner_is_shut_down_for_tests().await);
+    assert_eq!(store.active_validation_task_count_for_tests().await, 0);
+    let task_events = store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events");
+    assert_eq!(task_events.len(), 1);
+    assert_eq!(task_events[0].validation_session_id, validation_session_id);
+    assert_eq!(
+        task_events[0].terminal_state,
+        WorkflowGraphValidationTaskTerminalState::Cancelled {
+            reason: super::super::inference_validation_lifecycle::WorkflowGraphValidationCancellationReason::Shutdown,
+        }
+    );
+}
+
+#[tokio::test]
+async fn validation_task_owner_shutdown_is_idempotent_without_active_tasks() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+
+    store.shutdown_validation_tasks().await;
+    store.shutdown_validation_tasks().await;
+
+    assert!(store.validation_task_owner_is_shut_down_for_tests().await);
+    assert_eq!(store.active_validation_task_count_for_tests().await, 0);
+}
+
+#[tokio::test]
+async fn validation_task_owner_rejects_new_work_after_shutdown() {
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+
+    store.shutdown_validation_tasks().await;
+
+    let error = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect_err("validation task start should reject after shutdown");
+    assert!(matches!(
+        error,
+        crate::workflow::WorkflowServiceError::InvalidRequest(message)
+            if message.contains("validation task owner is shut down")
+    ));
+    assert_eq!(store.active_validation_task_count_for_tests().await, 0);
+    assert!(store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events")
+        .is_empty());
+}
+
+#[tokio::test]
+async fn validation_task_owner_close_session_still_cancels_active_task() {
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: Arc::clone(&entered),
+            release,
+        },
+    ));
+    let session = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let _validation_session_id = store
+        .start_current_validation_task(WorkflowGraphCurrentValidationRefreshRequest {
+            graph_session_id: session.session_id.clone(),
+            graph_revision: session
+                .graph_revision
+                .parse()
+                .expect("valid graph revision"),
+        })
+        .await
+        .expect("start validation task");
+    entered.notified().await;
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        store.close_session(&session.session_id),
+    )
+    .await
+    .expect("close should not wait for blocked facts provider release")
+    .expect("close graph session");
+
+    assert_eq!(store.active_validation_task_count_for_tests().await, 0);
+    assert!(store
+        .validation_task_events_for_tests(&session.session_id)
+        .await
+        .expect("validation task events")
+        .is_empty());
+}
+
+#[tokio::test]
 async fn validation_lifecycle_event_snapshot_reports_backend_refresh_events() {
     let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
         StaticInferenceFactsProvider {
@@ -2546,6 +2688,43 @@ async fn workflow_service_starts_backend_validation_task_from_typed_graph_revisi
         current.validation_session_id.as_ref(),
         Some(&validation_session_id)
     );
+}
+
+#[tokio::test]
+async fn workflow_service_shutdown_validation_tasks_rejects_later_task_start() {
+    let service = WorkflowService::new().with_graph_session_fact_providers(
+        Arc::new(StaticInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+        }),
+        Arc::new(InvalidDependencyEnvironmentProvider),
+    );
+    let session = service
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph: dependency_inference_graph(),
+            workflow_id: None,
+        })
+        .await
+        .expect("create graph edit session");
+
+    service.workflow_graph_shutdown_validation_tasks().await;
+
+    let error = service
+        .workflow_graph_start_current_validation_task(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: session.session_id.clone(),
+                graph_revision: session
+                    .graph_revision
+                    .parse()
+                    .expect("valid session graph revision"),
+            },
+        )
+        .await
+        .expect_err("validation task start should reject after shutdown");
+    assert!(matches!(
+        error,
+        crate::workflow::WorkflowServiceError::InvalidRequest(message)
+            if message.contains("validation task owner is shut down")
+    ));
 }
 
 #[tokio::test]

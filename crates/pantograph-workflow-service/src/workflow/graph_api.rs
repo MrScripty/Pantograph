@@ -104,6 +104,10 @@ impl WorkflowService {
             .await
     }
 
+    pub async fn workflow_graph_shutdown_validation_tasks(&self) {
+        self.graph_session_store.shutdown_validation_tasks().await;
+    }
+
     #[cfg(test)]
     pub(crate) async fn workflow_graph_drain_validation_tasks_for_tests(&self) {
         self.graph_session_store

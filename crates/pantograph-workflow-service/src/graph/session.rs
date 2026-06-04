@@ -211,6 +211,22 @@ impl GraphSessionStore {
         Ok(())
     }
 
+    pub async fn shutdown_validation_tasks(&self) {
+        self.validation_tasks
+            .shutdown_with_lifecycle(self.validation_lifecycle.as_ref())
+            .await;
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn validation_task_owner_is_shut_down_for_tests(&self) -> bool {
+        self.validation_tasks.is_shut_down().await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn active_validation_task_count_for_tests(&self) -> usize {
+        self.validation_tasks.active_task_count().await
+    }
+
     #[cfg(test)]
     pub(crate) async fn validation_state_record_count_for_session(
         &self,
