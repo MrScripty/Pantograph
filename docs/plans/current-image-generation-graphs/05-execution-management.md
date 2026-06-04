@@ -24389,6 +24389,40 @@ Worker rules:
       cooperative cancellation if runtime behavior needs interruption after
       backend execution starts, then resume retry/defer idempotency,
       replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+  - 2026-06-04 Milestone 5c dependency-readiness retry idempotency slice:
+    - Smallest vertical slice: make workflow-service retry of deferred runtime
+      dependency readiness idempotent once the scheduler task has already
+      re-entered `WaitingDependencyReadiness`, without changing broader retry
+      policy or replay/bootstrap behavior. Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      and this plan set. The unrelated Pumas proposal Markdown files already
+      dirty in the worktree were ignored and are not part of this slice.
+    - No-fallback confirmation: this is a scheduler/workflow-service state
+      idempotency hardening slice only. It does not add adapter-owned retry
+      policy, Tauri/frontend business logic, graph-path launch, reduced-plan
+      launch, node-engine runtime launch, compatibility shims, Pumas fact
+      changes, lockfile edits, generated files, build outputs, sqlite
+      artifacts, workflow fixture rewrites, replay/bootstrap logic, or
+      diagnostics-ledger writes.
+    - Implementation summary: `retry_deferred_runtime_dependency_readiness`
+      now returns the current record unchanged when the runtime task is
+      already `WaitingDependencyReadiness`. Store-level
+      `AlreadyApplied` results are accepted only by this retry path; existing
+      terminal and lifecycle mutation paths continue to reject duplicate/stale
+      transitions through the strict helper.
+    - Tests/verification:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service orchestrator_dependency_readiness_retry_is_idempotent_after_waiting_state --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched scheduler
+        files. Matches were existing negative legacy test names/messages and
+        existing Pumas/non-runtime task-class handling only.
+    - Remaining follow-up: replay/bootstrap recovery and
+      diagnostics-ledger attempt/timing facts remain future validated slices.
 
 ### Traceability Links
 

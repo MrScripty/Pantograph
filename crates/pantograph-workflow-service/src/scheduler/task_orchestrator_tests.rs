@@ -442,6 +442,61 @@ fn orchestrator_retries_deferred_runtime_dependency_readiness() {
 }
 
 #[test]
+fn orchestrator_dependency_readiness_retry_is_idempotent_after_waiting_state() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = WorkflowExecutionSessionStore::new(4, 2);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let deferred = orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+            None,
+        )
+        .expect("missing dependency proof should defer runtime task");
+    let retried = orchestrator
+        .retry_deferred_runtime_dependency_readiness(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+        )
+        .expect("deferred runtime task should re-enter dependency readiness");
+
+    let repeated_retry = orchestrator
+        .retry_deferred_runtime_dependency_readiness(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+        )
+        .expect("repeated dependency readiness retry should be idempotent");
+
+    assert_eq!(
+        deferred.state.kind(),
+        SchedulerTaskStateKind::PausedDeferred
+    );
+    assert_eq!(
+        retried.state.kind(),
+        SchedulerTaskStateKind::WaitingDependencyReadiness
+    );
+    assert_eq!(repeated_retry, retried);
+    assert_eq!(repeated_retry.state_version, retried.state_version);
+}
+
+#[test]
 fn orchestrator_retries_retryable_runtime_dependency_readiness_failure() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_intent = runtime_host_request_fixture().handoff.task_intent;

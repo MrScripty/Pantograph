@@ -1876,3 +1876,29 @@ durable task orchestration path.
   interruption or Tauri/frontend policy. Remaining follow-up: Python worker
   mid-call cancellation if needed, then retry/defer idempotency,
   replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+- 2026-06-04 dependency-readiness retry idempotency slice completed. Smallest
+  useful vertical slice: make workflow-service retry of deferred runtime
+  dependency readiness idempotent after a task has already re-entered
+  `WaitingDependencyReadiness`. Allowed write set used:
+  `scheduler/task_orchestrator.rs`, `scheduler/task_orchestrator_tests.rs`,
+  and this plan set.
+  No-fallback/no-legacy confirmation: this only hardens scheduler task-state
+  retry idempotency. It does not add adapter-owned retry policy, Tauri/frontend
+  business logic, graph-path launch, reduced-plan launch, node-engine runtime
+  launch, compatibility shims, Pumas fact changes, lockfile edits, generated
+  files, build outputs, sqlite artifacts, workflow fixture rewrites,
+  replay/bootstrap logic, or diagnostics-ledger writes.
+  Implementation summary: repeated dependency-readiness retry calls now return
+  the current `WaitingDependencyReadiness` record unchanged. Store-level
+  `AlreadyApplied` transition results are accepted only by this retry path;
+  terminal and other lifecycle transitions still use the strict duplicate
+  rejection helper.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  orchestrator_dependency_readiness_retry_is_idempotent_after_waiting_state
+  --lib`; `cargo test -p pantograph-workflow-service task_orchestrator --lib`;
+  `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+  no-fallback/no-legacy source search over touched scheduler files.
+  Remaining follow-up: replay/bootstrap recovery and diagnostics-ledger
+  attempt/timing facts.

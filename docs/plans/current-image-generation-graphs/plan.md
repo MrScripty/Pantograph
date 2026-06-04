@@ -275,6 +275,17 @@ fixture rewrite. Remaining lifecycle work: Python worker-contract support for
 mid-call cooperative cancellation, then retry/defer idempotency,
 replay/bootstrap, and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 scheduler dependency-readiness retry idempotency update:
+workflow-service retry of deferred runtime dependency readiness is now
+idempotent once the task has already re-entered `WaitingDependencyReadiness`.
+Repeated retry calls return the current scheduler task-state record unchanged
+instead of producing an invalid-request error, while other stale lifecycle and
+terminal mutations remain strict. This adds no retry policy engine, replay
+bootstrap, diagnostics-ledger writes, adapter/Tauri/frontend policy, graph-path
+or reduced-plan launch fallback, Pumas fact change, lockfile edit, generated
+file, or workflow fixture rewrite. Remaining lifecycle work: replay/bootstrap
+recovery and diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

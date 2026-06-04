@@ -1407,11 +1407,14 @@ impl WorkflowSchedulerTaskOrchestrator {
                     )),
                 )
             })?;
+        if record.state.kind() == SchedulerTaskStateKind::WaitingDependencyReadiness {
+            return Ok(record.clone());
+        }
         let transition = retry_dependency_readiness_transition(record)?;
         store
             .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_or_replayed_task_state_record)
     }
 
     pub(crate) fn fail_unhandled_task_classes_for_active_run(
@@ -2289,6 +2292,17 @@ fn applied_task_state_record(
                     record.task_id.as_str()
                 )),
             ))
+        }
+    }
+}
+
+fn applied_or_replayed_task_state_record(
+    result: pantograph_scheduler::SchedulerTaskStateTransitionApplyResult,
+) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+    match result {
+        pantograph_scheduler::SchedulerTaskStateTransitionApplyResult::Applied(record)
+        | pantograph_scheduler::SchedulerTaskStateTransitionApplyResult::AlreadyApplied(record) => {
+            Ok(record)
         }
     }
 }
