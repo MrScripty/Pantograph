@@ -543,7 +543,10 @@ durable task orchestration path.
   completions cannot record a second result. Remaining follow-up inside this
   item: explicit cancel transition, reservation-release intent wiring,
   retry/defer idempotency, replay/recovery, worker supervision, and
-  timing/attempt ledger facts.
+  timing/attempt ledger facts. 2026-06-03 follow-up source update: started
+  runtime-host dispatch errors now terminally fail through the matching task
+  attempt id, and the obsolete broad `runtime-dispatch-not-wired` active-run
+  helper was deleted.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

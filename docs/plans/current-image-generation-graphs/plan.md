@@ -87,6 +87,14 @@ compatibility shim. Remaining lifecycle work: explicit cancel attempt
 transition, reservation-release intent wiring, retry/defer idempotency,
 replay/recovery, worker supervision, and timing/attempt ledger facts.
 
+2026-06-03 scheduler runtime dispatch error update: started runtime task
+dispatch errors now terminally fail the matching active attempt instead of
+using the retired broad active-run `runtime-dispatch-not-wired` helper. The
+dead helper, transition builder, and direct test were removed. Runtime dispatch
+selection no-candidate and runtime-host dispatch error paths both return to
+attempt-aware terminal mutation without recording task results or adding any
+legacy runtime launch branch.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

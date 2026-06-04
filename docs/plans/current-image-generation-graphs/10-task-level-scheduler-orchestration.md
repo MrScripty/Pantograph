@@ -560,6 +560,9 @@ Completed sub-slice on 2026-06-03:
   attempt id before task-state/result mutation.
 - Duplicate starts and stale completions fail closed without recording
   additional task results.
+- Started runtime-host dispatch errors now terminally fail through the
+  matching attempt id, and the obsolete broad active-run
+  `runtime-dispatch-not-wired` helper was removed.
 - The remaining attempt-core work is explicit cancel transition support and
   reservation-release intent wiring, followed by retry/defer idempotency,
   replay/recovery, worker supervision, and timing/attempt ledger facts.

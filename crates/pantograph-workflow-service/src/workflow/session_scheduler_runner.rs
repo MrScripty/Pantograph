@@ -712,14 +712,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     } else {
                         self.service
                             .scheduler_task_orchestrator
-                            .fail_runtime_dispatch_not_wired_for_active_run(
+                            .fail_started_runtime_task_dispatch_error(
                                 &mut store,
                                 session_id,
                                 workflow_run_id,
+                                &started_runtime_task,
+                                &error,
                             )
                             .map_err(|error| {
                                 WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler runtime dispatch fail-closed transition failed: {error}"
+                                    "scheduler runtime dispatch error transition failed: {error}"
                                 ))
                             })?;
                     }

@@ -619,6 +619,29 @@ impl WorkflowSchedulerTaskOrchestrator {
             .and_then(applied_task_state_record)
     }
 
+    pub(crate) fn fail_started_runtime_task_dispatch_error(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        error: &WorkflowSchedulerTaskOrchestratorError,
+    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        let failure_transition = terminal_failure_transition_from_running(
+            &started.running_record,
+            runtime_dispatch_failure_diagnostic(error),
+        )?;
+        store
+            .fail_active_run_scheduler_task_attempt(
+                session_id,
+                workflow_run_id,
+                &started.attempt_id,
+                failure_transition,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+            .and_then(applied_task_state_record)
+    }
+
     pub(crate) fn advance_awaiting_non_runtime_task_inputs(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -977,68 +1000,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
             .and_then(applied_task_state_record)
-    }
-
-    pub(crate) fn fail_runtime_dispatch_not_wired_for_active_run(
-        &self,
-        store: &mut WorkflowExecutionSessionStore,
-        session_id: &str,
-        workflow_run_id: &str,
-    ) -> Result<Vec<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
-        let (task_graph, records) = store
-            .active_run_scheduler_task_state(session_id, workflow_run_id)
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
-            .ok_or_else(|| {
-                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "active workflow run '{}' has no scheduler task graph",
-                        workflow_run_id
-                    )),
-                )
-            })?;
-        let mut failed_records = Vec::new();
-        for task in task_graph.tasks.iter().filter(|task| {
-            task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
-        }) {
-            let record = records
-                .iter()
-                .find(|record| record.task_id.as_str() == task.task_id.as_str())
-                .ok_or_else(|| {
-                    WorkflowSchedulerTaskOrchestratorError::WorkflowService(
-                        WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler runtime task '{}' has no active task-state record",
-                            task.task_id.as_str()
-                        )),
-                    )
-                })?;
-            if record.state.kind() == SchedulerTaskStateKind::TerminalFailed {
-                failed_records.push(record.clone());
-                continue;
-            }
-            if record.state.kind() == SchedulerTaskStateKind::Completed {
-                return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "scheduler runtime task '{}' is already completed before runtime dispatch",
-                        task.task_id.as_str()
-                    )),
-                ));
-            }
-            let transition = runtime_dispatch_not_wired_transition(record)?;
-            let failed = store
-                .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
-                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-                .and_then(applied_task_state_record)?;
-            failed_records.push(failed);
-        }
-        if failed_records.is_empty() {
-            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
-                WorkflowServiceError::InvalidRequest(format!(
-                    "active workflow run '{}' has no runtime inference scheduler tasks",
-                    workflow_run_id
-                )),
-            ));
-        }
-        Ok(failed_records)
     }
 
     pub(crate) fn fail_unhandled_task_classes_for_active_run(
@@ -1583,6 +1544,20 @@ fn runtime_result_failure_diagnostics(
         .collect()
 }
 
+fn runtime_dispatch_failure_diagnostic(
+    error: &WorkflowSchedulerTaskOrchestratorError,
+) -> SchedulerTaskStateDiagnostic {
+    SchedulerTaskStateDiagnostic {
+        severity: SchedulerTaskStateDiagnosticSeverity::Error,
+        code: SchedulerTaskStateDiagnosticCode::TerminalFailure,
+        message: format!("runtime scheduler task dispatch failed: {error}"),
+        hint: Some(
+            "Inspect runtime-host dispatch diagnostics and retry with a valid scheduler-selected runtime candidate."
+                .to_string(),
+        ),
+    }
+}
+
 fn runtime_dispatch_selection_task_diagnostics(
     selection: &SchedulerDispatchSelectionDecision,
 ) -> Vec<SchedulerTaskStateDiagnostic> {
@@ -1632,29 +1607,6 @@ fn runtime_dispatch_selection_task_diagnostic(
             )
         }),
     }
-}
-
-fn runtime_dispatch_not_wired_transition(
-    record: &SchedulerTaskStateRecord,
-) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
-    task_state_transition(
-        record,
-        "runtime-dispatch-not-wired",
-        record.state.kind(),
-        SchedulerTaskState::TerminalFailed {
-            diagnostics: vec![SchedulerTaskStateDiagnostic {
-                severity: SchedulerTaskStateDiagnosticSeverity::Error,
-                code: SchedulerTaskStateDiagnosticCode::SchedulerPolicyError,
-                message:
-                    "runtime scheduler task dispatch is not wired through scheduler-selected runtime-host handoff"
-                        .to_string(),
-                hint: Some(
-                    "Wire this task through a dispatch-selected SchedulerRuntimeHandoff before executing runtime inference."
-                        .to_string(),
-                ),
-            }],
-        },
-    )
 }
 
 fn unhandled_task_class_transition(

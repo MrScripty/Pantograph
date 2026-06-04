@@ -23662,6 +23662,38 @@ Worker rules:
     - Remaining follow-up: explicit cancel attempt transition,
       reservation-release intent wiring, retry/defer idempotency,
       replay/recovery, worker supervision, and timing/attempt ledger facts.
+  - 2026-06-03 Milestone 5c started runtime dispatch error attempt slice:
+    - Smallest useful vertical slice: replace the remaining broad active-run
+      runtime dispatch error transition with a started-task attempt-aware
+      terminal failure path.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this execution log.
+    - No-fallback/no-legacy result: runtime-host dispatch errors for a started
+      runtime task now fail the matching task attempt and cannot record task
+      results. The obsolete `fail_runtime_dispatch_not_wired_for_active_run`
+      helper, its transition builder, and its direct test were removed instead
+      of preserved behind an allowance.
+    - Standards alignment: terminal mutation remains store-owned and
+      attempt-correlated; the session runner no longer calls a broad active-run
+      helper after a runtime task has already started.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      scheduler::task_orchestrator --lib`; `cargo check -p
+      pantograph-workflow-service`; targeted no-fallback/deleted-symbol search
+      over touched scheduler/session-runner files; and `git diff --check`.
+    - Verification deviation fixed: the first dispatch-error test assertion
+      matched a nested runtime-host error substring that is not part of the
+      stable task-state diagnostic contract. The test now asserts the stable
+      scheduler dispatch failure diagnostic and no-result invariant.
+    - Remaining follow-up: explicit cancel attempt transition,
+      reservation-release intent wiring, retry/defer idempotency,
+      replay/recovery, worker supervision, and timing/attempt ledger facts.
 
 ### Traceability Links
 
