@@ -281,6 +281,12 @@ query by graph session/revision only, so the next presentation slice can
 consume validation lifecycle events without re-running validation or deriving
 descriptor overlays locally.
 
+2026-06-03 toolbar lifecycle projection update: `WorkflowToolbar.svelte` now
+consumes graph-validation lifecycle events through the backend current
+validation projection read model. Lifecycle handling applies backend-provided
+node overlays and summary state without calling validation refresh, deriving
+descriptor overlays, or computing validation freshness in frontend code.
+
 ## Standards Rule
 
 The standards constraints in

@@ -6517,3 +6517,21 @@ defining an image-only inference-node interface.
   - Remaining follow-up: make the graph editor lifecycle handler consume this
     read model and update runtime overlays from backend projections without
     calling validation refresh from lifecycle events.
+- [x] 2026-06-03 toolbar lifecycle projection consumption slice completed:
+  - Smallest useful vertical slice: wire `WorkflowToolbar.svelte`
+    graph-validation lifecycle event handling to the backend current validation
+    projection read model.
+  - Allowed files touched: `src/components/WorkflowToolbar.svelte`,
+    `src/components/README.md`, plan summary files, this milestone, and
+    execution log.
+  - No-fallback/no-legacy confirmation: lifecycle events no longer call
+    validation refresh and no frontend/Tauri code computes descriptor overlays,
+    validation freshness, submit authority, Pumas facts, runtime facts,
+    scheduler eligibility, or graph-path authority. The toolbar applies only
+    backend-provided projection records as display runtime overlays.
+  - Verification passed: `npm run test:frontend --
+    workflowToolbarEvents.test.ts WorkflowService.commands.test.ts
+    workflowValidationProjectionOverlays.test.ts`; `npm run typecheck`;
+    touched-source search confirming initial validation still uses refresh and
+    lifecycle handling uses `currentGraphValidationProjection`; and `git diff
+    --check`.

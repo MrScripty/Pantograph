@@ -140,6 +140,10 @@ from backend node validation projections: the authored interface snapshot and
 the current node validation summary plus any backend-authored drift report or
 update proposal. These overlays are cleared when the graph revision key changes
 and are not saved back into graph data or used as submit authority.
+Graph-validation lifecycle events cause the toolbar to read the backend current
+validation projection read model and apply returned overlays. Lifecycle events
+must not call validation refresh, rebuild descriptor overlays from local graph
+data, or infer validation freshness from transport timing.
 Submit disabled reasons are rendered visibly below the toolbar rather than
 being available only as button titles, because Puma-Lib selection and other
 node edits mark workflows dirty and require a save before scheduler submission.

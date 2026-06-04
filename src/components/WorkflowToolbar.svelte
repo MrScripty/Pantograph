@@ -228,12 +228,17 @@
         })) {
           return;
         }
-        const summary = await workflowService.currentGraphValidationSummary({
+        const projection = await workflowService.currentGraphValidationProjection({
           graph_session_id: graphSessionId,
           graph_revision: graphRevision,
         });
         if (!cancelled && currentValidationSummaryKey === `${graphSessionId}:${graphRevision}`) {
-          currentValidationSummary = summary;
+          currentValidationSummary = projection.summary;
+          for (const overlay of workflowValidationProjectionOverlays(
+            projection.node_projections ?? [],
+          )) {
+            updateNodeRuntimeData(overlay.nodeId, overlay.data);
+          }
         }
       },
     }).then((nextUnlisten) => {

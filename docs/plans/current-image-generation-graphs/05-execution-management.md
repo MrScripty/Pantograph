@@ -23336,6 +23336,41 @@ Worker rules:
     - Remaining follow-up: wire `WorkflowToolbar.svelte` lifecycle refresh to
       call the current validation projection read model and apply returned node
       overlays, without calling validation refresh from lifecycle events.
+  - 2026-06-03 Milestone 5d toolbar lifecycle projection consumption slice:
+    - Smallest useful vertical slice: update the graph editor toolbar lifecycle
+      event handler to consume the backend current validation projection read
+      model and apply returned node overlays.
+    - Files touched: `src/components/WorkflowToolbar.svelte`,
+      `src/components/README.md`,
+      `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - Implementation: the toolbar still uses validation refresh for the
+      initial graph-revision validation pass. Graph-validation lifecycle events
+      now call `currentGraphValidationProjection`, assign the backend summary,
+      and apply backend-authored node projection overlays. The handler keeps
+      the existing graph-session/revision/current-summary-key guard before
+      mutating UI runtime overlays.
+    - No-fallback/no-legacy result: lifecycle handling no longer calls refresh
+      and does not derive descriptor overlays, submit authority, validation
+      freshness, scheduler eligibility, Pumas facts, runtime facts, or graph
+      paths locally. It consumes backend projection DTOs only.
+    - Standards alignment: workflow-service remains the owner of validation
+      state and projection facts; frontend owns display-only runtime overlays
+      and stale-event guards. The slice separates presentation consumption from
+      backend validation execution.
+    - Verification passed: `npm run test:frontend --
+      workflowToolbarEvents.test.ts WorkflowService.commands.test.ts
+      workflowValidationProjectionOverlays.test.ts`; `npm run typecheck`;
+      touched-source search confirmed `WorkflowToolbar.svelte` uses
+      `refreshCurrentGraphValidationSummary` only for initial validation and
+      `currentGraphValidationProjection` for lifecycle events; and `git diff
+      --check`.
+    - Remaining follow-up: continue Milestone 5d validation UX hardening only
+      if additional stale-event, cancellation, or overlay-clearing issues are
+      discovered during real graph editing smoke. Otherwise proceed to the next
+      plan milestone/follow-up.
 
 ### Traceability Links
 
