@@ -664,6 +664,29 @@ workflow-service-owned bootstrap/replay runner that applies safe plan decisions
 with durable duplicate-dispatch/idempotency protection, then add
 diagnostics-ledger attempt/timing facts after replay ordering is proven.
 
+2026-06-04 bootstrap recovery apply update: workflow-service now exposes
+`recover_workflow_execution_session_bootstrap`, the first mutating recovery
+runner slice. The runner consumes the backend recovery plan, fails closed when
+the plan has blocking decisions, rejects unsupported nonblocking decisions such
+as progress-loop replay, and applies only dependency-readiness resume requests
+through the existing canonical runtime dependency-readiness resume path. The
+slice added a recovery result DTO that returns the applied plan and resumed run
+responses. It does not redispatch ready runtime tasks, invent a replay loop,
+mutate scheduler state directly, call Tauri/frontend code, change graph/
+node-engine/reduced-plan execution, edit Pumas/package facts, rewrite
+lockfiles/generated files/workflow fixtures, or write diagnostics-ledger
+attempt/timing facts. Verification passed: `cargo fmt -p
+pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+bootstrap_recovery_apply_gate_rejects_unimplemented_progress_loop_replay
+--lib`; `cargo test -p pantograph-workflow-service
+workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan
+--lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: implement the
+explicit progress-loop replay runner, durable duplicate-dispatch/idempotency
+guard for ready runtime redispatch, and diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in

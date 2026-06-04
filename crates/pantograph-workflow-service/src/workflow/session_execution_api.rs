@@ -50,13 +50,14 @@ use super::{
     WorkflowExecutionSessionBootstrapRecoveryDecision,
     WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
     WorkflowExecutionSessionBootstrapRecoveryPlan, WorkflowExecutionSessionBootstrapRecoveryReport,
-    WorkflowExecutionSessionBootstrapRecoveryRun, WorkflowExecutionSessionBootstrapRecoveryTask,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionResumeRequest,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary, WorkflowHost,
-    WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
-    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
+    WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowExecutionSessionBootstrapRecoveryRun,
+    WorkflowExecutionSessionBootstrapRecoveryTask, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionResumeRequest, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowPortBinding, WorkflowRunResponse,
+    WorkflowRuntimeCapability, WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary, WorkflowService,
+    WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -633,6 +634,24 @@ impl WorkflowService {
     ) -> Result<WorkflowExecutionSessionBootstrapRecoveryPlan, WorkflowServiceError> {
         let report = self.workflow_execution_session_bootstrap_recovery_report()?;
         Ok(workflow_bootstrap_recovery_plan_from_report(report))
+    }
+
+    pub async fn recover_workflow_execution_session_bootstrap<H: WorkflowHost>(
+        &self,
+        host: &H,
+    ) -> Result<WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowServiceError> {
+        let plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
+        workflow_bootstrap_recovery_apply_gate(&plan)?;
+
+        let mut resumed_runs = Vec::new();
+        for request in plan.resume_requests.clone() {
+            resumed_runs.push(
+                self.resume_workflow_execution_session_runtime_dependency_readiness(host, request)
+                    .await?,
+            );
+        }
+
+        Ok(WorkflowExecutionSessionBootstrapRecoveryResult { plan, resumed_runs })
     }
 
     fn finish_failed_workflow_run_after_admission(
@@ -1569,6 +1588,32 @@ fn workflow_bootstrap_recovery_diagnostic(
     }
 }
 
+fn workflow_bootstrap_recovery_apply_gate(
+    plan: &WorkflowExecutionSessionBootstrapRecoveryPlan,
+) -> Result<(), WorkflowServiceError> {
+    if plan.blocking_decision_count > 0 {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "bootstrap recovery plan contains {} blocking decision(s); inspect the recovery plan diagnostics before applying recovery",
+            plan.blocking_decision_count
+        )));
+    }
+
+    if let Some(decision) = plan.decisions.iter().find(|decision| {
+        !matches!(
+            decision.decision_kind,
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
+                | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::NoopCompleted
+        )
+    }) {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "bootstrap recovery decision {:?} for task '{}' is not supported by the current recovery runner",
+            decision.decision_kind, decision.task_id
+        )));
+    }
+
+    Ok(())
+}
+
 fn queue_position_u32(
     queued_item: &WorkflowExecutionSessionQueueItem,
 ) -> Result<u32, WorkflowServiceError> {
@@ -2036,6 +2081,34 @@ mod tests {
             .as_deref()
             .expect("blocking diagnostic")
             .contains("duplicate-dispatch guard"));
+    }
+
+    #[test]
+    fn bootstrap_recovery_apply_gate_rejects_unimplemented_progress_loop_replay() {
+        let plan = WorkflowExecutionSessionBootstrapRecoveryPlan {
+            decisions: vec![WorkflowExecutionSessionBootstrapRecoveryDecision {
+                session_id: "session-a".to_string(),
+                workflow_run_id: "run-a".to_string(),
+                task_id: "infer".to_string(),
+                state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::Running),
+                recovery_action:
+                    WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop,
+                decision_kind:
+                    WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop,
+                diagnostic: None,
+            }],
+            resume_requests: Vec::new(),
+            blocking_decision_count: 0,
+        };
+
+        let error = workflow_bootstrap_recovery_apply_gate(&plan)
+            .expect_err("progress-loop replay must fail closed until implemented");
+
+        assert_eq!(
+            error.code(),
+            crate::workflow::WorkflowErrorCode::InvalidRequest
+        );
+        assert!(error.message().contains("ResumeProgressLoop"));
     }
 
     #[test]

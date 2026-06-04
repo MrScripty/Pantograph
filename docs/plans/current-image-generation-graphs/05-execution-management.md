@@ -24546,6 +24546,41 @@ Worker rules:
       bootstrap/replay runner that applies safe plan decisions with durable
       duplicate-dispatch/idempotency protection, then add diagnostics-ledger
       attempt/timing facts after replay ordering is proven.
+  - 2026-06-04 Milestone 5c bootstrap recovery apply slice:
+    - Smallest vertical slice: add the first mutating workflow-service
+      recovery runner that consumes the backend recovery plan and applies only
+      dependency-readiness resume requests through the existing canonical
+      resume API.
+    - Allowed write set used: `workflow/contracts.rs`,
+      `workflow/session_execution_api.rs`,
+      `workflow/tests/session_execution.rs`, `lib.rs`, and these plan docs.
+    - No-fallback/no-legacy confirmation: the runner fails closed when the
+      plan has blocking decisions, rejects unsupported nonblocking decisions
+      such as progress-loop replay, and does not redispatch ready runtime
+      tasks, invent a replay loop, mutate scheduler state directly, call
+      Tauri/frontend code, change graph/node-engine/reduced-plan execution,
+      edit Pumas/package facts, rewrite lockfiles/generated files/workflow
+      fixtures, or write diagnostics-ledger attempt/timing facts.
+    - Implementation summary: workflow contracts now include
+      `WorkflowExecutionSessionBootstrapRecoveryResult`. `WorkflowService`
+      exposes `recover_workflow_execution_session_bootstrap`; it gates the
+      plan, delegates safe dependency-readiness recovery to
+      `resume_workflow_execution_session_runtime_dependency_readiness`, and
+      returns the applied plan plus resumed run responses.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery_apply_gate_rejects_unimplemented_progress_loop_replay --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched source
+        files. Matches were existing diagnostics compatibility payload fields,
+        existing negative legacy tests, and existing Pumas test fixtures only.
+    - Remaining follow-up: implement explicit progress-loop replay, durable
+      duplicate-dispatch/idempotency guard for ready runtime redispatch, and
+      diagnostics-ledger attempt/timing facts.
 
 ### Traceability Links
 

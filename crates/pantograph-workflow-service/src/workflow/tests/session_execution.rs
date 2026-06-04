@@ -918,6 +918,122 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
 }
 
 #[tokio::test]
+async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan() {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+        .with_runtime_dispatch_source_refresher(source_refresher.clone())
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let workflow_id = "wf-bootstrap-recovery-resume";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+    service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session_id.clone(),
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime run should pause before readiness facts exist");
+    let workflow_run_id = {
+        let store = service.session_store_guard().expect("session store");
+        let active_run_ids = store.active_workflow_run_ids();
+        assert_eq!(active_run_ids.len(), 1);
+        active_run_ids[0].clone()
+    };
+    dependency_readiness_work_queue
+        .pop_next()
+        .expect("initial dependency-readiness work item");
+
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let recovery_result = service
+        .recover_workflow_execution_session_bootstrap(&host)
+        .await
+        .expect("bootstrap recovery should resume dependency readiness");
+
+    assert_eq!(recovery_result.plan.blocking_decision_count, 0);
+    assert_eq!(
+        recovery_result.plan.resume_requests,
+        vec![WorkflowExecutionSessionResumeRequest {
+            session_id: session_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
+        }]
+    );
+    assert_eq!(recovery_result.resumed_runs.len(), 1);
+    assert_eq!(
+        recovery_result.resumed_runs[0].workflow_run_id,
+        workflow_run_id
+    );
+    assert_eq!(runtime_host_port.requests().len(), 1);
+    assert!(service
+        .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+        .expect("resume candidates after bootstrap recovery")
+        .is_empty());
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn workflow_execution_session_resume_rejects_inactive_and_non_runtime_runs() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2);

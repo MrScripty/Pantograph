@@ -974,6 +974,14 @@ pub struct WorkflowExecutionSessionBootstrapRecoveryPlan {
     pub blocking_decision_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionBootstrapRecoveryResult {
+    pub plan: WorkflowExecutionSessionBootstrapRecoveryPlan,
+    #[serde(default)]
+    pub resumed_runs: Vec<WorkflowRunResponse>,
+}
+
 /// Session close request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
