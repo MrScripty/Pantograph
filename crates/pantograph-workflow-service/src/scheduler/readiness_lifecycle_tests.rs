@@ -14,8 +14,9 @@ use pantograph_dependency_planning::{
     ValidatedDependencyReadinessRequestEnvelope,
 };
 use pantograph_runtime_host_contracts::{
-    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
-    RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    SchedulerRuntimeHostDispatcher,
 };
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerTaskState, SchedulerTaskStateDiagnosticCode,
@@ -220,6 +221,7 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
     async fn execute_runtime_host_request(
         &self,
         _request: RuntimeHostExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         Err(RuntimeHostExecutionPortError::ExecutionFailed {
             message: "runtime host should not be called by readiness lifecycle tests".to_string(),

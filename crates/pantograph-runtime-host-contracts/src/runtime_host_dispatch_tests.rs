@@ -4,10 +4,11 @@ use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoffState;
 
 use super::{
-    RuntimeHostDispatchError, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    SchedulerRuntimeHostDispatcher,
+    RuntimeHostDispatchError, RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, SchedulerRuntimeHostDispatcher,
 };
 use crate::{
+    RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
     RuntimeHostExecutionContractError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     RuntimeHostExecutionState,
 };
@@ -15,6 +16,7 @@ use crate::{
 #[derive(Default)]
 struct RecordingRuntimeHostPort {
     requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
+    cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
     response: Mutex<Option<RuntimeHostExecutionResponse>>,
 }
 
@@ -22,12 +24,20 @@ impl RecordingRuntimeHostPort {
     fn with_response(response: RuntimeHostExecutionResponse) -> Self {
         Self {
             requests: Mutex::new(Vec::new()),
+            cancellation_snapshots: Mutex::new(Vec::new()),
             response: Mutex::new(Some(response)),
         }
     }
 
     fn requests(&self) -> Vec<RuntimeHostExecutionRequest> {
         self.requests.lock().expect("request lock").clone()
+    }
+
+    fn cancellation_snapshots(&self) -> Vec<RuntimeHostExecutionCancellationSnapshot> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("cancellation snapshot lock")
+            .clone()
     }
 }
 
@@ -36,7 +46,12 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("cancellation snapshot lock")
+            .push(cancellation.snapshot());
         self.requests.lock().expect("request lock").push(request);
         self.response
             .lock()
@@ -77,6 +92,20 @@ async fn dispatcher_passes_dispatch_selected_handoff_to_runtime_host_port() {
     );
     assert!(recorded[0].handoff.dispatch_decision.is_some());
     assert_eq!(recorded[0].materialized_inputs.len(), 2);
+    assert_eq!(
+        recorded[0].cancellation_context.cancellation_context_id,
+        "runtime-host-cancellation.runtime-host-request-1"
+    );
+    let cancellation_snapshots = port.cancellation_snapshots();
+    assert_eq!(cancellation_snapshots.len(), 1);
+    assert_eq!(
+        cancellation_snapshots[0].cancellation_context_id,
+        recorded[0].cancellation_context.cancellation_context_id
+    );
+    assert_eq!(
+        cancellation_snapshots[0].state,
+        RuntimeHostExecutionCancellationState::Running
+    );
 }
 
 #[tokio::test]

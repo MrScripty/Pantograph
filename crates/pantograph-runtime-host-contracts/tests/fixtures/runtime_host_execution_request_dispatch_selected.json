@@ -1,6 +1,10 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "execution_request_id": "runtime-host.request.001",
+  "cancellation_context": {
+    "cancellation_context_id": "runtime-host-cancellation.runtime-host.request.001",
+    "owner": "workflow_service"
+  },
   "materialized_inputs": [
     {
       "port_id": "prompt",

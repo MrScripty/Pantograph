@@ -2600,6 +2600,22 @@ requirements. Until then, missing source facts must produce typed
 no-candidate diagnostics rather than synthetic candidates, blocking calls in
 scheduler policy, or summary/cache-row execution authority.
 
+2026-06-04 lifecycle cancellation contract foundation completed: before the
+full workflow-service task supervisor, runtime-host execution now has a typed
+cancellation boundary. `RuntimeHostExecutionRequest` contract v2 requires a
+workflow-service-owned `RuntimeHostExecutionCancellationContext`, and
+`RuntimeHostExecutionPort` receives a live
+`RuntimeHostExecutionCancellationHandle` beside the request. The current
+dispatcher creates a canonical running workflow-service context for existing
+callers, while `dispatch_with_cancellation` is the explicit entrypoint the
+next supervisor slice must use. This preserves the no-fallback rule: no Tauri
+or frontend lifecycle policy, no adapter-owned business cancellation, no graph
+path execution, no reduced-plan runtime launch, and no compatibility shim were
+added. Remaining durable lifecycle work: workflow-service task supervisor with
+real child cancellation/shutdown signal, adapter observation of cancellation,
+await/abort/panic handling, retry/defer idempotency, replay/bootstrap, and
+diagnostics-ledger attempt/timing facts.
+
 ## Effects On Existing Systems
 
 ### Scheduler

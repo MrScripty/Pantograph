@@ -597,7 +597,8 @@ mod tests {
     };
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
-        RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPortError,
+        RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     };
     use pantograph_runtime_registry::{
         RuntimeRegistration, RuntimeRegistry, RuntimeTransition, SharedRuntimeRegistry,
@@ -637,6 +638,7 @@ mod tests {
         async fn execute_runtime_host_request(
             &self,
             _request: RuntimeHostExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
         ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
             Err(RuntimeHostExecutionPortError::ExecutionFailed {
                 message: "test runtime host port is not executable".to_string(),

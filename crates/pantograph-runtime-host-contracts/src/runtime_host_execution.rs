@@ -12,7 +12,7 @@ const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
 
 /// Current contract version for runtime-host execution requests and responses.
-pub const RUNTIME_HOST_EXECUTION_CONTRACT_VERSION: u16 = 1;
+pub const RUNTIME_HOST_EXECUTION_CONTRACT_VERSION: u16 = 2;
 
 /// Host-owned request to execute one scheduler-dispatched task.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -21,6 +21,7 @@ pub struct RuntimeHostExecutionRequest {
     #[serde(default = "default_runtime_host_execution_contract_version")]
     pub contract_version: u16,
     pub execution_request_id: String,
+    pub cancellation_context: RuntimeHostExecutionCancellationContext,
     pub handoff: SchedulerRuntimeHandoff,
     pub materialized_inputs: Vec<RuntimeHostExecutionInput>,
 }
@@ -29,6 +30,7 @@ impl RuntimeHostExecutionRequest {
     pub fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         validate_contract_version(self.contract_version)?;
         validate_identifier("execution_request_id", &self.execution_request_id)?;
+        self.cancellation_context.validate()?;
         if self.materialized_inputs.len() > MAX_RUNTIME_HOST_INPUTS {
             return Err(RuntimeHostExecutionContractError::TooManyInputs {
                 actual: self.materialized_inputs.len(),
@@ -44,6 +46,73 @@ impl RuntimeHostExecutionRequest {
                 field: "handoff.state",
                 reason: "runtime host execution requires a dispatch-selected scheduler handoff",
             });
+        }
+        Ok(())
+    }
+}
+
+/// Serialized cancellation/shutdown context attached to a runtime-host request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostExecutionCancellationContext {
+    pub cancellation_context_id: String,
+    pub owner: RuntimeHostExecutionCancellationOwner,
+}
+
+impl RuntimeHostExecutionCancellationContext {
+    pub fn workflow_service(execution_request_id: impl AsRef<str>) -> Self {
+        Self {
+            cancellation_context_id: format!(
+                "runtime-host-cancellation.{}",
+                execution_request_id.as_ref()
+            ),
+            owner: RuntimeHostExecutionCancellationOwner::WorkflowService,
+        }
+    }
+
+    fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_identifier(
+            "cancellation_context.cancellation_context_id",
+            &self.cancellation_context_id,
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostExecutionCancellationOwner {
+    WorkflowService,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostExecutionCancellationState {
+    Running,
+    CancellationRequested,
+    ShutdownRequested,
+}
+
+/// Snapshot returned by the live cancellation handle passed to runtime hosts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostExecutionCancellationSnapshot {
+    pub cancellation_context_id: String,
+    pub state: RuntimeHostExecutionCancellationState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl RuntimeHostExecutionCancellationSnapshot {
+    pub fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_identifier(
+            "cancellation_snapshot.cancellation_context_id",
+            &self.cancellation_context_id,
+        )?;
+        if let Some(reason) = self.reason.as_ref() {
+            validate_text("cancellation_snapshot.reason", reason)?;
         }
         Ok(())
     }

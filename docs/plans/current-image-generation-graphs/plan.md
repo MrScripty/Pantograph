@@ -181,6 +181,21 @@ behavior, and panic observation. A workflow-service-only gate may reject new
 work but is insufficient for in-flight runtime tasks; adapter-owned
 cancellation is rejected because it splits lifecycle/business ownership.
 
+2026-06-04 scheduler runtime-host cancellation contract foundation update:
+runtime-host execution contract v2 now requires a serialized workflow-service
+cancellation context on every execution request and passes a live cancellation
+handle beside the request through the runtime-host execution port. The
+existing dispatcher creates a running workflow-service-owned context, while a
+new explicit dispatch-with-cancellation entrypoint gives the upcoming
+workflow-service supervisor a typed boundary for cooperative cancellation and
+shutdown. Concrete workflow-service and embedded-runtime port implementations
+compile against the new contract; adapters do not own lifecycle policy and no
+fallback runtime launch, graph path, Tauri/frontend cancellation branch, or
+compatibility shim was added. Remaining lifecycle work: wire a real
+workflow-service supervisor signal into the handle, make adapters observe
+cancellation/shutdown, add await/abort/panic handling, then continue with
+retry/defer, replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

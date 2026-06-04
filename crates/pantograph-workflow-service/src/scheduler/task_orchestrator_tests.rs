@@ -10,10 +10,11 @@ use pantograph_dependency_planning::{
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecyclePort, ReservationLifecyclePortError,
-    RuntimeHostDispatchError, RuntimeHostExecutionContractError, RuntimeHostExecutionInputValue,
-    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
-    RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
-    RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RuntimeHostDispatchError, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
+    RuntimeHostExecutionContractError, RuntimeHostExecutionInputValue, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    SchedulerRuntimeHostDispatcher, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     select_scheduler_dispatch, SchedulableTaskIntent, SchedulerDispatchSelectionRequest,
@@ -42,6 +43,7 @@ use super::{WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestrator
 #[derive(Default)]
 struct RecordingRuntimeHostPort {
     requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
+    cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
     response: Mutex<Option<RuntimeHostExecutionResponse>>,
 }
 
@@ -49,12 +51,20 @@ impl RecordingRuntimeHostPort {
     fn with_response(response: RuntimeHostExecutionResponse) -> Self {
         Self {
             requests: Mutex::new(Vec::new()),
+            cancellation_snapshots: Mutex::new(Vec::new()),
             response: Mutex::new(Some(response)),
         }
     }
 
     fn requests(&self) -> Vec<RuntimeHostExecutionRequest> {
         self.requests.lock().expect("request lock").clone()
+    }
+
+    fn cancellation_snapshots(&self) -> Vec<RuntimeHostExecutionCancellationSnapshot> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("cancellation snapshot lock")
+            .clone()
     }
 }
 
@@ -63,7 +73,12 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("cancellation snapshot lock")
+            .push(cancellation.snapshot());
         self.requests.lock().expect("request lock").push(request);
         self.response
             .lock()
@@ -121,6 +136,20 @@ async fn orchestrator_dispatches_runtime_task_through_shared_runtime_host_port()
         SchedulerRuntimeHandoffState::DispatchSelected
     );
     assert_eq!(recorded[0].materialized_inputs.len(), 2);
+    assert_eq!(
+        recorded[0].cancellation_context.cancellation_context_id,
+        "runtime-host-cancellation.workflow-service-runtime-request-1"
+    );
+    let cancellation_snapshots = port.cancellation_snapshots();
+    assert_eq!(cancellation_snapshots.len(), 1);
+    assert_eq!(
+        cancellation_snapshots[0].cancellation_context_id,
+        recorded[0].cancellation_context.cancellation_context_id
+    );
+    assert_eq!(
+        cancellation_snapshots[0].state,
+        RuntimeHostExecutionCancellationState::Running
+    );
 }
 
 #[tokio::test]

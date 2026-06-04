@@ -25,8 +25,37 @@ fn runtime_host_execution_request_fixture_decodes_and_validates() {
         validated.as_ref().handoff.state,
         SchedulerRuntimeHandoffState::DispatchSelected
     );
+    assert_eq!(
+        validated
+            .as_ref()
+            .cancellation_context
+            .cancellation_context_id,
+        "runtime-host-cancellation.runtime-host.request.001"
+    );
     assert_eq!(validated.as_ref().materialized_inputs.len(), 2);
     assert!(validated.as_ref().handoff.dispatch_decision.is_some());
+}
+
+#[test]
+fn runtime_host_execution_request_requires_cancellation_context() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .expect("runtime host request fixture must decode as value");
+    value
+        .as_object_mut()
+        .expect("request fixture must be object")
+        .remove("cancellation_context");
+
+    let error = serde_json::from_value::<RuntimeHostExecutionRequest>(value)
+        .expect_err("runtime host request must explicitly carry cancellation context");
+
+    assert!(
+        error
+            .to_string()
+            .contains("missing field `cancellation_context`"),
+        "{error}"
+    );
 }
 
 #[test]

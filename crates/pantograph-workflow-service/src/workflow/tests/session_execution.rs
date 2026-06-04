@@ -21,14 +21,14 @@ use pantograph_inference_interface_contracts::{
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
-    ReservationLifecyclePortError, RuntimeHostExecutionDiagnostic,
-    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
-    RuntimeHostExecutionInputValue, RuntimeHostExecutionMediaArtifactRef,
-    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
-    WorkflowSessionRuntimeLoadProofReadinessState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    ReservationLifecyclePortError, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionInputValue,
+    RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    WorkflowSessionRuntimeLoadProofDiagnosticPhase, WorkflowSessionRuntimeLoadProofReadinessState,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerEstimateHint,
@@ -3356,6 +3356,7 @@ impl RuntimeHostExecutionPort for CompletingRuntimeHostPort {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         self.requests
             .lock()
@@ -3403,6 +3404,7 @@ impl RuntimeHostExecutionPort for FailingRuntimeHostPort {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         self.requests
             .lock()

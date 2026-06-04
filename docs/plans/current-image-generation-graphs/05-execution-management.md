@@ -23999,6 +23999,58 @@ Worker rules:
       `cargo fmt -p pantograph-workflow-service -- --check`, focused cargo
       tests, `cargo check -p pantograph-workflow-service`, and
       `git diff --check`.
+  - 2026-06-04 Milestone 5c runtime-host cancellation contract foundation
+    slice:
+    - Smallest vertical slice: make cancellation/shutdown propagation part of
+      the backend runtime-host contract before building the full
+      workflow-service task supervisor. Allowed write set used: runtime-host
+      execution contracts/fixtures/tests; workflow-service scheduler/session
+      port call sites and focused tests; embedded-runtime port implementations/
+      tests; and this plan set. The two unrelated Pumas proposal Markdown
+      files already dirty in the worktree were ignored and are not part of
+      this slice.
+    - No-fallback confirmation: every runtime-host execution request now
+      requires typed serialized cancellation context; the live handle is
+      passed beside the request instead of being hidden in Tauri, frontend,
+      adapters, or dropped futures. The slice added no graph-path runtime
+      launch, reduced-plan fallback, adapter-owned lifecycle policy,
+      compatibility shim, retry/defer branch, replay/bootstrap logic,
+      diagnostics-ledger storage, Pumas fact changes, lockfile changes, or
+      saved workflow fixture edits.
+    - Implementation summary: bumped runtime-host execution contract fixtures
+      to version 2; added `RuntimeHostExecutionCancellationContext`,
+      `RuntimeHostExecutionCancellationHandle`, cancellation snapshot/state
+      DTOs, and `RuntimeHostExecutionCancellationSignal`; updated
+      `RuntimeHostExecutionPort` to accept the handle; added
+      `RuntimeHostDispatcher::dispatch_with_cancellation`; kept the existing
+      dispatcher entrypoint as a canonical running workflow-service context
+      for current callers; and updated workflow-service plus embedded-runtime
+      port implementations/tests.
+    - Tests/verification:
+      - `cargo fmt -p pantograph-runtime-host-contracts`
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-embedded-runtime`
+      - `cargo test -p pantograph-runtime-host-contracts runtime_host_execution --lib`
+      - `cargo test -p pantograph-runtime-host-contracts runtime_host_dispatch --lib`
+      - `cargo test -p pantograph-workflow-service scheduler::task_orchestrator --lib`
+      - `cargo test -p pantograph-workflow-service scheduler::readiness_lifecycle --lib`
+      - `cargo test -p pantograph-embedded-runtime runtime_host_execution_port --lib`
+      - `cargo check -p pantograph-runtime-host-contracts`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo check -p pantograph-embedded-runtime`
+      - `git diff --check`
+      - Targeted no-fallback/deleted-symbol search over touched runtime-host,
+        workflow-service, and embedded-runtime files. Matches were existing
+        negative tests/README guardrails, path-rejection tests, and a Pumas
+        test fixture path helper; no production fallback or legacy execution
+        branch was introduced.
+    - Deviation/discovered issue: this slice provides the contract and default
+      running context but not the full live supervisor signal. The next
+      lifecycle slice must wire workflow-service-owned child cancellation/
+      shutdown signal state into `dispatch_with_cancellation`, make runtime
+      adapters observe it, and add await/abort/panic handling before
+      retry/defer, replay/bootstrap, and diagnostics-ledger attempt/timing
+      facts.
 
 ### Traceability Links
 

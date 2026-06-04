@@ -9,8 +9,9 @@ use pantograph_dependency_environment_service::{
 };
 use pantograph_dependency_planning::ValidatedDependencyEnvironmentResult;
 use pantograph_runtime_host_contracts::{
-    ReservationLifecyclePort, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
+    ReservationLifecyclePort, RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    SchedulerRuntimeHostDispatcher,
 };
 
 use crate::graph::{
@@ -381,6 +382,7 @@ impl RuntimeHostExecutionPort for RuntimeHostExecutionUnavailablePort {
     async fn execute_runtime_host_request(
         &self,
         _request: RuntimeHostExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         Err(RuntimeHostExecutionPortError::ExecutionFailed {
             message: "runtime-host execution port is not configured for workflow-service"

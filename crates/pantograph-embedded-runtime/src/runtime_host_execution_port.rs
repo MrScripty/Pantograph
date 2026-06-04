@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_runtime_host_contracts::{
-    RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
-    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionOutput,
-    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
-    ValidatedRuntimeHostExecutionRequest, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionState, ValidatedRuntimeHostExecutionRequest,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
 use crate::runtime_host_image_execution::{
@@ -108,6 +109,7 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         let validated_request =
             ValidatedRuntimeHostExecutionRequest::try_from(request).map_err(|error| {
@@ -377,10 +379,11 @@ mod tests {
     #[tokio::test]
     async fn fail_closed_port_rejects_without_load_target_resolver() {
         let request = runtime_host_request_fixture();
+        let cancellation = runtime_host_cancellation(&request);
         let port = EmbeddedRuntimeHostExecutionPort::fail_closed();
 
         let response = port
-            .execute_runtime_host_request(request)
+            .execute_runtime_host_request(request, cancellation)
             .await
             .expect("missing resolver should be a typed rejected response");
 
@@ -403,10 +406,11 @@ mod tests {
     async fn port_rejects_invalid_requests_as_port_errors() {
         let mut request = runtime_host_request_fixture();
         request.execution_request_id.clear();
+        let cancellation = runtime_host_cancellation(&request);
         let port = EmbeddedRuntimeHostExecutionPort::fail_closed();
 
         let error = port
-            .execute_runtime_host_request(request)
+            .execute_runtime_host_request(request, cancellation)
             .await
             .expect_err("invalid request should fail the port");
 
@@ -428,12 +432,13 @@ mod tests {
     #[tokio::test]
     async fn port_rejects_after_load_target_when_media_sink_is_missing() {
         let request = runtime_host_request_fixture();
+        let cancellation = runtime_host_cancellation(&request);
         let port = EmbeddedRuntimeHostExecutionPort::with_load_target_resolver_only_for_test(
             Arc::new(ReadyLoadTargetResolver),
         );
 
         let response = port
-            .execute_runtime_host_request(request)
+            .execute_runtime_host_request(request, cancellation)
             .await
             .expect("missing media sink should be a typed rejected response");
 
@@ -453,6 +458,7 @@ mod tests {
     #[tokio::test]
     async fn port_rejects_after_load_target_when_package_facts_resolver_is_missing() {
         let request = runtime_host_request_fixture();
+        let cancellation = runtime_host_cancellation(&request);
         let port = EmbeddedRuntimeHostExecutionPort {
             load_target_resolver: Some(Arc::new(ReadyLoadTargetResolver)),
             media_artifact_sink: Some(Arc::new(UnusedMediaArtifactSink)),
@@ -461,7 +467,7 @@ mod tests {
         };
 
         let response = port
-            .execute_runtime_host_request(request)
+            .execute_runtime_host_request(request, cancellation)
             .await
             .expect("missing package resolver should be a typed rejected response");
 
@@ -502,9 +508,10 @@ mod tests {
                 "PyTorch",
             )),
         );
+        let cancellation = runtime_host_cancellation(&request);
 
         let response = port
-            .execute_runtime_host_request(request)
+            .execute_runtime_host_request(request, cancellation)
             .await
             .expect("image execution should complete");
 
@@ -579,9 +586,10 @@ mod tests {
                 "PyTorch",
             )),
         );
+        let cancellation = runtime_host_cancellation(&request);
 
         let response = port
-            .execute_runtime_host_request(request)
+            .execute_runtime_host_request(request, cancellation)
             .await
             .expect("image execution should complete through production Pumas resolvers");
 
@@ -614,6 +622,12 @@ mod tests {
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
         ))
         .expect("runtime host request fixture should deserialize")
+    }
+
+    fn runtime_host_cancellation(
+        request: &RuntimeHostExecutionRequest,
+    ) -> RuntimeHostExecutionCancellationHandle {
+        RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone())
     }
 
     async fn seed_pumas_diffusers_model(

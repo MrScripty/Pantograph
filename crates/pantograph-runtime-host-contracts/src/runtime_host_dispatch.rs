@@ -5,9 +5,11 @@ use pantograph_scheduler::SchedulerRuntimeHandoff;
 use thiserror::Error;
 
 use crate::{
-    RuntimeHostExecutionContractError, RuntimeHostExecutionInput, RuntimeHostExecutionRequest,
-    RuntimeHostExecutionResponse, ValidatedRuntimeHostExecutionRequest,
-    ValidatedRuntimeHostExecutionResponse, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationSnapshot,
+    RuntimeHostExecutionCancellationState, RuntimeHostExecutionContractError,
+    RuntimeHostExecutionInput, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
 /// Runtime-host execution port called by scheduler dispatch.
@@ -16,7 +18,50 @@ pub trait RuntimeHostExecutionPort: Send + Sync {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError>;
+}
+
+pub trait RuntimeHostExecutionCancellationSignal: Send + Sync {
+    fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot;
+}
+
+#[derive(Clone)]
+#[must_use]
+pub struct RuntimeHostExecutionCancellationHandle {
+    signal: Arc<dyn RuntimeHostExecutionCancellationSignal>,
+}
+
+impl RuntimeHostExecutionCancellationHandle {
+    pub fn running(context: RuntimeHostExecutionCancellationContext) -> Self {
+        let snapshot = RuntimeHostExecutionCancellationSnapshot {
+            cancellation_context_id: context.cancellation_context_id,
+            state: RuntimeHostExecutionCancellationState::Running,
+            reason: None,
+        };
+        Self {
+            signal: Arc::new(StaticRuntimeHostExecutionCancellationSignal { snapshot }),
+        }
+    }
+
+    pub fn with_signal(signal: Arc<dyn RuntimeHostExecutionCancellationSignal>) -> Self {
+        Self { signal }
+    }
+
+    pub fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
+        self.signal.snapshot()
+    }
+}
+
+#[derive(Debug)]
+struct StaticRuntimeHostExecutionCancellationSignal {
+    snapshot: RuntimeHostExecutionCancellationSnapshot,
+}
+
+impl RuntimeHostExecutionCancellationSignal for StaticRuntimeHostExecutionCancellationSignal {
+    fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
+        self.snapshot.clone()
+    }
 }
 
 /// Scheduler-side dispatcher for runtime-host execution requests.
@@ -37,16 +82,40 @@ impl SchedulerRuntimeHostDispatcher {
         handoff: SchedulerRuntimeHandoff,
         materialized_inputs: Vec<RuntimeHostExecutionInput>,
     ) -> Result<ValidatedRuntimeHostExecutionResponse, RuntimeHostDispatchError> {
+        let execution_request_id = execution_request_id.into();
+        let cancellation_context =
+            RuntimeHostExecutionCancellationContext::workflow_service(&execution_request_id);
+        let cancellation =
+            RuntimeHostExecutionCancellationHandle::running(cancellation_context.clone());
+        self.dispatch_with_cancellation(
+            execution_request_id,
+            handoff,
+            materialized_inputs,
+            cancellation_context,
+            cancellation,
+        )
+        .await
+    }
+
+    pub async fn dispatch_with_cancellation(
+        &self,
+        execution_request_id: impl Into<String>,
+        handoff: SchedulerRuntimeHandoff,
+        materialized_inputs: Vec<RuntimeHostExecutionInput>,
+        cancellation_context: RuntimeHostExecutionCancellationContext,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<ValidatedRuntimeHostExecutionResponse, RuntimeHostDispatchError> {
         let request = RuntimeHostExecutionRequest {
             contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
             execution_request_id: execution_request_id.into(),
+            cancellation_context,
             handoff,
             materialized_inputs,
         };
         let validated_request = ValidatedRuntimeHostExecutionRequest::try_from(request)?;
         let response = self
             .port
-            .execute_runtime_host_request(validated_request.as_ref().clone())
+            .execute_runtime_host_request(validated_request.as_ref().clone(), cancellation)
             .await?;
         validate_response_matches_request(validated_request.as_ref(), &response)?;
         ValidatedRuntimeHostExecutionResponse::try_from(response)
