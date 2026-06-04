@@ -191,6 +191,17 @@ Out of scope:
   adding validation policy. They carry only graph-session/revision intent and
   the returned validation session id; graph-mutation auto-triggering and editor
   overlay state remain separate slices.
+- 2026-06-03 auto-trigger lifecycle re-plan decision: use Option 1. Before
+  graph mutations auto-start validation tasks, add explicit shutdown/drain
+  ownership to the workflow-service validation task owner. The shutdown path
+  must be idempotent, stop accepting new validation work after shutdown starts,
+  propagate cancellation to active validation tasks, await or abort tracked
+  handles, record bounded terminal diagnostics for cancellation/panic/error,
+  and expose a single backend lifecycle boundary that composition roots can
+  call before dropping the service. Only after that is verified may semantic
+  graph mutations call the task owner automatically. Tauri/frontend remain
+  transport/presentation only and must not own task lifecycle, validation
+  freshness, retry policy, resolver facts, or submit authority.
 - Keep the validation core synchronous wherever it only parses, validates,
   projects, or computes summaries. Async belongs at Pumas/inference/runtime fact
   lookup, event delivery, IPC, or persistence boundaries, and locks must be

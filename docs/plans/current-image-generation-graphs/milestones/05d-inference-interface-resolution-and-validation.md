@@ -2732,6 +2732,49 @@ defining an image-only inference-node interface.
         workflow modules.
         Remaining follow-up: add graph-mutation auto-triggers and frontend
         overlay consumption in separate slices.
+      - 2026-06-03 graph-mutation auto-trigger re-plan decision recorded: use
+        Option 1. Before semantic graph mutations auto-start validation tasks,
+        complete an explicit workflow-service shutdown/drain slice for
+        `WorkflowGraphValidationTaskOwner` and its service/store composition
+        boundary. This is required because auto-triggering turns validation
+        tasks into normal background lifecycle work, and the standards require
+        every spawned task to have one lifecycle owner with cancellation,
+        awaiting/aborting, panic/error observation, and deterministic shutdown.
+        Standards-aligned implementation sequence:
+        1. Add task-owner shutdown/drain state. Shutdown must be idempotent,
+           stop accepting new validation work, cancel active tasks with a typed
+           shutdown reason, await or abort tracked handles, record bounded
+           terminal diagnostics, and clean retained task state without dropping
+           unobserved joins.
+        2. Expose one backend lifecycle boundary from `GraphSessionStore` and
+           `WorkflowService`, and wire composition roots that own the service to
+           call it before dropping workflow-service. Do not put lifecycle
+           ownership in Tauri command handlers or frontend stores.
+        3. Add deterministic backend tests for active-task shutdown, no-op
+           shutdown with no active tasks, idempotent repeated shutdown,
+           no-new-work-after-shutdown typed rejection, panic/error observation
+           during shutdown, and graph-session close behavior still working.
+        4. After shutdown/drain verification passes, wire semantic graph
+           mutations through the existing backend mutation helper so successful
+           semantic revisions cancel stale validation and start one new
+           backend-owned validation task for the current graph revision.
+           Layout-only mutations and read-only candidate lookups must not
+           auto-start validation.
+        5. Add transport/frontend overlay consumption only after backend
+           auto-triggering is proven. Frontend state must filter by
+           graph-session id, graph revision, validation-session id, event
+           sequence, and node scope, and it must not infer freshness or submit
+           authority.
+        Rejected options:
+        - Keep explicit trigger only indefinitely: standards-compliant as a
+          temporary scope reduction, but it leaves the planned backend
+          auto-validation UX incomplete.
+        - Auto-trigger immediately inside graph mutation helpers: too likely to
+          broaden background task creation before shutdown/drain ownership is
+          explicit.
+        - Put lifecycle, freshness, or retry policy in Tauri/frontend:
+          rejected because business logic and validation authority belong to
+          workflow-service.
 - [ ] Add the workflow-service live validation lifecycle owner before event
       delivery reaches the frontend. The owner must start, cancel, supersede, and
       clean up validation sessions; use bounded event/state buffers with explicit

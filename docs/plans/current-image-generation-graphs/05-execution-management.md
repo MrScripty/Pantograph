@@ -23121,6 +23121,39 @@ Worker rules:
       in unrelated workflow modules.
     - Remaining follow-up: add graph-mutation auto-triggers and editor overlay
       consumption in separate slices.
+  - 2026-06-03 Milestone 5d graph-mutation auto-trigger re-plan update:
+    - Decision: use Option 1 from the re-plan discussion. Before graph
+      mutations auto-start validation tasks, add explicit shutdown/drain
+      ownership for the workflow-service validation task owner.
+    - Standards alignment: Rust async standards require every spawned task to
+      have one lifecycle owner, tracked handles, cancellation propagation,
+      await/abort during shutdown, panic/error observation at the owner, and
+      bounded diagnostics. Coding standards also require one module to own
+      state transitions, lifecycle, and failure behavior; Tauri/frontend must
+      stay transport/presentation-only.
+    - Required next implementation slice: add idempotent shutdown/drain state to
+      `WorkflowGraphValidationTaskOwner`; reject new validation work after
+      shutdown starts with typed diagnostics; cancel, await or abort, and record
+      active task terminal states; expose one backend lifecycle boundary from
+      `GraphSessionStore`/`WorkflowService`; and wire composition roots to call
+      it before service drop.
+    - Required tests before auto-triggering: active-task shutdown, shutdown with
+      no active tasks, repeated shutdown idempotence, no-new-work-after-shutdown
+      rejection, panic/error observation during shutdown, and unchanged
+      graph-session close cleanup behavior.
+    - Follow-up after that slice: wire semantic graph mutations through the
+      existing backend mutation helper so successful semantic revisions cancel
+      stale validation and start one new backend-owned validation task for the
+      current graph revision. Layout-only mutations and read-only candidate
+      lookups must not auto-start validation. Frontend overlay consumption
+      remains a later separate slice.
+    - Rejected options: keep explicit trigger only indefinitely; auto-trigger
+      immediately inside mutation helpers before shutdown/drain ownership is
+      explicit; or put lifecycle/freshness/retry policy in Tauri/frontend.
+    - Files updated: `docs/plans/current-image-generation-graphs/11-inference-interface-resolution-and-validation.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05d-inference-interface-resolution-and-validation.md`,
+      and this execution log.
+    - Verification: plan review only; no source implementation in this update.
 
 ### Traceability Links
 
