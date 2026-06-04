@@ -23557,6 +23557,33 @@ Worker rules:
       edited Tauri files; `cargo fmt --manifest-path src-tauri/Cargo.toml`
       was applied and the final format check passed.
     - Remaining follow-up: none for the retired Tauri snapshot event contract.
+  - 2026-06-03 Milestone 5c scheduler runtime orchestration staging-allowance
+    cleanup slice:
+    - Smallest useful vertical slice: remove obsolete `dead_code` allowances
+      from runtime dispatch/error, runtime input-readiness, and
+      dependency-readiness transition helpers that are now used by production
+      `WorkflowSchedulerTaskOrchestrator` methods and focused tests.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this execution log.
+    - No-fallback/no-legacy result: this is a source hygiene cleanup only.
+      Runtime execution still flows through scheduler-owned readiness,
+      dispatch selection, runtime-host request/response, and task-result
+      recording; no graph-path fallback, reduced-plan launch, node-engine
+      runtime launch, or Tauri/frontend policy branch was added.
+    - Standards alignment: obsolete staging allowances were removed once the
+      scheduler runtime orchestration helpers became active. The remaining
+      durable cancellation/retry/replay/timing lifecycle work stays explicitly
+      separate instead of being hidden by broad allowances.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo check -p pantograph-workflow-service`; `cargo test -p
+      pantograph-workflow-service scheduler::task_orchestrator --lib`; and
+      `git diff --check`.
+    - Remaining follow-up: durable cancellation, retry/defer idempotency,
+      duplicate-dispatch prevention, reservation release, replay, recovery,
+      and attempt/timing facts remain the open scheduler lifecycle hardening
+      work.
 
 ### Traceability Links
 

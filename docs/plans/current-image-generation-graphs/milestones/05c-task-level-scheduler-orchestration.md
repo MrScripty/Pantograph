@@ -1561,3 +1561,17 @@ durable task orchestration path.
   input-readiness advancement and canonical dispatch-selection request assembly
   are still required before runtime-containing session runs can leave the
   fail-closed path.
+- 2026-06-03 scheduler runtime orchestration staging-allowance cleanup slice
+  completed. Smallest useful vertical slice: remove obsolete `dead_code`
+  allowances from runtime dispatch/error, runtime input-readiness, and
+  dependency-readiness transition helpers that are now consumed by production
+  `WorkflowSchedulerTaskOrchestrator` methods and focused tests. No fallback or
+  legacy branch was added; runtime execution still flows through
+  scheduler-owned readiness, dispatch selection, runtime-host request/response,
+  and task-result recording. Verification passed: `cargo fmt -p
+  pantograph-workflow-service -- --check`; `cargo check -p
+  pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+  scheduler::task_orchestrator --lib`; and `git diff --check`. Remaining
+  follow-up: durable cancellation, retry/defer idempotency, duplicate-dispatch
+  prevention, reservation release, replay, recovery, and attempt/timing facts
+  remain the open scheduler lifecycle hardening work.

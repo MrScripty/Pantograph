@@ -1381,22 +1381,16 @@ fn awaiting_inputs_state() -> SchedulerTaskState {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
-    #[allow(dead_code)]
     #[error("runtime-host dispatch failed")]
     RuntimeHostDispatch(RuntimeHostDispatchError),
-    #[allow(dead_code)]
     #[error("runtime-host task result mapping failed")]
     RuntimeHostTaskResultMapping(WorkflowRuntimeHostTaskResultMappingError),
-    #[allow(dead_code)]
     #[error("runtime-host task input mapping failed")]
     RuntimeHostTaskInputMapping(WorkflowRuntimeHostTaskInputMappingError),
-    #[allow(dead_code)]
     #[error("scheduler dispatch selection did not select a runtime task")]
     RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
-    #[allow(dead_code)]
     #[error("reservation lifecycle contract validation failed: {0}")]
     ReservationLifecycleContract(ReservationLifecycleContractError),
-    #[allow(dead_code)]
     #[error("reservation lifecycle port failed: {0}")]
     ReservationLifecyclePort(ReservationLifecyclePortError),
     #[error("scheduler contract validation failed")]
@@ -1450,7 +1444,6 @@ fn ready_non_runtime_execution_intent(
     Ok(execution_intent.clone())
 }
 
-#[allow(dead_code)]
 fn ready_runtime_execution_intent(
     record: &SchedulerTaskStateRecord,
 ) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
@@ -1694,7 +1687,6 @@ fn ready_transition_from_awaiting_inputs(
     )
 }
 
-#[allow(dead_code)]
 fn waiting_dependency_readiness_transition_from_awaiting_inputs(
     task: &WorkflowSchedulerTask,
     record: &SchedulerTaskStateRecord,
@@ -1972,7 +1964,6 @@ enum NonRuntimeInputReadiness {
     Invalid(SchedulerTaskStateDiagnostic),
 }
 
-#[allow(dead_code)]
 enum RuntimeInputReadiness {
     Ready,
     Blocked,
@@ -1980,7 +1971,6 @@ enum RuntimeInputReadiness {
     Invalid(SchedulerTaskStateDiagnostic),
 }
 
-#[allow(dead_code)]
 fn runtime_input_readiness(
     task: &WorkflowSchedulerTask,
     results: &[WorkflowSchedulerTaskResult],
@@ -2041,7 +2031,6 @@ fn non_runtime_input_readiness(
     }
 }
 
-#[allow(dead_code)]
 fn runtime_execution_intent(
     task: &WorkflowSchedulerTask,
 ) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
