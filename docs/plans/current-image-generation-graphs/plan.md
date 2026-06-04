@@ -507,6 +507,15 @@ and panic observation, deeper cooperative cancellation inside long-running
 image gateway/provider calls, retry/defer idempotency, replay/bootstrap, and
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 active supervisor path re-plan update: option 3 is the active next
+path now that the cancellable runtime-host contract foundation and
+embedded-runtime observation are in place. The next implementation slices must
+keep lifecycle/business policy in workflow-service: active task cancellation
+intent API, supervised runtime task handles with typed join/panic diagnostics,
+shutdown drain plus bounded abort, deeper image gateway/provider cooperative
+cancellation, then retry/replay/ledger facts. Tauri/frontend and runtime
+adapters remain forwarding/observation layers only.
+
 ## Standards Rule
 
 The standards constraints in

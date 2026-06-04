@@ -1774,3 +1774,29 @@ durable task orchestration path.
   with workflow-service await/abort and panic observation, deeper runtime
   gateway/provider cancellation, retry/defer idempotency, replay/bootstrap,
   and diagnostics-ledger attempt/timing facts.
+- 2026-06-04 active supervisor path re-plan decision recorded. Option 3 is now
+  the active next implementation path because option 2's cancellable
+  runtime-host contract foundation and embedded-runtime observation are in
+  place. Standards alignment: lifecycle/business policy remains owned by
+  workflow-service; Tauri and bindings may only forward requests; runtime
+  adapters may only observe cancellation; sync task-state/idempotency checks
+  stay in the store/lifecycle core; async awaits, shutdown drain/abort, and
+  panic observation stay in the workflow-service supervisor shell; failures
+  return typed diagnostics without graph-path, reduced-plan, node-engine, or
+  compatibility fallback.
+  Thin-slice sequence:
+  1. Add a workflow-service-owned active task cancellation intent API that
+     validates the active task/attempt and updates the lifecycle-owned
+     cancellation signal. It must not terminally mutate the task or release
+     reservations until the supervised execution owner observes completion or
+     cancellation.
+  2. Move runtime task execution under a workflow-service supervisor shell with
+     tracked async handles, await outside store locks, typed panic/join
+     diagnostics, and terminal mutation through the existing store boundary.
+  3. Add lifecycle-owner shutdown drain and bounded timeout/abort behavior.
+  4. Push cooperative cancellation into long-running image gateway/provider
+     calls.
+  5. Resume retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
+     attempt/timing facts only after the supervisor boundary is stable.
+  Rejected path remains adapter/Tauri-owned cancellation because it splits
+  lifecycle ownership and moves business policy outside workflow-service.

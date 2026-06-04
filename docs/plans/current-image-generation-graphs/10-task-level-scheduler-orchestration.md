@@ -685,6 +685,31 @@ Option 3 thin implementation sequence:
      await/abort behavior and panic observation for supervised task handles,
      and the image gateway/providers still need cooperative cancellation for
      mid-inference interruption.
+   - 2026-06-04 re-plan decision: option 3 is now the active implementation
+     path. Option 2's backend cancellation contract and embedded-runtime
+     observation are complete enough to support a workflow-service supervisor
+     without relying on future dropping as the only stop mechanism. Implement
+     option 3 in validated thin slices:
+     1. Add a workflow-service-owned active task cancellation intent API that
+        validates the active task/attempt, updates the lifecycle-owned runtime
+        cancellation signal, and returns typed diagnostics. Do not terminally
+        mutate the task or release reservations until the supervised execution
+        owner observes the result, so stale completion and double-release races
+        remain impossible.
+     2. Move runtime task execution under a workflow-service supervisor shell
+        that owns tracked async handles, awaits completion outside store locks,
+        classifies join cancellation/panic as typed lifecycle diagnostics, and
+        applies terminal task-state mutation through the existing store
+        boundary.
+     3. Add shutdown draining and timeout/abort behavior at the same lifecycle
+        owner. Shutdown must signal children first, wait within a bounded
+        policy, then abort only at the supervisor boundary with typed
+        diagnostics.
+     4. Pass cooperative cancellation deeper into long-running image
+        gateway/provider calls so runtime work can stop before forced abort.
+     5. Only after these lifecycle semantics are stable, continue retry/defer
+        idempotency, replay/bootstrap recovery, and diagnostics-ledger
+        attempt/timing facts.
 4. [ ] Retry/defer policy boundary: add typed retry/defer decisions and
    idempotency keys after cancellation ownership exists. Keep retry scheduling
    separate from dispatch selection and reservation release.
@@ -719,18 +744,21 @@ Cancellation/shutdown re-plan options:
   returns. Standards fit is partial because workflow-service remains owner, but
   it cannot stop in-flight runtime-host work and therefore does not satisfy
   cooperative cancellation for long-running runtime tasks.
-- Option 2 cancellable runtime-host execution contract (selected): extend the
-  backend runtime-host execution boundary so workflow-service passes typed
-  cancellation/shutdown context into runtime execution. Runtime-host adapters
-  observe the signal and return typed cancelled/failure results, while
-  workflow-service owns the lifecycle decision, task-state mutation, and
-  diagnostics. This is the smallest standards-compliant path before a full
-  supervisor because it preserves a clean business/execution split.
-- Option 3 full workflow-service task supervisor (scheduled after option 2):
+- Option 2 cancellable runtime-host execution contract (completed foundation):
+  extend the backend runtime-host execution boundary so workflow-service passes
+  typed cancellation/shutdown context into runtime execution. Runtime-host
+  adapters observe the signal and return typed cancelled/failure results,
+  while workflow-service owns the lifecycle decision, task-state mutation, and
+  diagnostics. This foundation is now in place for workflow-service-owned
+  signals and embedded-runtime observation; deeper gateway/provider
+  cooperative cancellation remains part of option 3.
+- Option 3 full workflow-service task supervisor (selected next):
   run task executions under lifecycle-owned handles with child cancellation
   tokens, shutdown draining, timeout/abort behavior, and panic observation.
-  This is the long-term lifecycle shape, but it should follow option 2 so
-  aborting a Rust future is not the only way to stop underlying runtime work.
+  This is the active next path now that option 2's contract foundation exists.
+  It must be split by concern: cancellation intent API first, supervised
+  execution wrapper second, shutdown drain/abort third, deeper gateway/provider
+  cancellation fourth, then retry/replay/ledger work.
 - Option 4 adapter-owned cancellation: rejected because it moves lifecycle and
   business policy into runtime adapters/Tauri/frontend and creates multiple
   state owners.

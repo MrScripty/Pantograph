@@ -24148,6 +24148,39 @@ Worker rules:
       cooperative cancellation deeper into long-running runtime gateway/provider
       calls before retry/defer, replay/bootstrap, and diagnostics-ledger
       attempt/timing facts are finalized.
+  - 2026-06-04 Milestone 5c active supervisor path re-plan decision:
+    - Decision: option 3 is the active next implementation path. The completed
+      cancellable runtime-host contract and embedded-runtime observation slices
+      satisfy the prerequisite for moving in-flight execution under a
+      workflow-service supervisor without relying on future dropping as the
+      only stop mechanism.
+    - Standards alignment: workflow-service remains the single owner of
+      lifecycle/business policy, active task/attempt validation, terminal
+      task-state mutation, reservation release ordering, shutdown, panic
+      observation, and typed diagnostics. Tauri/frontend/bindings may only
+      forward cancellation requests. Runtime adapters may only observe
+      cancellation. Sync state/idempotency checks stay in the store/lifecycle
+      core; async work stays in the workflow-service supervisor shell.
+    - Planned thin slices:
+      1. Add a workflow-service-owned active task cancellation intent API that
+         validates the active task/attempt and updates the lifecycle-owned
+         runtime cancellation signal. Do not terminally mutate the task or
+         release reservations until supervised execution observes the result.
+      2. Move runtime task execution under a workflow-service supervisor shell
+         with tracked async handles, await outside store locks, typed join/panic
+         diagnostics, and terminal mutation through the existing store boundary.
+      3. Add lifecycle-owner shutdown draining plus bounded timeout/abort
+         behavior.
+      4. Pass cooperative cancellation deeper into long-running image
+         gateway/provider calls.
+      5. Resume retry/defer idempotency, replay/bootstrap, and
+         diagnostics-ledger attempt/timing facts after the supervisor boundary
+         is stable.
+    - No-fallback confirmation: the re-plan does not permit graph-path
+      execution, reduced-plan launch, node-engine runtime launch,
+      compatibility cancellation branches, adapter-owned lifecycle policy,
+      Tauri/frontend business logic, Pumas fact changes, lockfile edits, or
+      saved workflow fixture rewrites.
 
 ### Traceability Links
 
