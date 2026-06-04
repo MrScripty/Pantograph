@@ -45,9 +45,9 @@ use crate::types::{
     RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 use crate::{
-    BackendExecutionContext, InferenceExecutionResourceObservation,
-    InferenceExecutionTelemetryScope, RuntimeNativeTelemetryProvider, RuntimeResourceMonitor,
-    RuntimeResourceMonitorGuard,
+    BackendExecutionContext, InferenceExecutionCancellationHandle,
+    InferenceExecutionResourceObservation, InferenceExecutionTelemetryScope,
+    RuntimeNativeTelemetryProvider, RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
 };
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
@@ -1352,8 +1352,22 @@ impl InferenceGateway {
         &self,
         plan: ImageGenerationExecutionPlan,
     ) -> Result<ImageGenerationResult, GatewayError> {
+        self.generate_image_from_plan_with_cancellation(
+            plan,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+    }
+
+    /// Generate one or more images through the active backend with cooperative cancellation.
+    pub async fn generate_image_from_plan_with_cancellation(
+        &self,
+        plan: ImageGenerationExecutionPlan,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<ImageGenerationResult, GatewayError> {
         let telemetry_scope = InferenceExecutionTelemetryScope::new();
-        let context = BackendExecutionContext::new(telemetry_scope.recorder());
+        let context =
+            BackendExecutionContext::with_cancellation(telemetry_scope.recorder(), cancellation);
         let result = self
             .generate_image_from_plan_with_context(plan, context)
             .await;
@@ -1366,10 +1380,12 @@ impl InferenceGateway {
         plan: ImageGenerationExecutionPlan,
         context: BackendExecutionContext,
     ) -> Result<ImageGenerationResult, GatewayError> {
+        reject_cancelled_backend_context("image generation gateway", &context)?;
         let guard = self.backend.read().await;
         if !guard.is_ready() {
             return Err(GatewayError::Backend(BackendError::NotReady));
         }
+        reject_cancelled_backend_context("image generation gateway", &context)?;
         guard
             .generate_image_from_plan(plan, context)
             .await
@@ -1381,9 +1397,24 @@ impl InferenceGateway {
         &self,
         input: ImageGenerationPlanningInput<'_>,
     ) -> Result<ImageGenerationResult, GatewayError> {
+        self.generate_image_from_planning_input_with_cancellation(
+            input,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+    }
+
+    /// Build and execute one image-generation plan with cooperative cancellation.
+    pub async fn generate_image_from_planning_input_with_cancellation(
+        &self,
+        input: ImageGenerationPlanningInput<'_>,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        reject_cancelled_execution_handle("image generation planning", &cancellation)?;
         match plan_image_generation_execution(input) {
             ImageGenerationPlanningOutcome::Planned { plan } => {
-                self.generate_image_from_plan(plan).await
+                self.generate_image_from_plan_with_cancellation(plan, cancellation)
+                    .await
             }
             ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
                 Err(GatewayError::ImageGenerationPlanning {
@@ -1400,8 +1431,26 @@ impl InferenceGateway {
         request: &ImageGenerationRequest,
         handoff: &PlannedImageGenerationLaunchHandoff,
     ) -> Result<ImageGenerationResult, GatewayError> {
-        self.generate_image_from_planning_input(handoff.planning_input(request))
-            .await
+        self.generate_image_from_launch_handoff_with_cancellation(
+            request,
+            handoff,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+    }
+
+    /// Execute a host-built image-generation launch handoff with cooperative cancellation.
+    pub async fn generate_image_from_launch_handoff_with_cancellation(
+        &self,
+        request: &ImageGenerationRequest,
+        handoff: &PlannedImageGenerationLaunchHandoff,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        self.generate_image_from_planning_input_with_cancellation(
+            handoff.planning_input(request),
+            cancellation,
+        )
+        .await
     }
 
     /// Build and execute one image-generation plan while emitting bounded lifecycle facts.
@@ -3036,6 +3085,26 @@ impl GatewayExecutionTelemetry {
     fn backend_execution_context(&self) -> BackendExecutionContext {
         BackendExecutionContext::new(self.scope.recorder())
     }
+}
+
+fn reject_cancelled_backend_context(
+    operation: &str,
+    context: &BackendExecutionContext,
+) -> Result<(), GatewayError> {
+    context
+        .cancellation_rejection_message(operation)
+        .map(|message| Err(GatewayError::Backend(BackendError::Cancelled(message))))
+        .unwrap_or(Ok(()))
+}
+
+fn reject_cancelled_execution_handle(
+    operation: &str,
+    cancellation: &InferenceExecutionCancellationHandle,
+) -> Result<(), GatewayError> {
+    cancellation
+        .rejection_message(operation)
+        .map(|message| Err(GatewayError::Backend(BackendError::Cancelled(message))))
+        .unwrap_or(Ok(()))
 }
 
 fn start_execution_telemetry_for_process(

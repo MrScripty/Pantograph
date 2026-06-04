@@ -1839,3 +1839,40 @@ durable task orchestration path.
   typed join/panic diagnostics, shutdown drain/abort, deeper gateway/provider
   cooperative cancellation, retry/defer idempotency, replay/bootstrap, and
   diagnostics-ledger attempt/timing facts.
+- 2026-06-04 inference gateway cooperative cancellation slice completed.
+  Smallest useful vertical slice: project the workflow-service-owned
+  runtime-host cancellation signal through embedded-runtime into inference
+  gateway/backend execution context. Allowed write set used:
+  inference telemetry/gateway/backend source and tests,
+  embedded-runtime runtime-host execution port, and this plan set.
+  No-fallback/no-legacy confirmation: cancellation remains on the canonical
+  workflow-service to runtime-host to embedded-runtime to inference path and
+  does not add Tauri/frontend policy, adapter-owned lifecycle policy,
+  graph-path launch, reduced-plan launch, node-engine runtime launch,
+  compatibility shims, Pumas fact changes, lockfile edits, or saved workflow
+  fixture rewrites.
+  Implementation summary: inference now has local cancellation
+  handle/snapshot/state DTOs carried by `BackendExecutionContext`; gateway
+  image planning/dispatch entrypoints reject typed cancellation before backend
+  execution; embedded-runtime bridges runtime-host cancellation into inference;
+  and the PyTorch image backend checks the signal before entering its blocking
+  Python worker call.
+  Verification passed: `cargo fmt -p inference -p pantograph-embedded-runtime`;
+  `cargo test -p inference
+  test_generate_image_from_plan_with_cancellation_forwards_running_signal
+  --lib`; `cargo test -p inference
+  test_generate_image_from_planning_input_with_cancellation_rejects_before_backend
+  --lib`; `cargo test -p pantograph-embedded-runtime
+  port_completes_image_execution_with_sink_backed_media_ref --lib`; `cargo
+  test -p pantograph-embedded-runtime
+  port_rejects_cancelled_request_before_runtime_dependencies --lib`; `cargo
+  check -p inference`; `cargo check -p pantograph-embedded-runtime`; `cargo
+  fmt -p inference -p pantograph-embedded-runtime -- --check`; `git diff
+  --check`; and targeted no-fallback/no-legacy search over touched source and
+  plan files.
+  Deviation/discovered issue: the Python worker contract is still a
+  synchronous blocking call, so mid-call interruption requires a future
+  worker-owned cooperative cancellation contract rather than forced thread
+  interruption or Tauri/frontend policy. Remaining follow-up: Python worker
+  mid-call cancellation if needed, then retry/defer idempotency,
+  replay/bootstrap, and diagnostics-ledger attempt/timing facts.

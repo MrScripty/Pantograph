@@ -23,6 +23,7 @@ impl PyTorchBackend {
         if !self.ready {
             return Err(BackendError::NotReady);
         }
+        reject_cancelled_image_generation(&context)?;
 
         let request_id = format!("pytorch-generate-image-{}", Uuid::new_v4().simple());
         let envelope = generate_image_envelope_from_plan(request_id.clone(), &plan)?;
@@ -31,6 +32,7 @@ impl PyTorchBackend {
                 "Failed to encode PyTorch worker generate_image envelope: {error}"
             ))
         })?;
+        reject_cancelled_image_generation(&context)?;
 
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<ImageGenerationResult, BackendError> {
@@ -68,6 +70,15 @@ impl PyTorchBackend {
         .await
         .map_err(|error| BackendError::Inference(task_join_error_message(error)))?
     }
+}
+
+fn reject_cancelled_image_generation(
+    context: &BackendExecutionContext,
+) -> Result<(), BackendError> {
+    context
+        .cancellation_rejection_message("PyTorch image generation")
+        .map(BackendError::Cancelled)
+        .unwrap_or(Ok(()))
 }
 
 pub(super) fn generate_image_envelope_from_plan(

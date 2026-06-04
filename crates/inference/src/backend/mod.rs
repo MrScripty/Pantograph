@@ -87,6 +87,9 @@ pub enum BackendError {
     #[error("Inference error: {0}")]
     Inference(String),
 
+    #[error("Inference cancelled: {0}")]
+    Cancelled(String),
+
     #[error("Out of memory: {0}")]
     OutOfMemory(String),
 

@@ -206,12 +206,28 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                 {
                     return Ok(response);
                 }
+                let inference_cancellation =
+                    inference_cancellation_handle_from_runtime_host(cancellation.clone());
                 let result = match gateway
-                    .generate_image_from_planning_input(projection.planning_input())
+                    .generate_image_from_planning_input_with_cancellation(
+                        projection.planning_input(),
+                        inference_cancellation,
+                    )
                     .await
                 {
                     Ok(result) => result,
                     Err(error) => {
+                        if matches!(
+                            error,
+                            inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                        ) {
+                            if let Some(response) = cancellation_rejection_response(
+                                validated_request.as_ref(),
+                                &cancellation,
+                            )? {
+                                return Ok(response);
+                            }
+                        }
                         return Ok(failed_response(
                             validated_request.as_ref(),
                             &gateway_error_message(error),
@@ -240,6 +256,40 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
             )),
         }
     }
+}
+
+#[derive(Clone)]
+struct RuntimeHostInferenceCancellationSignal {
+    cancellation: RuntimeHostExecutionCancellationHandle,
+}
+
+impl inference::InferenceExecutionCancellationSignal for RuntimeHostInferenceCancellationSignal {
+    fn snapshot(&self) -> inference::InferenceExecutionCancellationSnapshot {
+        let snapshot = self.cancellation.snapshot();
+        let reason = snapshot.reason;
+        match snapshot.state {
+            RuntimeHostExecutionCancellationState::Running => {
+                inference::InferenceExecutionCancellationSnapshot::running()
+            }
+            RuntimeHostExecutionCancellationState::CancellationRequested => {
+                inference::InferenceExecutionCancellationSnapshot::cancellation_requested(reason)
+            }
+            RuntimeHostExecutionCancellationState::ShutdownRequested => {
+                inference::InferenceExecutionCancellationSnapshot::shutdown_requested(reason)
+            }
+            _ => inference::InferenceExecutionCancellationSnapshot::cancellation_requested(Some(
+                "runtime-host cancellation signal entered an unknown state".to_string(),
+            )),
+        }
+    }
+}
+
+fn inference_cancellation_handle_from_runtime_host(
+    cancellation: RuntimeHostExecutionCancellationHandle,
+) -> inference::InferenceExecutionCancellationHandle {
+    inference::InferenceExecutionCancellationHandle::with_signal(Arc::new(
+        RuntimeHostInferenceCancellationSignal { cancellation },
+    ))
 }
 
 fn rejected_response(

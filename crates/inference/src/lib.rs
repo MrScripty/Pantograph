@@ -105,8 +105,11 @@ pub use execution_evidence::{
     ExecutionEvidenceSource, GraphRuntimeRequirement, GraphRuntimeRequirementParseError,
 };
 pub use execution_telemetry::{
-    BackendExecutionContext, InferenceExecutionTelemetryError, InferenceExecutionTelemetryRecorder,
-    InferenceExecutionTelemetryScope, RuntimeNativeTelemetryProvider,
+    BackendExecutionContext, InferenceExecutionCancellationHandle,
+    InferenceExecutionCancellationSignal, InferenceExecutionCancellationSnapshot,
+    InferenceExecutionCancellationState, InferenceExecutionTelemetryError,
+    InferenceExecutionTelemetryRecorder, InferenceExecutionTelemetryScope,
+    RuntimeNativeTelemetryProvider,
 };
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,

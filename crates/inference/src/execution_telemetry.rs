@@ -4,6 +4,7 @@
 //! receive a recorder to report typed observations, but they must not emit
 //! lifecycle diagnostics directly or place telemetry in task outputs.
 
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
@@ -55,17 +56,171 @@ impl InferenceExecutionTelemetryScope {
 #[derive(Debug, Clone)]
 pub struct BackendExecutionContext {
     telemetry_recorder: InferenceExecutionTelemetryRecorder,
+    cancellation: InferenceExecutionCancellationHandle,
 }
 
 impl BackendExecutionContext {
     #[must_use]
     pub fn new(telemetry_recorder: InferenceExecutionTelemetryRecorder) -> Self {
-        Self { telemetry_recorder }
+        Self {
+            telemetry_recorder,
+            cancellation: InferenceExecutionCancellationHandle::running(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_cancellation(
+        telemetry_recorder: InferenceExecutionTelemetryRecorder,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Self {
+        Self {
+            telemetry_recorder,
+            cancellation,
+        }
     }
 
     #[must_use]
     pub fn telemetry_recorder(&self) -> &InferenceExecutionTelemetryRecorder {
         &self.telemetry_recorder
+    }
+
+    #[must_use]
+    pub fn cancellation(&self) -> &InferenceExecutionCancellationHandle {
+        &self.cancellation
+    }
+
+    #[must_use]
+    pub fn cancellation_snapshot(&self) -> InferenceExecutionCancellationSnapshot {
+        self.cancellation.snapshot()
+    }
+
+    #[must_use]
+    pub fn cancellation_rejection_message(&self, operation: &str) -> Option<String> {
+        self.cancellation.rejection_message(operation)
+    }
+}
+
+/// Backend-observable cancellation state for one inference execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum InferenceExecutionCancellationState {
+    Running,
+    CancellationRequested,
+    ShutdownRequested,
+}
+
+/// Backend-observable cancellation snapshot for one inference execution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InferenceExecutionCancellationSnapshot {
+    pub state: InferenceExecutionCancellationState,
+    pub reason: Option<String>,
+}
+
+impl InferenceExecutionCancellationSnapshot {
+    #[must_use]
+    pub fn running() -> Self {
+        Self {
+            state: InferenceExecutionCancellationState::Running,
+            reason: None,
+        }
+    }
+
+    #[must_use]
+    pub fn cancellation_requested(reason: Option<String>) -> Self {
+        Self {
+            state: InferenceExecutionCancellationState::CancellationRequested,
+            reason,
+        }
+    }
+
+    #[must_use]
+    pub fn shutdown_requested(reason: Option<String>) -> Self {
+        Self {
+            state: InferenceExecutionCancellationState::ShutdownRequested,
+            reason,
+        }
+    }
+}
+
+/// Host-owned cancellation signal exposed to backend execution code.
+pub trait InferenceExecutionCancellationSignal: Send + Sync {
+    fn snapshot(&self) -> InferenceExecutionCancellationSnapshot;
+}
+
+#[derive(Clone)]
+pub struct InferenceExecutionCancellationHandle {
+    signal: Arc<dyn InferenceExecutionCancellationSignal>,
+}
+
+impl InferenceExecutionCancellationHandle {
+    #[must_use]
+    pub fn running() -> Self {
+        Self::with_signal(Arc::new(StaticInferenceExecutionCancellationSignal {
+            snapshot: InferenceExecutionCancellationSnapshot::running(),
+        }))
+    }
+
+    #[must_use]
+    pub fn cancellation_requested(reason: impl Into<String>) -> Self {
+        Self::with_signal(Arc::new(StaticInferenceExecutionCancellationSignal {
+            snapshot: InferenceExecutionCancellationSnapshot::cancellation_requested(Some(
+                reason.into(),
+            )),
+        }))
+    }
+
+    #[must_use]
+    pub fn shutdown_requested(reason: impl Into<String>) -> Self {
+        Self::with_signal(Arc::new(StaticInferenceExecutionCancellationSignal {
+            snapshot: InferenceExecutionCancellationSnapshot::shutdown_requested(Some(
+                reason.into(),
+            )),
+        }))
+    }
+
+    #[must_use]
+    pub fn with_signal(signal: Arc<dyn InferenceExecutionCancellationSignal>) -> Self {
+        Self { signal }
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> InferenceExecutionCancellationSnapshot {
+        self.signal.snapshot()
+    }
+
+    #[must_use]
+    pub fn rejection_message(&self, operation: &str) -> Option<String> {
+        let snapshot = self.snapshot();
+        let reason = snapshot.reason.as_deref().unwrap_or("no reason provided");
+        match snapshot.state {
+            InferenceExecutionCancellationState::Running => None,
+            InferenceExecutionCancellationState::CancellationRequested => {
+                Some(format!("{operation} cancelled before completion: {reason}"))
+            }
+            InferenceExecutionCancellationState::ShutdownRequested => Some(format!(
+                "{operation} stopped for shutdown before completion: {reason}"
+            )),
+        }
+    }
+}
+
+impl fmt::Debug for InferenceExecutionCancellationHandle {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InferenceExecutionCancellationHandle")
+            .field("snapshot", &self.snapshot())
+            .finish()
+    }
+}
+
+#[derive(Debug)]
+struct StaticInferenceExecutionCancellationSignal {
+    snapshot: InferenceExecutionCancellationSnapshot,
+}
+
+impl InferenceExecutionCancellationSignal for StaticInferenceExecutionCancellationSignal {
+    fn snapshot(&self) -> InferenceExecutionCancellationSnapshot {
+        self.snapshot.clone()
     }
 }
 

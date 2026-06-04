@@ -24331,6 +24331,64 @@ Worker rules:
       long-running image gateway/provider calls, then resume retry/defer
       idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing
       facts.
+  - 2026-06-04 Milestone 5c inference gateway cooperative cancellation slice:
+    - Smallest vertical slice: pass the workflow-service-owned runtime-host
+      cancellation signal through embedded-runtime into inference-local
+      gateway/backend execution context, then reject typed cancellation before
+      image planning, before gateway backend dispatch, and before PyTorch
+      enters its blocking Python worker call. Allowed write set used:
+      `crates/inference/src/execution_telemetry.rs`,
+      `crates/inference/src/lib.rs`,
+      `crates/inference/src/gateway.rs`,
+      `crates/inference/src/backend/mod.rs`,
+      `crates/inference/src/backend/pytorch_image_generation.rs`,
+      `crates/inference/src/gateway_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+      and this plan set. The unrelated Pumas proposal Markdown files already
+      dirty in the worktree were ignored and are not part of this slice.
+    - No-fallback confirmation: cancellation remains backend/workflow-service
+      owned and travels through the existing runtime-host to embedded-runtime
+      to inference gateway path. The slice adds no Tauri/frontend policy,
+      adapter-owned lifecycle policy, graph-path launch, reduced-plan launch,
+      node-engine runtime launch, compatibility shim, Pumas fact change,
+      lockfile edit, generated file, build output, sqlite artifact, or saved
+      workflow fixture rewrite.
+    - Implementation summary: inference now exposes local
+      `InferenceExecutionCancellationHandle`/snapshot/state DTOs and carries
+      them on `BackendExecutionContext`. The gateway has cancellable
+      image-plan/planning-input/handoff entrypoints and maps cancellation to
+      `BackendError::Cancelled`. Embedded-runtime projects the validated
+      runtime-host cancellation handle into that inference-local signal when
+      calling the gateway and maps gateway cancellation back to typed
+      runtime-host rejected responses when the runtime-host signal is
+      cancelled. The PyTorch image backend checks the context before envelope
+      execution enters `spawn_blocking`.
+    - Tests/verification:
+      - `cargo fmt -p inference -p pantograph-embedded-runtime`
+      - `cargo test -p inference test_generate_image_from_plan_with_cancellation_forwards_running_signal --lib`
+      - `cargo test -p inference test_generate_image_from_planning_input_with_cancellation_rejects_before_backend --lib`
+      - `cargo test -p pantograph-embedded-runtime port_completes_image_execution_with_sink_backed_media_ref --lib`
+      - `cargo test -p pantograph-embedded-runtime port_rejects_cancelled_request_before_runtime_dependencies --lib`
+      - `cargo check -p inference`
+      - `cargo check -p pantograph-embedded-runtime`
+      - `cargo fmt -p inference -p pantograph-embedded-runtime -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy search over touched source and plan
+        files. Matches were existing docs/tests terminology, existing
+        inference compatibility/model-path APIs outside this slice, and a
+        Pumas fixture path helper; no new alternate execution path or
+        Tauri/frontend policy branch was introduced.
+    - Verification deviation/discovered issue: the existing Python worker
+      contract is a synchronous `generate_image_from_envelope` call inside
+      `spawn_blocking`; Rust can fail closed before entering that call but
+      cannot safely interrupt it mid-call without a worker-owned cooperative
+      cancellation contract. That worker-contract extension is the remaining
+      cancellation follow-up and must not be implemented as forced thread
+      interruption or Tauri/frontend policy.
+    - Remaining follow-up: add Python worker-contract support for mid-call
+      cooperative cancellation if runtime behavior needs interruption after
+      backend execution starts, then resume retry/defer idempotency,
+      replay/bootstrap, and diagnostics-ledger attempt/timing facts.
 
 ### Traceability Links
 

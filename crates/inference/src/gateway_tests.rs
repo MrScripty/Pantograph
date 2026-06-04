@@ -1,6 +1,7 @@
 use super::*;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -42,6 +43,7 @@ use crate::types::{
 };
 use crate::{
     BackendExecutionContext, InferenceDeviceClass, InferenceDeviceId,
+    InferenceExecutionCancellationSnapshot, InferenceExecutionCancellationState,
     InferenceExecutionTelemetryError, RuntimeNativeTelemetryProvider,
 };
 
@@ -49,6 +51,11 @@ use crate::{
 mod start_config;
 
 struct MockImageBackend;
+#[derive(Clone, Default)]
+struct RecordingCancellationImageBackend {
+    calls: Arc<AtomicUsize>,
+    snapshots: Arc<Mutex<Vec<InferenceExecutionCancellationSnapshot>>>,
+}
 struct MockActiveLlamaBackend;
 struct MockHttpBackend;
 struct MockReusedBackend;
@@ -495,6 +502,91 @@ impl InferenceBackend for MockImageBackend {
             language: request.language,
             duration_seconds: Some(1.5),
             segments: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[async_trait]
+impl InferenceBackend for RecordingCancellationImageBackend {
+    fn name(&self) -> &'static str {
+        "Recording cancellation backend"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock image backend that records cancellation context"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            image_generation: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        Ok(Box::pin(stream::empty()))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(Vec::new())
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Ok(RerankResponse {
+            results: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+
+    async fn generate_image_from_plan(
+        &self,
+        plan: ImageGenerationExecutionPlan,
+        context: BackendExecutionContext,
+    ) -> Result<ImageGenerationResult, BackendError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.snapshots
+            .lock()
+            .expect("snapshots lock")
+            .push(context.cancellation_snapshot());
+        Ok(ImageGenerationResult {
+            images: vec![crate::types::EncodedImage {
+                data_base64: plan.prompt,
+                mime_type: "image/png".to_string(),
+                width: plan.width,
+                height: plan.height,
+            }],
+            seed_used: plan.seed,
             metadata: serde_json::Value::Null,
         })
     }
@@ -1266,6 +1358,31 @@ async fn test_generate_image_from_plan_forwards_to_active_backend() {
 }
 
 #[tokio::test]
+async fn test_generate_image_from_plan_with_cancellation_forwards_running_signal() {
+    let backend = RecordingCancellationImageBackend::default();
+    let calls = backend.calls.clone();
+    let snapshots = backend.snapshots.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "mock");
+
+    let result = gateway
+        .generate_image_from_plan_with_cancellation(
+            sample_image_generation_plan(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .expect("running cancellation signal should reach backend execution");
+
+    assert_eq!(result.seed_used, Some(7));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let snapshots = snapshots.lock().expect("snapshots lock");
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(
+        snapshots[0].state,
+        InferenceExecutionCancellationState::Running
+    );
+}
+
+#[tokio::test]
 async fn test_generate_image_from_planning_input_plans_and_forwards() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
@@ -1290,6 +1407,38 @@ async fn test_generate_image_from_planning_input_plans_and_forwards() {
         result.metadata["planned_runtime_variant"],
         "pytorch.diffusers"
     );
+}
+
+#[tokio::test]
+async fn test_generate_image_from_planning_input_with_cancellation_rejects_before_backend() {
+    let backend = RecordingCancellationImageBackend::default();
+    let calls = backend.calls.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "mock");
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = sample_image_generation_request();
+    let decision = sample_image_backend_decision("pytorch");
+
+    let error = gateway
+        .generate_image_from_planning_input_with_cancellation(
+            ImageGenerationPlanningInput {
+                request: &request,
+                package_facts: &facts,
+                artifact_load_target: &sample_artifact_load_target(&facts),
+                backend_decision: &decision,
+            },
+            InferenceExecutionCancellationHandle::cancellation_requested("user cancelled task"),
+        )
+        .await
+        .expect_err("cancelled planning input should reject before backend execution");
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    match error {
+        GatewayError::Backend(BackendError::Cancelled(message)) => {
+            assert!(message.contains("image generation planning"));
+            assert!(message.contains("user cancelled task"));
+        }
+        other => panic!("expected typed cancellation error, got {other:?}"),
+    }
 }
 
 #[tokio::test]

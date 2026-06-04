@@ -263,6 +263,18 @@ and diff hygiene. Remaining lifecycle work: pass cooperative cancellation
 deeper into long-running image gateway/provider calls, then retry/defer
 idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 inference gateway cooperative cancellation update: the
+workflow-service-owned runtime-host cancellation signal now projects through
+embedded-runtime into inference-local gateway/backend execution context.
+Image generation planning and gateway dispatch reject typed cancellation
+before backend execution, and the PyTorch image backend checks the same signal
+before entering its blocking Python worker call. This adds no Tauri/frontend
+policy, adapter-owned lifecycle logic, graph-path/reduced-plan launch fallback,
+runtime launch branch, Pumas fact change, lockfile edit, or saved workflow
+fixture rewrite. Remaining lifecycle work: Python worker-contract support for
+mid-call cooperative cancellation, then retry/defer idempotency,
+replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.
