@@ -516,6 +516,15 @@ shutdown drain plus bounded abort, deeper image gateway/provider cooperative
 cancellation, then retry/replay/ledger facts. Tauri/frontend and runtime
 adapters remain forwarding/observation layers only.
 
+2026-06-04 active cancellation lifecycle-core update: workflow-service
+lifecycle handles now retain pending runtime-host cancellation or shutdown
+state before the runtime-host cancellation handle exists, and later dispatch
+initializes the signal from that pending state. The slice intentionally avoids
+early terminal task mutation, early reservation release, adapter-owned policy,
+and Tauri/frontend changes. The production active cancellation API is the next
+slice so it can be wired to a real backend caller instead of leaving dead
+staging code.
+
 ## Standards Rule
 
 The standards constraints in

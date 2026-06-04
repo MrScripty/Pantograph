@@ -96,6 +96,8 @@ impl WorkflowSchedulerTaskLifecycleManager {
             owner_id: self.owner_id.clone(),
             task_id,
             attempt_id,
+            runtime_host_cancellation_state: RuntimeHostExecutionCancellationState::Running,
+            runtime_host_cancellation_reason: None,
             runtime_host_cancellation_signal: None,
         };
         self.active_task_handles.insert(task_key, record.clone());
@@ -117,11 +119,15 @@ impl WorkflowSchedulerTaskLifecycleManager {
         let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
         let cancellation_context =
             RuntimeHostExecutionCancellationContext::workflow_service(execution_request_id);
+        let pending_state = tracked.runtime_host_cancellation_state.clone();
+        let pending_reason = tracked.runtime_host_cancellation_reason.clone();
         let signal = tracked
             .runtime_host_cancellation_signal
             .get_or_insert_with(|| {
-                Arc::new(WorkflowSchedulerTaskRuntimeHostCancellationSignal::running(
+                Arc::new(WorkflowSchedulerTaskRuntimeHostCancellationSignal::new(
                     cancellation_context.cancellation_context_id.clone(),
+                    pending_state,
+                    pending_reason,
                 ))
             })
             .clone();
@@ -138,12 +144,16 @@ impl WorkflowSchedulerTaskLifecycleManager {
         reason: impl Into<String>,
     ) -> Result<(), WorkflowServiceError> {
         let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
+        let reason = Some(reason.into());
+        tracked.runtime_host_cancellation_state =
+            RuntimeHostExecutionCancellationState::CancellationRequested;
+        tracked.runtime_host_cancellation_reason = reason.clone();
         let Some(signal) = tracked.runtime_host_cancellation_signal.as_ref() else {
             return Ok(());
         };
         signal.update_state(
             RuntimeHostExecutionCancellationState::CancellationRequested,
-            Some(reason.into()),
+            reason,
         )
     }
 
@@ -198,11 +208,16 @@ impl WorkflowSchedulerTaskLifecycleManager {
     pub(crate) fn begin_shutdown(&mut self) -> WorkflowSchedulerTaskLifecycleShutdownState {
         if self.shutdown_state == WorkflowSchedulerTaskLifecycleShutdownState::Running {
             self.shutdown_state = WorkflowSchedulerTaskLifecycleShutdownState::ShuttingDown;
-            for record in self.active_task_handles.values() {
+            for record in self.active_task_handles.values_mut() {
+                let reason =
+                    Some("workflow-service task lifecycle owner is shutting down".to_string());
+                record.runtime_host_cancellation_state =
+                    RuntimeHostExecutionCancellationState::ShutdownRequested;
+                record.runtime_host_cancellation_reason = reason.clone();
                 if let Some(signal) = record.runtime_host_cancellation_signal.as_ref() {
                     let _ = signal.update_state(
                         RuntimeHostExecutionCancellationState::ShutdownRequested,
-                        Some("workflow-service task lifecycle owner is shutting down".to_string()),
+                        reason,
                     );
                 }
             }
@@ -307,6 +322,8 @@ pub(crate) struct WorkflowSchedulerTaskLifecycleHandleRecord {
     pub(crate) owner_id: WorkflowSchedulerTaskLifecycleOwnerId,
     pub(crate) task_id: SchedulerTaskId,
     pub(crate) attempt_id: WorkflowSchedulerTaskAttemptId,
+    runtime_host_cancellation_state: RuntimeHostExecutionCancellationState,
+    runtime_host_cancellation_reason: Option<String>,
     runtime_host_cancellation_signal:
         Option<Arc<WorkflowSchedulerTaskRuntimeHostCancellationSignal>>,
 }
@@ -317,12 +334,16 @@ struct WorkflowSchedulerTaskRuntimeHostCancellationSignal {
 }
 
 impl WorkflowSchedulerTaskRuntimeHostCancellationSignal {
-    fn running(cancellation_context_id: String) -> Self {
+    fn new(
+        cancellation_context_id: String,
+        state: RuntimeHostExecutionCancellationState,
+        reason: Option<String>,
+    ) -> Self {
         Self {
             snapshot: Mutex::new(RuntimeHostExecutionCancellationSnapshot {
                 cancellation_context_id,
-                state: RuntimeHostExecutionCancellationState::Running,
-                reason: None,
+                state,
+                reason,
             }),
         }
     }

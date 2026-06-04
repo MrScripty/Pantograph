@@ -168,6 +168,34 @@ fn task_lifecycle_manager_updates_runtime_host_cancellation_signal() {
 }
 
 #[test]
+fn task_lifecycle_manager_applies_pending_cancellation_to_later_runtime_host_signal() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+
+    manager
+        .request_task_cancellation(&task_id, &attempt_id, "user cancelled before dispatch")
+        .expect("request task cancellation");
+    let (_context, cancellation) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "runtime-host-request.current")
+        .expect("create runtime host cancellation");
+
+    let snapshot = cancellation.snapshot();
+    assert_eq!(
+        snapshot.state,
+        RuntimeHostExecutionCancellationState::CancellationRequested
+    );
+    assert_eq!(
+        snapshot.reason.as_deref(),
+        Some("user cancelled before dispatch")
+    );
+    assert_eq!(manager.active_task_handle_count(), 1);
+}
+
+#[test]
 fn task_lifecycle_manager_shutdown_updates_runtime_host_cancellation_signal() {
     let mut manager = lifecycle_manager();
     let task_id = task_id("image-task");
@@ -190,6 +218,32 @@ fn task_lifecycle_manager_shutdown_updates_runtime_host_cancellation_signal() {
         snapshot.reason.as_deref(),
         Some("workflow-service task lifecycle owner is shutting down")
     );
+}
+
+#[test]
+fn task_lifecycle_manager_applies_pending_shutdown_to_later_runtime_host_signal() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+
+    manager.begin_shutdown();
+    let (_context, cancellation) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "runtime-host-request.current")
+        .expect("create runtime host cancellation");
+
+    let snapshot = cancellation.snapshot();
+    assert_eq!(
+        snapshot.state,
+        RuntimeHostExecutionCancellationState::ShutdownRequested
+    );
+    assert_eq!(
+        snapshot.reason.as_deref(),
+        Some("workflow-service task lifecycle owner is shutting down")
+    );
+    assert_eq!(manager.active_task_handle_count(), 1);
 }
 
 #[test]

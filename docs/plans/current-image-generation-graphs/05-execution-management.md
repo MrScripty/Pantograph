@@ -24181,6 +24181,50 @@ Worker rules:
       compatibility cancellation branches, adapter-owned lifecycle policy,
       Tauri/frontend business logic, Pumas fact changes, lockfile edits, or
       saved workflow fixture rewrites.
+  - 2026-06-04 Milestone 5c active cancellation lifecycle-core slice:
+    - Smallest vertical slice: preserve active task cancellation/shutdown intent
+      in the workflow-service lifecycle core before runtime-host cancellation
+      handles are created, and prove that later runtime dispatch receives the
+      pending signal without terminal task mutation or reservation release.
+      Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      and this plan set. The unrelated Pumas proposal Markdown files already
+      dirty in the worktree were ignored and are not part of this slice.
+    - No-fallback confirmation: cancellation/shutdown intent remains
+      workflow-service owned, Tauri/frontend are untouched, runtime adapters do
+      not own policy, cancelled tasks are not terminally mutated early,
+      reservations are not released early, and no graph-path, reduced-plan,
+      node-engine, or compatibility execution branch was restored.
+    - Implementation summary: active lifecycle handle records now retain
+      pending runtime-host cancellation state and reason. The lifecycle manager
+      applies pending cancellation or shutdown to a later-created runtime-host
+      cancellation signal, while existing live signals still update
+      immediately. A test-only orchestrator harness proves started runtime task
+      cancellation remains non-terminal and reaches runtime-host dispatch.
+    - Tests/verification:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo test -p pantograph-workflow-service task_lifecycle --lib`
+      - `cargo test -p pantograph-workflow-service scheduler::task_orchestrator --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `git diff --check`
+      - Targeted no-fallback search over touched source files. The only match
+        was an existing negative legacy-bridge test name.
+    - Deviation/discovered issue: exposing a production orchestrator
+      cancellation method in this slice produced dead staging code because no
+      production backend API calls it yet. The implementation was narrowed to
+      production lifecycle-core behavior plus a test-only orchestrator harness.
+      Next slice must add the workflow-service-owned active cancellation
+      surface through an actual backend API/command path, with
+      Tauri/frontend/bindings forwarding only.
+    - Remaining follow-up: add the production active cancellation surface,
+      then supervised runtime task handles, typed join/panic diagnostics,
+      shutdown drain/abort, deeper image gateway/provider cancellation,
+      retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
+      attempt/timing facts.
 
 ### Traceability Links
 

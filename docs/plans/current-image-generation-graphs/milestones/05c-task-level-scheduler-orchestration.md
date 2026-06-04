@@ -1800,3 +1800,42 @@ durable task orchestration path.
      attempt/timing facts only after the supervisor boundary is stable.
   Rejected path remains adapter/Tauri-owned cancellation because it splits
   lifecycle ownership and moves business policy outside workflow-service.
+- 2026-06-04 active cancellation lifecycle-core slice completed. Smallest
+  useful vertical slice: preserve workflow-service-owned cancellation/shutdown
+  intent on active task handles before runtime-host cancellation handles exist,
+  and prove the pending state is projected into later runtime-host dispatch
+  without terminal task mutation or reservation release. Allowed write set
+  used: `scheduler/task_lifecycle.rs`, `scheduler/task_lifecycle_tests.rs`,
+  `scheduler/task_orchestrator.rs`, `scheduler/task_orchestrator_tests.rs`,
+  and this plan set.
+  No-fallback/no-legacy confirmation: the slice keeps lifecycle/business state
+  in workflow-service, changes no Tauri/frontend code, adds no adapter-owned
+  policy, does not terminally mutate cancelled tasks, does not release
+  reservations early, and does not restore graph-path, reduced-plan,
+  node-engine, or compatibility execution branches.
+  Implementation summary: `WorkflowSchedulerTaskLifecycleHandleRecord` now
+  stores pending runtime-host cancellation state and reason. Cancellation and
+  shutdown update that pending state before a signal exists, and
+  `runtime_host_cancellation` initializes the later signal from the pending
+  state. Existing live signals still update immediately. The orchestrator has
+  a test-only harness proving a started runtime task can record cancellation
+  before dispatch, remain `Running`, keep its lifecycle handle, and pass
+  `CancellationRequested` into runtime-host dispatch.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo fmt
+  -p pantograph-workflow-service -- --check`; `cargo test -p
+  pantograph-workflow-service task_lifecycle --lib`; `cargo test -p
+  pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+  check -p pantograph-workflow-service`; `git diff --check`; and targeted
+  no-fallback search over touched source. The only search match was an
+  existing negative legacy-bridge test name.
+  Deviation/discovered issue: the initially planned production active
+  cancellation API would have been unused by production code in this slice.
+  To stay standards-compliant and avoid dead staging code, the production
+  workflow-service active cancellation surface is deferred to the next slice,
+  where it must be wired to an actual backend command/API caller while keeping
+  Tauri/frontend as forwarding-only layers.
+  Remaining follow-up: add the workflow-service-owned active cancellation
+  surface, then move runtime task execution under supervised handles with
+  typed join/panic diagnostics, shutdown drain/abort, deeper gateway/provider
+  cooperative cancellation, retry/defer idempotency, replay/bootstrap, and
+  diagnostics-ledger attempt/timing facts.

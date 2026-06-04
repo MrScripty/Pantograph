@@ -710,6 +710,16 @@ Option 3 thin implementation sequence:
      5. Only after these lifecycle semantics are stable, continue retry/defer
         idempotency, replay/bootstrap recovery, and diagnostics-ledger
         attempt/timing facts.
+   - 2026-06-04 implementation update: the first option-3 source slice
+     landed the lifecycle-core part of active cancellation intent. Active task
+     handles now retain pending runtime cancellation or shutdown state even
+     when the runtime-host cancellation handle has not been created yet, so
+     pre-dispatch cancellation/shutdown is projected into the later
+     runtime-host signal without terminal task mutation or reservation
+     release. The production workflow-service cancellation surface remains the
+     next slice because adding an unused orchestrator API would be dead
+     staging code; the current slice uses a test-only orchestrator harness to
+     prove the pending signal reaches runtime dispatch.
 4. [ ] Retry/defer policy boundary: add typed retry/defer decisions and
    idempotency keys after cancellation ownership exists. Keep retry scheduling
    separate from dispatch selection and reservation release.
