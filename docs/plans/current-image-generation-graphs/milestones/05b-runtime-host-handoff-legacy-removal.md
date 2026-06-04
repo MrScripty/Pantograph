@@ -156,6 +156,23 @@ leave the retired event contract in production. Option 3, promoting a new
 backend-owned push snapshot event stream, is deferred unless inspection proves
 live consumers require push snapshot delivery rather than read-model updates.
 
+2026-06-03 implementation result: active-consumer inventory found no remaining
+production transport owner for the Tauri runtime/scheduler snapshot event
+variants. The slice deleted the event input DTOs, enum variants, constructors,
+serializer branches, event-adapter ownership branches, diagnostics overlay
+event branches, and workflow-event trace projection branches. Diagnostics
+snapshot recording remains backend-owned through diagnostics-store/headless
+record and update helpers; test-only snapshot record helpers now write
+`WorkflowTraceEvent::RuntimeSnapshotCaptured` and
+`WorkflowTraceEvent::SchedulerSnapshotCaptured` plus diagnostics state directly
+instead of constructing Tauri events. Verification passed:
+`cargo fmt --manifest-path src-tauri/Cargo.toml`, `cargo fmt --manifest-path
+src-tauri/Cargo.toml -- --check`, `cargo check --manifest-path
+src-tauri/Cargo.toml`, `cargo test --manifest-path src-tauri/Cargo.toml
+diagnostics`, `cargo test --manifest-path src-tauri/Cargo.toml event_adapter`,
+strict deleted-symbol search for the removed event input/variant symbols, and
+`git diff --check`.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must

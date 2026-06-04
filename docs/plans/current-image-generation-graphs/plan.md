@@ -51,6 +51,17 @@ shim may be introduced. Option 1 is rejected because it leaves the dead event
 contract in production; Option 3 remains deferred unless inspection finds a
 live requirement for a backend-owned push snapshot event stream.
 
+2026-06-03 Tauri runtime/scheduler snapshot event deletion update: the retired
+Tauri event input DTOs, enum variants, constructors, serializer branches,
+event-adapter ownership branches, diagnostics overlay event branches, and
+trace projection branches were deleted. Diagnostics snapshot recording remains
+backend-owned through diagnostics-store/headless record and update helpers;
+test-only record helpers now write trace facts and snapshot state directly
+instead of constructing Tauri events. Verification passed with Tauri
+fmt/check, diagnostics tests, event-adapter tests, deleted-symbol search, and
+diff hygiene. No graph snapshot fallback, scheduler adapter, runtime launch
+branch, frontend-derived policy, or compatibility event shim was added.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

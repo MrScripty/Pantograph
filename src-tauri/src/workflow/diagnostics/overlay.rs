@@ -5,9 +5,8 @@ use pantograph_workflow_service::WorkflowTraceSnapshotResponse;
 
 use super::trace::diagnostics_run_trace;
 use super::types::{
-    DiagnosticsEventRecord, DiagnosticsRuntimeSnapshot, DiagnosticsRuntimeSnapshotInput,
-    DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
-    WorkflowDiagnosticsProjectionContext,
+    DiagnosticsEventRecord, DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot,
+    WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext,
 };
 use crate::workflow::events::WorkflowEvent;
 
@@ -118,13 +117,6 @@ pub(crate) fn record_diagnostics_overlay(
     event: &WorkflowEvent,
     timestamp_ms: u64,
 ) {
-    if matches!(event, WorkflowEvent::RuntimeSnapshot { .. }) {
-        apply_runtime_event(state, event, timestamp_ms);
-    }
-    if matches!(event, WorkflowEvent::SchedulerSnapshot { .. }) {
-        apply_scheduler_event(state, event, timestamp_ms);
-    }
-
     let Some(workflow_run_id) = event_workflow_run_id(event) else {
         return;
     };
@@ -239,76 +231,9 @@ pub(crate) fn event_workflow_run_id(event: &WorkflowEvent) -> Option<String> {
         | WorkflowEvent::IncrementalExecutionStarted {
             workflow_run_id, ..
         }
-        | WorkflowEvent::RuntimeSnapshot {
-            workflow_run_id, ..
-        }
-        | WorkflowEvent::SchedulerSnapshot {
-            workflow_run_id, ..
-        }
         | WorkflowEvent::DiagnosticsSnapshot {
             workflow_run_id, ..
         } => Some(workflow_run_id.clone()),
-    }
-}
-
-fn apply_runtime_event(
-    state: &mut WorkflowDiagnosticsState,
-    event: &WorkflowEvent,
-    timestamp_ms: u64,
-) {
-    if let WorkflowEvent::RuntimeSnapshot {
-        workflow_id,
-        capabilities,
-        active_model_target,
-        embedding_model_target,
-        active_runtime_snapshot,
-        embedding_runtime_snapshot,
-        managed_runtimes,
-        error,
-        ..
-    } = event
-    {
-        state.runtime =
-            DiagnosticsRuntimeSnapshot::from_capabilities(DiagnosticsRuntimeSnapshotInput {
-                workflow_id: workflow_id.clone(),
-                capabilities: capabilities.as_ref().clone(),
-                last_error: error.clone(),
-                active_model_target: active_model_target.clone(),
-                embedding_model_target: embedding_model_target.clone(),
-                active_runtime_snapshot: active_runtime_snapshot.clone(),
-                embedding_runtime_snapshot: embedding_runtime_snapshot.clone(),
-                managed_runtimes: managed_runtimes.clone(),
-                captured_at_ms: timestamp_ms,
-            });
-    }
-}
-
-fn apply_scheduler_event(
-    state: &mut WorkflowDiagnosticsState,
-    event: &WorkflowEvent,
-    timestamp_ms: u64,
-) {
-    if let WorkflowEvent::SchedulerSnapshot {
-        workflow_id,
-        workflow_run_id,
-        session_id,
-        session,
-        items,
-        diagnostics,
-        error,
-        ..
-    } = event
-    {
-        state.scheduler = DiagnosticsSchedulerSnapshot {
-            workflow_id: workflow_id.clone(),
-            session_id: Some(session_id.clone()),
-            workflow_run_id: Some(workflow_run_id.clone()),
-            captured_at_ms: Some(timestamp_ms),
-            session: session.clone(),
-            items: items.clone(),
-            diagnostics: diagnostics.clone(),
-            last_error: error.clone(),
-        };
     }
 }
 
@@ -327,8 +252,6 @@ fn event_type_name(event: &WorkflowEvent) -> &'static str {
         WorkflowEvent::GraphModified { .. } => "GraphModified",
         WorkflowEvent::WaitingForInput { .. } => "WaitingForInput",
         WorkflowEvent::IncrementalExecutionStarted { .. } => "IncrementalExecutionStarted",
-        WorkflowEvent::RuntimeSnapshot { .. } => "RuntimeSnapshot",
-        WorkflowEvent::SchedulerSnapshot { .. } => "SchedulerSnapshot",
         WorkflowEvent::DiagnosticsSnapshot { .. } => "DiagnosticsSnapshot",
     }
 }
@@ -344,8 +267,6 @@ fn event_workflow_id(event: &WorkflowEvent) -> Option<String> {
         | WorkflowEvent::IncrementalExecutionStarted { workflow_id, .. } => {
             Some(workflow_id.clone())
         }
-        WorkflowEvent::RuntimeSnapshot { workflow_id, .. } => Some(workflow_id.clone()),
-        WorkflowEvent::SchedulerSnapshot { workflow_id, .. } => workflow_id.clone(),
         _ => None,
     }
 }
@@ -645,18 +566,6 @@ fn summarize_event(event: &WorkflowEvent) -> String {
         WorkflowEvent::IncrementalExecutionStarted { .. } => {
             "Incremental execution started".to_string()
         }
-        WorkflowEvent::RuntimeSnapshot { error, .. } => error
-            .clone()
-            .filter(|value| !value.trim().is_empty())
-            .map(|value| format!("Runtime snapshot failed: {}", value))
-            .unwrap_or_else(|| "Runtime snapshot captured".to_string()),
-        WorkflowEvent::SchedulerSnapshot { items, error, .. } => error
-            .clone()
-            .filter(|value| !value.trim().is_empty())
-            .map(|value| format!("Scheduler snapshot failed: {}", value))
-            .unwrap_or_else(|| {
-                format!("Scheduler snapshot captured ({} queue items)", items.len())
-            }),
         WorkflowEvent::DiagnosticsSnapshot { .. } => "Diagnostics snapshot captured".to_string(),
     }
 }

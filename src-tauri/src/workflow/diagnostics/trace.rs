@@ -264,42 +264,6 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
             workflow_id: Some(workflow_id.clone()),
             task_ids: task_ids.clone(),
         }),
-        WorkflowEvent::RuntimeSnapshot {
-            workflow_id,
-            workflow_run_id,
-            captured_at_ms,
-            capabilities,
-            trace_runtime_metrics,
-            error,
-            ..
-        } => Some(WorkflowTraceEvent::RuntimeSnapshotCaptured {
-            workflow_run_id: workflow_run_id.clone(),
-            workflow_id: Some(workflow_id.clone()),
-            captured_at_ms: *captured_at_ms,
-            runtime: trace_runtime_metrics.as_ref().clone(),
-            capabilities: capabilities.as_ref().clone(),
-            error: error.clone(),
-        }),
-        WorkflowEvent::SchedulerSnapshot {
-            workflow_id,
-            workflow_run_id,
-            session_id,
-            captured_at_ms,
-            session,
-            items,
-            diagnostics,
-            error,
-            ..
-        } => Some(WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            workflow_run_id: workflow_run_id.clone(),
-            workflow_id: workflow_id.clone(),
-            session_id: session_id.clone(),
-            captured_at_ms: *captured_at_ms,
-            session: session.clone(),
-            items: items.clone(),
-            diagnostics: diagnostics.clone(),
-            error: error.clone(),
-        }),
         WorkflowEvent::DiagnosticsSnapshot { .. } => None,
     }
 }

@@ -46,12 +46,6 @@ pub(super) fn translated_workflow_run_id(event: &TauriWorkflowEvent) -> &str {
         | TauriWorkflowEvent::IncrementalExecutionStarted {
             workflow_run_id, ..
         }
-        | TauriWorkflowEvent::RuntimeSnapshot {
-            workflow_run_id, ..
-        }
-        | TauriWorkflowEvent::SchedulerSnapshot {
-            workflow_run_id, ..
-        }
         | TauriWorkflowEvent::DiagnosticsSnapshot {
             workflow_run_id, ..
         } => workflow_run_id,

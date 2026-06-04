@@ -86,12 +86,6 @@ impl WorkflowEvent {
             | Self::IncrementalExecutionStarted {
                 workflow_run_id, ..
             }
-            | Self::RuntimeSnapshot {
-                workflow_run_id, ..
-            }
-            | Self::SchedulerSnapshot {
-                workflow_run_id, ..
-            }
             | Self::DiagnosticsSnapshot {
                 workflow_run_id, ..
             } => workflow_run_id,
@@ -268,56 +262,6 @@ impl WorkflowEvent {
                     "workflow_id": workflow_id,
                     "workflow_run_id": workflow_run_id,
                     "task_ids": task_ids,
-                }),
-            ),
-            Self::RuntimeSnapshot {
-                workflow_id,
-                workflow_run_id,
-                captured_at_ms,
-                capabilities,
-                trace_runtime_metrics,
-                active_model_target,
-                embedding_model_target,
-                active_runtime_snapshot,
-                embedding_runtime_snapshot,
-                managed_runtimes,
-                error,
-            } => (
-                "RuntimeSnapshot",
-                json!({
-                    "workflow_id": workflow_id,
-                    "workflow_run_id": workflow_run_id,
-                    "captured_at_ms": captured_at_ms,
-                    "capabilities": capabilities,
-                    "trace_runtime_metrics": trace_runtime_metrics,
-                    "active_model_target": active_model_target,
-                    "embedding_model_target": embedding_model_target,
-                    "active_runtime_snapshot": active_runtime_snapshot,
-                    "embedding_runtime_snapshot": embedding_runtime_snapshot,
-                    "managed_runtimes": managed_runtimes,
-                    "error": error,
-                }),
-            ),
-            Self::SchedulerSnapshot {
-                workflow_id,
-                workflow_run_id,
-                session_id,
-                captured_at_ms,
-                session,
-                items,
-                diagnostics,
-                error,
-            } => (
-                "SchedulerSnapshot",
-                json!({
-                    "workflow_id": workflow_id,
-                    "workflow_run_id": workflow_run_id,
-                    "session_id": session_id,
-                    "captured_at_ms": captured_at_ms,
-                    "session": session,
-                    "items": items,
-                    "diagnostics": diagnostics,
-                    "error": error,
                 }),
             ),
             Self::DiagnosticsSnapshot {

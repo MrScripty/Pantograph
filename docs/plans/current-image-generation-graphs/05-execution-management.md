@@ -23515,6 +23515,48 @@ Worker rules:
       --manifest-path src-tauri/Cargo.toml event_adapter`; targeted
       serialization/trace tests as needed; deleted-symbol search for the
       retired snapshot event names; and `git diff --check`.
+  - 2026-06-03 Milestone 5b Tauri runtime/scheduler snapshot event deletion
+    slice:
+    - Smallest useful vertical slice: delete the retired Tauri
+      runtime/scheduler snapshot event contract and keep snapshot recording on
+      backend-owned diagnostics store/headless APIs.
+    - Files touched: `src-tauri/src/workflow/events.rs`,
+      `src-tauri/src/workflow/event_serialization.rs`,
+      `src-tauri/src/workflow/event_adapter/translation.rs`,
+      `src-tauri/src/workflow/diagnostics/overlay.rs`,
+      `src-tauri/src/workflow/diagnostics/trace.rs`,
+      `src-tauri/src/workflow/diagnostics/store.rs`,
+      `src-tauri/src/workflow/diagnostics/tests/runtime_projection.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - No-fallback/no-legacy result: removed
+      `WorkflowRuntimeSnapshotEventInput`,
+      `WorkflowSchedulerSnapshotEventInput`,
+      `WorkflowEvent::RuntimeSnapshot`,
+      `WorkflowEvent::SchedulerSnapshot`, their constructors, serializer
+      branches, event-adapter ownership branches, diagnostics overlay event
+      branches, and workflow-event trace projection branches. No graph
+      snapshot fallback, scheduler adapter, runtime launch branch,
+      frontend-derived policy, or compatibility event shim was added.
+    - Standards alignment: Tauri remains transport/projection glue. Runtime
+      and scheduler snapshot facts remain backend-owned through diagnostics
+      store/headless record and update helpers; test-only record helpers now
+      write `WorkflowTraceEvent::RuntimeSnapshotCaptured` and
+      `WorkflowTraceEvent::SchedulerSnapshotCaptured` plus diagnostics state
+      directly instead of constructing Tauri events.
+    - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml`;
+      `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`; `cargo
+      check --manifest-path src-tauri/Cargo.toml`; `cargo test --manifest-path
+      src-tauri/Cargo.toml diagnostics`; `cargo test --manifest-path
+      src-tauri/Cargo.toml event_adapter`; strict deleted-symbol search for
+      removed Tauri snapshot event input/variant symbols; and `git diff
+      --check`.
+    - Verification deviation fixed: the first `cargo fmt --manifest-path
+      src-tauri/Cargo.toml -- --check` found rustfmt-only changes in the
+      edited Tauri files; `cargo fmt --manifest-path src-tauri/Cargo.toml`
+      was applied and the final format check passed.
+    - Remaining follow-up: none for the retired Tauri snapshot event contract.
 
 ### Traceability Links
 

@@ -438,7 +438,7 @@ fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_
 }
 
 #[test]
-fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
+fn runtime_snapshot_record_carries_runtime_lifecycle_into_trace_store() {
     let store = WorkflowDiagnosticsStore::default();
     let snapshot = store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "wf-runtime".to_string(),
@@ -682,7 +682,7 @@ fn inference_runtime_lifecycle_snapshot_from_diagnostics_canonicalizes_runtime_a
 }
 
 #[test]
-fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store() {
+fn scheduler_snapshot_record_carries_authoritative_queue_metrics_into_trace_store() {
     let store = WorkflowDiagnosticsStore::default();
     let projection =
         store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
@@ -751,7 +751,7 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
 }
 
 #[test]
-fn scheduler_snapshot_event_carries_workflow_run_id_into_projection() {
+fn scheduler_snapshot_record_carries_workflow_run_id_into_projection() {
     let store = WorkflowDiagnosticsStore::default();
     let projection =
         store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {

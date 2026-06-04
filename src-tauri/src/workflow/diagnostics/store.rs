@@ -24,10 +24,6 @@ use super::types::{
     DiagnosticsWorkflowTimingHistory, WorkflowDiagnosticsProjection,
 };
 use crate::workflow::events::WorkflowEvent;
-#[cfg(test)]
-use crate::workflow::events::{
-    WorkflowRuntimeSnapshotEventInput, WorkflowSchedulerSnapshotEventInput,
-};
 
 const DEFAULT_DIAGNOSTICS_EVENT_LIMIT: usize = 200;
 
@@ -189,20 +185,38 @@ impl WorkflowDiagnosticsStore {
         &self,
         input: WorkflowRuntimeSnapshotRecord,
     ) -> WorkflowDiagnosticsProjection {
-        let event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
-            workflow_id: input.workflow_id,
+        let trace_event = WorkflowTraceEvent::RuntimeSnapshotCaptured {
             workflow_run_id: input.workflow_run_id,
+            workflow_id: Some(input.workflow_id.clone()),
             captured_at_ms: input.captured_at_ms,
-            capabilities: input.capabilities,
-            trace_runtime_metrics: input.trace_runtime_metrics,
-            active_model_target: input.active_model_target,
-            embedding_model_target: input.embedding_model_target,
-            active_runtime_snapshot: input.active_runtime_snapshot,
-            embedding_runtime_snapshot: input.embedding_runtime_snapshot,
-            managed_runtimes: input.managed_runtimes,
-            error: input.error,
-        });
-        self.record_workflow_event(&event, input.captured_at_ms)
+            runtime: input.trace_runtime_metrics,
+            capabilities: input.capabilities.clone(),
+            error: input.error.clone(),
+        };
+        let traces = self
+            .trace_store
+            .record_event(&trace_event, input.captured_at_ms);
+        let mut state = self.state.lock();
+        state.runtime =
+            DiagnosticsRuntimeSnapshot::from_capabilities(DiagnosticsRuntimeSnapshotInput {
+                workflow_id: input.workflow_id,
+                capabilities: input.capabilities,
+                last_error: input.error,
+                active_model_target: input.active_model_target,
+                embedding_model_target: input.embedding_model_target,
+                active_runtime_snapshot: input
+                    .active_runtime_snapshot
+                    .as_ref()
+                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                embedding_runtime_snapshot: input
+                    .embedding_runtime_snapshot
+                    .as_ref()
+                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                managed_runtimes: input.managed_runtimes,
+                captured_at_ms: input.captured_at_ms,
+            });
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
     }
 
     #[cfg(test)]
@@ -210,17 +224,32 @@ impl WorkflowDiagnosticsStore {
         &self,
         input: WorkflowSchedulerSnapshotRecord,
     ) -> WorkflowDiagnosticsProjection {
-        let event = WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
-            workflow_id: input.workflow_id,
-            workflow_run_id: input.workflow_run_id,
-            session_id: input.session_id,
+        let trace_event = WorkflowTraceEvent::SchedulerSnapshotCaptured {
+            workflow_run_id: input.workflow_run_id.clone(),
+            workflow_id: input.workflow_id.clone(),
+            session_id: input.session_id.clone(),
             captured_at_ms: input.captured_at_ms,
+            session: input.session.clone(),
+            items: input.items.clone(),
+            diagnostics: input.diagnostics.clone(),
+            error: input.error.clone(),
+        };
+        let traces = self
+            .trace_store
+            .record_event(&trace_event, input.captured_at_ms);
+        let mut state = self.state.lock();
+        state.scheduler = DiagnosticsSchedulerSnapshot {
+            workflow_id: input.workflow_id,
+            session_id: Some(input.session_id),
+            workflow_run_id: Some(input.workflow_run_id),
+            captured_at_ms: Some(input.captured_at_ms),
             session: input.session,
             items: input.items,
             diagnostics: input.diagnostics,
-            error: input.error,
-        });
-        self.record_workflow_event(&event, input.captured_at_ms)
+            last_error: input.error,
+        };
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
     }
 
     pub fn update_runtime_snapshot(
@@ -278,6 +307,7 @@ impl WorkflowDiagnosticsStore {
         state.snapshot(&traces)
     }
 
+    #[cfg(test)]
     pub fn record_workflow_event(
         &self,
         event: &WorkflowEvent,
