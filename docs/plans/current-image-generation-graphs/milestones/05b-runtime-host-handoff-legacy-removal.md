@@ -896,6 +896,21 @@ upgrade after this path is working.
   filter; both corrected commands passed. Remaining warnings are
   `record_workflow_event`, runtime/scheduler snapshot event DTOs/constructors,
   and Pumas helper functions.
+- 2026-06-03 Tauri Pumas selector extension helper cleanup slice completed.
+  Smallest useful vertical slice: scope the unused extension-based Pumas
+  selector helper wrappers in `puma_lib_commands.rs` to tests while keeping
+  the production command path on the access-based helpers. Allowed write set:
+  `src-tauri/src/workflow/puma_lib_commands.rs`, this milestone, the
+  execution log, and the top-level plan. No-fallback confirmation: this does
+  not add a Pumas fallback, owner-API bridge, path lookup, or runtime launch
+  branch; production commands continue to resolve backend-owned selector
+  access once and call access-based Pumas APIs. Verification passed: `cargo
+  fmt --manifest-path src-tauri/Cargo.toml -- --check`, `cargo check
+  --manifest-path src-tauri/Cargo.toml`, `cargo test --manifest-path
+  src-tauri/Cargo.toml puma_lib_commands`, and diff hygiene. Remaining Tauri
+  warnings are now limited to `record_workflow_event` and the retired
+  runtime/scheduler snapshot event DTO/constructor surface, which should be
+  reviewed together as one diagnostics contract cleanup rather than piecemeal.
 - 2026-05-22: Created from the Milestone 5a node-engine legacy boundary
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy

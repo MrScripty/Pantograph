@@ -177,6 +177,7 @@ pub async fn list_model_library_updates_since(
     list_model_library_updates_since_from_access(selector_access, cursor.as_deref(), limit).await
 }
 
+#[cfg(test)]
 async fn list_model_library_updates_since_from_extensions(
     extensions: &node_engine::ExecutorExtensions,
     cursor: Option<&str>,
@@ -186,6 +187,7 @@ async fn list_model_library_updates_since_from_extensions(
     list_model_library_updates_since_from_access(selector_access, cursor, limit).await
 }
 
+#[cfg(test)]
 async fn model_package_facts_summary_snapshot_from_extensions(
     extensions: &node_engine::ExecutorExtensions,
     limit: usize,
@@ -210,6 +212,7 @@ async fn model_package_facts_summary_snapshot_from_access(
     Err("Pumas selector access not available in executor extensions".to_string())
 }
 
+#[cfg(test)]
 async fn resolve_model_package_facts_summary_from_extensions(
     extensions: &node_engine::ExecutorExtensions,
     model_id: &str,

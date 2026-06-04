@@ -28,6 +28,13 @@ path, while preserving diagnostics graph-context projection coverage in tests.
 Verification passed with Tauri fmt/check, diagnostics tests, event-adapter
 tests, and diff hygiene.
 
+2026-06-03 Tauri Pumas selector helper cleanup update: unused extension-based
+Pumas selector helper wrappers in `puma_lib_commands.rs` are now test-only.
+Production commands continue through backend-owned selector access and
+access-based Pumas APIs; no owner-API fallback, path lookup, or runtime launch
+branch was added. Verification passed with Tauri fmt/check, Pumas command
+tests, and diff hygiene.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

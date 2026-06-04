@@ -23456,6 +23456,29 @@ Worker rules:
     - Remaining warnings: Tauri check still reports `record_workflow_event`,
       runtime/scheduler snapshot event DTOs/constructors, and Pumas helper
       functions as separate cleanup candidates.
+  - 2026-06-03 Milestone 5b Tauri Pumas selector extension helper cleanup
+    slice:
+    - Smallest useful vertical slice: scope the unused extension-based Pumas
+      selector helper wrappers in `puma_lib_commands.rs` to tests.
+    - Files touched: `src-tauri/src/workflow/puma_lib_commands.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - No-fallback/no-legacy result: the slice does not add a Pumas fallback,
+      owner-API bridge, path lookup, or runtime launch branch. Production
+      Pumas commands continue to use access-based helpers after backend-owned
+      selector access resolution.
+    - Standards alignment: extension-based helper wrappers remain only as
+      test probes for selector-access ownership. Production command code no
+      longer exposes the unused wrapper surface.
+    - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+      --check`; `cargo check --manifest-path src-tauri/Cargo.toml`; `cargo
+      test --manifest-path src-tauri/Cargo.toml puma_lib_commands`; and `git
+      diff --check`.
+    - Remaining warnings: Tauri check now reports only the broader
+      `record_workflow_event` plus runtime/scheduler snapshot event
+      DTO/constructor surface. That should be reviewed as one diagnostics
+      contract cleanup slice.
 
 ### Traceability Links
 
