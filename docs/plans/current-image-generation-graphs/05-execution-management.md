@@ -23837,6 +23837,56 @@ Worker rules:
       duplicate-dispatch prevention across restarts, worker supervision and
       cancellation tokens for in-flight runtime-host work, and
       diagnostics-ledger attempt/timing facts.
+  - 2026-06-04 Milestone 5c durable lifecycle supervisor re-plan decision:
+    - Selected path: Option 3. The attempt/lease core is complete enough for
+      the next implementation phase to introduce a single workflow-service
+      lifecycle supervisor instead of adding more ad hoc guardrails to the
+      session runner.
+    - Thin implementation sequence:
+      1. Lifecycle manager skeleton for backend-owned task handles, shutdown
+         state, and typed lifecycle diagnostics.
+      2. Durable duplicate-dispatch/task lease guardrail that prevents
+         overlapping dispatch and stale resume from starting the same task
+         twice.
+      3. Cancellation/shutdown token ownership with task handle tracking,
+         await/abort behavior, and lifecycle-owner panic/cancellation
+         observation.
+      4. Retry/defer policy boundary with typed decisions and idempotency keys.
+      5. Replay/bootstrap recovery that reconstructs lifecycle state and
+         reconciles incomplete attempts without re-running completed tasks.
+      6. Diagnostics-ledger attempt/timing facts after ordering and replay
+         semantics are stable.
+    - Allowed next implementation write set for the first option 3 slice:
+      workflow-service scheduler/session lifecycle modules, focused
+      workflow-service scheduler/session tests, workflow-service scheduler/
+      workflow READMEs if ownership boundaries change, and this plan set.
+      Tauri, frontend, runtime-host contracts, runtime-registry,
+      diagnostics-ledger schema/storage, generated DTOs, lockfiles, and saved
+      workflow fixtures remain out of scope unless a later slice records a
+      direct boundary need first.
+    - Explicitly out of scope for the first option 3 slice: retry/defer
+      scheduling policy, replay/bootstrap recovery, diagnostics-ledger writes,
+      new shared scheduler contract extraction, runtime-host API changes,
+      runtime-registry reservation allocator redesign, and frontend/Tauri
+      lifecycle policy.
+    - No-fallback/no-legacy guardrails: no whole-run output-demand fallback,
+      reduced execution-plan launch, graph path inference, node-engine runtime
+      launch, compatibility retry branch, or frontend-derived lifecycle state
+      may be added. Canonical failures must remain typed diagnostics.
+    - Standards alignment: `CODING-STANDARDS.md` requires separating
+      independent concerns and one owner for state transitions/lifecycle;
+      `RUST-ASYNC-STANDARDS.md` requires background tasks to be owned by a
+      lifecycle manager with cancellation and shutdown behavior; `TESTING-
+      STANDARDS.md` requires replay/bootstrap, duplicate command, retry, and
+      lifecycle/overlap verification for durable command/event systems.
+    - Required verification for the first option 3 slice: focused tests for
+      lifecycle-manager construction, ownership of tracked task handles,
+      no duplicate lifecycle owner, shutdown-state idempotency, no store lock
+      held across awaited task work, no Tauri/frontend lifecycle branch, and
+      targeted no-fallback/deleted-symbol searches; `cargo fmt -p
+      pantograph-workflow-service -- --check`; focused workflow-service
+      scheduler/session tests; `cargo check -p pantograph-workflow-service`;
+      and `git diff --check`.
 
 ### Traceability Links
 

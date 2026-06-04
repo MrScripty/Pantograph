@@ -622,14 +622,60 @@ Required verification for this next path:
   workflow-service scheduler tests, `cargo check -p pantograph-workflow-service`,
   and `git diff --check`.
 
-Deferred Option 3 target:
+Selected next path: Option 3 durable lifecycle supervisor:
 
-- Add a single lifecycle owner for bounded workers, cancellation tokens,
-  retry/defer policy, duplicate-dispatch prevention across restarts,
-  reservation release execution, replay/recovery, diagnostics ledger writes,
-  task panic handling, and shutdown.
+- Add a single workflow-service lifecycle owner for bounded workers,
+  cancellation tokens, retry/defer policy, duplicate-dispatch prevention
+  across restarts, replay/recovery, diagnostics ledger writes, task panic
+  handling, and shutdown.
+- Keep the active-run store as the synchronous state-transition owner and keep
+  runtime-host, reservation, ledger, and worker I/O in the async shell. Do not
+  let the supervisor mutate task state through side channels.
 - Promote attempt/timing facts into diagnostics read models only after the
-  attempt/lease state core is validated.
+  supervisor-owned lifecycle state and event ordering are validated.
+- Do not move lifecycle/business policy into Tauri, frontend, runtime-host
+  adapters, or diagnostics projections.
+
+Option 3 thin implementation sequence:
+
+1. Lifecycle manager skeleton: introduce the workflow-service-owned supervisor
+   module and DTOs for task lifecycle ownership, active task handles, shutdown
+   state, and typed lifecycle diagnostics. This slice must not add retry,
+   replay, ledger writes, or new dispatch policy.
+2. Durable duplicate-dispatch/task lease guardrail: extend the active-run
+   lifecycle state so a task cannot be dispatched twice across runner resume,
+   stale attempts, or overlapping calls. Keep it synchronous and fail closed
+   with typed diagnostics.
+3. Cancellation and shutdown ownership: add cancellation tokens or equivalent
+   task-stop signals, propagate shutdown from the supervisor, and await or
+   abort tracked tasks at the lifecycle owner. Do not hide cancellation in
+   leaf runtime-host or reservation code.
+4. Retry/defer policy boundary: add typed retry/defer decisions and
+   idempotency keys after cancellation ownership exists. Keep retry scheduling
+   separate from dispatch selection and reservation release.
+5. Replay/bootstrap recovery: reconstruct supervisor-visible lifecycle state
+   from persisted active-run/task facts and reconcile incomplete attempts
+   without re-running completed tasks or releasing unowned reservations.
+6. Diagnostics ledger attempt/timing facts: persist started/completed/failed/
+   cancelled attempt timings, retry/defer decisions, replay outcomes, and
+   worker lifecycle events only after the ordering and replay semantics are
+   stable.
+
+Option 3 standards gates:
+
+- Simplicity/complection: each slice owns one concern. Do not combine worker
+  handles, retry policy, replay, and ledger persistence in the same source
+  slice.
+- Lifecycle ownership: one workflow-service supervisor owns task handles,
+  cancellation, shutdown, panic observation, and restart/replay coordination.
+- Sync-core/async-shell: state transition and idempotency checks stay
+  synchronous; awaits remain in the orchestrator/supervisor shell.
+- No fallback/no legacy: failures return typed diagnostics. Do not restore
+  whole-run output demand, reduced execution-plan launch, node-engine runtime
+  launch, graph path inference, compatibility retry branches, or
+  Tauri/frontend lifecycle policy.
+- Persistence/replay: replay must be explicit, testable, and idempotent before
+  durable worker restart behavior is considered complete.
 
 Rejected or deferred alternatives:
 
@@ -637,6 +683,8 @@ Rejected or deferred alternatives:
   because it does not establish durable attempt identity, stale-attempt
   rejection, or the state owner needed before removing more legacy launch
   paths.
+- Option 2 attempt/lease core is now complete enough to support option 3. It
+  remains the foundation, not the next implementation target.
 - Option 4 contract-first scheduler crate extraction is deferred until there
   is a proven shared owner outside workflow-service. Extracting now would add
   abstraction before the workflow-service active-run lifecycle shape is

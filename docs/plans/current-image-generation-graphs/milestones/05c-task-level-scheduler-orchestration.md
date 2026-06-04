@@ -568,7 +568,14 @@ durable task orchestration path.
   from the returned release intent after the store mutation completes.
   Remaining follow-up: retry/defer idempotency, replay/recovery, durable
   duplicate-dispatch prevention, worker supervision/cancellation tokens, and
-  diagnostics-ledger timing/attempt facts.
+  diagnostics-ledger timing/attempt facts. 2026-06-04 re-plan decision: use
+  Option 3 next. The attempt/lease core is validated enough to introduce a
+  workflow-service durable lifecycle supervisor in thin slices: lifecycle
+  manager skeleton, durable duplicate-dispatch/task lease guardrails,
+  cancellation/shutdown token ownership, retry/defer policy, replay/bootstrap
+  recovery, and diagnostics-ledger attempt/timing facts. Each slice must keep
+  one lifecycle owner, sync-core/async-shell separation, no Tauri/frontend
+  business logic, and no graph-path/reduced-plan/node-engine runtime fallback.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

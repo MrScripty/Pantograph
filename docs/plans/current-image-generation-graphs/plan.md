@@ -133,6 +133,17 @@ before runtime-host dispatch. Remaining lifecycle work is retry/defer
 idempotency, replay/recovery, durable duplicate-dispatch prevention, worker
 supervision/cancellation tokens, and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 scheduler durable lifecycle supervisor re-plan decision: use Option
+3 next. The attempt/lease core is now validated, so the next lifecycle work
+must introduce a single workflow-service lifecycle supervisor through thin
+slices: lifecycle manager skeleton, durable duplicate-dispatch/task lease
+guardrails, cancellation/shutdown token ownership, retry/defer policy,
+replay/bootstrap recovery, and diagnostics-ledger attempt/timing facts. These
+must remain backend-owned and decomposed; do not move business logic into
+Tauri/frontend, do not reintroduce graph-path or reduced-plan launch fallback,
+and do not combine retry, replay, worker lifecycle, and ledger facts into one
+source slice.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.
