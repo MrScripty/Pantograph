@@ -446,9 +446,31 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
             .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
             .expect("resume candidates"),
         vec![WorkflowExecutionSessionResumeRequest {
-            session_id,
-            workflow_run_id,
+            session_id: session_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
         }]
+    );
+    let recovery_report = service
+        .workflow_execution_session_bootstrap_recovery_report()
+        .expect("bootstrap recovery report");
+    assert_eq!(recovery_report.active_runs.len(), 1);
+    assert_eq!(recovery_report.active_runs[0].session_id, session_id);
+    assert_eq!(
+        recovery_report.active_runs[0].workflow_run_id,
+        workflow_run_id
+    );
+    assert_eq!(recovery_report.active_runs[0].runtime_tasks.len(), 1);
+    assert_eq!(
+        recovery_report.active_runs[0].runtime_tasks[0].task_id,
+        "infer"
+    );
+    assert_eq!(
+        recovery_report.active_runs[0].runtime_tasks[0].state_kind,
+        Some(SchedulerTaskStateKind::PausedDeferred)
+    );
+    assert_eq!(
+        recovery_report.active_runs[0].runtime_tasks[0].action,
+        WorkflowExecutionSessionBootstrapRecoveryAction::RetryDependencyReadiness
     );
 }
 

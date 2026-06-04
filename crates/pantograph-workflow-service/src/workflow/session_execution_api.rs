@@ -4,7 +4,11 @@ use crate::graph::{
     workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
     WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
 };
-use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
+use crate::scheduler::{
+    unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
+    WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
+    WORKFLOW_SESSION_QUEUE_POLL_MS,
+};
 use crate::technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
     WorkflowTechnicalFitResourceEstimateState,
@@ -39,12 +43,15 @@ use super::{
     workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
     WorkflowErrorDiagnosticsLink, WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionResumeRequest,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary, WorkflowHost,
-    WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
-    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
+    WorkflowExecutionSessionBootstrapRecoveryAction,
+    WorkflowExecutionSessionBootstrapRecoveryReport, WorkflowExecutionSessionBootstrapRecoveryRun,
+    WorkflowExecutionSessionBootstrapRecoveryTask, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionResumeRequest, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowPortBinding, WorkflowRunResponse,
+    WorkflowRuntimeCapability, WorkflowRuntimeRequirements, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskRunSummary, WorkflowService,
+    WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -602,6 +609,18 @@ impl WorkflowService {
     ) -> Result<Vec<WorkflowExecutionSessionResumeRequest>, WorkflowServiceError> {
         let store = self.session_store_guard()?;
         Ok(store.dependency_readiness_resume_candidates())
+    }
+
+    pub fn workflow_execution_session_bootstrap_recovery_report(
+        &self,
+    ) -> Result<WorkflowExecutionSessionBootstrapRecoveryReport, WorkflowServiceError> {
+        let store = self.session_store_guard()?;
+        let active_runs = store
+            .bootstrap_recovery_snapshots()?
+            .into_iter()
+            .map(workflow_bootstrap_recovery_run_from_scheduler)
+            .collect();
+        Ok(WorkflowExecutionSessionBootstrapRecoveryReport { active_runs })
     }
 
     fn finish_failed_workflow_run_after_admission(
@@ -1365,6 +1384,58 @@ impl WorkflowService {
         )
         .map(|_| ())
         .map_err(WorkflowServiceError::from)
+    }
+}
+
+fn workflow_bootstrap_recovery_run_from_scheduler(
+    snapshot: WorkflowSchedulerBootstrapRecoverySnapshot,
+) -> WorkflowExecutionSessionBootstrapRecoveryRun {
+    WorkflowExecutionSessionBootstrapRecoveryRun {
+        session_id: snapshot.session_id,
+        workflow_run_id: snapshot.workflow_run_id,
+        runtime_tasks: snapshot
+            .runtime_tasks
+            .into_iter()
+            .map(workflow_bootstrap_recovery_task_from_scheduler)
+            .collect(),
+    }
+}
+
+fn workflow_bootstrap_recovery_task_from_scheduler(
+    task: WorkflowSchedulerBootstrapRecoveryTask,
+) -> WorkflowExecutionSessionBootstrapRecoveryTask {
+    WorkflowExecutionSessionBootstrapRecoveryTask {
+        task_id: task.task_id,
+        state_kind: task.state_kind,
+        action: workflow_bootstrap_recovery_action_from_scheduler(task.action),
+    }
+}
+
+fn workflow_bootstrap_recovery_action_from_scheduler(
+    action: WorkflowSchedulerBootstrapRecoveryAction,
+) -> WorkflowExecutionSessionBootstrapRecoveryAction {
+    match action {
+        WorkflowSchedulerBootstrapRecoveryAction::ResumeProgressLoop => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop
+        }
+        WorkflowSchedulerBootstrapRecoveryAction::RetryDependencyReadiness => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::RetryDependencyReadiness
+        }
+        WorkflowSchedulerBootstrapRecoveryAction::RedispatchReadyRuntime => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime
+        }
+        WorkflowSchedulerBootstrapRecoveryAction::RuntimeRecoveryRequired => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::RuntimeRecoveryRequired
+        }
+        WorkflowSchedulerBootstrapRecoveryAction::Completed => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::Completed
+        }
+        WorkflowSchedulerBootstrapRecoveryAction::TerminalDiagnostic => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::TerminalDiagnostic
+        }
+        WorkflowSchedulerBootstrapRecoveryAction::MissingTaskStateRecord => {
+            WorkflowExecutionSessionBootstrapRecoveryAction::MissingTaskStateRecord
+        }
     }
 }
 

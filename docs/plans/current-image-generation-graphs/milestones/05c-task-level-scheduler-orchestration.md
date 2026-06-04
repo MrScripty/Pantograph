@@ -1945,3 +1945,42 @@ durable task orchestration path.
   that consumes the active-run recovery snapshot to reconcile incomplete
   attempts without duplicate dispatch, then add diagnostics-ledger
   attempt/timing facts after replay ordering is proven.
+- 2026-06-04 bootstrap recovery report API slice completed. Smallest useful
+  vertical slice: expose the active-run recovery classifier through a
+  workflow-service-owned read-only report API so future bootstrap/replay code
+  and forwarding adapters consume backend DTOs instead of re-deriving
+  scheduler policy. Allowed write set used:
+  `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+  `crates/pantograph-workflow-service/src/scheduler/store_queue.rs`,
+  `crates/pantograph-workflow-service/src/workflow/contracts.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  `crates/pantograph-workflow-service/src/lib.rs`, and this plan set.
+  No-fallback/no-legacy confirmation: the API only reports classifications
+  derived from canonical workflow-service active-run scheduler task
+  graph/state. It performs no replay, task-state mutation, runtime-host call,
+  diagnostics-ledger write, Tauri/frontend policy, graph-path inference,
+  reduced-plan launch, node-engine runtime launch, compatibility shim, Pumas
+  fact change, lockfile edit, generated file edit, or saved workflow fixture
+  rewrite.
+  Implementation summary: workflow contracts now include bootstrap recovery
+  report/run/task/action DTOs. `WorkflowService` exposes
+  `workflow_execution_session_bootstrap_recovery_report`, maps internal
+  scheduler recovery actions into workflow DTOs, and aggregates active-run
+  snapshots from the session store. The existing readiness-pending workflow
+  test asserts the report for a real active run deferred at dependency
+  readiness.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
+  --lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery
+  --lib`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+  no-fallback/no-legacy source search over touched files. Matches were
+  existing negative legacy tests, existing Pumas fixture setup, existing
+  warm-compatibility naming, and existing diagnostics compatibility payload
+  fields only.
+  Remaining follow-up: implement the workflow-service-owned bootstrap/replay
+  runner that consumes this report to reconcile incomplete attempts without
+  duplicate dispatch, then add diagnostics-ledger attempt/timing facts after
+  replay ordering is proven.

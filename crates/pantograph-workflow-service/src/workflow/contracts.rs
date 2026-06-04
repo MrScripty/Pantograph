@@ -8,6 +8,7 @@ pub use pantograph_runtime_host_contracts::{
     WorkflowSessionRuntimeLoadProof, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
     WorkflowSessionRuntimeLoadProofReadinessState,
 };
+use pantograph_scheduler::SchedulerTaskStateKind;
 
 use crate::graph::{
     WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphDiagnostic, WorkflowGraphRunSettings,
@@ -898,6 +899,43 @@ pub struct WorkflowExecutionSessionRunRequest {
 pub struct WorkflowExecutionSessionResumeRequest {
     pub session_id: String,
     pub workflow_run_id: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowExecutionSessionBootstrapRecoveryAction {
+    ResumeProgressLoop,
+    RetryDependencyReadiness,
+    RedispatchReadyRuntime,
+    RuntimeRecoveryRequired,
+    Completed,
+    TerminalDiagnostic,
+    MissingTaskStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionBootstrapRecoveryTask {
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_kind: Option<SchedulerTaskStateKind>,
+    pub action: WorkflowExecutionSessionBootstrapRecoveryAction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionBootstrapRecoveryRun {
+    pub session_id: String,
+    pub workflow_run_id: String,
+    #[serde(default)]
+    pub runtime_tasks: Vec<WorkflowExecutionSessionBootstrapRecoveryTask>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionBootstrapRecoveryReport {
+    #[serde(default)]
+    pub active_runs: Vec<WorkflowExecutionSessionBootstrapRecoveryRun>,
 }
 
 /// Session close request.

@@ -623,6 +623,24 @@ recovery snapshot from a workflow-service-owned bootstrap/replay runner that
 reconciles incomplete attempts without duplicate dispatch, then add
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 bootstrap recovery report API update: workflow-service now exposes
+a backend-owned `workflow_execution_session_bootstrap_recovery_report` API
+that aggregates active-run runtime task recovery classifications into
+workflow-level DTOs. The report is read-only and performs no replay, task-state
+mutation, runtime-host call, diagnostics-ledger write, Tauri/frontend policy,
+or legacy graph/backend/runtime inference. It gives the future bootstrap/replay
+runner and forwarding adapters a canonical backend contract for recovery
+decisions. Verification passed: `cargo fmt -p pantograph-workflow-service`;
+`cargo test -p pantograph-workflow-service
+workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
+--lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: implement the
+workflow-service-owned bootstrap/replay runner that consumes this report and
+reconciles incomplete attempts without duplicate dispatch, then add
+diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in

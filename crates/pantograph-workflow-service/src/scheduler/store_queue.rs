@@ -370,6 +370,23 @@ impl WorkflowExecutionSessionStore {
             .collect()
     }
 
+    pub(crate) fn bootstrap_recovery_snapshots(
+        &self,
+    ) -> Result<Vec<WorkflowSchedulerBootstrapRecoverySnapshot>, WorkflowServiceError> {
+        self.active
+            .iter()
+            .filter_map(|(session_id, state)| {
+                state.active_run.as_ref().map(|active_run| {
+                    self.active_run_bootstrap_recovery_snapshot(
+                        session_id,
+                        active_run.workflow_run_id.as_str(),
+                    )
+                })
+            })
+            .filter_map(Result::transpose)
+            .collect()
+    }
+
     pub(crate) fn active_run_bootstrap_recovery_snapshot(
         &self,
         session_id: &str,
