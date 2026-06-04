@@ -11,16 +11,17 @@ use super::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
-    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
-    WorkflowExecutionSessionQueuePushFrontResponse,
+    WorkflowExecutionSessionActiveTaskCancelRequest,
+    WorkflowExecutionSessionActiveTaskCancelResponse, WorkflowExecutionSessionInspectionRequest,
+    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionStatusRequest,
     WorkflowExecutionSessionStatusResponse, WorkflowExecutionSessionSummary, WorkflowHost,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
-    WorkflowServiceError,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSchedulerTaskExecutionClass, WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -202,6 +203,93 @@ impl WorkflowService {
                 Err(error)
             }
         }
+    }
+
+    pub async fn workflow_cancel_active_execution_session_task(
+        &self,
+        request: WorkflowExecutionSessionActiveTaskCancelRequest,
+    ) -> Result<WorkflowExecutionSessionActiveTaskCancelResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+        let task_id = request.task_id.trim();
+        if task_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "task_id must be non-empty".to_string(),
+            ));
+        }
+        let reason = request
+            .reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("workflow active task cancellation requested")
+            .to_string();
+
+        let (scheduler_task_id, attempt_id) = {
+            let store = self.session_store_guard()?;
+            let (task_graph, records) = store
+                .active_run_scheduler_task_state(session_id, workflow_run_id)?
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "workflow run '{}' has no active scheduler task state",
+                        workflow_run_id
+                    ))
+                })?;
+            let task = task_graph
+                .tasks
+                .iter()
+                .find(|task| task.task_id.as_str() == task_id)
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    ))
+                })?;
+            if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a runtime inference task",
+                    task_id
+                )));
+            }
+            let record = records
+                .iter()
+                .find(|record| record.task_id.as_str() == task_id)
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no active task-state record",
+                        task_id
+                    ))
+                })?;
+            if record.state.kind() != pantograph_scheduler::SchedulerTaskStateKind::Running {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' must be running before cancellation can be requested, found {:?}",
+                    task_id,
+                    record.state.kind()
+                )));
+            }
+            let attempt_id =
+                store.active_run_scheduler_task_attempt_id(session_id, workflow_run_id, task_id)?;
+            (task.task_id.clone(), attempt_id)
+        };
+
+        self.scheduler_task_orchestrator
+            .request_started_runtime_task_cancellation(&scheduler_task_id, &attempt_id, reason)
+            .map_err(|error| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "active runtime task cancellation failed: {error}"
+                ))
+            })?;
+        Ok(WorkflowExecutionSessionActiveTaskCancelResponse { ok: true })
     }
 
     pub async fn workflow_admin_cancel_queue_item(

@@ -174,14 +174,14 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 
-    #[cfg(test)]
     pub(crate) fn request_started_runtime_task_cancellation(
         &self,
-        started: &StartedRuntimeTaskExecution,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
         reason: impl Into<String>,
     ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
         self.task_lifecycle_manager()?
-            .request_task_cancellation(&started.task.task_id, &started.attempt_id, reason)
+            .request_task_cancellation(task_id, attempt_id, reason)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 

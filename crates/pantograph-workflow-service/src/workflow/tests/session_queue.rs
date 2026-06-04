@@ -1,4 +1,11 @@
 use super::*;
+use pantograph_dependency_planning::{
+    DependencyOverrideFingerprint, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessGraphRevision, DependencyReadinessPolicy, DependencyReadinessProofEnvelope,
+    DependencyReadinessValidationSessionId,
+};
+use pantograph_runtime_host_contracts::RuntimeHostExecutionRequest;
+use pantograph_scheduler::{SchedulableTaskIntent, SchedulerTaskStateKind};
 
 #[tokio::test]
 async fn workflow_execution_session_queue_items_include_authoritative_timestamps() {
@@ -103,6 +110,185 @@ async fn workflow_execution_session_queue_items_include_authoritative_timestamps
         running_items[0].scheduler_decision_reason,
         Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
     );
+}
+
+#[tokio::test]
+async fn workflow_cancel_active_task_records_intent_without_terminal_mutation() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::new();
+    let runtime_request = runtime_host_request_fixture();
+    let task_graph = task_graph(vec![task_from_intent(
+        runtime_request.handoff.task_intent.clone(),
+    )]);
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: task_graph.workflow_id.as_str().to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create workflow execution session");
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let task_id = task_graph.tasks[0].task_id.as_str().to_string();
+    let run_request = WorkflowExecutionSessionRunRequest {
+        session_id: created.session_id.clone(),
+        workflow_semantic_version: "0.1.0".to_string(),
+        inputs: Vec::new(),
+        output_targets: None,
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+
+    {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        let queued_run_id = store
+            .enqueue_run_with_id(&created.session_id, &run_request, workflow_run_id.clone())
+            .expect("enqueue run with fixture workflow run id");
+        store
+            .begin_queued_run(&created.session_id, &queued_run_id)
+            .expect("begin queued run")
+            .expect("active run");
+        service
+            .scheduler_task_orchestrator
+            .initialize_active_run_task_state(
+                &mut store,
+                &created.session_id,
+                &workflow_run_id,
+                task_graph,
+            )
+            .expect("initialize active runtime task state");
+        service
+            .scheduler_task_orchestrator
+            .apply_runtime_dependency_readiness_admission(
+                &mut store,
+                &created.session_id,
+                &workflow_run_id,
+                &task_id,
+                DependencyReadinessPolicy::CheckOnly,
+                Some(ready_readiness_proof()),
+            )
+            .expect("admit runtime dependency readiness");
+        let started = service
+            .scheduler_task_orchestrator
+            .start_ready_runtime_task(&mut store, &created.session_id, &workflow_run_id, &task_id)
+            .expect("start ready runtime task");
+        assert_eq!(started.task.task_id.as_str(), task_id);
+    }
+
+    let response = service
+        .workflow_cancel_active_execution_session_task(
+            WorkflowExecutionSessionActiveTaskCancelRequest {
+                session_id: created.session_id.clone(),
+                workflow_run_id: workflow_run_id.clone(),
+                task_id: task_id.clone(),
+                reason: Some("user cancelled active image generation".to_string()),
+            },
+        )
+        .await
+        .expect("cancel active runtime task");
+    assert!(response.ok);
+
+    let records = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        let (_, records) = store
+            .active_run_scheduler_task_state(&created.session_id, &workflow_run_id)
+            .expect("active run scheduler task state")
+            .expect("active scheduler task state");
+        assert!(
+            store
+                .active_run_scheduler_task_attempt_id(
+                    &created.session_id,
+                    &workflow_run_id,
+                    &task_id
+                )
+                .is_ok(),
+            "cancellation intent must not release the active attempt before runtime observation"
+        );
+        records
+    };
+    let record = records
+        .iter()
+        .find(|record| record.task_id.as_str() == task_id)
+        .expect("runtime task record");
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::Running);
+}
+
+#[tokio::test]
+async fn workflow_cancel_active_execution_session_task_rejects_non_running_runtime_task() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::new();
+    let runtime_request = runtime_host_request_fixture();
+    let task_graph = task_graph(vec![task_from_intent(
+        runtime_request.handoff.task_intent.clone(),
+    )]);
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: task_graph.workflow_id.as_str().to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create workflow execution session");
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let task_id = task_graph.tasks[0].task_id.as_str().to_string();
+    let run_request = WorkflowExecutionSessionRunRequest {
+        session_id: created.session_id.clone(),
+        workflow_semantic_version: "0.1.0".to_string(),
+        inputs: Vec::new(),
+        output_targets: None,
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+
+    {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        let queued_run_id = store
+            .enqueue_run_with_id(&created.session_id, &run_request, workflow_run_id.clone())
+            .expect("enqueue run with fixture workflow run id");
+        store
+            .begin_queued_run(&created.session_id, &queued_run_id)
+            .expect("begin queued run")
+            .expect("active run");
+        service
+            .scheduler_task_orchestrator
+            .initialize_active_run_task_state(
+                &mut store,
+                &created.session_id,
+                &workflow_run_id,
+                task_graph,
+            )
+            .expect("initialize active runtime task state");
+    }
+
+    let error = service
+        .workflow_cancel_active_execution_session_task(
+            WorkflowExecutionSessionActiveTaskCancelRequest {
+                session_id: created.session_id,
+                workflow_run_id,
+                task_id,
+                reason: None,
+            },
+        )
+        .await
+        .expect_err("non-running runtime task cancellation must fail closed");
+    assert!(error.to_string().contains("must be running"));
 }
 
 #[tokio::test]
@@ -575,6 +761,81 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
             .map(|id| id.as_str()),
         Some(admin_push_id.as_str())
     );
+}
+
+fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
+    serde_json::from_str(include_str!(
+        "../../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .expect("runtime host request fixture")
+}
+
+fn ready_readiness_proof() -> DependencyReadinessProofEnvelope {
+    runtime_host_request_fixture().handoff.readiness_proof
+}
+
+fn task_graph(tasks: Vec<WorkflowSchedulerTask>) -> WorkflowSchedulerTaskGraph {
+    let workflow_id = tasks
+        .first()
+        .map(|task| task.workflow_id.clone())
+        .expect("task graph requires at least one task");
+    let workflow_run_id = tasks
+        .first()
+        .map(|task| task.workflow_run_id.clone())
+        .expect("task graph requires at least one task");
+    WorkflowSchedulerTaskGraph {
+        schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        workflow_id,
+        workflow_run_id,
+        tasks,
+    }
+}
+
+fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask {
+    WorkflowSchedulerTask {
+        workflow_id: task_intent.workflow_id.clone(),
+        workflow_run_id: task_intent.workflow_run_id.clone(),
+        node_id: task_intent.node_id.clone(),
+        task_id: task_intent.task_id.clone(),
+        node_type: "llm-inference".to_string(),
+        execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+        dependency_task_ids: Vec::new(),
+        input_bindings: Vec::new(),
+        schedulable_intent: Some(task_intent.clone()),
+        schedulable_intent_template: Some(WorkflowSchedulerTaskIntentTemplate {
+            task_type: task_intent.task_type,
+            constraints: task_intent.constraints,
+            trait_settings: task_intent.trait_settings,
+            dependency_override_patches: task_intent.dependency_override_patches,
+            estimate_hints: task_intent.estimate_hints,
+            dependency_readiness_source: WorkflowSchedulerDependencyReadinessSource {
+                graph_revision: DependencyReadinessGraphRevision::parse("graph.revision.001")
+                    .expect("graph revision"),
+                validation_session_id: Some(
+                    DependencyReadinessValidationSessionId::parse("validation.session.001")
+                        .expect("validation session"),
+                ),
+                validation_snapshot_id: None,
+                descriptor_fingerprint: DependencyReadinessDescriptorFingerprint::parse(
+                    "descriptor.fingerprint.001",
+                )
+                .expect("descriptor fingerprint"),
+                dependency_requirements_id: ready_readiness_proof()
+                    .preflight_result
+                    .dependency_requirements_id
+                    .expect("readiness proof fixture dependency requirements id"),
+                selected_binding_ids: Vec::new(),
+                dependency_override_fingerprint: DependencyOverrideFingerprint::parse(
+                    "override.none.001",
+                )
+                .expect("dependency override fingerprint"),
+            },
+        }),
+        non_runtime_task_template: None,
+        source_input_task_template: None,
+        inference_descriptor_fingerprint: None,
+        diagnostics: Vec::new(),
+    }
 }
 
 #[tokio::test]

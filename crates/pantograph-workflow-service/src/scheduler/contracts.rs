@@ -296,6 +296,24 @@ pub struct WorkflowExecutionSessionQueueCancelResponse {
     pub ok: bool,
 }
 
+/// Active runtime task cancellation request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionActiveTaskCancelRequest {
+    pub session_id: String,
+    pub workflow_run_id: String,
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Active runtime task cancellation response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionActiveTaskCancelResponse {
+    pub ok: bool,
+}
+
 /// Privileged GUI-admin queue cancellation request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

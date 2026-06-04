@@ -1326,7 +1326,11 @@ async fn orchestrator_records_pending_runtime_cancellation_without_terminal_muta
         .expect("select runtime task dispatch");
 
     orchestrator
-        .request_started_runtime_task_cancellation(&started, "user cancelled active task")
+        .request_started_runtime_task_cancellation(
+            &started.task.task_id,
+            &started.attempt_id,
+            "user cancelled active task",
+        )
         .expect("request started runtime task cancellation");
     let (_stored_graph, records) = store
         .active_run_scheduler_task_state(&session_id, &workflow_run_id)

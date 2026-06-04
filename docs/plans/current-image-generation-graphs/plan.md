@@ -209,6 +209,24 @@ adapters must observe cancellation/shutdown, and the workflow-service
 supervisor still needs await/abort behavior, panic observation, retry/defer
 idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 workflow-service active runtime cancellation API update:
+workflow-service now exposes a backend-owned active runtime task cancellation
+request/response contract and service method. The method validates the active
+session/run/task, requires the task to be a running runtime inference task,
+resolves the current active scheduler attempt id from the store, releases the
+store lock, then records cancellation intent through the lifecycle owner. This
+does not terminally mutate scheduler task state, release reservations, create
+Tauri/frontend policy, or add graph-path/reduced-plan/runtime-launch fallback.
+Focused verification passed with `cargo fmt -p pantograph-workflow-service --
+--check`, `cargo test -p pantograph-workflow-service session_queue --lib`,
+`cargo test -p pantograph-workflow-service task_lifecycle --lib`, `cargo test
+-p pantograph-workflow-service task_orchestrator --lib`, and prior
+`cargo check -p pantograph-workflow-service`. Remaining lifecycle work:
+runtime adapters must observe the cancellation/shutdown signal, active runtime
+supervision still needs await/abort/panic handling, and retry/defer,
+replay/bootstrap, and diagnostics-ledger attempt/timing facts remain future
+thin slices.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

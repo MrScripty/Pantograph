@@ -321,6 +321,39 @@ impl WorkflowExecutionSessionStore {
         Ok((apply_result, attempt_id))
     }
 
+    pub(crate) fn active_run_scheduler_task_attempt_id(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> Result<WorkflowSchedulerTaskAttemptId, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_ref().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+        active_run
+            .scheduler_task_attempts
+            .get(task_id)
+            .map(|attempt| attempt.attempt_id.clone())
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no active attempt",
+                    task_id
+                ))
+            })
+    }
+
     /// Atomically fail the matching active scheduler task attempt.
     pub(crate) fn fail_active_run_scheduler_task_attempt(
         &mut self,
