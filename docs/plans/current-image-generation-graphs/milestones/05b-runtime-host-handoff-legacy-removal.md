@@ -137,6 +137,25 @@ idempotent shutdown, and log cancellation/panic/failure paths at the lifecycle
 owner. A typed snapshot notification stream remains the future event-first
 upgrade after this path is working.
 
+Selected Tauri runtime/scheduler snapshot event cleanup re-plan as of
+2026-06-03: use option 2, the retired Tauri event contract deletion path. The
+remaining `record_workflow_event`, `WorkflowRuntimeSnapshotEventInput`,
+`WorkflowSchedulerSnapshotEventInput`, `WorkflowEvent::RuntimeSnapshot`,
+`WorkflowEvent::SchedulerSnapshot`, and their constructors/serialization
+branches must be handled as one diagnostics contract cleanup, not as unrelated
+warning fixes. Before deletion, inventory active consumers in Tauri events,
+event serialization, diagnostics overlay/trace/store, headless diagnostics,
+runtime debug surfaces, and tests. If the snapshot event variants have no
+active production transport owner, delete them and migrate tests to the active
+backend-owned diagnostics snapshot/update APIs. Runtime and scheduler
+diagnostics state must remain owned by workflow-service/headless diagnostics
+read models and diagnostics-store update/record helpers; Tauri must not add a
+new graph snapshot fallback, scheduler adapter, runtime launch path, or
+business-policy branch. Option 1 is rejected because test-only quarantine would
+leave the retired event contract in production. Option 3, promoting a new
+backend-owned push snapshot event stream, is deferred unless inspection proves
+live consumers require push snapshot delivery rather than read-model updates.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -911,6 +930,28 @@ upgrade after this path is working.
   warnings are now limited to `record_workflow_event` and the retired
   runtime/scheduler snapshot event DTO/constructor surface, which should be
   reviewed together as one diagnostics contract cleanup rather than piecemeal.
+- 2026-06-03 Tauri runtime/scheduler snapshot event contract re-plan selected.
+  Decision: use option 2, deleting the retired Tauri snapshot event contract
+  after a focused consumer inventory proves no active production transport
+  owner remains. The next source slice may touch
+  `src-tauri/src/workflow/events.rs`,
+  `src-tauri/src/workflow/event_serialization.rs`,
+  `src-tauri/src/workflow/event_adapter/translation.rs`,
+  `src-tauri/src/workflow/diagnostics/overlay.rs`,
+  `src-tauri/src/workflow/diagnostics/trace.rs`,
+  `src-tauri/src/workflow/diagnostics/store.rs`,
+  focused diagnostics/event-adapter/headless tests, READMEs, and these plan
+  docs. It must not touch runtime-host execution, scheduler admission, Pumas
+  selector behavior, frontend UI state, or workflow-service contracts unless
+  the inventory proves a shared contract extension is required. No-fallback
+  confirmation: delete or migrate the event surface to active backend-owned
+  diagnostics snapshot APIs; do not add a Tauri snapshot fallback, scheduler
+  adapter, graph snapshot repair path, or compatibility event. Expected
+  verification: Tauri fmt/check, `cargo test --manifest-path
+  src-tauri/Cargo.toml diagnostics`, `cargo test --manifest-path
+  src-tauri/Cargo.toml event_adapter`, targeted serialization/trace tests as
+  needed, deleted-symbol search for the retired snapshot event names, and
+  `git diff --check`.
 - 2026-05-22: Created from the Milestone 5a node-engine legacy boundary
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy

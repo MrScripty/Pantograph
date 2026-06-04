@@ -23479,6 +23479,42 @@ Worker rules:
       `record_workflow_event` plus runtime/scheduler snapshot event
       DTO/constructor surface. That should be reviewed as one diagnostics
       contract cleanup slice.
+  - 2026-06-03 Milestone 5b Tauri runtime/scheduler snapshot event contract
+    re-plan decision:
+    - Decision: use Option 2, deleting the retired Tauri
+      `WorkflowEvent::RuntimeSnapshot`/`WorkflowEvent::SchedulerSnapshot`
+      contract surface after a focused active-consumer inventory.
+    - Rejected Option 1: making only `record_workflow_event` test-only leaves
+      the dead snapshot event contract in production and does not resolve the
+      diagnostics ownership boundary.
+    - Deferred Option 3: promoting a backend-owned push snapshot event stream
+      is only justified if inspection finds active consumers that require push
+      delivery rather than existing backend-owned diagnostics read/update APIs.
+    - Next allowed implementation write set:
+      `src-tauri/src/workflow/events.rs`,
+      `src-tauri/src/workflow/event_serialization.rs`,
+      `src-tauri/src/workflow/event_adapter/translation.rs`,
+      `src-tauri/src/workflow/diagnostics/overlay.rs`,
+      `src-tauri/src/workflow/diagnostics/trace.rs`,
+      `src-tauri/src/workflow/diagnostics/store.rs`, focused
+      diagnostics/event-adapter/headless tests, local READMEs, this milestone,
+      and the top-level plan.
+    - No-fallback/no-legacy guardrail: migrate tests and any retained behavior
+      to backend-owned diagnostics snapshot/update APIs. Do not introduce a
+      Tauri graph snapshot fallback, scheduler adapter, runtime launch branch,
+      frontend-derived diagnostics policy, or compatibility event shim.
+    - Standards alignment: this follows the simplicity/complection rule by
+      handling event DTO shape, serialization, diagnostics overlay, trace
+      projection, and store recording as one diagnostics contract cleanup
+      instead of warning-by-warning edits. Tauri remains transport/projection
+      glue; backend diagnostics APIs remain the source of runtime/scheduler
+      snapshot state.
+    - Expected verification: `cargo fmt --manifest-path src-tauri/Cargo.toml
+      -- --check`; `cargo check --manifest-path src-tauri/Cargo.toml`; `cargo
+      test --manifest-path src-tauri/Cargo.toml diagnostics`; `cargo test
+      --manifest-path src-tauri/Cargo.toml event_adapter`; targeted
+      serialization/trace tests as needed; deleted-symbol search for the
+      retired snapshot event names; and `git diff --check`.
 
 ### Traceability Links
 

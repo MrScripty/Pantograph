@@ -35,6 +35,22 @@ access-based Pumas APIs; no owner-API fallback, path lookup, or runtime launch
 branch was added. Verification passed with Tauri fmt/check, Pumas command
 tests, and diff hygiene.
 
+2026-06-03 Tauri runtime/scheduler snapshot event contract re-plan decision:
+use Option 2, deleting the retired Tauri `WorkflowEvent::RuntimeSnapshot` and
+`WorkflowEvent::SchedulerSnapshot` contract surface instead of quarantining
+one helper or promoting a new backend event stream. The next implementation
+slice must first inventory active consumers, then remove the event variants,
+input DTOs, constructors, serialization/projection branches, and direct
+`record_workflow_event` production helper only if they are proven unused by
+active transport. Runtime and scheduler diagnostics snapshots must continue
+through backend-owned diagnostics/headless snapshot APIs and store update/
+record helpers. Tests that currently construct snapshot events should migrate
+to the active diagnostics snapshot APIs. No Tauri business logic, graph
+snapshot fallback, scheduler adapter, runtime launch branch, or compatibility
+shim may be introduced. Option 1 is rejected because it leaves the dead event
+contract in production; Option 3 remains deferred unless inspection finds a
+live requirement for a backend-owned push snapshot event stream.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.
