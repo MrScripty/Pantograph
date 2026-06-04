@@ -121,6 +121,18 @@ graph path fallback, reduced-plan launch, node-engine runtime launch,
 Tauri/frontend policy, compatibility shim, or separate scheduler cancelled
 state was added.
 
+2026-06-03 scheduler reservation lifecycle application update: runtime
+dispatch now uses an explicit selected-dispatch sequence: start the task
+attempt, select dispatch, bind the selected reservation to that attempt,
+dispatch through the runtime-host port, terminally mutate task state/results,
+then apply reservation lifecycle release events outside the store lock.
+Runtime-host success/failure release events now consume the terminal store
+mutation's typed release intent instead of being emitted before the store
+transition. Missing reservation lifecycle configuration still fails closed
+before runtime-host dispatch. Remaining lifecycle work is retry/defer
+idempotency, replay/recovery, durable duplicate-dispatch prevention, worker
+supervision/cancellation tokens, and diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

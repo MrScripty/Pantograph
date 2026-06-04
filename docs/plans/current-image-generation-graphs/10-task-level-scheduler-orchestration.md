@@ -568,11 +568,14 @@ Completed sub-slice on 2026-06-03:
   terminal store mutations return typed reservation-release intent for leased
   attempts. Duplicate reservation binding and stale reservation/cancel attempts
   fail closed before task-state/result mutation.
-- The remaining immediate attempt/lease work is async reservation lifecycle
-  application from the orchestrator/session runner after the store mutation
-  returns release intent. Retry/defer idempotency, replay/recovery, worker
-  supervision, cancellation tokens for in-flight runtime-host work, and
-  timing/attempt ledger facts remain later slices.
+- Runtime dispatch now follows the explicit selected-dispatch sequence:
+  start attempt, select dispatch, bind the selected reservation to the attempt,
+  dispatch runtime-host work, terminally mutate task state/results, then apply
+  reservation lifecycle release events outside the store lock from the typed
+  terminal mutation release intent.
+- The remaining lifecycle work is retry/defer idempotency, replay/recovery,
+  durable duplicate-dispatch prevention, worker supervision, cancellation
+  tokens for in-flight runtime-host work, and timing/attempt ledger facts.
 
 Selected next path for cancellation/reservation release:
 
@@ -596,6 +599,10 @@ Selected next path for cancellation/reservation release:
   release-intent emission for completion/failure/cancel, explicit cancel
   transition support, stale/mismatched attempt rejection, and duplicate binding
   rejection.
+- Completed async application on 2026-06-03: selected runtime dispatch is split
+  so the session runner binds the reservation to the active attempt before the
+  runtime-host await, and terminal lifecycle release events are emitted only
+  after the matching terminal store mutation returns release intent.
 - Keep retry/defer idempotency, replay/recovery, worker supervision,
   cancellation tokens for in-flight runtime-host work, and diagnostics ledger
   attempt/timing facts out of this slice.

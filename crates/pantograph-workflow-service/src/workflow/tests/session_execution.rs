@@ -218,7 +218,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         .await
         .expect_err("runtime-containing scheduler run should fail closed");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
     assert!(
         error
             .message()
@@ -1163,7 +1163,7 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
         .await
         .expect_err("missing reservation lifecycle port must fail before runtime dispatch");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
     assert!(
         error
             .message()

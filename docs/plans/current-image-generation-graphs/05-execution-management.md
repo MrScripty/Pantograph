@@ -23784,6 +23784,59 @@ Worker rules:
       idempotency, replay/recovery, worker supervision/cancellation tokens,
       durable duplicate-dispatch prevention, and diagnostics-ledger
       attempt/timing facts remain later lifecycle hardening slices.
+  - 2026-06-03 Milestone 5c reservation lifecycle async application source
+    slice:
+    - Smallest useful vertical slice: split selected runtime dispatch so the
+      session runner can bind the selected reservation lease to the active
+      attempt before runtime-host dispatch and apply terminal reservation
+      lifecycle release events only after terminal store mutation returns typed
+      release intent.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this execution log.
+    - No-fallback/no-legacy result: runtime-host dispatch no longer emits
+      terminal reservation lifecycle events before the store terminal
+      transition. The sequence is now selected dispatch, active-attempt
+      reservation binding, runtime-host await, terminal store mutation, then
+      release lifecycle application outside the store lock. Missing lifecycle
+      configuration still fails before runtime-host dispatch. No graph-path
+      fallback, reduced-plan launch, node-engine runtime launch, Tauri/
+      frontend policy branch, compatibility shim, or shared scheduler
+      cancelled-state branch was added.
+    - Standards alignment: workflow-service remains the business/lifecycle
+      owner; the active-run store owns synchronous state mutation; the
+      session runner/orchestrator async shell owns runtime-host and
+      reservation-port I/O. The selected-dispatch DTO separates selection
+      facts from host execution without moving scheduler policy into Tauri or
+      frontend code.
+    - Verification passed: `cargo test -p pantograph-workflow-service
+      workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary
+      --lib`; `cargo test -p pantograph-workflow-service
+      workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing
+      --lib`; `cargo test -p pantograph-workflow-service
+      workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+      --lib`; `cargo test -p pantograph-workflow-service
+      workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run
+      --lib`; `cargo test -p pantograph-workflow-service
+      workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure
+      --lib`; `cargo test -p pantograph-workflow-service
+      scheduler::task_orchestrator --lib`; `cargo fmt -p
+      pantograph-workflow-service -- --check`; `cargo check -p
+      pantograph-workflow-service`; targeted no-fallback scan over touched
+      scheduler/session-runner/session-execution files; and `git diff
+      --check`.
+    - Verification note: the no-fallback scan found existing test names/
+      messages and fixture compatibility fields only; no production fallback
+      or legacy execution branch was found.
+    - Remaining follow-up: retry/defer idempotency, replay/recovery, durable
+      duplicate-dispatch prevention across restarts, worker supervision and
+      cancellation tokens for in-flight runtime-host work, and
+      diagnostics-ledger attempt/timing facts.
 
 ### Traceability Links
 

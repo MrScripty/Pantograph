@@ -78,6 +78,14 @@ pub(crate) struct StartedRuntimeTaskExecution {
     attempt_id: WorkflowSchedulerTaskAttemptId,
 }
 
+#[derive(Debug, Clone)]
+#[must_use]
+pub(crate) struct SelectedRuntimeTaskDispatch {
+    handoff: SchedulerRuntimeHandoff,
+    reservation_lease_id: SchedulerReservationLeaseId,
+    candidate_id: Option<SchedulerDispatchCandidateId>,
+}
+
 impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) fn new(runtime_host_dispatcher: SchedulerRuntimeHostDispatcher) -> Self {
         Self {
@@ -117,6 +125,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
     }
 
+    #[cfg(test)]
     pub(crate) async fn select_and_dispatch_runtime_task(
         &self,
         execution_request_id: impl Into<String>,
@@ -124,6 +133,23 @@ impl WorkflowSchedulerTaskOrchestrator {
         materialized_results: &[WorkflowSchedulerTaskResult],
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        let selected_dispatch = self
+            .select_runtime_task_dispatch(task, selection_request)
+            .await?;
+        self.dispatch_selected_runtime_task(
+            execution_request_id,
+            task,
+            materialized_results,
+            &selected_dispatch,
+        )
+        .await
+    }
+
+    pub(crate) async fn select_runtime_task_dispatch(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
         let selection_request = selection_request.into_inner();
         let selection = select_scheduler_dispatch(
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone())
@@ -150,11 +176,45 @@ impl WorkflowSchedulerTaskOrchestrator {
         })?;
         let reservation_lease_id = dispatch_decision.reservation_lease_id.clone();
         let candidate_id = selected_candidate_id(&selection_request, dispatch_decision);
+        Ok(SelectedRuntimeTaskDispatch {
+            handoff,
+            reservation_lease_id,
+            candidate_id,
+        })
+    }
+
+    pub(crate) fn bind_started_runtime_task_reservation(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        selected_dispatch: &SelectedRuntimeTaskDispatch,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        store
+            .bind_active_run_scheduler_task_reservation(
+                session_id,
+                workflow_run_id,
+                &started.task.task_id,
+                &started.attempt_id,
+                selected_dispatch.reservation_lease_id.clone(),
+                selected_dispatch.candidate_id.clone(),
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
+    pub(crate) async fn dispatch_selected_runtime_task(
+        &self,
+        execution_request_id: impl Into<String>,
+        task: &WorkflowSchedulerTask,
+        materialized_results: &[WorkflowSchedulerTaskResult],
+        selected_dispatch: &SelectedRuntimeTaskDispatch,
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
         let _ = self
             .apply_reservation_lifecycle_event(reservation_lifecycle_event(
                 task,
-                reservation_lease_id.clone(),
-                candidate_id.clone(),
+                selected_dispatch.reservation_lease_id.clone(),
+                selected_dispatch.candidate_id.clone(),
                 ReservationLifecycleOutcome::DispatchStarted,
                 vec![reservation_lifecycle_diagnostic(
                     ReservationLifecycleDiagnosticSeverity::Info,
@@ -165,38 +225,57 @@ impl WorkflowSchedulerTaskOrchestrator {
             .await?;
         let materialized_inputs = materialize_runtime_host_inputs(task, materialized_results)
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskInputMapping)?;
-        let dispatch_result = self
-            .dispatch_runtime_handoff(execution_request_id, handoff, materialized_inputs)
-            .await;
-        match dispatch_result {
-            Ok(result) => {
-                let _ = self
-                    .apply_reservation_lifecycle_event(runtime_host_terminal_lifecycle_event(
-                        task,
-                        reservation_lease_id.clone(),
-                        candidate_id,
-                        &result,
-                    )?)
-                    .await?;
-                Ok(result)
-            }
-            Err(error) => {
-                let _ = self
-                    .apply_reservation_lifecycle_event(reservation_lifecycle_event(
-                        task,
-                        reservation_lease_id,
-                        candidate_id,
-                        ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
-                        vec![reservation_lifecycle_diagnostic(
-                            ReservationLifecycleDiagnosticSeverity::Error,
-                            ReservationLifecycleDiagnosticCode::RuntimeHostRejected,
-                            format!("runtime-host dispatch failed: {error}"),
-                        )],
-                    )?)
-                    .await?;
-                Err(error)
-            }
-        }
+        self.dispatch_runtime_handoff(
+            execution_request_id,
+            selected_dispatch.handoff.clone(),
+            materialized_inputs,
+        )
+        .await
+    }
+
+    pub(crate) async fn apply_runtime_task_result_reservation_lifecycle(
+        &self,
+        task: &WorkflowSchedulerTask,
+        mutation: &WorkflowSchedulerTaskTerminalMutation,
+        result: &WorkflowSchedulerTaskResult,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
+            return Ok(());
+        };
+        let _ = self
+            .apply_reservation_lifecycle_event(runtime_host_terminal_lifecycle_event(
+                task,
+                release_intent.reservation_lease_id.clone(),
+                release_intent.candidate_id.clone(),
+                result,
+            )?)
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn apply_runtime_task_dispatch_error_reservation_lifecycle(
+        &self,
+        task: &WorkflowSchedulerTask,
+        mutation: &WorkflowSchedulerTaskTerminalMutation,
+        error: &WorkflowSchedulerTaskOrchestratorError,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
+            return Ok(());
+        };
+        let _ = self
+            .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+                task,
+                release_intent.reservation_lease_id.clone(),
+                release_intent.candidate_id.clone(),
+                ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
+                vec![reservation_lifecycle_diagnostic(
+                    ReservationLifecycleDiagnosticSeverity::Error,
+                    ReservationLifecycleDiagnosticCode::RuntimeHostRejected,
+                    format!("runtime-host dispatch failed: {error}"),
+                )],
+            )?)
+            .await?;
+        Ok(())
     }
 
     async fn apply_unselected_candidate_lifecycle_events(
@@ -577,6 +656,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn complete_started_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -585,6 +665,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         started: &StartedRuntimeTaskExecution,
         result: WorkflowSchedulerTaskResult,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        self.complete_started_runtime_task_terminal_mutation(
+            store,
+            session_id,
+            workflow_run_id,
+            started,
+            result,
+        )
+        .and_then(applied_terminal_task_state_record)
+    }
+
+    pub(crate) fn complete_started_runtime_task_terminal_mutation(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        result: WorkflowSchedulerTaskResult,
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowSchedulerTaskOrchestratorError> {
         let completion_transition =
             runtime_result_transition_from_running(&started.running_record, &result)?;
         store
@@ -596,7 +694,6 @@ impl WorkflowSchedulerTaskOrchestrator {
                 result,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_selection(
@@ -607,6 +704,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         started: &StartedRuntimeTaskExecution,
         selection: &SchedulerDispatchSelectionDecision,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        self.fail_started_runtime_task_dispatch_selection_terminal_mutation(
+            store,
+            session_id,
+            workflow_run_id,
+            started,
+            selection,
+        )
+        .and_then(applied_terminal_task_state_record)
+    }
+
+    pub(crate) fn fail_started_runtime_task_dispatch_selection_terminal_mutation(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        selection: &SchedulerDispatchSelectionDecision,
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowSchedulerTaskOrchestratorError> {
         let failure_transition = terminal_failure_transition_from_running_diagnostics(
             &started.running_record,
             runtime_dispatch_selection_task_diagnostics(selection),
@@ -619,7 +734,6 @@ impl WorkflowSchedulerTaskOrchestrator {
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_error(
@@ -630,6 +744,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         started: &StartedRuntimeTaskExecution,
         error: &WorkflowSchedulerTaskOrchestratorError,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        self.fail_started_runtime_task_dispatch_error_terminal_mutation(
+            store,
+            session_id,
+            workflow_run_id,
+            started,
+            error,
+        )
+        .and_then(applied_terminal_task_state_record)
+    }
+
+    pub(crate) fn fail_started_runtime_task_dispatch_error_terminal_mutation(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        error: &WorkflowSchedulerTaskOrchestratorError,
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowSchedulerTaskOrchestratorError> {
         let failure_transition = terminal_failure_transition_from_running(
             &started.running_record,
             runtime_dispatch_failure_diagnostic(error),
@@ -642,7 +774,6 @@ impl WorkflowSchedulerTaskOrchestrator {
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn advance_awaiting_non_runtime_task_inputs(

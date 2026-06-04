@@ -561,7 +561,14 @@ durable task orchestration path.
   follow-up: wire async reservation lifecycle application from the orchestrator
   or session runner after the store mutation releases the lock, then continue
   retry/defer idempotency, replay/recovery, worker supervision, and ledger
-  timing facts in later slices.
+  timing facts in later slices. 2026-06-03 async application update: runtime
+  dispatch now selects, binds the selected reservation to the started attempt,
+  dispatches runtime-host work without holding the store lock, terminally
+  mutates task state/results, and applies reservation lifecycle release events
+  from the returned release intent after the store mutation completes.
+  Remaining follow-up: retry/defer idempotency, replay/recovery, durable
+  duplicate-dispatch prevention, worker supervision/cancellation tokens, and
+  diagnostics-ledger timing/attempt facts.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
