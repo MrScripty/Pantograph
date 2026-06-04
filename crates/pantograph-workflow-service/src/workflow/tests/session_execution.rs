@@ -1091,6 +1091,103 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
 }
 
 #[tokio::test]
+async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure() {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(PanickingRuntimeHostPort);
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+        .with_runtime_dispatch_source_refresher(source_refresher)
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port)
+        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let workflow_id = "wf-runtime-host-panic";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime-host dispatch panic should fail the workflow run");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(
+        error
+            .message()
+            .contains("runtime task supervisor join failed"),
+        "unexpected error: {error}"
+    );
+    let lifecycle_events = reservation_lifecycle_port.events();
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .map(|event| &event.outcome)
+            .collect::<Vec<_>>(),
+        vec![
+            &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
+        ]
+    );
+}
+
+#[tokio::test]
 async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing() {
     let host = RuntimeInferenceSessionHost::new();
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
@@ -3427,6 +3524,19 @@ impl RuntimeHostExecutionPort for FailingRuntimeHostPort {
             }],
             terminal_metadata: None,
         })
+    }
+}
+
+struct PanickingRuntimeHostPort;
+
+#[async_trait::async_trait]
+impl RuntimeHostExecutionPort for PanickingRuntimeHostPort {
+    async fn execute_runtime_host_request(
+        &self,
+        _request: RuntimeHostExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        panic!("runtime host panicked during test dispatch")
     }
 }
 

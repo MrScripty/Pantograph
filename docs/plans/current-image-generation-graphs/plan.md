@@ -227,6 +227,26 @@ supervision still needs await/abort/panic handling, and retry/defer,
 replay/bootstrap, and diagnostics-ledger attempt/timing facts remain future
 thin slices.
 
+2026-06-04 workflow-service runtime dispatch supervisor shell update:
+runtime task dispatch in the workflow-service session runner now executes
+under a small supervised async join boundary. Runtime-host dispatch still uses
+the existing orchestrator, lifecycle cancellation signal, terminal store
+mutation, and reservation-release paths, but panic/cancelled join failures are
+converted into typed orchestrator diagnostics instead of unwinding through the
+session runner. This adds no retry policy, shutdown drain/abort behavior,
+Tauri/frontend policy, graph-path/reduced-plan launch fallback, or adapter
+lifecycle ownership. Focused verification passed with `cargo fmt -p
+pantograph-workflow-service -- --check`, targeted runtime success/failure/
+panic session-execution tests, `cargo test -p pantograph-workflow-service
+task_orchestrator --lib`, `cargo test -p pantograph-workflow-service
+task_lifecycle --lib`, `cargo check -p pantograph-workflow-service`, and
+targeted no-fallback search. A broader exploratory `workflow_execution_session_records_`
+filter also exposed unrelated retained-artifact/runtime-proof fixture failures
+outside this slice; those are recorded as discovered issues, not fixed here.
+Remaining lifecycle work: shutdown drain/abort, deeper image gateway/provider
+cooperative cancellation, retry/defer idempotency, replay/bootstrap, and
+diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

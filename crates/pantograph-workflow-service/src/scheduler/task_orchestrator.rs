@@ -1659,6 +1659,8 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     ExternalInputMaterialization(WorkflowExternalInputMaterializationError),
     #[error("non-runtime scheduler task execution failed")]
     NonRuntimeTaskAdapter(WorkflowSchedulerNonRuntimeTaskAdapterError),
+    #[error("runtime task supervisor join failed: {message}")]
+    RuntimeTaskSupervisorJoin { message: String },
 }
 
 #[derive(Debug)]

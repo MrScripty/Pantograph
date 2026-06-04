@@ -24225,6 +24225,53 @@ Worker rules:
       shutdown drain/abort, deeper image gateway/provider cancellation,
       retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
       attempt/timing facts.
+  - 2026-06-04 Milestone 5c runtime dispatch supervisor shell slice:
+    - Smallest vertical slice: move awaited runtime task dispatch in the
+      workflow-service session runner behind a supervised async join boundary
+      that observes task panics/cancelled joins and converts them into typed
+      orchestrator errors. Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and this plan set. The unrelated Pumas proposal Markdown files already
+      dirty in the worktree were ignored and are not part of this slice.
+    - No-fallback confirmation: the supervisor does not add retry, replay,
+      shutdown draining, graph-path launch, reduced-plan launch,
+      node-engine runtime launch, adapter-owned lifecycle policy,
+      Tauri/frontend business logic, compatibility shims, Pumas fact changes,
+      lockfile edits, or saved workflow fixture rewrites. It delegates
+      terminal state mutation and reservation release to the existing
+      active-attempt store/orchestrator boundaries.
+    - Implementation summary: the session runner now spawns runtime-host
+      dispatch through a workflow-service-owned supervisor shell, awaits the
+      join handle outside store locks, and maps panic/cancelled joins to a
+      typed `RuntimeTaskSupervisorJoin` orchestrator error. Existing dispatch
+      success, runtime-host failed-result, and dispatch-error terminal paths
+      continue to mutate through the same active task attempt and reservation
+      lifecycle release flow.
+    - Tests/verification:
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo test -p pantograph-workflow-service task_lifecycle --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - Targeted no-fallback search over touched source files. Matches were
+        existing negative legacy tests and compatibility fixture fields.
+    - Deviation/discovered issue: an exploratory broad filter,
+      `cargo test -p pantograph-workflow-service workflow_execution_session_records_ --lib`,
+      also ran unrelated retained-artifact and runtime-proof tests and exposed
+      existing fixture failures in
+      `workflow_execution_session_records_retained_node_io_artifact_bodies`
+      and
+      `workflow_execution_session_records_load_completed_only_with_runtime_proof`.
+      They are outside this supervisor slice and were not fixed here.
+    - Remaining follow-up: add lifecycle-owner shutdown draining plus bounded
+      timeout/abort behavior, pass cooperative cancellation deeper into
+      long-running image gateway/provider calls, then resume retry/defer
+      idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing
+      facts.
 
 ### Traceability Links
 
