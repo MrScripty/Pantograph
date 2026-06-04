@@ -152,6 +152,14 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         .await
     }
 
+    pub(super) async fn resume_progress_loop(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        self.run_progress_loop(session_id, workflow_run_id).await
+    }
+
     async fn continue_runtime_dependency_readiness(
         &self,
         host: &impl WorkflowHost,

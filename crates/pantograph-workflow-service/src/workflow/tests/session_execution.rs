@@ -1034,6 +1034,158 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
 }
 
 #[tokio::test]
+async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume(
+) {
+    let host = RuntimeInferenceSessionHost::new();
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_dependency_environment_provider(std::sync::Arc::new(
+            dependency_readiness_provider.clone(),
+        ))
+        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+        .with_runtime_dispatch_source_refresher(source_refresher)
+        .with_runtime_dispatch_candidate_provider(Arc::new(
+            SingleCanonicalRuntimeDispatchCandidateProvider,
+        ))
+        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_reservation_lifecycle_port(reservation_lifecycle_port);
+    let workflow_id = "wf-bootstrap-progress-loop";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    let snapshot = ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(
+        runtime_executable_validation_snapshot(&version, &graph),
+    )
+    .expect("validated executable snapshot");
+    let projections = snapshot
+        .scheduler_inference_task_projections()
+        .expect("scheduler inference task projections");
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+    let request = WorkflowExecutionSessionRunRequest {
+        session_id: session_id.clone(),
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("paint a red cube"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let workflow_run_id = {
+        let mut store = service.session_store_guard().expect("session store");
+        let workflow_run_id = store
+            .enqueue_run(&session_id, &request)
+            .expect("enqueue run");
+        store
+            .begin_queued_run(&session_id, &workflow_run_id)
+            .expect("begin run")
+            .expect("dequeued run");
+        workflow_run_id
+    };
+    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+        &pantograph_runtime_attribution::WorkflowId::try_from(workflow_id.to_string())
+            .expect("workflow id"),
+        &pantograph_runtime_attribution::WorkflowRunId::try_from(workflow_run_id.clone())
+            .expect("workflow run id"),
+        &graph,
+        &projections,
+    )
+    .expect("scheduler task graph");
+    let initial_records = service
+        .scheduler_task_orchestrator
+        .initial_task_state_records(&task_graph)
+        .expect("initial task state");
+    {
+        let mut store = service.session_store_guard().expect("session store");
+        store
+            .set_active_run_scheduler_task_state(
+                &session_id,
+                &workflow_run_id,
+                task_graph,
+                initial_records,
+            )
+            .expect("store active task state");
+        service
+            .scheduler_task_orchestrator
+            .materialize_external_inputs_for_active_run(
+                &mut store,
+                &session_id,
+                &workflow_run_id,
+                &request.inputs,
+            )
+            .expect("materialize source input");
+    }
+    let recovery_plan = service
+        .workflow_execution_session_bootstrap_recovery_plan()
+        .expect("recovery plan before apply");
+    assert_eq!(recovery_plan.blocking_decision_count, 0);
+    assert_eq!(
+        recovery_plan.decisions[0].decision_kind,
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+    );
+
+    let dependency_request = runtime_dependency_environment_request(&version);
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("dependency readiness snapshot should validate"),
+        )
+        .expect("store dependency readiness snapshot");
+
+    let recovery_result = service
+        .recover_workflow_execution_session_bootstrap(&host)
+        .await
+        .expect("bootstrap recovery should run progress loop then resume readiness");
+
+    assert_eq!(
+        recovery_result.plan.decisions[0].decision_kind,
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+    );
+    assert_eq!(recovery_result.resumed_runs.len(), 1);
+    assert_eq!(
+        recovery_result.resumed_runs[0].workflow_run_id,
+        workflow_run_id
+    );
+    assert!(recovery_result.final_plan.decisions.is_empty());
+    assert_eq!(runtime_host_port.requests().len(), 1);
+    assert!(service
+        .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+        .expect("resume candidates after bootstrap progress recovery")
+        .is_empty());
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn workflow_execution_session_resume_rejects_inactive_and_non_runtime_runs() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2);

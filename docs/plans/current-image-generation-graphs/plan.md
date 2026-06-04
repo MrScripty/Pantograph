@@ -687,6 +687,26 @@ no-fallback/no-legacy source search. Remaining lifecycle work: implement the
 explicit progress-loop replay runner, durable duplicate-dispatch/idempotency
 guard for ready runtime redispatch, and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 bootstrap progress-loop recovery update: the bootstrap recovery
+runner now applies `ResumeProgressLoop` decisions by invoking the existing
+workflow-service scheduler progress loop for the affected active run, then
+recomputes the recovery plan before applying dependency-readiness resumes. The
+recomputed gate preserves the no-fallback rule: if progress reaches ready
+runtime dispatch, duplicate-dispatch protection still blocks redispatch until
+that durable guard is implemented. The recovery result now returns both the
+initial and final plans so replay effects remain inspectable. Verification
+passed: `cargo fmt -p pantograph-workflow-service`; `cargo test -p
+pantograph-workflow-service
+bootstrap_recovery_progress_loop_requests_dedupe_by_active_run --lib`; `cargo
+test -p pantograph-workflow-service
+workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume
+--lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: implement the
+durable duplicate-dispatch/idempotency guard for ready runtime redispatch and
+diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in

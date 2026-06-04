@@ -978,6 +978,7 @@ pub struct WorkflowExecutionSessionBootstrapRecoveryPlan {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionBootstrapRecoveryResult {
     pub plan: WorkflowExecutionSessionBootstrapRecoveryPlan,
+    pub final_plan: WorkflowExecutionSessionBootstrapRecoveryPlan,
     #[serde(default)]
     pub resumed_runs: Vec<WorkflowRunResponse>,
 }

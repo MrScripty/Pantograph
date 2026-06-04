@@ -643,15 +643,27 @@ impl WorkflowService {
         let plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
         workflow_bootstrap_recovery_apply_gate(&plan)?;
 
+        for request in workflow_bootstrap_recovery_progress_loop_requests(&plan) {
+            self.resume_workflow_execution_session_progress_loop(request)
+                .await?;
+        }
+
+        let resume_plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
+        workflow_bootstrap_recovery_apply_gate(&resume_plan)?;
         let mut resumed_runs = Vec::new();
-        for request in plan.resume_requests.clone() {
+        for request in resume_plan.resume_requests.clone() {
             resumed_runs.push(
                 self.resume_workflow_execution_session_runtime_dependency_readiness(host, request)
                     .await?,
             );
         }
 
-        Ok(WorkflowExecutionSessionBootstrapRecoveryResult { plan, resumed_runs })
+        let final_plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
+        Ok(WorkflowExecutionSessionBootstrapRecoveryResult {
+            plan,
+            final_plan,
+            resumed_runs,
+        })
     }
 
     fn finish_failed_workflow_run_after_admission(
@@ -662,6 +674,48 @@ impl WorkflowService {
         let mut store = self.session_store_guard()?;
         store.finish_run(session_id, workflow_run_id)?;
         Ok(())
+    }
+
+    async fn resume_workflow_execution_session_progress_loop(
+        &self,
+        request: WorkflowExecutionSessionResumeRequest,
+    ) -> Result<(), WorkflowServiceError> {
+        let session_id = request.session_id.trim().to_string();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+        let workflow_run_id = request.workflow_run_id.trim().to_string();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+
+        {
+            let store = self.session_store_guard()?;
+            let (_, records) = store
+                .active_run_scheduler_task_state(&session_id, &workflow_run_id)?
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "workflow run '{}' has no active scheduler task state to resume",
+                        workflow_run_id
+                    ))
+                })?;
+            if !records.iter().any(|record| {
+                record.state.kind() == pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs
+            }) {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "workflow run '{}' has no scheduler task awaiting input progress",
+                    workflow_run_id
+                )));
+            }
+        }
+
+        WorkflowSchedulerSessionRunner::new(self)
+            .resume_progress_loop(&session_id, &workflow_run_id)
+            .await
     }
 
     fn workflow_run_snapshot_for_execution_resume_if_configured(
@@ -1602,6 +1656,7 @@ fn workflow_bootstrap_recovery_apply_gate(
         !matches!(
             decision.decision_kind,
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
+                | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
                 | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::NoopCompleted
         )
     }) {
@@ -1612,6 +1667,29 @@ fn workflow_bootstrap_recovery_apply_gate(
     }
 
     Ok(())
+}
+
+fn workflow_bootstrap_recovery_progress_loop_requests(
+    plan: &WorkflowExecutionSessionBootstrapRecoveryPlan,
+) -> Vec<WorkflowExecutionSessionResumeRequest> {
+    let mut requests = Vec::new();
+    let mut request_keys = BTreeSet::new();
+    for decision in plan.decisions.iter().filter(|decision| {
+        decision.decision_kind
+            == WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+    }) {
+        let key = (
+            decision.session_id.clone(),
+            decision.workflow_run_id.clone(),
+        );
+        if request_keys.insert(key) {
+            requests.push(WorkflowExecutionSessionResumeRequest {
+                session_id: decision.session_id.clone(),
+                workflow_run_id: decision.workflow_run_id.clone(),
+            });
+        }
+    }
+    requests
 }
 
 fn queue_position_u32(
@@ -2084,31 +2162,45 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_recovery_apply_gate_rejects_unimplemented_progress_loop_replay() {
+    fn bootstrap_recovery_progress_loop_requests_dedupe_by_active_run() {
         let plan = WorkflowExecutionSessionBootstrapRecoveryPlan {
-            decisions: vec![WorkflowExecutionSessionBootstrapRecoveryDecision {
-                session_id: "session-a".to_string(),
-                workflow_run_id: "run-a".to_string(),
-                task_id: "infer".to_string(),
-                state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::Running),
-                recovery_action:
-                    WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop,
-                decision_kind:
-                    WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop,
-                diagnostic: None,
-            }],
+            decisions: vec![
+                WorkflowExecutionSessionBootstrapRecoveryDecision {
+                    session_id: "session-a".to_string(),
+                    workflow_run_id: "run-a".to_string(),
+                    task_id: "infer-a".to_string(),
+                    state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs),
+                    recovery_action:
+                        WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop,
+                    decision_kind:
+                        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop,
+                    diagnostic: None,
+                },
+                WorkflowExecutionSessionBootstrapRecoveryDecision {
+                    session_id: "session-a".to_string(),
+                    workflow_run_id: "run-a".to_string(),
+                    task_id: "infer-b".to_string(),
+                    state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs),
+                    recovery_action:
+                        WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop,
+                    decision_kind:
+                        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop,
+                    diagnostic: None,
+                },
+            ],
             resume_requests: Vec::new(),
             blocking_decision_count: 0,
         };
 
-        let error = workflow_bootstrap_recovery_apply_gate(&plan)
-            .expect_err("progress-loop replay must fail closed until implemented");
+        workflow_bootstrap_recovery_apply_gate(&plan).expect("progress-loop recovery is supported");
 
         assert_eq!(
-            error.code(),
-            crate::workflow::WorkflowErrorCode::InvalidRequest
+            workflow_bootstrap_recovery_progress_loop_requests(&plan),
+            vec![WorkflowExecutionSessionResumeRequest {
+                session_id: "session-a".to_string(),
+                workflow_run_id: "run-a".to_string(),
+            }]
         );
-        assert!(error.message().contains("ResumeProgressLoop"));
     }
 
     #[test]
