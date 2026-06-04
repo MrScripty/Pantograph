@@ -196,6 +196,19 @@ workflow-service supervisor signal into the handle, make adapters observe
 cancellation/shutdown, add await/abort/panic handling, then continue with
 retry/defer, replay/bootstrap, and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 scheduler lifecycle-owned runtime cancellation signal update:
+workflow-service task lifecycle now owns the live runtime-host cancellation
+signal for started runtime task attempts. The lifecycle manager validates the
+matching active attempt before creating a runtime-host cancellation handle,
+updates that handle for task cancellation and lifecycle-owner shutdown, and
+the production session runner dispatches started runtime tasks through
+`dispatch_with_cancellation`. This keeps cancellation state backend-owned and
+does not add adapter, Tauri, frontend, graph-path, reduced-plan, retry,
+replay, or diagnostics-ledger behavior. Remaining lifecycle work: runtime
+adapters must observe cancellation/shutdown, and the workflow-service
+supervisor still needs await/abort behavior, panic observation, retry/defer
+idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

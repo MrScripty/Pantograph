@@ -4,7 +4,13 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
+use pantograph_runtime_host_contracts::{
+    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostExecutionCancellationSignal, RuntimeHostExecutionCancellationSnapshot,
+    RuntimeHostExecutionCancellationState,
+};
 use pantograph_scheduler::SchedulerTaskId;
 
 use crate::workflow::WorkflowServiceError;
@@ -90,9 +96,55 @@ impl WorkflowSchedulerTaskLifecycleManager {
             owner_id: self.owner_id.clone(),
             task_id,
             attempt_id,
+            runtime_host_cancellation_signal: None,
         };
         self.active_task_handles.insert(task_key, record.clone());
         Ok(record)
+    }
+
+    pub(crate) fn runtime_host_cancellation(
+        &mut self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        execution_request_id: impl AsRef<str>,
+    ) -> Result<
+        (
+            RuntimeHostExecutionCancellationContext,
+            RuntimeHostExecutionCancellationHandle,
+        ),
+        WorkflowServiceError,
+    > {
+        let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
+        let cancellation_context =
+            RuntimeHostExecutionCancellationContext::workflow_service(execution_request_id);
+        let signal = tracked
+            .runtime_host_cancellation_signal
+            .get_or_insert_with(|| {
+                Arc::new(WorkflowSchedulerTaskRuntimeHostCancellationSignal::running(
+                    cancellation_context.cancellation_context_id.clone(),
+                ))
+            })
+            .clone();
+        Ok((
+            cancellation_context,
+            RuntimeHostExecutionCancellationHandle::with_signal(signal),
+        ))
+    }
+
+    pub(crate) fn request_task_cancellation(
+        &mut self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        reason: impl Into<String>,
+    ) -> Result<(), WorkflowServiceError> {
+        let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
+        let Some(signal) = tracked.runtime_host_cancellation_signal.as_ref() else {
+            return Ok(());
+        };
+        signal.update_state(
+            RuntimeHostExecutionCancellationState::CancellationRequested,
+            Some(reason.into()),
+        )
     }
 
     pub(crate) fn complete_task_handle(
@@ -146,6 +198,14 @@ impl WorkflowSchedulerTaskLifecycleManager {
     pub(crate) fn begin_shutdown(&mut self) -> WorkflowSchedulerTaskLifecycleShutdownState {
         if self.shutdown_state == WorkflowSchedulerTaskLifecycleShutdownState::Running {
             self.shutdown_state = WorkflowSchedulerTaskLifecycleShutdownState::ShuttingDown;
+            for record in self.active_task_handles.values() {
+                if let Some(signal) = record.runtime_host_cancellation_signal.as_ref() {
+                    let _ = signal.update_state(
+                        RuntimeHostExecutionCancellationState::ShutdownRequested,
+                        Some("workflow-service task lifecycle owner is shutting down".to_string()),
+                    );
+                }
+            }
         }
         self.shutdown_state
     }
@@ -168,6 +228,43 @@ impl WorkflowSchedulerTaskLifecycleManager {
 
         self.shutdown_state = WorkflowSchedulerTaskLifecycleShutdownState::Shutdown;
         Ok(self.shutdown_state)
+    }
+
+    fn matching_task_handle_mut(
+        &mut self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+    ) -> Result<&mut WorkflowSchedulerTaskLifecycleHandleRecord, WorkflowServiceError> {
+        let tracked = self
+            .active_task_handles
+            .get_mut(task_id.as_str())
+            .ok_or_else(|| {
+                lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
+                    WorkflowSchedulerTaskLifecycleDiagnosticCode::TaskHandleNotTracked,
+                    format!(
+                        "task lifecycle handle is not tracked for task '{}'",
+                        task_id.as_str()
+                    ),
+                    Some("Only tracked task attempts can receive lifecycle signals.".to_string()),
+                ))
+            })?;
+
+        if tracked.attempt_id != *attempt_id {
+            return Err(lifecycle_error(
+                WorkflowSchedulerTaskLifecycleDiagnostic::error(
+                    WorkflowSchedulerTaskLifecycleDiagnosticCode::StaleTaskHandleAttempt,
+                    format!(
+                        "task lifecycle handle for task '{}' is owned by attempt '{}', not '{}'",
+                        task_id.as_str(),
+                        tracked.attempt_id.as_str(),
+                        attempt_id.as_str()
+                    ),
+                    Some("Ignore stale lifecycle signal from older task attempts.".to_string()),
+                ),
+            ));
+        }
+
+        Ok(tracked)
     }
 }
 
@@ -205,11 +302,60 @@ pub(crate) enum WorkflowSchedulerTaskLifecycleShutdownState {
     Shutdown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct WorkflowSchedulerTaskLifecycleHandleRecord {
     pub(crate) owner_id: WorkflowSchedulerTaskLifecycleOwnerId,
     pub(crate) task_id: SchedulerTaskId,
     pub(crate) attempt_id: WorkflowSchedulerTaskAttemptId,
+    runtime_host_cancellation_signal:
+        Option<Arc<WorkflowSchedulerTaskRuntimeHostCancellationSignal>>,
+}
+
+#[derive(Debug)]
+struct WorkflowSchedulerTaskRuntimeHostCancellationSignal {
+    snapshot: Mutex<RuntimeHostExecutionCancellationSnapshot>,
+}
+
+impl WorkflowSchedulerTaskRuntimeHostCancellationSignal {
+    fn running(cancellation_context_id: String) -> Self {
+        Self {
+            snapshot: Mutex::new(RuntimeHostExecutionCancellationSnapshot {
+                cancellation_context_id,
+                state: RuntimeHostExecutionCancellationState::Running,
+                reason: None,
+            }),
+        }
+    }
+
+    fn update_state(
+        &self,
+        state: RuntimeHostExecutionCancellationState,
+        reason: Option<String>,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut snapshot = self.snapshot.lock().map_err(|_error| {
+            WorkflowServiceError::Internal(
+                "scheduler task cancellation signal lock was poisoned".to_string(),
+            )
+        })?;
+        snapshot.state = state;
+        snapshot.reason = reason;
+        snapshot
+            .validate()
+            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))
+    }
+}
+
+impl RuntimeHostExecutionCancellationSignal for WorkflowSchedulerTaskRuntimeHostCancellationSignal {
+    fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
+        self.snapshot
+            .lock()
+            .map(|snapshot| snapshot.clone())
+            .unwrap_or_else(|_error| RuntimeHostExecutionCancellationSnapshot {
+                cancellation_context_id: "runtime-host-cancellation.poisoned".to_string(),
+                state: RuntimeHostExecutionCancellationState::ShutdownRequested,
+                reason: Some("scheduler task cancellation signal lock was poisoned".to_string()),
+            })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

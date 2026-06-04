@@ -2616,6 +2616,21 @@ real child cancellation/shutdown signal, adapter observation of cancellation,
 await/abort/panic handling, retry/defer idempotency, replay/bootstrap, and
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 lifecycle-owned runtime cancellation signal completed:
+`WorkflowSchedulerTaskLifecycleManager` now owns runtime-host cancellation
+signals for active started task attempts. Signal creation requires the tracked
+task id and matching attempt id, task cancellation updates the live handle to
+`CancellationRequested`, and lifecycle-owner shutdown updates active handles
+to `ShutdownRequested`. `WorkflowSchedulerTaskOrchestrator` routes production
+started runtime dispatch through `dispatch_with_cancellation` after
+materializing inputs and before awaiting the runtime-host port, so no
+lifecycle/store lock is held across the await. The older direct dispatch
+helpers are test-only contract helpers. Remaining durable lifecycle work:
+runtime-host adapters still need cooperative cancellation observation, and the
+workflow-service supervisor still needs await/abort, panic observation,
+retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
+attempt/timing facts.
+
 ## Effects On Existing Systems
 
 ### Scheduler

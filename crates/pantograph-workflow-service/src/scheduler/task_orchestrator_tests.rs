@@ -1202,6 +1202,79 @@ fn orchestrator_persists_started_runtime_task_result() {
     );
 }
 
+#[tokio::test]
+async fn orchestrator_dispatches_started_runtime_task_with_lifecycle_cancellation() {
+    let mut selection_request = dispatch_selection_request_fixture();
+    let task_intent = selection_request.task_intent.clone();
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    selection_request.task_intent.workflow_run_id = task_graph.workflow_run_id.clone();
+    let mut response = runtime_host_response_fixture();
+    response.execution_request_id = "workflow-service-runtime-request-started".to_string();
+    response.workflow_id = task_graph.workflow_id.clone();
+    response.workflow_run_id = task_graph.workflow_run_id.clone();
+    response.node_id = task_graph.tasks[0].node_id.clone();
+    response.task_id = task_graph.tasks[0].task_id.clone();
+    let port = Arc::new(RecordingRuntimeHostPort::with_response(response));
+    let orchestrator =
+        WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(port.clone()))
+            .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(selection_request.readiness_proof.clone()),
+        )
+        .expect("admit runtime task readiness");
+    let started = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+    let selected_dispatch = orchestrator
+        .select_runtime_task_dispatch(
+            &started.task,
+            ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
+                .expect("selection request fixture must validate"),
+        )
+        .await
+        .expect("select runtime task dispatch");
+
+    let result = orchestrator
+        .dispatch_started_runtime_task(
+            "workflow-service-runtime-request-started",
+            &started,
+            &selected_dispatch,
+        )
+        .await
+        .expect("started runtime dispatch should reach runtime host");
+
+    assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
+    let recorded = port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].cancellation_context.cancellation_context_id,
+        "runtime-host-cancellation.workflow-service-runtime-request-started"
+    );
+    let cancellation_snapshots = port.cancellation_snapshots();
+    assert_eq!(cancellation_snapshots.len(), 1);
+    assert_eq!(
+        cancellation_snapshots[0].cancellation_context_id,
+        recorded[0].cancellation_context.cancellation_context_id
+    );
+    assert_eq!(
+        cancellation_snapshots[0].state,
+        RuntimeHostExecutionCancellationState::Running
+    );
+}
+
 #[test]
 fn orchestrator_rejects_duplicate_runtime_task_attempt_start() {
     let orchestrator = orchestrator_without_runtime_host_response();

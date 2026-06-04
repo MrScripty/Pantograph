@@ -730,10 +730,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             let dispatch_result = self
                 .service
                 .scheduler_task_orchestrator
-                .dispatch_selected_runtime_task(
+                .dispatch_started_runtime_task(
                     execution_request_id,
-                    &started_runtime_task.task,
-                    &started_runtime_task.materialized_results,
+                    &started_runtime_task,
                     &selected_dispatch,
                 )
                 .await;

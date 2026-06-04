@@ -24051,6 +24051,57 @@ Worker rules:
       adapters observe it, and add await/abort/panic handling before
       retry/defer, replay/bootstrap, and diagnostics-ledger attempt/timing
       facts.
+  - 2026-06-04 Milestone 5c lifecycle-owned runtime cancellation signal slice:
+    - Smallest vertical slice: move the live runtime-host cancellation signal
+      from the dispatcher default into workflow-service task lifecycle
+      ownership for started runtime task attempts. Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      and this plan set. The two unrelated Pumas proposal Markdown files
+      already dirty in the worktree were ignored and are not part of this
+      slice.
+    - No-fallback confirmation: runtime-host cancellation handle creation now
+      requires the active tracked task id plus matching attempt id, and the
+      production session runner dispatches started runtime tasks through
+      `dispatch_with_cancellation`. The slice added no adapter-owned lifecycle
+      policy, Tauri/frontend cancellation branch, graph-path execution,
+      reduced-plan launch, compatibility shim, retry/defer branch,
+      replay/bootstrap logic, diagnostics-ledger storage, Pumas fact changes,
+      lockfile changes, or saved workflow fixture edits.
+    - Implementation summary: `WorkflowSchedulerTaskLifecycleManager` owns a
+      live runtime-host cancellation signal per active started task attempt,
+      exposes a validated runtime-host cancellation context/handle pair,
+      updates active signals to `CancellationRequested` or
+      `ShutdownRequested`, and rejects stale-attempt signal creation.
+      `WorkflowSchedulerTaskOrchestrator::dispatch_started_runtime_task`
+      materializes inputs, creates the lifecycle-owned cancellation handle
+      without holding a lock across await, and calls
+      `RuntimeHostDispatcher::dispatch_with_cancellation`. The session runner
+      now uses that lifecycle-aware production dispatch path.
+    - Tests/verification:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo test -p pantograph-workflow-service task_lifecycle --lib`
+      - `cargo test -p pantograph-workflow-service scheduler::task_orchestrator --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `git diff --check`
+      - Targeted no-fallback search over touched files. The only match was an
+        existing negative test name for the legacy bridge.
+    - Verification deviation/discovered issue: broad `cargo test -p
+      pantograph-workflow-service workflow::tests::session_execution --lib`
+      still fails pre-existing legacy/non-runtime session expectations and
+      missing saved executable snapshot fixtures. The runtime-dispatch session
+      tests covering this slice passed and are listed above.
+    - Remaining follow-up: make runtime-host adapters observe the live
+      cancellation handle, add workflow-service await/abort behavior and panic
+      observation for supervised task handles, then continue with retry/defer
+      idempotency, replay/bootstrap, and diagnostics-ledger attempt/timing
+      facts.
 
 ### Traceability Links
 

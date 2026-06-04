@@ -2,14 +2,16 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use async_trait::async_trait;
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
+#[cfg(test)]
+use pantograph_runtime_host_contracts::RuntimeHostExecutionInput;
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplicationState, ReservationLifecycleContractError,
     ReservationLifecycleDiagnostic, ReservationLifecycleDiagnosticCode,
     ReservationLifecycleDiagnosticSeverity, ReservationLifecycleEvent, ReservationLifecycleOutcome,
     ReservationLifecyclePort, ReservationLifecyclePortError, RuntimeHostDispatchError,
-    RuntimeHostExecutionInput, SchedulerRuntimeHostDispatcher,
-    ValidatedReservationLifecycleApplication, ValidatedReservationLifecycleEvent,
-    RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
+    SchedulerRuntimeHostDispatcher, ValidatedReservationLifecycleApplication,
+    ValidatedReservationLifecycleEvent, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
@@ -155,6 +157,23 @@ impl WorkflowSchedulerTaskOrchestrator {
         let _ = self.release_task_lifecycle_handle(task_id, attempt_id);
     }
 
+    fn runtime_host_cancellation(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        execution_request_id: &str,
+    ) -> Result<
+        (
+            RuntimeHostExecutionCancellationContext,
+            RuntimeHostExecutionCancellationHandle,
+        ),
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
+        self.task_lifecycle_manager()?
+            .runtime_host_cancellation(task_id, attempt_id, execution_request_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
     fn task_lifecycle_manager(
         &self,
     ) -> Result<
@@ -168,6 +187,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         })
     }
 
+    #[cfg(test)]
     pub(crate) async fn dispatch_runtime_handoff(
         &self,
         execution_request_id: impl Into<String>,
@@ -261,6 +281,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 
+    #[cfg(test)]
     pub(crate) async fn dispatch_selected_runtime_task(
         &self,
         execution_request_id: impl Into<String>,
@@ -289,6 +310,49 @@ impl WorkflowSchedulerTaskOrchestrator {
             materialized_inputs,
         )
         .await
+    }
+
+    pub(crate) async fn dispatch_started_runtime_task(
+        &self,
+        execution_request_id: impl Into<String>,
+        started: &StartedRuntimeTaskExecution,
+        selected_dispatch: &SelectedRuntimeTaskDispatch,
+    ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
+        let execution_request_id = execution_request_id.into();
+        let _ = self
+            .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+                &started.task,
+                selected_dispatch.reservation_lease_id.clone(),
+                selected_dispatch.candidate_id.clone(),
+                ReservationLifecycleOutcome::DispatchStarted,
+                vec![reservation_lifecycle_diagnostic(
+                    ReservationLifecycleDiagnosticSeverity::Info,
+                    ReservationLifecycleDiagnosticCode::DispatchStarted,
+                    "runtime dispatch started for selected scheduler reservation",
+                )],
+            )?)
+            .await?;
+        let materialized_inputs =
+            materialize_runtime_host_inputs(&started.task, &started.materialized_results)
+                .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskInputMapping)?;
+        let (cancellation_context, cancellation) = self.runtime_host_cancellation(
+            &started.task.task_id,
+            &started.attempt_id,
+            &execution_request_id,
+        )?;
+        let response = self
+            .runtime_host_dispatcher
+            .dispatch_with_cancellation(
+                execution_request_id,
+                selected_dispatch.handoff.clone(),
+                materialized_inputs,
+                cancellation_context,
+                cancellation,
+            )
+            .await
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)?;
+        runtime_host_response_to_task_result(&response)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
     }
 
     pub(crate) async fn apply_runtime_task_result_reservation_lifecycle(

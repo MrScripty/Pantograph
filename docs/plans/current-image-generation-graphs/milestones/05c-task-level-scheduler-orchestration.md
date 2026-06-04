@@ -1693,3 +1693,45 @@ durable task orchestration path.
   shutdown signal, adapter observation of cancellation/shutdown, await/abort
   and panic handling, then retry/defer idempotency, replay/bootstrap, and
   diagnostics-ledger attempt/timing facts.
+- 2026-06-04 lifecycle-owned runtime cancellation signal slice completed.
+  Smallest useful vertical slice: move the live runtime-host cancellation
+  signal from the dispatcher default into workflow-service task lifecycle
+  ownership for started runtime task attempts. Allowed write set used:
+  `scheduler/task_lifecycle.rs`, `scheduler/task_lifecycle_tests.rs`,
+  `scheduler/task_orchestrator.rs`, `scheduler/task_orchestrator_tests.rs`,
+  `workflow/session_scheduler_runner.rs`, and this plan set.
+  No-fallback/no-legacy confirmation: the slice validates the active
+  task/attempt before creating the runtime-host cancellation handle and routes
+  production started runtime dispatch through `dispatch_with_cancellation`.
+  It does not add adapter-owned lifecycle policy, Tauri/frontend cancellation
+  behavior, graph-path execution, reduced-plan launch, compatibility shims,
+  retry/defer policy, replay/bootstrap, diagnostics-ledger writes, Pumas fact
+  changes, lockfile changes, or saved workflow fixture edits.
+  Implementation summary: `WorkflowSchedulerTaskLifecycleManager` now creates
+  `RuntimeHostExecutionCancellationHandle` values backed by a live
+  workflow-service signal, updates active signals to `CancellationRequested`
+  or `ShutdownRequested`, and rejects stale-attempt signal creation.
+  `WorkflowSchedulerTaskOrchestrator::dispatch_started_runtime_task` uses that
+  signal after input materialization and before awaiting runtime-host
+  execution. The session runner now uses this lifecycle-aware dispatch path
+  for started runtime tasks.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo fmt
+  -p pantograph-workflow-service -- --check`; `cargo test -p
+  pantograph-workflow-service task_lifecycle --lib`; `cargo test -p
+  pantograph-workflow-service scheduler::task_orchestrator --lib`; `cargo
+  test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection
+  --lib`; `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution::workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run
+  --lib`; `cargo check -p pantograph-workflow-service`; `git diff --check`;
+  and targeted no-fallback search over touched files.
+  Verification deviation/discovered issue: the broad
+  `cargo test -p pantograph-workflow-service
+  workflow::tests::session_execution --lib` command still fails pre-existing
+  legacy/non-runtime session expectations and missing saved executable
+  snapshot fixtures. The runtime-dispatch session tests that cover this slice
+  passed and are listed above.
+  Remaining follow-up: make runtime-host adapters observe the live cancellation
+  handle, add workflow-service await/abort behavior and panic observation for
+  supervised task handles, then continue with retry/defer idempotency,
+  replay/bootstrap, and diagnostics-ledger attempt/timing facts.

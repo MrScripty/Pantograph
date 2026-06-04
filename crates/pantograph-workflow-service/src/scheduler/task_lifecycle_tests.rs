@@ -1,3 +1,4 @@
+use pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationState;
 use pantograph_scheduler::SchedulerTaskId;
 
 use crate::scheduler::{
@@ -88,6 +89,107 @@ fn task_lifecycle_manager_completes_matching_task_handle() {
     assert_eq!(completed.task_id, task_id);
     assert_eq!(completed.attempt_id, attempt_id);
     assert_eq!(manager.active_task_handle_count(), 0);
+}
+
+#[test]
+fn task_lifecycle_manager_creates_runtime_host_cancellation_signal_for_active_attempt() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+
+    let (context, cancellation) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "runtime-host-request.current")
+        .expect("create runtime host cancellation");
+    let snapshot = cancellation.snapshot();
+
+    assert_eq!(
+        context.cancellation_context_id,
+        "runtime-host-cancellation.runtime-host-request.current"
+    );
+    assert_eq!(
+        snapshot.cancellation_context_id,
+        context.cancellation_context_id
+    );
+    assert_eq!(
+        snapshot.state,
+        RuntimeHostExecutionCancellationState::Running
+    );
+    assert_eq!(snapshot.reason, None);
+}
+
+#[test]
+fn task_lifecycle_manager_rejects_runtime_host_cancellation_for_stale_attempt() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    manager
+        .track_task_handle(
+            task_id.clone(),
+            attempt_id("scheduler-task-attempt.current"),
+        )
+        .expect("track task handle");
+
+    let error = match manager.runtime_host_cancellation(
+        &task_id,
+        &attempt_id("scheduler-task-attempt.stale"),
+        "runtime-host-request.stale",
+    ) {
+        Ok(_) => panic!("stale attempt must not receive cancellation handle"),
+        Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("StaleTaskHandleAttempt"));
+}
+
+#[test]
+fn task_lifecycle_manager_updates_runtime_host_cancellation_signal() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+    let (_context, cancellation) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "runtime-host-request.current")
+        .expect("create runtime host cancellation");
+
+    manager
+        .request_task_cancellation(&task_id, &attempt_id, "user cancelled task")
+        .expect("request task cancellation");
+
+    let snapshot = cancellation.snapshot();
+    assert_eq!(
+        snapshot.state,
+        RuntimeHostExecutionCancellationState::CancellationRequested
+    );
+    assert_eq!(snapshot.reason.as_deref(), Some("user cancelled task"));
+}
+
+#[test]
+fn task_lifecycle_manager_shutdown_updates_runtime_host_cancellation_signal() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+    let (_context, cancellation) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "runtime-host-request.current")
+        .expect("create runtime host cancellation");
+
+    manager.begin_shutdown();
+
+    let snapshot = cancellation.snapshot();
+    assert_eq!(
+        snapshot.state,
+        RuntimeHostExecutionCancellationState::ShutdownRequested
+    );
+    assert_eq!(
+        snapshot.reason.as_deref(),
+        Some("workflow-service task lifecycle owner is shutting down")
+    );
 }
 
 #[test]
