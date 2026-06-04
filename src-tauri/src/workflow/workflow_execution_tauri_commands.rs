@@ -1,13 +1,6 @@
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{command, State};
 
-use crate::agent::rag::SharedRagManager;
-use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
-
-use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
-use super::events::WorkflowEvent;
-use super::workflow_execution_commands::{
-    RunWorkflowExecutionSessionInput, WorkflowEditSessionRunResponse, WorkflowExecutionRuntimeState,
-};
+use super::commands::SharedWorkflowService;
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentActionIntent, DependencyEnvironmentActionIntentResult,
     DraftGraphValidationSessionId,
@@ -408,42 +401,6 @@ pub async fn create_workflow_execution_session(
         graph,
         workflow_id,
         workflow_service,
-    )
-    .await
-}
-
-#[command]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Tauri command entrypoint receives framework-injected state handles; internal execution code uses grouped request structs."
-)]
-pub async fn run_workflow_execution_session(
-    app: AppHandle,
-    session_id: String,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    config: State<'_, SharedAppConfig>,
-    rag_manager: State<'_, SharedRagManager>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<WorkflowEditSessionRunResponse, String> {
-    super::workflow_execution_commands::run_workflow_execution_session(
-        RunWorkflowExecutionSessionInput {
-            app,
-            session_id,
-            state: WorkflowExecutionRuntimeState {
-                gateway,
-                runtime_registry,
-                config,
-                rag_manager,
-                extensions,
-                workflow_service,
-                diagnostics_store,
-            },
-            channel,
-        },
     )
     .await
 }

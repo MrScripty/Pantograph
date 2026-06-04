@@ -23371,6 +23371,37 @@ Worker rules:
       if additional stale-event, cancellation, or overlay-clearing issues are
       discovered during real graph editing smoke. Otherwise proceed to the next
       plan milestone/follow-up.
+  - 2026-06-03 Milestone 5b Tauri edit-session launcher deletion slice:
+    - Smallest useful vertical slice: delete the unregistered Tauri
+      `run_workflow_execution_session` edit-session command wrapper and the
+      desktop-local `workflow_execution_runtime.rs` graph-snapshot launcher.
+    - Files touched: `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+      `src-tauri/src/workflow/workflow_execution_commands.rs`,
+      `src-tauri/src/workflow/mod.rs`,
+      `src-tauri/src/workflow/workflow_execution_runtime.rs`,
+      `src-tauri/src/README.md`, `src-tauri/src/workflow/README.md`,
+      `src/services/workflow/WorkflowService.commands.test.ts`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - No-fallback/no-legacy result: the slice removed an alternate
+      graph-snapshot runtime launcher instead of adapting it to scheduler
+      facts. The TypeScript `runSession` boundary still fails closed before
+      invoking Tauri, and scheduler execution-session commands remain the only
+      GUI workflow submission path.
+    - Standards alignment: Tauri no longer owns a runtime execution sequence,
+      diagnostics snapshot emission, graph execution snapshot loading, or
+      app-local runtime policy for edit-session runs. Business execution stays
+      behind backend scheduler/runtime-host boundaries.
+    - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+      --check`; `cargo check --manifest-path src-tauri/Cargo.toml`;
+      `npm run test:frontend -- WorkflowService.commands.test.ts`; `npm run
+      typecheck`; and deleted-symbol search for the removed Tauri launcher
+      names.
+    - Discovered issue: `cargo check` still reports unrelated dead-code
+      warnings for diagnostics runtime/scheduler snapshot event helpers and
+      Pumas helper functions. They remain separate cleanup candidates because
+      they are outside this launcher deletion slice.
 
 ### Traceability Links
 

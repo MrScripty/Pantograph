@@ -221,6 +221,26 @@ test('mock node definitions expose intent-only Pumas inference ports', () => {
   }
 });
 
+test('workflow service runSession fails closed before legacy Tauri invoke', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    throw new Error(`unexpected invoke: ${cmd}`);
+  });
+
+  try {
+    const service = new WorkflowService();
+    await assert.rejects(
+      () => service.runSession('edit-session-1'),
+      /Direct edit-session execution is unavailable/,
+    );
+    assert.deepEqual(calls, []);
+  } finally {
+    clearMocks();
+  }
+});
+
 test('technical-fit contract fixture preserves runtime variant and device facts', () => {
   const fixture = loadTechnicalFitContractFixture();
   const request: WorkflowTechnicalFitRequest = fixture.technical_fit_request;

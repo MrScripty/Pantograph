@@ -650,6 +650,14 @@ upgrade after this path is working.
   fail-closed diagnostics describe retired dependency/model-reference
   contracts generically and still block before legacy dependency request,
   resolver, model-reference, or adapter dispatch behavior can run.
+  2026-06-03 progress: deleted the unregistered Tauri
+  `run_workflow_execution_session` edit-session command wrapper and the
+  desktop-local `workflow_execution_runtime.rs` launcher. The app-facing
+  TypeScript `runSession` boundary remains fail-closed and now has a focused
+  regression test proving it throws before invoking a legacy Tauri command.
+  Successful GUI submission remains scheduler-owned through execution-session
+  commands; Tauri no longer retains an internal graph-snapshot runtime launch
+  branch.
 - [x] Add backend-owned runtime session/load-proof state in
   `pantograph-embedded-runtime` keyed by workflow/task identity and populated
   from canonical inference planning, Pumas artifact/load-target decisions, and
@@ -822,6 +830,28 @@ upgrade after this path is working.
 **Status:**
 
 - [ ] In progress.
+- 2026-06-03 Tauri edit-session launcher deletion slice completed. Smallest
+  useful vertical slice: remove the unregistered desktop edit-session run
+  command and its Tauri-local runtime orchestration module after the minimal
+  scheduler/runtime-host image inference path was proven. Allowed write set:
+  `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`,
+  `src-tauri/src/workflow/workflow_execution_commands.rs`,
+  `src-tauri/src/workflow/mod.rs`,
+  `src-tauri/src/workflow/workflow_execution_runtime.rs`,
+  `src-tauri/src/README.md`, `src-tauri/src/workflow/README.md`,
+  `src/services/workflow/WorkflowService.commands.test.ts`, this milestone,
+  and the top-level plan. No-fallback confirmation: this deleted an alternate
+  graph-snapshot runtime launcher instead of adapting it to scheduler facts;
+  the frontend service still fails closed before invoking Tauri, and scheduler
+  execution-session commands remain the only GUI run path. Verification
+  passed: `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`,
+  `cargo check --manifest-path src-tauri/Cargo.toml`,
+  `npm run test:frontend -- WorkflowService.commands.test.ts`,
+  `npm run typecheck`, and a deleted-symbol search for the removed Tauri
+  launcher names. Discovered issues: `cargo check` still reports unrelated
+  dead-code warnings for diagnostics runtime/scheduler snapshot event helpers
+  and Pumas helper functions; keep those as separate cleanup candidates because
+  they are not part of this edit-session launcher deletion slice.
 - 2026-05-22: Created from the Milestone 5a node-engine legacy boundary
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy

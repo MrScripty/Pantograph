@@ -1,5 +1,16 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-03 Tauri edit-session launcher deletion update: after the minimal
+scheduler/runtime-host image inference path was proven, the unregistered
+`run_workflow_execution_session` Tauri wrapper and desktop-local
+`workflow_execution_runtime.rs` graph-snapshot launcher were deleted. The
+app-facing TypeScript `runSession` boundary remains fail-closed and is covered
+by a regression test that proves it throws before invoking a Tauri command.
+Scheduler execution-session commands remain the only GUI workflow submission
+path. Verification passed with Tauri fmt/check, frontend command tests,
+typecheck, and deleted-symbol search; unrelated diagnostics/Pumas dead-code
+warnings remain future cleanup candidates.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

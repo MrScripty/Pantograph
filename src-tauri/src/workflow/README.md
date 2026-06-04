@@ -13,9 +13,8 @@ owner of that policy itself.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `commands.rs` | Shared Tauri workflow state aliases plus non-execution command registration entrypoints. |
-| `workflow_execution_tauri_commands.rs` | Tauri execution/edit-session command entrypoints that forward to focused execution and graph-session helpers. |
-| `workflow_execution_commands.rs` | Thin execution command-group facade that reuses focused runtime and edit-session helpers. |
-| `workflow_execution_runtime.rs` | Legacy desktop edit-session execution orchestration retained as internal code; it is not registered as a public GUI command. |
+| `workflow_execution_tauri_commands.rs` | Tauri edit-session command entrypoints that forward to focused graph-session helpers. |
+| `workflow_execution_commands.rs` | Thin execution command-group facade that reuses focused edit-session helpers. |
 | `execution_manager.rs` | Tauri execution-manager facade for host-local execution handles and stale-cleanup ownership. |
 | `execution_manager/` | Focused execution-state lifecycle helpers behind the public execution-manager facade. |
 | `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
@@ -71,7 +70,8 @@ while still handling desktop runtime execution concerns.
   Command handlers and frontend state must not own validation freshness, retry,
   descriptor resolution, or submit policy.
 - Public GUI workflow submission must enter through scheduler execution-session
-  commands. The legacy edit-session run command must stay unregistered.
+  commands. The legacy edit-session run command and desktop-local launcher are
+  deleted.
 - Retention cleanup command handlers must stay transport-thin and delegate to
   `pantograph-workflow-service` so audit events and projection updates have one
   backend owner.
@@ -140,19 +140,13 @@ constructors that bypass those owners.
 Workflow event serialization and ownership projection now live in
 `event_serialization.rs`, keeping `events.rs` focused on DTO definitions and
 snapshot factory helpers.
-`workflow_execution_tauri_commands.rs` now owns the Tauri-facing execution
+`workflow_execution_tauri_commands.rs` now owns the Tauri-facing edit-session
 entrypoints, while `workflow_execution_commands.rs` remains a thin command-
-group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`
-so edit-session graph operations and runtime execution sequencing stop growing
-inside the general command root.
-`workflow_execution_runtime.rs` uses grouped execution, session, and runtime
-state inputs for internal orchestration. Tauri command entrypoints retain their
-framework-injected state signatures for registration compatibility, with scoped
-lint expectations documenting that boundary exception instead of propagating
-long positional argument lists through runtime helpers.
-The legacy edit-session `run_workflow_execution_session` Tauri command is not
-registered. Graph editing still uses edit sessions for mutation, undo, and redo,
-but workflow submission goes through scheduler-owned
+group facade over `workflow_edit_session.rs` so edit-session graph operations
+stop growing inside the general command root.
+The legacy edit-session `run_workflow_execution_session` Tauri command and
+desktop-local launcher are deleted. Graph editing still uses edit sessions for
+mutation, undo, and redo, but workflow submission goes through scheduler-owned
 `workflow_create_execution_session`, `workflow_run_execution_session`, and
 `workflow_close_execution_session`.
 Execution-session queue cancel, reprioritize, push-front, and GUI-admin queued
@@ -211,10 +205,9 @@ relevance, so GUI stores do not need adapter-local diagnostics event claiming.
 Serialized workflow events also include a backend-authored `ownership` payload
 that exposes event execution id, active execution id, and baseline relevance for
 frontend execution reducers.
-Workflow execution diagnostics emission must likewise route through a backend
-helper that synchronizes the shared runtime registry before projecting the
-execution snapshot, so `workflow_execution_runtime.rs` does not own a second
-sync-before-snapshot sequence.
+Workflow execution diagnostics emission must likewise route through backend
+helpers that synchronize shared runtime state before projecting execution
+snapshots; Tauri must not own a second sync-before-snapshot sequence.
 The legacy Tauri-local workflow persistence module has been removed; path
 boundary tests now live with `FileSystemWorkflowGraphStore` in the workflow
 service crate, which is the active owner for save/load/list behavior.

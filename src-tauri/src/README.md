@@ -125,8 +125,8 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
   transport entrypoints only; priority calculation, priority override,
   session-scoped/admin push-front behavior, session lookup, and audit outcomes
   stay in the workflow service.
-- The legacy edit-session `run_workflow_execution_session` command must not be
-  registered. GUI submissions use the scheduler-owned
+- The legacy edit-session `run_workflow_execution_session` command and
+  desktop-local launcher are deleted. GUI submissions use the scheduler-owned
   `workflow_run_execution_session` command so bucket, scheduler, diagnostics,
   and projection state all share one public run path.
 - Workflow projection query commands, including scheduler estimate reads, must
