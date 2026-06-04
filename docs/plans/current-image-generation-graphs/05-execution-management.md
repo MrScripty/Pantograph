@@ -23429,6 +23429,33 @@ Worker rules:
       reported as dead code in the Tauri binary. It remains a separate cleanup
       candidate because it has diagnostics tests and projection ownership that
       should be reviewed in its own slice.
+  - 2026-06-03 Milestone 5b Tauri diagnostics graph setter production-surface
+    cleanup slice:
+    - Smallest useful vertical slice: make
+      `WorkflowDiagnosticsStore::set_execution_graph` test-only after
+      production callers were removed.
+    - Files touched: `src-tauri/src/workflow/diagnostics/store.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`, and this
+      execution log.
+    - No-fallback/no-legacy result: the slice removes production access to a
+      Tauri-local graph attachment helper without adding a graph snapshot
+      fallback, scheduler adapter, or runtime launch branch. Diagnostics
+      graph-context projection remains covered by tests.
+    - Standards alignment: graph snapshots stay behind backend diagnostics and
+      projection owners; Tauri no longer exposes a dead production graph
+      setter left behind by the retired edit-session launcher.
+    - Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml --
+      --check`; `cargo check --manifest-path src-tauri/Cargo.toml`; `cargo
+      test --manifest-path src-tauri/Cargo.toml diagnostics`; `cargo test
+      --manifest-path src-tauri/Cargo.toml event_adapter`; and `git diff
+      --check`.
+    - Verification correction: `cargo test --manifest-path src-tauri/Cargo.toml
+      diagnostics event_adapter` was invalid because Cargo accepts one
+      test-name filter; both corrected commands passed.
+    - Remaining warnings: Tauri check still reports `record_workflow_event`,
+      runtime/scheduler snapshot event DTOs/constructors, and Pumas helper
+      functions as separate cleanup candidates.
 
 ### Traceability Links
 

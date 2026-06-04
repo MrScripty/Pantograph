@@ -877,6 +877,25 @@ upgrade after this path is working.
   as another dead diagnostics helper in the Tauri binary; keep it as a
   separate cleanup candidate with its diagnostics tests and projection
   ownership reviewed before deletion.
+- 2026-06-03 Tauri diagnostics graph setter production-surface cleanup slice
+  completed. Smallest useful vertical slice: scope
+  `WorkflowDiagnosticsStore::set_execution_graph` to tests after production
+  callers were removed, preserving diagnostics graph-context regression
+  coverage without exposing a dead production graph snapshot attachment API.
+  Allowed write set: `src-tauri/src/workflow/diagnostics/store.rs`, this
+  milestone, the execution log, and the top-level plan. No-fallback
+  confirmation: this does not add a graph snapshot fallback or runtime launch
+  branch; it removes production access to a Tauri-local graph attachment
+  helper while leaving backend-owned diagnostics projection behavior covered by
+  tests. Verification passed: `cargo fmt --manifest-path src-tauri/Cargo.toml
+  -- --check`, `cargo check --manifest-path src-tauri/Cargo.toml`, `cargo
+  test --manifest-path src-tauri/Cargo.toml diagnostics`, `cargo test
+  --manifest-path src-tauri/Cargo.toml event_adapter`, and diff hygiene.
+  Verification correction: `cargo test --manifest-path src-tauri/Cargo.toml
+  diagnostics event_adapter` was invalid because Cargo accepts one test-name
+  filter; both corrected commands passed. Remaining warnings are
+  `record_workflow_event`, runtime/scheduler snapshot event DTOs/constructors,
+  and Pumas helper functions.
 - 2026-05-22: Created from the Milestone 5a node-engine legacy boundary
   re-plan. Decision: use Option 3 planning structure with Option 1
   implementation direction. Milestone 5b owns runtime-host handoff and legacy

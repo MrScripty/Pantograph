@@ -20,6 +20,14 @@ fmt/check, event-adapter tests, and deleted-symbol search. The deletion exposes
 `WorkflowDiagnosticsStore::set_execution_graph` as a separate dead diagnostics
 helper cleanup candidate.
 
+2026-06-03 Tauri diagnostics graph setter cleanup update:
+`WorkflowDiagnosticsStore::set_execution_graph` is now test-only after the
+production adapter caller was deleted. This removes a dead production graph
+snapshot attachment API without adding any graph fallback or runtime launch
+path, while preserving diagnostics graph-context projection coverage in tests.
+Verification passed with Tauri fmt/check, diagnostics tests, event-adapter
+tests, and diff hygiene.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

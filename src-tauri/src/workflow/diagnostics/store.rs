@@ -166,6 +166,7 @@ impl WorkflowDiagnosticsStore {
             .set_execution_metadata(workflow_run_id, workflow_id);
     }
 
+    #[cfg(test)]
     pub fn set_execution_graph(&self, workflow_run_id: &str, graph: &WorkflowGraph) {
         self.trace_store
             .set_execution_graph_context(workflow_run_id, &graph_trace_context(graph));
