@@ -24,7 +24,8 @@ use super::{
     unix_timestamp_ms, WorkflowExecutionSessionActiveRun, WorkflowExecutionSessionActiveRunContext,
     WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionQueuedRun,
     WorkflowExecutionSessionRecord, WorkflowExecutionSessionRunFinishState,
-    WorkflowExecutionSessionStore,
+    WorkflowExecutionSessionStore, WorkflowSchedulerBootstrapRecoveryAction,
+    WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
 };
 
 impl WorkflowExecutionSessionStore {
@@ -339,29 +340,13 @@ impl WorkflowExecutionSessionStore {
         session_id: &str,
         workflow_run_id: &str,
     ) -> Option<WorkflowExecutionSessionResumeState> {
-        let state = self.active.get(session_id)?;
-        let active_run = state.active_run.as_ref()?;
-        if active_run.workflow_run_id != workflow_run_id {
-            return None;
-        }
-        let task_graph = active_run.scheduler_task_graph.as_ref()?;
-        let runtime_task_ids = task_graph
-            .tasks
-            .iter()
-            .filter(|task| {
-                task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
-            })
-            .map(|task| task.task_id.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
-        let has_pending_runtime_readiness_task =
-            active_run.scheduler_task_records.values().any(|record| {
-                runtime_task_ids.contains(record.task_id.as_str())
-                    && matches!(
-                        record.state.kind(),
-                        SchedulerTaskStateKind::PausedDeferred
-                            | SchedulerTaskStateKind::WaitingDependencyReadiness
-                    )
-            });
+        let snapshot = self
+            .active_run_bootstrap_recovery_snapshot(session_id, workflow_run_id)
+            .ok()
+            .flatten()?;
+        let has_pending_runtime_readiness_task = snapshot.runtime_tasks.iter().any(|task| {
+            task.action == WorkflowSchedulerBootstrapRecoveryAction::RetryDependencyReadiness
+        });
         has_pending_runtime_readiness_task
             .then_some(WorkflowExecutionSessionResumeState::DependencyReadinessPending)
     }
@@ -383,6 +368,57 @@ impl WorkflowExecutionSessionStore {
                 })
             })
             .collect()
+    }
+
+    pub(crate) fn active_run_bootstrap_recovery_snapshot(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<Option<WorkflowSchedulerBootstrapRecoverySnapshot>, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_ref() else {
+            return Ok(None);
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Ok(None);
+        }
+        let Some(task_graph) = active_run.scheduler_task_graph.as_ref() else {
+            if active_run.scheduler_task_records.is_empty() {
+                return Ok(None);
+            }
+            return Err(WorkflowServiceError::Internal(format!(
+                "session '{}' active run '{}' has scheduler task-state records without task graph",
+                session_id, workflow_run_id
+            )));
+        };
+
+        let runtime_tasks = task_graph
+            .tasks
+            .iter()
+            .filter(|task| {
+                task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+            })
+            .map(|task| {
+                let task_id = task.task_id.as_str().to_string();
+                let state_kind = active_run
+                    .scheduler_task_records
+                    .get(task.task_id.as_str())
+                    .map(|record| record.state.kind());
+                WorkflowSchedulerBootstrapRecoveryTask {
+                    task_id,
+                    state_kind,
+                    action: bootstrap_recovery_action_for_state(state_kind),
+                }
+            })
+            .collect();
+
+        Ok(Some(WorkflowSchedulerBootstrapRecoverySnapshot {
+            session_id: session_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
+            runtime_tasks,
+        }))
     }
 
     #[allow(dead_code)]
@@ -711,6 +747,39 @@ impl WorkflowExecutionSessionStore {
         }
 
         WorkflowExecutionSessionWarmCompatibility::Compatible
+    }
+}
+
+fn bootstrap_recovery_action_for_state(
+    state_kind: Option<SchedulerTaskStateKind>,
+) -> WorkflowSchedulerBootstrapRecoveryAction {
+    match state_kind {
+        Some(SchedulerTaskStateKind::AwaitingInputs) => {
+            WorkflowSchedulerBootstrapRecoveryAction::ResumeProgressLoop
+        }
+        Some(
+            SchedulerTaskStateKind::WaitingDependencyReadiness
+            | SchedulerTaskStateKind::PausedDeferred
+            | SchedulerTaskStateKind::RetryableFailed,
+        ) => WorkflowSchedulerBootstrapRecoveryAction::RetryDependencyReadiness,
+        Some(SchedulerTaskStateKind::Ready) => {
+            WorkflowSchedulerBootstrapRecoveryAction::RedispatchReadyRuntime
+        }
+        Some(
+            SchedulerTaskStateKind::WaitingResources
+            | SchedulerTaskStateKind::WaitingBatch
+            | SchedulerTaskStateKind::Running,
+        ) => WorkflowSchedulerBootstrapRecoveryAction::RuntimeRecoveryRequired,
+        Some(SchedulerTaskStateKind::Completed) => {
+            WorkflowSchedulerBootstrapRecoveryAction::Completed
+        }
+        Some(
+            SchedulerTaskStateKind::InputUnavailable
+            | SchedulerTaskStateKind::Invalid
+            | SchedulerTaskStateKind::TerminalFailed,
+        ) => WorkflowSchedulerBootstrapRecoveryAction::TerminalDiagnostic,
+        None => WorkflowSchedulerBootstrapRecoveryAction::MissingTaskStateRecord,
+        Some(_) => WorkflowSchedulerBootstrapRecoveryAction::TerminalDiagnostic,
     }
 }
 

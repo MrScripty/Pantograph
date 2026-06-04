@@ -4,6 +4,7 @@ use crate::workflow::{
     WorkflowSchedulerTaskGraph,
 };
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
+use pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState;
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerRuntimeDeviceConstraints, SchedulerTaskExecutionIntent,
     SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
@@ -372,4 +373,219 @@ fn active_run_rejects_task_records_for_different_run() {
     assert!(err
         .to_string()
         .contains("belongs to workflow run 'run-other'"));
+}
+
+#[test]
+fn active_run_bootstrap_recovery_snapshot_classifies_runtime_task_states() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &workflow_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    store
+        .set_active_run_scheduler_task_state(
+            &session_id,
+            &workflow_run_id,
+            scheduler_task_graph(
+                &workflow_run_id,
+                &[
+                    "awaiting-inputs",
+                    "waiting-readiness",
+                    "paused-deferred",
+                    "retryable-failed",
+                    "ready-runtime",
+                    "running-runtime",
+                    "terminal-failed",
+                    "completed-runtime",
+                ],
+            ),
+            vec![
+                scheduler_record(
+                    &workflow_run_id,
+                    "awaiting-inputs",
+                    SchedulerTaskStateKind::AwaitingInputs,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "waiting-readiness",
+                    SchedulerTaskStateKind::WaitingDependencyReadiness,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "paused-deferred",
+                    SchedulerTaskStateKind::PausedDeferred,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "retryable-failed",
+                    SchedulerTaskStateKind::RetryableFailed,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "ready-runtime",
+                    SchedulerTaskStateKind::Ready,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "running-runtime",
+                    SchedulerTaskStateKind::Running,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "terminal-failed",
+                    SchedulerTaskStateKind::TerminalFailed,
+                ),
+                scheduler_record(
+                    &workflow_run_id,
+                    "completed-runtime",
+                    SchedulerTaskStateKind::Completed,
+                ),
+            ],
+        )
+        .expect("set task state");
+
+    let snapshot = store
+        .active_run_bootstrap_recovery_snapshot(&session_id, &workflow_run_id)
+        .expect("bootstrap recovery snapshot")
+        .expect("active run snapshot");
+    let actions = snapshot
+        .runtime_tasks
+        .iter()
+        .map(|task| (task.task_id.as_str(), task.action))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    assert_eq!(
+        actions.get("awaiting-inputs"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::ResumeProgressLoop)
+    );
+    assert_eq!(
+        actions.get("waiting-readiness"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::RetryDependencyReadiness)
+    );
+    assert_eq!(
+        actions.get("paused-deferred"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::RetryDependencyReadiness)
+    );
+    assert_eq!(
+        actions.get("retryable-failed"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::RetryDependencyReadiness)
+    );
+    assert_eq!(
+        actions.get("ready-runtime"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::RedispatchReadyRuntime)
+    );
+    assert_eq!(
+        actions.get("running-runtime"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::RuntimeRecoveryRequired)
+    );
+    assert_eq!(
+        actions.get("terminal-failed"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::TerminalDiagnostic)
+    );
+    assert_eq!(
+        actions.get("completed-runtime"),
+        Some(&WorkflowSchedulerBootstrapRecoveryAction::Completed)
+    );
+}
+
+#[test]
+fn active_run_bootstrap_recovery_snapshot_reports_missing_runtime_task_state() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &workflow_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    store
+        .set_active_run_scheduler_task_state(
+            &session_id,
+            &workflow_run_id,
+            scheduler_task_graph(&workflow_run_id, &["image-task"]),
+            Vec::new(),
+        )
+        .expect("set task graph without records");
+
+    let snapshot = store
+        .active_run_bootstrap_recovery_snapshot(&session_id, &workflow_run_id)
+        .expect("bootstrap recovery snapshot")
+        .expect("active run snapshot");
+
+    assert_eq!(snapshot.runtime_tasks.len(), 1);
+    assert_eq!(snapshot.runtime_tasks[0].task_id, "image-task");
+    assert_eq!(snapshot.runtime_tasks[0].state_kind, None);
+    assert_eq!(
+        snapshot.runtime_tasks[0].action,
+        WorkflowSchedulerBootstrapRecoveryAction::MissingTaskStateRecord
+    );
+}
+
+#[test]
+fn dependency_readiness_resume_candidates_use_bootstrap_recovery_classifier() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &workflow_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    store
+        .set_active_run_scheduler_task_state(
+            &session_id,
+            &workflow_run_id,
+            scheduler_task_graph(&workflow_run_id, &["image-task"]),
+            vec![scheduler_record(
+                &workflow_run_id,
+                "image-task",
+                SchedulerTaskStateKind::RetryableFailed,
+            )],
+        )
+        .expect("set task state");
+
+    assert_eq!(
+        store.active_run_dependency_readiness_resume_state(&session_id, &workflow_run_id),
+        Some(WorkflowExecutionSessionResumeState::DependencyReadinessPending)
+    );
+    let candidates = store.dependency_readiness_resume_candidates();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].session_id, session_id);
+    assert_eq!(candidates[0].workflow_run_id, workflow_run_id);
 }

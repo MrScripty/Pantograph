@@ -602,6 +602,27 @@ and Tauri/frontend changes. The production active cancellation API is the next
 slice so it can be wired to a real backend caller instead of leaving dead
 staging code.
 
+2026-06-04 bootstrap recovery classifier update: workflow-service now exposes
+an active-run scheduler bootstrap recovery snapshot for canonical runtime task
+state and reuses that classifier in the existing dependency-readiness resume
+candidate path. The classifier maps runtime task state to typed next actions:
+resume progress loop, retry dependency readiness, redispatch ready runtime
+task, require runtime recovery, completed, terminal diagnostic, or missing
+task-state record. It does not replay work, mutate task state, infer from
+legacy graph/backend/runtime paths, write diagnostics-ledger facts, add
+Tauri/frontend policy, or change Pumas/package facts. Verification passed:
+`cargo fmt -p pantograph-workflow-service`; `cargo test -p
+pantograph-workflow-service bootstrap_recovery --lib`; `cargo test -p
+pantograph-workflow-service
+dependency_readiness_resume_candidates_use_bootstrap_recovery_classifier
+--lib`; `cargo test -p pantograph-workflow-service scheduler::store --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: consume the
+recovery snapshot from a workflow-service-owned bootstrap/replay runner that
+reconciles incomplete attempts without duplicate dispatch, then add
+diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in

@@ -175,6 +175,31 @@ pub(crate) struct WorkflowExecutionSessionActiveRunContext {
     pub(crate) timeout_ms: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkflowSchedulerBootstrapRecoveryAction {
+    ResumeProgressLoop,
+    RetryDependencyReadiness,
+    RedispatchReadyRuntime,
+    RuntimeRecoveryRequired,
+    Completed,
+    TerminalDiagnostic,
+    MissingTaskStateRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSchedulerBootstrapRecoveryTask {
+    pub(crate) task_id: String,
+    pub(crate) state_kind: Option<pantograph_scheduler::SchedulerTaskStateKind>,
+    pub(crate) action: WorkflowSchedulerBootstrapRecoveryAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSchedulerBootstrapRecoverySnapshot {
+    pub(crate) session_id: String,
+    pub(crate) workflow_run_id: String,
+    pub(crate) runtime_tasks: Vec<WorkflowSchedulerBootstrapRecoveryTask>,
+}
+
 pub(crate) fn unix_timestamp_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
 

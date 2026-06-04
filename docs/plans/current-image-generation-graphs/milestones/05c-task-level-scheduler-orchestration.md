@@ -1902,3 +1902,46 @@ durable task orchestration path.
   no-fallback/no-legacy source search over touched scheduler files.
   Remaining follow-up: replay/bootstrap recovery and diagnostics-ledger
   attempt/timing facts.
+- 2026-06-04 bootstrap recovery classifier slice completed. Smallest useful
+  vertical slice: classify existing active-run runtime scheduler task records
+  into typed bootstrap recovery actions and route the existing
+  dependency-readiness resume candidate query through that classifier, without
+  replaying work or adding diagnostics-ledger writes. Allowed write set used:
+  `crates/pantograph-workflow-service/src/scheduler/store.rs`,
+  `crates/pantograph-workflow-service/src/scheduler/store_queue.rs`,
+  `crates/pantograph-workflow-service/src/scheduler/store_tests.rs`, and this
+  plan set.
+  No-fallback/no-legacy confirmation: the classifier only reads canonical
+  workflow-service active-run scheduler task graph/state. It does not infer
+  recovery from graph paths, selector summaries, reduced plans, node-engine
+  state, runtime adapters, Tauri/frontend state, Pumas package facts,
+  lockfiles, generated files, saved workflow fixtures, or diagnostics-ledger
+  records. Missing task-state records are represented as a typed recovery
+  action instead of silently falling back.
+  Implementation summary: `WorkflowExecutionSessionStore` now exposes an
+  active-run bootstrap recovery snapshot for runtime scheduler tasks. The
+  snapshot maps task state to `ResumeProgressLoop`,
+  `RetryDependencyReadiness`, `RedispatchReadyRuntime`,
+  `RuntimeRecoveryRequired`, `Completed`, `TerminalDiagnostic`, or
+  `MissingTaskStateRecord`. The existing
+  `active_run_dependency_readiness_resume_state` path now consumes this
+  classifier, so `RetryableFailed` dependency-readiness tasks are treated
+  consistently with other retryable readiness states.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service bootstrap_recovery --lib`; `cargo test
+  -p pantograph-workflow-service
+  dependency_readiness_resume_candidates_use_bootstrap_recovery_classifier
+  --lib`; `cargo test -p pantograph-workflow-service scheduler::store --lib`;
+  `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+  no-fallback/no-legacy source search over touched scheduler files. Matches
+  were existing Pumas test helper imports and existing warm-compatibility
+  naming only.
+  Deviation/discovered issue: a broader aggregate bootstrap snapshot API was
+  intentionally not kept in this slice because no production bootstrap owner
+  consumes it yet, and leaving it unused would violate the standards bias
+  against dead staging code.
+  Remaining follow-up: add the workflow-service-owned bootstrap/replay runner
+  that consumes the active-run recovery snapshot to reconcile incomplete
+  attempts without duplicate dispatch, then add diagnostics-ledger
+  attempt/timing facts after replay ordering is proven.
