@@ -536,6 +536,14 @@ durable task orchestration path.
   guardrails are not enough to complete the lifecycle boundary. Option 3
   remains the final durable lifecycle supervisor target. Option 4 is deferred
   unless the attempt/lease contract must be shared outside workflow-service.
+  2026-06-03 source update: the first attempt-core slice added
+  workflow-service active-run task attempt ids for runtime and non-runtime
+  task starts. Completion/failure paths now require the matching attempt id
+  before task-state/result mutation, duplicate starts fail closed, and stale
+  completions cannot record a second result. Remaining follow-up inside this
+  item: explicit cancel transition, reservation-release intent wiring,
+  retry/defer idempotency, replay/recovery, worker supervision, and
+  timing/attempt ledger facts.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

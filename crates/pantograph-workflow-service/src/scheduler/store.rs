@@ -61,6 +61,27 @@ struct WorkflowExecutionSessionActiveRun {
     scheduler_task_records: BTreeMap<String, SchedulerTaskStateRecord>,
     // Milestone 5c stages task-result storage before durable ledger replay.
     scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
+    scheduler_task_attempts: BTreeMap<String, WorkflowExecutionSessionTaskAttempt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSchedulerTaskAttemptId(String);
+
+impl WorkflowSchedulerTaskAttemptId {
+    fn new() -> Self {
+        Self(format!("scheduler-task-attempt.{}", Uuid::new_v4()))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowExecutionSessionTaskAttempt {
+    attempt_id: WorkflowSchedulerTaskAttemptId,
+    #[allow(dead_code)]
+    started_at_ms: u64,
 }
 
 #[derive(Debug, Clone)]

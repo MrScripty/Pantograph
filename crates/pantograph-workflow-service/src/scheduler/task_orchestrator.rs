@@ -43,7 +43,7 @@ use crate::workflow::{
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
 };
 
-use super::WorkflowExecutionSessionStore;
+use super::{WorkflowExecutionSessionStore, WorkflowSchedulerTaskAttemptId};
 
 /// Workflow-service async shell for scheduler task orchestration.
 ///
@@ -63,6 +63,7 @@ pub(crate) struct StartedNonRuntimeTaskExecution {
     task: WorkflowSchedulerTask,
     materialized_results: Vec<WorkflowSchedulerTaskResult>,
     running_record: SchedulerTaskStateRecord,
+    attempt_id: WorkflowSchedulerTaskAttemptId,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +72,7 @@ pub(crate) struct StartedRuntimeTaskExecution {
     pub(crate) task: WorkflowSchedulerTask,
     pub(crate) materialized_results: Vec<WorkflowSchedulerTaskResult>,
     running_record: SchedulerTaskStateRecord,
+    attempt_id: WorkflowSchedulerTaskAttemptId,
 }
 
 impl WorkflowSchedulerTaskOrchestrator {
@@ -426,14 +428,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         let ready_execution_intent = ready_non_runtime_execution_intent(ready_record)?;
         let running_transition =
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
-        let running_record = store
-            .apply_active_run_scheduler_task_transition(
+        let (running_record, attempt_id) = store
+            .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
                 running_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)?;
+            .and_then(applied_task_state_record_with_attempt)?;
 
         let materialized_results = store
             .active_run_scheduler_task_results(session_id, workflow_run_id)
@@ -442,6 +444,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             task: task.clone(),
             materialized_results,
             running_record,
+            attempt_id,
         })
     }
 
@@ -467,6 +470,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             .complete_active_run_scheduler_task(
                 session_id,
                 workflow_run_id,
+                &started.attempt_id,
                 completion_transition,
                 result,
             )
@@ -487,9 +491,10 @@ impl WorkflowSchedulerTaskOrchestrator {
             non_runtime_adapter_failure_diagnostic(error),
         )?;
         store
-            .apply_active_run_scheduler_task_transition(
+            .fail_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
+                &started.attempt_id,
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
@@ -549,14 +554,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         let ready_execution_intent = ready_runtime_execution_intent(ready_record)?;
         let running_transition =
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
-        let running_record = store
-            .apply_active_run_scheduler_task_transition(
+        let (running_record, attempt_id) = store
+            .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
                 running_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)?;
+            .and_then(applied_task_state_record_with_attempt)?;
 
         let materialized_results = store
             .active_run_scheduler_task_results(session_id, workflow_run_id)
@@ -565,6 +570,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             task: task.clone(),
             materialized_results,
             running_record,
+            attempt_id,
         })
     }
 
@@ -582,6 +588,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             .complete_active_run_scheduler_task(
                 session_id,
                 workflow_run_id,
+                &started.attempt_id,
                 completion_transition,
                 result,
             )
@@ -602,9 +609,10 @@ impl WorkflowSchedulerTaskOrchestrator {
             runtime_dispatch_selection_task_diagnostics(selection),
         )?;
         store
-            .apply_active_run_scheduler_task_transition(
+            .fail_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
+                &started.attempt_id,
                 failure_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
@@ -1907,6 +1915,19 @@ fn applied_task_state_record(
             ))
         }
     }
+}
+
+fn applied_task_state_record_with_attempt(
+    result: (
+        pantograph_scheduler::SchedulerTaskStateTransitionApplyResult,
+        WorkflowSchedulerTaskAttemptId,
+    ),
+) -> Result<
+    (SchedulerTaskStateRecord, WorkflowSchedulerTaskAttemptId),
+    WorkflowSchedulerTaskOrchestratorError,
+> {
+    let (result, attempt_id) = result;
+    applied_task_state_record(result).map(|record| (record, attempt_id))
 }
 
 fn source_input_execution_intent(

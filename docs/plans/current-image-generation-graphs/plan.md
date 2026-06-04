@@ -76,6 +76,17 @@ lifecycle supervisor, remains the target architecture after the attempt/lease
 core exists. Option 4, moving contracts into `pantograph-scheduler`, is
 deferred unless shared ownership is proven.
 
+2026-06-03 scheduler attempt identity source update: workflow-service
+active-run task execution now creates a scheduler-owned attempt id when a
+ready runtime or non-runtime task starts. Completion and failure paths must
+present the matching attempt id before mutating task state or task results;
+duplicate starts and stale completions fail closed without recording results.
+This keeps async task execution outside the store mutation boundary and adds no
+graph path fallback, node-engine runtime launch, Tauri/frontend policy, or
+compatibility shim. Remaining lifecycle work: explicit cancel attempt
+transition, reservation-release intent wiring, retry/defer idempotency,
+replay/recovery, worker supervision, and timing/attempt ledger facts.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

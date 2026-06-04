@@ -23623,6 +23623,45 @@ Worker rules:
       --check`; focused workflow-service scheduler tests; relevant
       workflow-service `cargo check` feature matrix when public contracts
       change; and `git diff --check`.
+  - 2026-06-03 Milestone 5c scheduler attempt identity source slice:
+    - Smallest useful vertical slice: add workflow-service active-run task
+      attempt identity for runtime and non-runtime task start/completion/
+      failure paths.
+    - Files touched:
+      `crates/pantograph-workflow-service/src/scheduler/store.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store_queue.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this execution log.
+    - No-fallback/no-legacy result: task starts now create a store-owned
+      attempt id, and completion/failure must present the matching id before
+      mutating task state or task results. Duplicate starts and stale
+      completions fail closed without adding graph-path fallback,
+      reduced-plan launch, node-engine runtime launch, Tauri/frontend policy,
+      or a compatibility retry branch.
+    - Standards alignment: the active-run store remains the single synchronous
+      state owner for attempt identity and terminal mutation; the orchestrator
+      remains the async shell that executes tasks outside the store lock and
+      returns to explicit completion/failure transitions.
+    - Verification passed: `cargo fmt -p pantograph-workflow-service --
+      --check`; `cargo test -p pantograph-workflow-service
+      active_run_complete_scheduler_task --lib`; `cargo test -p
+      pantograph-workflow-service scheduler::task_orchestrator --lib`; targeted
+      no-fallback search over touched scheduler files for legacy runtime/graph
+      launch terms; `cargo check -p pantograph-workflow-service`; and `git
+      diff --check`.
+    - Verification deviation fixed: the existing store test fixture initially
+      staged `Running` state directly and reused the running transition id as
+      the initial transition id. The fixture now starts from `Ready` through
+      the new attempt-start store method and uses an initial transition id,
+      matching production task-state initialization.
+    - Remaining follow-up: explicit cancel attempt transition,
+      reservation-release intent wiring, retry/defer idempotency,
+      replay/recovery, worker supervision, and timing/attempt ledger facts.
 
 ### Traceability Links
 

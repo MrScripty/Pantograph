@@ -1198,6 +1198,128 @@ fn orchestrator_persists_started_runtime_task_result() {
 }
 
 #[test]
+fn orchestrator_rejects_duplicate_runtime_task_attempt_start() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(ready_readiness_proof()),
+        )
+        .expect("admit runtime task readiness");
+
+    let started = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+    assert!(started
+        .attempt_id
+        .as_str()
+        .starts_with("scheduler-task-attempt."));
+
+    let error = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect_err("duplicate runtime task start must be rejected");
+
+    let WorkflowSchedulerTaskOrchestratorError::WorkflowService(error) = error else {
+        panic!("expected workflow-service error");
+    };
+    assert!(!error.message().is_empty());
+    let (_stored_graph, records) = store
+        .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+        .expect("active run task state")
+        .expect("stored task state");
+    assert_eq!(records[0].state.kind(), SchedulerTaskStateKind::Running);
+    assert!(store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results")
+        .is_empty());
+}
+
+#[test]
+fn orchestrator_rejects_stale_runtime_task_completion_without_mutating_results() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(ready_readiness_proof()),
+        )
+        .expect("admit runtime task readiness");
+    let started = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+    orchestrator
+        .complete_started_runtime_task(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &started,
+            runtime_task_result_fixture(&task_graph.tasks[0]),
+        )
+        .expect("complete runtime task");
+
+    let error = orchestrator
+        .complete_started_runtime_task(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &started,
+            runtime_task_result_fixture(&task_graph.tasks[0]),
+        )
+        .expect_err("stale runtime task completion must be rejected");
+
+    let WorkflowSchedulerTaskOrchestratorError::WorkflowService(error) = error else {
+        panic!("expected workflow-service error");
+    };
+    assert!(error
+        .message()
+        .contains("has no active attempt for completion"));
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].task_id, task_id);
+    assert_eq!(
+        results[0].status,
+        WorkflowSchedulerTaskResultStatus::Completed
+    );
+}
+
+#[test]
 fn orchestrator_preserves_dispatch_no_selection_diagnostics_on_started_runtime_task() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let mut selection_request = dispatch_selection_request_fixture();

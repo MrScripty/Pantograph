@@ -552,6 +552,18 @@ Option 2 immediate implementation:
   port. Do not silently drop reservations, and do not let Tauri/frontend own
   release policy.
 
+Completed sub-slice on 2026-06-03:
+
+- Workflow-service active-run store now creates a task attempt id when a
+  ready runtime or non-runtime task starts.
+- Runtime and non-runtime completion/failure paths now require the matching
+  attempt id before task-state/result mutation.
+- Duplicate starts and stale completions fail closed without recording
+  additional task results.
+- The remaining attempt-core work is explicit cancel transition support and
+  reservation-release intent wiring, followed by retry/defer idempotency,
+  replay/recovery, worker supervision, and timing/attempt ledger facts.
+
 Deferred Option 3 target:
 
 - Add a single lifecycle owner for bounded workers, cancellation tokens,
