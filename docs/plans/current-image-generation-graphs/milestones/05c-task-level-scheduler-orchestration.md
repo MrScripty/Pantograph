@@ -1735,3 +1735,42 @@ durable task orchestration path.
   handle, add workflow-service await/abort behavior and panic observation for
   supervised task handles, then continue with retry/defer idempotency,
   replay/bootstrap, and diagnostics-ledger attempt/timing facts.
+- 2026-06-04 embedded runtime-host cancellation observation slice completed.
+  Smallest useful vertical slice: make the embedded runtime-host execution
+  port observe workflow-service-owned cancellation/shutdown at its current
+  async boundaries. Allowed write set used:
+  `crates/pantograph-runtime-host-contracts/src/runtime_host_execution.rs`,
+  `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`, and
+  this plan set.
+  No-fallback/no-legacy confirmation: the adapter only observes the live
+  cancellation handle supplied by workflow-service. It does not own lifecycle
+  policy, add Tauri/frontend cancellation behavior, restore graph-path or
+  reduced-plan execution, add compatibility shims, introduce retry/defer,
+  alter Pumas facts, edit lockfiles, or update saved workflow fixtures.
+  Mismatched or invalid cancellation snapshots fail closed as port errors.
+  Implementation summary: runtime-host diagnostics now include
+  `CancellationRequested` and `ShutdownRequested`; the embedded runtime-host
+  port validates cancellation snapshots, rejects mismatched contexts, and
+  checks cancellation before dependency resolution, after load-target
+  resolution, after package-facts resolution, and before gateway execution.
+  Cancellation and shutdown produce typed rejected runtime-host responses with
+  stable diagnostic hints.
+  Verification passed:
+  `cargo fmt -p pantograph-runtime-host-contracts -- --check`;
+  `cargo fmt -p pantograph-embedded-runtime -- --check`;
+  `cargo test -p pantograph-runtime-host-contracts runtime_host_execution --lib`;
+  `cargo test -p pantograph-embedded-runtime runtime_host_execution_port --lib`;
+  `cargo test -p pantograph-workflow-service scheduler::task_orchestrator --lib`;
+  `cargo check -p pantograph-runtime-host-contracts`;
+  `cargo check -p pantograph-embedded-runtime`;
+  `cargo check -p pantograph-workflow-service`; and `git diff --check`.
+  Verification note: targeted no-fallback/deleted-symbol search over touched
+  source found only a Pumas test fixture path helper, not a production
+  fallback, legacy execution branch, Tauri/frontend policy, reduced-plan
+  launch, or retired runtime handoff.
+  Remaining follow-up: the embedded runtime-host port now observes
+  cancellation before and between existing async steps, but the image gateway
+  still needs cooperative cancellation for mid-inference interruption. Continue
+  with workflow-service await/abort and panic observation, deeper runtime
+  gateway/provider cancellation, retry/defer idempotency, replay/bootstrap,
+  and diagnostics-ledger attempt/timing facts.

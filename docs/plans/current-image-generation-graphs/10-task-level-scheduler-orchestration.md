@@ -674,6 +674,17 @@ Option 3 thin implementation sequence:
      diagnostics. After that contract is in place, implement the full
      workflow-service task supervisor with tracked handles, child cancellation
      tokens, shutdown draining, timeout/abort behavior, and panic observation.
+   - 2026-06-04 implementation update: the cancellable runtime-host execution
+     contract path is now partially implemented through adapter observation.
+     Workflow-service owns live cancellation/shutdown signals for started
+     runtime task attempts, started runtime dispatch passes the live handle
+     through the runtime-host boundary, and the embedded-runtime port observes
+     that handle before dependency resolution, after load-target resolution,
+     after package-facts resolution, and before gateway execution. The broader
+     lifecycle item remains open because workflow-service still needs
+     await/abort behavior and panic observation for supervised task handles,
+     and the image gateway/providers still need cooperative cancellation for
+     mid-inference interruption.
 4. [ ] Retry/defer policy boundary: add typed retry/defer decisions and
    idempotency keys after cancellation ownership exists. Keep retry scheduling
    separate from dispatch selection and reservation release.

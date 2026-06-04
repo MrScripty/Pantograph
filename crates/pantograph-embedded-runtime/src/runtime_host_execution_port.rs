@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_runtime_host_contracts::{
-    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionCancellationSnapshot,
+    RuntimeHostExecutionCancellationState, RuntimeHostExecutionDiagnostic,
     RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
     RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
@@ -45,6 +46,11 @@ const MEDIA_ARTIFACT_WRITE_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.media_artifact_write_failed";
 const RUNTIME_EXECUTION_UNAVAILABLE_HINT: &str =
     "embedded_runtime_host_execution_port.runtime_execution_unavailable";
+const CANCELLATION_REQUESTED_HINT: &str =
+    "embedded_runtime_host_execution_port.cancellation_requested";
+const SHUTDOWN_REQUESTED_HINT: &str = "embedded_runtime_host_execution_port.shutdown_requested";
+const UNKNOWN_CANCELLATION_STATE_HINT: &str =
+    "embedded_runtime_host_execution_port.unknown_cancellation_state";
 
 pub(crate) struct EmbeddedRuntimeHostExecutionPort {
     load_target_resolver: Option<Arc<dyn RuntimeHostLoadTargetResolver>>,
@@ -109,7 +115,7 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
     async fn execute_runtime_host_request(
         &self,
         request: RuntimeHostExecutionRequest,
-        _cancellation: RuntimeHostExecutionCancellationHandle,
+        cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
         let validated_request =
             ValidatedRuntimeHostExecutionRequest::try_from(request).map_err(|error| {
@@ -117,6 +123,12 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                     message: format!("embedded runtime-host request failed validation: {error}"),
                 }
             })?;
+
+        if let Some(response) =
+            cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
+        {
+            return Ok(response);
+        }
 
         let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
             return Ok(rejected_response(
@@ -129,6 +141,11 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
 
         match load_target_resolver.resolve(&validated_request).await {
             Ok(load_target) => {
+                if let Some(response) =
+                    cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
+                {
+                    return Ok(response);
+                }
                 let Some(_media_artifact_sink) = self.media_artifact_sink.as_ref() else {
                     return Ok(rejected_response(
                         validated_request.as_ref(),
@@ -164,6 +181,11 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                         ));
                     }
                 };
+                if let Some(response) =
+                    cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
+                {
+                    return Ok(response);
+                }
                 let projection = match project_runtime_host_image_generation(
                     &validated_request,
                     package_facts,
@@ -179,6 +201,11 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                         ));
                     }
                 };
+                if let Some(response) =
+                    cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
+                {
+                    return Ok(response);
+                }
                 let result = match gateway
                     .generate_image_from_planning_input(projection.planning_input())
                     .await
@@ -237,6 +264,61 @@ fn rejected_response(
             hint: Some(hint.to_string()),
         }],
         terminal_metadata: None,
+    }
+}
+
+fn cancellation_rejection_response(
+    request: &RuntimeHostExecutionRequest,
+    cancellation: &RuntimeHostExecutionCancellationHandle,
+) -> Result<Option<RuntimeHostExecutionResponse>, RuntimeHostExecutionPortError> {
+    let snapshot = cancellation.snapshot();
+    snapshot
+        .validate()
+        .map_err(|error| RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host cancellation snapshot failed validation: {error}"
+            ),
+        })?;
+    if snapshot.cancellation_context_id != request.cancellation_context.cancellation_context_id {
+        return Err(RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host cancellation context mismatch: request '{}' but signal '{}'",
+                request.cancellation_context.cancellation_context_id,
+                snapshot.cancellation_context_id
+            ),
+        });
+    }
+
+    Ok(cancellation_rejection_from_snapshot(request, &snapshot))
+}
+
+fn cancellation_rejection_from_snapshot(
+    request: &RuntimeHostExecutionRequest,
+    snapshot: &RuntimeHostExecutionCancellationSnapshot,
+) -> Option<RuntimeHostExecutionResponse> {
+    let reason = snapshot.reason.as_deref().unwrap_or("no reason provided");
+    match snapshot.state {
+        RuntimeHostExecutionCancellationState::Running => None,
+        RuntimeHostExecutionCancellationState::CancellationRequested => Some(rejected_response(
+            request,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            &format!("embedded runtime-host execution cancelled before completion: {reason}"),
+            CANCELLATION_REQUESTED_HINT,
+        )),
+        RuntimeHostExecutionCancellationState::ShutdownRequested => Some(rejected_response(
+            request,
+            RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+            &format!(
+                "embedded runtime-host execution stopped for workflow-service shutdown: {reason}"
+            ),
+            SHUTDOWN_REQUESTED_HINT,
+        )),
+        _ => Some(rejected_response(
+            request,
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "embedded runtime-host execution rejected an unknown cancellation state",
+            UNKNOWN_CANCELLATION_STATE_HINT,
+        )),
     }
 }
 
@@ -360,7 +442,9 @@ mod tests {
         BackendExecutionContext, ImageGenerationExecutionPlan, ImageGenerationResult,
         RerankRequest, RerankResponse,
     };
-    use pantograph_runtime_host_contracts::RuntimeHostExecutionContractError;
+    use pantograph_runtime_host_contracts::{
+        RuntimeHostExecutionCancellationSignal, RuntimeHostExecutionContractError,
+    };
     use pantograph_workflow_service::{
         ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowArtifactWriter, WorkflowService,
     };
@@ -375,6 +459,17 @@ mod tests {
         WorkflowServiceRuntimeHostMediaArtifactSink,
     };
     use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
+
+    #[derive(Debug)]
+    struct FixtureCancellationSignal {
+        snapshot: RuntimeHostExecutionCancellationSnapshot,
+    }
+
+    impl RuntimeHostExecutionCancellationSignal for FixtureCancellationSignal {
+        fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
+            self.snapshot.clone()
+        }
+    }
 
     #[tokio::test]
     async fn fail_closed_port_rejects_without_load_target_resolver() {
@@ -400,6 +495,90 @@ mod tests {
             diagnostic.hint.as_deref(),
             Some(MISSING_LOAD_TARGET_RESOLVER_HINT)
         );
+    }
+
+    #[tokio::test]
+    async fn port_rejects_cancelled_request_before_runtime_dependencies() {
+        let request = runtime_host_request_fixture();
+        let cancellation = runtime_host_cancellation_with_state(
+            &request,
+            RuntimeHostExecutionCancellationState::CancellationRequested,
+            Some("user cancelled task"),
+        );
+        let port = EmbeddedRuntimeHostExecutionPort::fail_closed();
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("cancelled request should produce typed rejected response");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested
+        );
+        assert_eq!(
+            response.diagnostics[0].hint.as_deref(),
+            Some(CANCELLATION_REQUESTED_HINT)
+        );
+        assert!(response.diagnostics[0]
+            .message
+            .contains("user cancelled task"));
+    }
+
+    #[tokio::test]
+    async fn port_rejects_shutdown_request_before_runtime_dependencies() {
+        let request = runtime_host_request_fixture();
+        let cancellation = runtime_host_cancellation_with_state(
+            &request,
+            RuntimeHostExecutionCancellationState::ShutdownRequested,
+            Some("workflow shutdown"),
+        );
+        let port = EmbeddedRuntimeHostExecutionPort::fail_closed();
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("shutdown request should produce typed rejected response");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::ShutdownRequested
+        );
+        assert_eq!(
+            response.diagnostics[0].hint.as_deref(),
+            Some(SHUTDOWN_REQUESTED_HINT)
+        );
+        assert!(response.diagnostics[0]
+            .message
+            .contains("workflow shutdown"));
+    }
+
+    #[tokio::test]
+    async fn port_rejects_mismatched_cancellation_context_as_port_error() {
+        let request = runtime_host_request_fixture();
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(
+            FixtureCancellationSignal {
+                snapshot: RuntimeHostExecutionCancellationSnapshot {
+                    cancellation_context_id: "runtime-host-cancellation.other".to_string(),
+                    state: RuntimeHostExecutionCancellationState::Running,
+                    reason: None,
+                },
+            },
+        ));
+        let port = EmbeddedRuntimeHostExecutionPort::fail_closed();
+
+        let error = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect_err("mismatched cancellation signal must fail the port");
+
+        assert!(matches!(
+            error,
+            RuntimeHostExecutionPortError::ExecutionFailed { .. }
+        ));
+        assert!(error.to_string().contains("cancellation context mismatch"));
     }
 
     #[tokio::test]
@@ -628,6 +807,23 @@ mod tests {
         request: &RuntimeHostExecutionRequest,
     ) -> RuntimeHostExecutionCancellationHandle {
         RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone())
+    }
+
+    fn runtime_host_cancellation_with_state(
+        request: &RuntimeHostExecutionRequest,
+        state: RuntimeHostExecutionCancellationState,
+        reason: Option<&str>,
+    ) -> RuntimeHostExecutionCancellationHandle {
+        RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(FixtureCancellationSignal {
+            snapshot: RuntimeHostExecutionCancellationSnapshot {
+                cancellation_context_id: request
+                    .cancellation_context
+                    .cancellation_context_id
+                    .clone(),
+                state,
+                reason: reason.map(str::to_string),
+            },
+        }))
     }
 
     async fn seed_pumas_diffusers_model(

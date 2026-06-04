@@ -213,6 +213,8 @@ pub enum RuntimeHostExecutionDiagnosticCode {
     PumasLoadTargetRequired,
     PumasLoadTargetUnavailable,
     RuntimeUnavailable,
+    CancellationRequested,
+    ShutdownRequested,
     ExecutionFailed,
     ExecutionCompleted,
 }

@@ -496,6 +496,17 @@ validation projection read model. Lifecycle handling applies backend-provided
 node overlays and summary state without calling validation refresh, deriving
 descriptor overlays, or computing validation freshness in frontend code.
 
+2026-06-04 embedded runtime-host cancellation observation update:
+runtime-host diagnostics now include typed cancellation and shutdown codes,
+and the embedded-runtime execution port observes the workflow-service-owned
+live cancellation handle before and between its existing async dependency and
+gateway steps. Cancellation or shutdown returns typed rejected runtime-host
+responses; invalid or mismatched cancellation snapshots fail closed as port
+errors. Remaining Milestone 5c lifecycle work is workflow-service await/abort
+and panic observation, deeper cooperative cancellation inside long-running
+image gateway/provider calls, retry/defer idempotency, replay/bootstrap, and
+diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in
