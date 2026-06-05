@@ -50,6 +50,7 @@ export type DiagnosticEventKind =
   | 'scheduler_model_lifecycle_changed'
   | 'scheduler_run_admitted'
   | 'scheduler_reservation_changed'
+  | 'scheduler_task_attempt_lifecycle_changed'
   | 'run_started'
   | 'run_terminal'
   | 'run_snapshot_accepted'
@@ -73,6 +74,15 @@ export type DiagnosticEventSourceComponent =
 
 export type DiagnosticErrorSeverity = 'warning' | 'error' | 'fatal';
 
+export type SchedulerTaskAttemptExecutionClass = 'runtime' | 'non_runtime_node_engine';
+
+export type SchedulerTaskAttemptLifecycleTransition =
+  | 'started'
+  | 'redispatched'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
 export interface SchedulerTimelineProjectionRecord {
   event_seq: number;
   event_id: string;
@@ -91,6 +101,20 @@ export interface SchedulerTimelineProjectionRecord {
   error_severity?: DiagnosticErrorSeverity | null;
   error_phase?: string | null;
   related_event_ids?: string[];
+  scheduler_task_id?: string | null;
+  scheduler_attempt_id?: string | null;
+  scheduler_attempt_execution_class?: SchedulerTaskAttemptExecutionClass | null;
+  scheduler_attempt_transition?: SchedulerTaskAttemptLifecycleTransition | null;
+  scheduler_attempt_started_at_ms?: number | null;
+  scheduler_attempt_ended_at_ms?: number | null;
+  scheduler_attempt_duration_ms?: number | null;
+  scheduler_attempt_runtime_id?: string | null;
+  scheduler_attempt_runtime_variant_id?: string | null;
+  scheduler_attempt_backend_key?: string | null;
+  scheduler_attempt_device_class?: string | null;
+  scheduler_attempt_device_id?: string | null;
+  scheduler_attempt_network_node_id?: string | null;
+  scheduler_attempt_reservation_id?: string | null;
   payload_json: string;
 }
 

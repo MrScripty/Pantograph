@@ -25226,6 +25226,52 @@ Worker rules:
     - Remaining follow-up: consume these typed attempt facts from frontend/UI
       or operator diagnostics views only through the backend-owned scheduler
       timeline read model when that display slice is scheduled.
+  - 2026-06-05 Milestone 5c scheduler page attempt timeline display slice:
+    - Smallest vertical slice: update the frontend diagnostics DTO, pure
+      Scheduler page presenter, presenter test, and Scheduler page timeline
+      rows to display the typed scheduler attempt facts already exposed by the
+      backend-owned scheduler timeline read model.
+    - Allowed write set used:
+      `src/services/diagnostics/types.ts`,
+      `src/components/workbench/schedulerPagePresenters.ts`,
+      `src/components/workbench/schedulerPagePresenters.test.ts`,
+      `src/components/workbench/SchedulerPage.svelte`, and these plan files.
+    - No-fallback/no-legacy confirmation: the frontend consumes typed
+      projection fields only. It does not parse raw payload JSON, infer
+      scheduler attempt lifecycle state, add Tauri/runtime/Pumas business
+      logic, change backend scheduler policy, or introduce compatibility
+      shims.
+    - Simplicity/complection confirmation: diagnostics-ledger remains the
+      projection owner, workflow-service remains the read-model transport,
+      scheduler lifecycle policy remains backend-owned, and the Scheduler page
+      only formats display rows from the typed DTO.
+    - Implementation summary: `SchedulerTimelineProjectionRecord` now includes
+      the task-attempt lifecycle event kind plus nullable scheduler attempt
+      fields. `buildSchedulerTimelineAttemptRows` formats task/attempt ids,
+      transition, execution class, start/end/duration timing, selected
+      runtime/backend/device/network-node facts, and reservation id. Scheduler
+      timeline rows render those facts only when present.
+    - Focused tests added/updated:
+      `scheduler timeline attempt rows use typed projection facts` verifies
+      empty rows for non-attempt events and complete display rows for a typed
+      redispatched runtime attempt event.
+    - Verification passed:
+      - `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`
+      - `npm run typecheck`
+      - `npm run build`
+      - `npx eslint src/services/diagnostics/types.ts src/components/workbench/schedulerPagePresenters.ts src/components/workbench/schedulerPagePresenters.test.ts src/components/workbench/SchedulerPage.svelte --max-warnings 0`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched frontend
+        files. No new fallback, graph-path, reduced-plan, compatibility-shim,
+        Tauri policy, runtime adapter policy, or Pumas ownership matches were
+        introduced.
+    - Verification deviation/discovered issue: broad `npm run lint:full` still
+      fails on an unrelated existing `svelte/prefer-writable-derived` issue in
+      `src/components/nodes/workflow/PumaLibNode.svelte`; the touched files
+      pass targeted ESLint.
+    - Remaining follow-up: optional Diagnostics/Network page reuse of the same
+      presenter rows can be scheduled separately if those operator views also
+      need expanded attempt facts.
 
 ### Traceability Links
 

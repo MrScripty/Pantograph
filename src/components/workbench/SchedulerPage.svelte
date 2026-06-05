@@ -26,6 +26,7 @@
   import {
     buildSchedulerEstimateRows,
     buildSchedulerRetentionSummaryRows,
+    buildSchedulerTimelineAttemptRows,
     buildSchedulerRunListQuery,
     filterSchedulerTimelineEvents,
     filterAndSortSchedulerRuns,
@@ -1239,6 +1240,7 @@
       {:else}
         <div class="divide-y divide-neutral-900">
           {#each displayedTimelineEvents as event (event.event_id)}
+            {@const attemptRows = buildSchedulerTimelineAttemptRows(event)}
             <article class="px-4 py-3">
               <div class="flex items-center justify-between gap-3">
                 <div class="font-mono text-[11px] text-neutral-500">seq {event.event_seq}</div>
@@ -1253,6 +1255,16 @@
               <div class="mt-2 text-sm text-neutral-300">{event.summary}</div>
               {#if event.detail}
                 <div class="mt-1 text-xs text-neutral-500">{event.detail}</div>
+              {/if}
+              {#if attemptRows.length > 0}
+                <dl class="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 border-t border-neutral-900 pt-3 sm:grid-cols-2">
+                  {#each attemptRows as row (row.label)}
+                    <div class="min-w-0">
+                      <dt class="text-[11px] uppercase text-neutral-600">{row.label}</dt>
+                      <dd class="truncate font-mono text-xs text-neutral-300" title={row.value}>{row.value}</dd>
+                    </div>
+                  {/each}
+                </dl>
               {/if}
             </article>
           {/each}

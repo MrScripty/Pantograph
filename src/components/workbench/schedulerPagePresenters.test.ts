@@ -9,6 +9,7 @@ import type {
 import {
   buildSchedulerEstimateRows,
   buildSchedulerRetentionSummaryRows,
+  buildSchedulerTimelineAttemptRows,
   buildSchedulerRunListQuery,
   filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
@@ -542,6 +543,47 @@ test('scheduler timeline presenters expose typed projection facts', () => {
   );
   assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{}' }), 'Metadata only');
   assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{"queue":"default"}' }), 'Payload captured');
+});
+
+test('scheduler timeline attempt rows use typed projection facts', () => {
+  assert.deepEqual(buildSchedulerTimelineAttemptRows(timelineEvent({})), []);
+  assert.deepEqual(
+    buildSchedulerTimelineAttemptRows(
+      timelineEvent({
+        event_kind: 'scheduler_task_attempt_lifecycle_changed',
+        scheduler_task_id: 'task-runtime-image-alpha',
+        scheduler_attempt_id: 'attempt-runtime-image-alpha-001',
+        scheduler_attempt_execution_class: 'runtime',
+        scheduler_attempt_transition: 'redispatched',
+        scheduler_attempt_started_at_ms: 1_000,
+        scheduler_attempt_ended_at_ms: 2_250,
+        scheduler_attempt_duration_ms: 1_250,
+        scheduler_attempt_runtime_id: 'pytorch',
+        scheduler_attempt_runtime_variant_id: 'pytorch.cuda',
+        scheduler_attempt_backend_key: 'pytorch',
+        scheduler_attempt_device_class: 'cuda',
+        scheduler_attempt_device_id: 'cuda:0',
+        scheduler_attempt_network_node_id: 'local-node-alpha',
+        scheduler_attempt_reservation_id: 'reservation-runtime-image-alpha',
+      }),
+    ),
+    [
+      { label: 'Task', value: 'task-runtime-image-alpha' },
+      { label: 'Attempt', value: 'attempt-runtime-image-alpha-001' },
+      { label: 'Transition', value: 'Redispatched' },
+      { label: 'Class', value: 'Runtime' },
+      { label: 'Started', value: new Date(1_000).toLocaleString() },
+      { label: 'Ended', value: new Date(2_250).toLocaleString() },
+      { label: 'Duration', value: '1.3 s' },
+      { label: 'Runtime', value: 'pytorch' },
+      { label: 'Variant', value: 'pytorch.cuda' },
+      { label: 'Backend', value: 'pytorch' },
+      { label: 'Device Class', value: 'cuda' },
+      { label: 'Device', value: 'cuda:0' },
+      { label: 'Network Node', value: 'local-node-alpha' },
+      { label: 'Reservation', value: 'reservation-runtime-image-alpha' },
+    ],
+  );
 });
 
 test('scheduler timeline filters use typed event kind and source fields', () => {

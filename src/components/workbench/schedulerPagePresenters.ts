@@ -372,6 +372,82 @@ export function schedulerTimelinePayloadLabel(
   return 'Metadata only';
 }
 
+export interface SchedulerTimelineAttemptFactRow {
+  label: string;
+  value: string;
+}
+
+export function buildSchedulerTimelineAttemptRows(
+  event: Pick<
+    SchedulerTimelineProjectionRecord,
+    | 'scheduler_task_id'
+    | 'scheduler_attempt_id'
+    | 'scheduler_attempt_execution_class'
+    | 'scheduler_attempt_transition'
+    | 'scheduler_attempt_started_at_ms'
+    | 'scheduler_attempt_ended_at_ms'
+    | 'scheduler_attempt_duration_ms'
+    | 'scheduler_attempt_runtime_id'
+    | 'scheduler_attempt_runtime_variant_id'
+    | 'scheduler_attempt_backend_key'
+    | 'scheduler_attempt_device_class'
+    | 'scheduler_attempt_device_id'
+    | 'scheduler_attempt_network_node_id'
+    | 'scheduler_attempt_reservation_id'
+  >,
+): SchedulerTimelineAttemptFactRow[] {
+  const rows: SchedulerTimelineAttemptFactRow[] = [];
+  addSchedulerAttemptRow(rows, 'Task', event.scheduler_task_id);
+  addSchedulerAttemptRow(rows, 'Attempt', event.scheduler_attempt_id);
+  addSchedulerAttemptRow(rows, 'Transition', formatSchedulerAttemptEnum(event.scheduler_attempt_transition));
+  addSchedulerAttemptRow(rows, 'Class', formatSchedulerAttemptEnum(event.scheduler_attempt_execution_class));
+  addSchedulerAttemptRow(rows, 'Started', formatSchedulerAttemptTimestamp(event.scheduler_attempt_started_at_ms));
+  addSchedulerAttemptRow(rows, 'Ended', formatSchedulerAttemptTimestamp(event.scheduler_attempt_ended_at_ms));
+  addSchedulerAttemptRow(rows, 'Duration', formatSchedulerAttemptDuration(event.scheduler_attempt_duration_ms));
+  addSchedulerAttemptRow(rows, 'Runtime', event.scheduler_attempt_runtime_id);
+  addSchedulerAttemptRow(rows, 'Variant', event.scheduler_attempt_runtime_variant_id);
+  addSchedulerAttemptRow(rows, 'Backend', event.scheduler_attempt_backend_key);
+  addSchedulerAttemptRow(rows, 'Device Class', event.scheduler_attempt_device_class);
+  addSchedulerAttemptRow(rows, 'Device', event.scheduler_attempt_device_id);
+  addSchedulerAttemptRow(rows, 'Network Node', event.scheduler_attempt_network_node_id);
+  addSchedulerAttemptRow(rows, 'Reservation', event.scheduler_attempt_reservation_id);
+  return rows;
+}
+
+function addSchedulerAttemptRow(
+  rows: SchedulerTimelineAttemptFactRow[],
+  label: string,
+  value: string | null | undefined,
+): void {
+  if (value) {
+    rows.push({ label, value });
+  }
+}
+
+function formatSchedulerAttemptEnum(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatSchedulerAttemptTimestamp(value: number | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return formatSchedulerTimestamp(value);
+}
+
+function formatSchedulerAttemptDuration(value: number | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return value < 1_000 ? `${Math.round(value)} ms` : `${(value / 1_000).toFixed(1)} s`;
+}
+
 export function schedulerTimelineKindFilterOptions(
   events: Pick<SchedulerTimelineProjectionRecord, 'event_kind'>[],
 ): SchedulerTimelineProjectionRecord['event_kind'][] {

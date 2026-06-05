@@ -978,6 +978,28 @@ follow-up: consume these typed scheduler attempt facts from frontend/UI or
 operator diagnostics views only through the backend-owned scheduler timeline
 read model when that display slice is scheduled.
 
+2026-06-05 scheduler page attempt timeline display update: the Scheduler page
+now consumes the backend-owned scheduler timeline attempt fields through the
+typed diagnostics service DTO and pure scheduler presenter rows. Attempt
+timeline records render task id, attempt id, transition, execution class,
+start/end/duration timing, selected runtime/backend/device/network-node facts,
+and reservation id when those typed projection fields are present. The
+frontend does not parse raw payload JSON, infer scheduler state, or introduce
+Tauri/runtime/Pumas business logic. Verification passed: `node
+--experimental-strip-types --test
+src/components/workbench/schedulerPagePresenters.test.ts`; `npm run
+typecheck`; `npm run build`; targeted `npx eslint
+src/services/diagnostics/types.ts src/components/workbench/schedulerPagePresenters.ts
+src/components/workbench/schedulerPagePresenters.test.ts
+src/components/workbench/SchedulerPage.svelte --max-warnings 0`; `git diff
+--check`; and targeted no-fallback/no-legacy source search. Verification
+deviation/discovered issue: broad `npm run lint:full` still fails on an
+unrelated existing `svelte/prefer-writable-derived` issue in
+`src/components/nodes/workflow/PumaLibNode.svelte`; the touched files pass
+targeted ESLint. Remaining follow-up: optional Diagnostics/Network page reuse
+of the same presenter rows can be scheduled separately if those operator views
+also need expanded attempt facts.
+
 ## Standards Rule
 
 The standards constraints in
