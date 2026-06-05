@@ -2,14 +2,6 @@ use super::*;
 use node_engine::{extension_keys, ExecutorExtensions, VecEventSink, WorkflowEvent};
 use std::sync::Mutex;
 
-#[test]
-fn canonical_backend_key_accepts_llama_cpp_alias() {
-    assert_eq!(
-        TauriTaskExecutor::canonical_backend_key(Some("llama_cpp")),
-        Some("llamacpp".to_string())
-    );
-}
-
 #[tokio::test]
 async fn canonical_llm_inference_falls_through_to_core_executor() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));

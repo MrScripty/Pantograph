@@ -40,13 +40,13 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
         .await
         .expect("gateway should start in inference mode");
 
-    let host_runtime_mode_info =
-        HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
-    let initial_runtime_instance_id = host_runtime_mode_info
+    let initial_mode_info = gateway.mode_info().await;
+    let initial_runtime_instance_id = initial_mode_info
         .active_runtime
         .as_ref()
         .and_then(|snapshot| snapshot.runtime_instance_id.clone())
         .expect("initial runtime instance id");
+    let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&initial_mode_info);
 
     let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
     extensions
@@ -80,7 +80,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
         .await
         .expect("create edit session");
 
-    let outcome = runtime
+    let error = runtime
         .execute_edit_session_graph(
             &session.session_id,
             "run-test",
@@ -92,29 +92,26 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
             Arc::new(node_engine::NullEventSink),
         )
         .await
-        .expect("edit-session execution should restore runtime even when node demand fails");
-    assert!(outcome.error.is_some());
+        .expect_err("direct embedding runtime preparation must fail closed");
+    assert!(error.contains("embedding_runtime_prepare_retired"));
 
-    let restored_mode_info = gateway.mode_info().await;
-    let restored_runtime_instance_id = restored_mode_info
+    let mode_info = gateway.mode_info().await;
+    let runtime_instance_id = mode_info
         .active_runtime
         .as_ref()
         .and_then(|snapshot| snapshot.runtime_instance_id.clone())
-        .expect("restored runtime instance id");
-    assert_ne!(
-        restored_runtime_instance_id, initial_runtime_instance_id,
-        "restore path should produce a fresh runtime instance for this regression check"
-    );
+        .expect("active runtime instance id");
+    assert_eq!(runtime_instance_id, initial_runtime_instance_id);
 
     let snapshot = runtime_registry.snapshot();
     let registry_runtime = snapshot
         .runtimes
         .iter()
         .find(|runtime| runtime.runtime_id == "llama_cpp")
-        .expect("active runtime should remain registered after restore");
+        .expect("active runtime should remain registered");
     assert_eq!(
         registry_runtime.runtime_instance_id.as_deref(),
-        Some(restored_runtime_instance_id.as_str())
+        Some(initial_runtime_instance_id.as_str())
     );
     assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
 }
@@ -193,7 +190,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
         .await
         .expect("create edit session");
 
-    let outcome = runtime
+    let error = runtime
         .execute_edit_session_graph(
             &edit_session.session_id,
             "run-test",
@@ -205,26 +202,26 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
             Arc::new(node_engine::NullEventSink),
         )
         .await
-        .expect("edit-session execution should restore runtime even when node demand fails");
-    assert!(outcome.error.is_some());
+        .expect_err("direct embedding runtime preparation must fail closed");
+    assert!(error.contains("embedding_runtime_prepare_retired"));
 
-    let restored_runtime_instance_id = gateway
+    let active_runtime_instance_id = gateway
         .mode_info()
         .await
         .active_runtime
         .as_ref()
         .and_then(|snapshot| snapshot.runtime_instance_id.clone())
-        .expect("restored runtime instance id");
-    let restored_runtime = runtime_registry
+        .expect("active runtime instance id");
+    let active_runtime = runtime_registry
         .snapshot()
         .runtimes
         .into_iter()
         .find(|runtime| runtime.runtime_id == "llama_cpp")
-        .expect("restored runtime should remain registered");
-    assert_eq!(restored_runtime.status, RuntimeRegistryStatus::Ready);
+        .expect("active runtime should remain registered");
+    assert_eq!(active_runtime.status, RuntimeRegistryStatus::Ready);
     assert_eq!(
-        restored_runtime.runtime_instance_id.as_deref(),
-        Some(restored_runtime_instance_id.as_str())
+        active_runtime.runtime_instance_id.as_deref(),
+        Some(active_runtime_instance_id.as_str())
     );
 
     let loaded = runtime
@@ -314,13 +311,13 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
         .await
         .expect("gateway should start in inference mode");
 
-    let host_runtime_mode_info =
-        HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
-    let initial_runtime_instance_id = host_runtime_mode_info
+    let initial_mode_info = gateway.mode_info().await;
+    let initial_runtime_instance_id = initial_mode_info
         .active_runtime
         .as_ref()
         .and_then(|snapshot| snapshot.runtime_instance_id.clone())
         .expect("initial runtime instance id");
+    let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&initial_mode_info);
 
     let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
     extensions
@@ -366,7 +363,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
         .await
         .expect("create edit session");
 
-    let outcome = runtime
+    let error = runtime
         .execute_edit_session_graph(
             &session.session_id,
             "run-test",
@@ -378,24 +375,26 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
             event_sink,
         )
         .await
-        .expect("edit-session execution should still finish");
-    assert!(outcome.error.is_some());
+        .expect_err("direct embedding runtime preparation must fail closed");
+    assert!(error.contains("embedding_runtime_prepare_retired"));
 
-    let started_snapshot = started_snapshot
-        .lock()
-        .expect("started snapshot lock poisoned")
-        .clone()
-        .expect("workflow started snapshot");
-    let started_runtime = started_snapshot
+    assert!(
+        started_snapshot
+            .lock()
+            .expect("started snapshot lock poisoned")
+            .is_none(),
+        "workflow should not start after retired embedding runtime preparation fails"
+    );
+    let registry_runtime = runtime_registry
+        .snapshot()
         .runtimes
-        .iter()
+        .into_iter()
         .find(|runtime| runtime.runtime_id == "llama_cpp")
-        .expect("active runtime snapshot at workflow start");
-    assert_eq!(started_runtime.status, RuntimeRegistryStatus::Ready);
-    assert_ne!(
-        started_runtime.runtime_instance_id.as_deref(),
-        Some(initial_runtime_instance_id.as_str()),
-        "registry should be refreshed to the prepared embedding runtime before execution starts"
+        .expect("active runtime should remain registered");
+    assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
+    assert_eq!(
+        registry_runtime.runtime_instance_id.as_deref(),
+        Some(initial_runtime_instance_id.as_str())
     );
 }
 
@@ -443,8 +442,13 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
         .await
         .expect("gateway should start in inference mode");
 
-    let host_runtime_mode_info =
-        HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+    let initial_mode_info = gateway.mode_info().await;
+    let initial_runtime_instance_id = initial_mode_info
+        .active_runtime
+        .as_ref()
+        .and_then(|snapshot| snapshot.runtime_instance_id.clone())
+        .expect("initial runtime instance id");
+    let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&initial_mode_info);
     let runtime_registry = Arc::new(RuntimeRegistry::new());
     let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
     extensions
@@ -477,7 +481,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
         .await
         .expect("create edit session");
 
-    let outcome = runtime
+    let error = runtime
         .execute_edit_session_graph(
             &session.session_id,
             "run-test",
@@ -489,26 +493,19 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
             Arc::new(node_engine::NullEventSink),
         )
         .await
-        .expect("edit-session execution should still complete when restore fails");
-    assert!(outcome.error.is_some());
+        .expect_err("direct embedding runtime preparation must fail closed");
+    assert!(error.contains("embedding_runtime_prepare_retired"));
 
-    let mode_info = gateway.mode_info().await;
-    let expected_observation = runtime_registry::active_runtime_observation(
-        &HostRuntimeModeSnapshot::from_mode_info(&mode_info),
-        true,
-    )
-    .expect("active runtime observation after failed restore");
-
-    let snapshot = runtime_registry.snapshot();
-    let registry_runtime = snapshot
+    let registry_runtime = runtime_registry
+        .snapshot()
         .runtimes
-        .iter()
-        .find(|runtime| runtime.runtime_id == expected_observation.runtime_id)
-        .expect("active runtime should remain observable after failed restore");
-    assert_eq!(registry_runtime.status, expected_observation.status);
+        .into_iter()
+        .find(|runtime| runtime.runtime_id == "llama_cpp")
+        .expect("active runtime should remain registered");
+    assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
     assert_eq!(
-        registry_runtime.runtime_instance_id,
-        expected_observation.runtime_instance_id
+        registry_runtime.runtime_instance_id.as_deref(),
+        Some(initial_runtime_instance_id.as_str())
     );
 }
 

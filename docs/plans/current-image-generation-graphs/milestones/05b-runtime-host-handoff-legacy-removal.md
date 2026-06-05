@@ -633,7 +633,15 @@ come from node-type defaults while the Python adapter remains fail-closed.
   legacy `model_ref.dependencyBindings` for environment ids or
   `model_ref.engine` for runtime backend selection. Explicit
   `environment_ref` remains the only env-id input for that fail-closed Python
-  path.
+  path. 2026-06-05 progress: embedded-runtime edit-session embedding runtime
+  preparation now fails closed before Pumas model lookup, embedded model-path
+  resolution, gateway dedicated embedding runtime start, runtime-registry
+  refresh, or workflow start. The remaining graph detection helpers only
+  decide whether the retired path must fail closed. The slice deleted the
+  embedded embedding model-path resolver helpers and removed a stale
+  task-executor helper test left behind by the earlier Python metadata cleanup.
+  No scheduler/runtime-host facts are adapted back into graph `model_path`,
+  Pumas path, or legacy embedding runtime launch shapes.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

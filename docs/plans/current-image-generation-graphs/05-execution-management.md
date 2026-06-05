@@ -25640,6 +25640,41 @@ Worker rules:
         extraction in `core_executor.rs` and `core_executor/inference_nodes.rs`
       - `cargo fmt -p node-engine -- --check`
       - `cargo check -p node-engine --features inference-nodes`
+  - 2026-06-05 Milestone 5b embedded-runtime embedding preparation
+    retirement slice:
+    - Smallest vertical slice: make the direct edit-session embedding runtime
+      preparation path fail closed before it can resolve Pumas model paths,
+      start a dedicated embedding runtime, refresh the runtime registry, or
+      start workflow execution.
+    - Allowed write set used:
+      `crates/pantograph-embedded-runtime/src/embedding_workflow.rs`,
+      `crates/pantograph-embedded-runtime/src/lib_tests/edit_session_execution_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: embedded edit-session execution no
+      longer resolves executable embedding model paths from graph/Pumas data
+      or adapts canonical scheduler/runtime-host state back into legacy
+      embedding-runtime launch inputs. The path returns a typed fail-closed
+      diagnostic until scheduler-owned task state/results and runtime-host
+      execution own the launch.
+    - Focused tests updated: embedding preparation now rejects before path
+      resolution and edit-session registry tests assert the workflow does not
+      start or refresh runtime state through the retired preparation path.
+    - Discovered issue: the previous Python metadata cleanup left a stale
+      `canonical_backend_key` unit test referencing a deleted helper. It was
+      removed in this slice because verification compiled the same embedded
+      runtime test crate and the helper was already retired.
+    - Verification passed:
+      - `cargo test -p pantograph-embedded-runtime embedding_workflow --lib`
+      - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_reconciles_registry_after_restore --lib`
+      - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_diagnostics_ready --lib`
+      - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_reconciles_registry_after_embedding_prepare --lib`
+      - `cargo test -p pantograph-embedded-runtime edit_session_execution_tests --lib`
+      - `cargo fmt -p pantograph-embedded-runtime -- --check`
+      - `cargo check -p pantograph-embedded-runtime`
+      - strict source search for removed embedding model-path resolver helpers
+      - `git diff --check`
 
 ### Traceability Links
 
