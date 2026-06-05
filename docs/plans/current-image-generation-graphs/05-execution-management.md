@@ -24692,6 +24692,40 @@ Worker rules:
     - Remaining follow-up: implement durable duplicate-dispatch/idempotency
       guard state for ready runtime redispatch, then add diagnostics-ledger
       attempt/timing facts.
+  - 2026-06-04 Milestone 5c ready runtime redispatch recovery slice:
+    - Smallest vertical slice: make proof-present ready runtime bootstrap
+      recovery actionable by routing it through the existing active-run resume
+      shell and scheduler start-attempt guard, while keeping proof-missing
+      ready runtime tasks blocked with typed diagnostics.
+    - Allowed write set used: `workflow/contracts.rs`,
+      `workflow/session_execution_api.rs`,
+      `workflow/session_scheduler_runner.rs`,
+      `workflow/tests/session_execution.rs`, and these plan docs.
+    - No-fallback/no-legacy confirmation: redispatch uses the canonical
+      workflow-service runner, persisted dependency readiness proof, runtime
+      dispatch source/candidate providers, scheduler dispatch selection,
+      scheduler start-attempt mutation, runtime-host execution port, and
+      reservation lifecycle path. It does not add graph/node-engine/reduced-plan
+      runtime execution, Tauri/frontend policy, Pumas/package fact changes,
+      lockfiles, generated files, workflow fixtures, or compatibility shims.
+      Missing proof still fails closed.
+    - Discovered issue fixed: the progress loop previously attempted to start
+      every ready task through the non-runtime node-engine path. Ready runtime
+      tasks are now filtered out by immutable scheduler task execution class so
+      runtime dispatch owns them.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery_plan_accepts_ready_redispatch_with_recovery_state --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched source
+        files. Matches were existing diagnostics compatibility payload fields,
+        existing Pumas test fixtures, and existing node-engine non-runtime
+        task diagnostics only.
+    - Remaining follow-up: add diagnostics-ledger attempt/timing facts.
 
 ### Traceability Links
 

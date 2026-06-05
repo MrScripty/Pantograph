@@ -746,6 +746,24 @@ no-fallback/no-legacy source search. Remaining lifecycle work: implement the
 durable duplicate-dispatch/idempotency guard for ready runtime redispatch,
 then add diagnostics-ledger attempt/timing facts.
 
+2026-06-04 ready runtime redispatch recovery update: bootstrap recovery now
+treats proof-present ready runtime tasks as actionable
+`RedispatchReadyRuntime` decisions and invokes the existing active-run resume
+shell, which dispatches through persisted readiness proof and the scheduler
+start-attempt guard. Proof-missing ready tasks remain blocked with typed
+diagnostics. The slice also fixed a discovered progress-loop bug where ready
+runtime tasks were incorrectly offered to the non-runtime node-engine start
+path before runtime dispatch. Verification passed: `cargo fmt -p
+pantograph-workflow-service`; `cargo test -p pantograph-workflow-service
+bootstrap_recovery_plan_accepts_ready_redispatch_with_recovery_state --lib`;
+`cargo test -p pantograph-workflow-service
+workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task
+--lib`; and `cargo test -p pantograph-workflow-service bootstrap_recovery
+--lib`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work:
+diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in

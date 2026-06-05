@@ -426,7 +426,6 @@ impl WorkflowExecutionSessionStore {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub(crate) fn active_run_runtime_dispatch_readiness_proof(
         &self,
         session_id: &str,

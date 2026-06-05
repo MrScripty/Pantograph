@@ -945,6 +945,7 @@ pub struct WorkflowExecutionSessionBootstrapRecoveryReport {
 pub enum WorkflowExecutionSessionBootstrapRecoveryDecisionKind {
     ResumeProgressLoop,
     ResumeRuntimeDependencyReadiness,
+    RedispatchReadyRuntime,
     BlockedRuntimeRedispatchRecoveryStateRequired,
     BlockedRuntimeRecoveryRequired,
     NoopCompleted,

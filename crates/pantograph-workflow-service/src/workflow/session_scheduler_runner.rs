@@ -302,11 +302,18 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         session_id: &str,
         workflow_run_id: &str,
     ) -> Result<bool, WorkflowServiceError> {
-        let (_task_graph, records) =
+        let (task_graph, records) =
             active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
         let ready_task_ids = records
             .iter()
-            .filter(|record| record.state.kind() == SchedulerTaskStateKind::Ready)
+            .filter(|record| {
+                record.state.kind() == SchedulerTaskStateKind::Ready
+                    && task_graph.tasks.iter().any(|task| {
+                        task.task_id.as_str() == record.task_id.as_str()
+                            && task.execution_class
+                                == WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+                    })
+            })
             .map(|record| record.task_id.as_str().to_string())
             .collect::<Vec<_>>();
         let mut progressed = false;
@@ -610,17 +617,13 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 kind == SchedulerTaskStateKind::Ready
             })?;
         for task_id in &runtime_task_ids {
-            let readiness_proof = admitted_runtime_readiness
-                .iter()
-                .find(|admitted| admitted.task_id == *task_id)
-                .ok_or_else(|| {
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "runtime scheduler task '{}' has no admitted readiness proof for dispatch selection",
-                        task_id
-                    ))
-                })?
-                .readiness_proof
-                .clone();
+            let readiness_proof = runtime_dispatch_readiness_proof(
+                self.service,
+                session_id,
+                workflow_run_id,
+                task_id,
+                admitted_runtime_readiness,
+            )?;
             let dispatch_context =
                 ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
             self.service
@@ -843,6 +846,31 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             timing_ms: started_at.elapsed().as_millis(),
         })
     }
+}
+
+fn runtime_dispatch_readiness_proof(
+    service: &WorkflowService,
+    session_id: &str,
+    workflow_run_id: &str,
+    task_id: &str,
+    admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
+) -> Result<DependencyReadinessProofEnvelope, WorkflowServiceError> {
+    if let Some(admitted) = admitted_runtime_readiness
+        .iter()
+        .find(|admitted| admitted.task_id == task_id)
+    {
+        return Ok(admitted.readiness_proof.clone());
+    }
+
+    let store = service.session_store_guard()?;
+    store
+        .active_run_runtime_dispatch_readiness_proof(session_id, workflow_run_id, task_id)?
+        .ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "runtime scheduler task '{}' has no persisted readiness proof for dispatch selection",
+                task_id
+            ))
+        })
 }
 
 fn ready_runtime_dispatch_context(

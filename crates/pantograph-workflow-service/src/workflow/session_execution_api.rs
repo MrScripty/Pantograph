@@ -651,7 +651,7 @@ impl WorkflowService {
         let resume_plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
         workflow_bootstrap_recovery_apply_gate(&resume_plan)?;
         let mut resumed_runs = Vec::new();
-        for request in resume_plan.resume_requests.clone() {
+        for request in workflow_bootstrap_recovery_runtime_resume_requests(&resume_plan) {
             resumed_runs.push(
                 self.resume_workflow_execution_session_runtime_dependency_readiness(host, request)
                     .await?,
@@ -1535,7 +1535,7 @@ fn workflow_bootstrap_recovery_plan_from_report(
 
     for run in report.active_runs {
         for task in run.runtime_tasks {
-            let decision_kind = workflow_bootstrap_recovery_decision_kind(task.action);
+            let decision_kind = workflow_bootstrap_recovery_decision_kind(&task);
             let diagnostic = workflow_bootstrap_recovery_diagnostic(decision_kind, &task);
             if workflow_bootstrap_recovery_decision_blocks(decision_kind) {
                 blocking_decision_count += 1;
@@ -1573,9 +1573,9 @@ fn workflow_bootstrap_recovery_plan_from_report(
 }
 
 fn workflow_bootstrap_recovery_decision_kind(
-    action: WorkflowExecutionSessionBootstrapRecoveryAction,
+    task: &WorkflowExecutionSessionBootstrapRecoveryTask,
 ) -> WorkflowExecutionSessionBootstrapRecoveryDecisionKind {
-    match action {
+    match task.action {
         WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop => {
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
         }
@@ -1583,7 +1583,11 @@ fn workflow_bootstrap_recovery_decision_kind(
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
         }
         WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime => {
-            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired
+            if task.runtime_dispatch_recovery_state_available {
+                WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
+            } else {
+                WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired
+            }
         }
         WorkflowExecutionSessionBootstrapRecoveryAction::RuntimeRecoveryRequired => {
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired
@@ -1667,6 +1671,7 @@ fn workflow_bootstrap_recovery_apply_gate(
             decision.decision_kind,
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
                 | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+                | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
                 | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::NoopCompleted
         )
     }) {
@@ -1687,6 +1692,32 @@ fn workflow_bootstrap_recovery_progress_loop_requests(
     for decision in plan.decisions.iter().filter(|decision| {
         decision.decision_kind
             == WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+    }) {
+        let key = (
+            decision.session_id.clone(),
+            decision.workflow_run_id.clone(),
+        );
+        if request_keys.insert(key) {
+            requests.push(WorkflowExecutionSessionResumeRequest {
+                session_id: decision.session_id.clone(),
+                workflow_run_id: decision.workflow_run_id.clone(),
+            });
+        }
+    }
+    requests
+}
+
+fn workflow_bootstrap_recovery_runtime_resume_requests(
+    plan: &WorkflowExecutionSessionBootstrapRecoveryPlan,
+) -> Vec<WorkflowExecutionSessionResumeRequest> {
+    let mut requests = Vec::new();
+    let mut request_keys = BTreeSet::new();
+    for decision in plan.decisions.iter().filter(|decision| {
+        matches!(
+            decision.decision_kind,
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
+                | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
+        )
     }) {
         let key = (
             decision.session_id.clone(),
@@ -2178,7 +2209,7 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_recovery_plan_reports_persisted_proof_when_guard_state_missing() {
+    fn bootstrap_recovery_plan_accepts_ready_redispatch_with_recovery_state() {
         let report = WorkflowExecutionSessionBootstrapRecoveryReport {
             active_runs: vec![WorkflowExecutionSessionBootstrapRecoveryRun {
                 session_id: "session-a".to_string(),
@@ -2194,16 +2225,22 @@ mod tests {
 
         let plan = workflow_bootstrap_recovery_plan_from_report(report);
 
-        assert_eq!(plan.blocking_decision_count, 1);
+        assert_eq!(plan.blocking_decision_count, 0);
+        assert!(plan.resume_requests.is_empty());
         assert_eq!(plan.decisions.len(), 1);
         assert!(plan.decisions[0].runtime_dispatch_recovery_state_available);
-        let diagnostic = plan.decisions[0]
-            .diagnostic
-            .as_deref()
-            .expect("blocking diagnostic");
-        assert!(diagnostic.contains("with persisted readiness proof"));
-        assert!(diagnostic.contains("duplicate-dispatch guard"));
-        assert!(!diagnostic.contains("requires persisted readiness proof and"));
+        assert_eq!(
+            plan.decisions[0].decision_kind,
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
+        );
+        assert!(plan.decisions[0].diagnostic.is_none());
+        assert_eq!(
+            workflow_bootstrap_recovery_runtime_resume_requests(&plan),
+            vec![WorkflowExecutionSessionResumeRequest {
+                session_id: "session-a".to_string(),
+                workflow_run_id: "run-a".to_string(),
+            }]
+        );
     }
 
     #[test]
