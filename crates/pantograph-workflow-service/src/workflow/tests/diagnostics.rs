@@ -14,7 +14,8 @@ use pantograph_diagnostics_ledger::{
     RunListFacetKind, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
     SchedulerEstimateProducedPayload, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
-    UsageEventStatus, UsageLineage,
+    SchedulerTaskAttemptExecutionClass, SchedulerTaskAttemptLifecycleChangedPayload,
+    SchedulerTaskAttemptLifecycleTransition, UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -1931,6 +1932,37 @@ fn workflow_diagnostic_event_record_requests_projection_refresh() {
 }
 
 #[test]
+fn workflow_scheduler_task_attempt_event_requests_scheduler_projection_refresh() {
+    let sink = Arc::new(RecordingProjectionRefreshSink::default());
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    service
+        .set_diagnostics_projection_refresh_sink(Some(sink.clone()))
+        .expect("projection refresh sink is configured");
+
+    service
+        .workflow_diagnostic_event_record(sample_scheduler_task_attempt_event())
+        .expect("task attempt diagnostic event records");
+
+    let requests = sink.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].reason,
+        WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended
+    );
+    assert_eq!(requests[0].workflow_run_id.as_deref(), Some("run-a"));
+    assert_eq!(requests[0].workflow_id.as_deref(), Some("workflow-a"));
+    assert!(requests[0]
+        .projections
+        .contains(&WorkflowDiagnosticsProjectionKind::SchedulerTimeline));
+    assert!(requests[0]
+        .projections
+        .contains(&WorkflowDiagnosticsProjectionKind::RunList));
+    assert!(requests[0]
+        .projections
+        .contains(&WorkflowDiagnosticsProjectionKind::RunDetail));
+}
+
+#[test]
 fn workflow_diagnostic_io_event_requests_io_projection_refresh() {
     let sink = Arc::new(RecordingProjectionRefreshSink::default());
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
@@ -2573,6 +2605,54 @@ fn sample_run_started_event() -> DiagnosticEventAppendRequest {
             queue_wait_ms: Some(1),
             scheduler_decision_reason: Some("warm_session_reused".to_string()),
         }),
+    }
+}
+
+fn sample_scheduler_task_attempt_event() -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("workflow-session-scheduler".to_string()),
+        occurred_at_ms: 14,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some("node-a".to_string()),
+        node_type: Some("image-generation".to_string()),
+        node_version: Some("node-v1".to_string()),
+        runtime_id: Some("runtime-a".to_string()),
+        runtime_version: Some("runtime-v1".to_string()),
+        model_id: Some("model-a".to_string()),
+        model_version: Some("model-v1".to_string()),
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(
+            SchedulerTaskAttemptLifecycleChangedPayload {
+                scheduler_task_id: "task-runtime-node-a".to_string(),
+                scheduler_attempt_id: "attempt-runtime-node-a-001".to_string(),
+                execution_class: SchedulerTaskAttemptExecutionClass::Runtime,
+                transition: SchedulerTaskAttemptLifecycleTransition::Started,
+                started_at_ms: Some(14),
+                ended_at_ms: None,
+                duration_ms: None,
+                selected_runtime_id: Some("runtime-a".to_string()),
+                selected_runtime_variant_id: Some("runtime-a.cuda".to_string()),
+                selected_backend_key: Some("pytorch".to_string()),
+                selected_device_class: Some("cuda".to_string()),
+                selected_device_id: Some("cuda:0".to_string()),
+                selected_network_node_id: Some("local-node-a".to_string()),
+                reservation_id: Some("reservation-run-a".to_string()),
+                reason: Some("task attempt started".to_string()),
+                error_summary: None,
+                canonical_error_event_id: None,
+            },
+        ),
     }
 }
 

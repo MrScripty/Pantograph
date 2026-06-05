@@ -1648,6 +1648,43 @@ fn scheduler_timeline_record_from_event(
             }
             (payload.summary(), Some(details.join("; ")))
         }
+        DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) => {
+            let mut details = vec![
+                payload.scheduler_task_id.clone(),
+                payload.scheduler_attempt_id.clone(),
+            ];
+            if let Some(duration_ms) = payload.duration_ms {
+                details.push(format!("duration {duration_ms} ms"));
+            }
+            if let Some(runtime_id) = payload.selected_runtime_id.as_deref() {
+                details.push(format!("selected runtime {runtime_id}"));
+            }
+            if let Some(runtime_variant_id) = payload.selected_runtime_variant_id.as_deref() {
+                details.push(format!("selected runtime variant {runtime_variant_id}"));
+            }
+            if let Some(backend_key) = payload.selected_backend_key.as_deref() {
+                details.push(format!("selected backend {backend_key}"));
+            }
+            if let Some(device_id) = payload.selected_device_id.as_deref() {
+                details.push(format!("selected device {device_id}"));
+            }
+            if let Some(network_node_id) = payload.selected_network_node_id.as_deref() {
+                details.push(format!("selected network node {network_node_id}"));
+            }
+            if let Some(reservation_id) = payload.reservation_id.as_deref() {
+                details.push(format!("reservation {reservation_id}"));
+            }
+            if let Some(reason) = payload.reason.as_deref() {
+                details.push(reason.to_string());
+            }
+            if let Some(error_summary) = payload.error_summary.as_deref() {
+                details.push(error_summary.to_string());
+            }
+            (
+                payload.transition.summary().to_string(),
+                Some(details.join("; ")),
+            )
+        }
         DiagnosticEventPayload::RunStarted(payload) => {
             let detail = match (
                 payload.queue_wait_ms,
@@ -2910,6 +2947,23 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             selected_device_id: payload.selected_device_id.clone(),
             selected_network_node_id: payload.selected_network_node_id.clone(),
         },
+        DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) => {
+            SchedulerProjectionFacts {
+                queue_position: None,
+                priority: None,
+                estimate_confidence: None,
+                estimated_queue_wait_ms: None,
+                estimated_duration_ms: None,
+                model_cache_state: None,
+                reason: payload
+                    .reason
+                    .clone()
+                    .or_else(|| payload.error_summary.clone()),
+                selected_runtime_id: payload.selected_runtime_id.clone(),
+                selected_device_id: payload.selected_device_id.clone(),
+                selected_network_node_id: payload.selected_network_node_id.clone(),
+            }
+        }
         DiagnosticEventPayload::RunStarted(payload) => SchedulerProjectionFacts {
             queue_position: None,
             priority: None,

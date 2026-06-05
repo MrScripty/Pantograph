@@ -42,6 +42,7 @@ pub enum DiagnosticEventKind {
     SchedulerModelLifecycleChanged,
     SchedulerRunAdmitted,
     SchedulerReservationChanged,
+    SchedulerTaskAttemptLifecycleChanged,
     RunStarted,
     RunTerminal,
     RunSnapshotAccepted,
@@ -65,6 +66,9 @@ impl DiagnosticEventKind {
             Self::SchedulerModelLifecycleChanged => "scheduler.model_lifecycle_changed",
             Self::SchedulerRunAdmitted => "scheduler.run_admitted",
             Self::SchedulerReservationChanged => "scheduler.reservation_changed",
+            Self::SchedulerTaskAttemptLifecycleChanged => {
+                "scheduler.task_attempt_lifecycle_changed"
+            }
             Self::RunStarted => "run.started",
             Self::RunTerminal => "run.terminal",
             Self::RunSnapshotAccepted => "run.snapshot_accepted",
@@ -88,6 +92,9 @@ impl DiagnosticEventKind {
             "scheduler.model_lifecycle_changed" => Ok(Self::SchedulerModelLifecycleChanged),
             "scheduler.run_admitted" => Ok(Self::SchedulerRunAdmitted),
             "scheduler.reservation_changed" => Ok(Self::SchedulerReservationChanged),
+            "scheduler.task_attempt_lifecycle_changed" => {
+                Ok(Self::SchedulerTaskAttemptLifecycleChanged)
+            }
             "run.started" => Ok(Self::RunStarted),
             "run.terminal" => Ok(Self::RunTerminal),
             "run.snapshot_accepted" => Ok(Self::RunSnapshotAccepted),
@@ -255,6 +262,7 @@ pub enum DiagnosticEventPayload {
     SchedulerModelLifecycleChanged(SchedulerModelLifecycleChangedPayload),
     SchedulerRunAdmitted(SchedulerRunAdmittedPayload),
     SchedulerReservationChanged(SchedulerReservationChangedPayload),
+    SchedulerTaskAttemptLifecycleChanged(SchedulerTaskAttemptLifecycleChangedPayload),
     RunStarted(RunStartedPayload),
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
@@ -281,6 +289,9 @@ impl DiagnosticEventPayload {
             Self::SchedulerRunAdmitted(_) => DiagnosticEventKind::SchedulerRunAdmitted,
             Self::SchedulerReservationChanged(_) => {
                 DiagnosticEventKind::SchedulerReservationChanged
+            }
+            Self::SchedulerTaskAttemptLifecycleChanged(_) => {
+                DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
             }
             Self::RunStarted(_) => DiagnosticEventKind::RunStarted,
             Self::RunTerminal(_) => DiagnosticEventKind::RunTerminal,
@@ -309,6 +320,7 @@ impl DiagnosticEventPayload {
             Self::SchedulerModelLifecycleChanged(payload) => payload.validate(),
             Self::SchedulerRunAdmitted(payload) => payload.validate(),
             Self::SchedulerReservationChanged(payload) => payload.validate(),
+            Self::SchedulerTaskAttemptLifecycleChanged(payload) => payload.validate(),
             Self::RunStarted(payload) => payload.validate(),
             Self::RunTerminal(payload) => payload.validate(),
             Self::RunSnapshotAccepted(payload) => payload.validate(),
@@ -748,6 +760,169 @@ impl SchedulerReservationChangedPayload {
             self.resource_kind.summary(),
             self.transition.summary()
         )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerTaskAttemptExecutionClass {
+    Runtime,
+    NonRuntimeNodeEngine,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerTaskAttemptLifecycleTransition {
+    Started,
+    Redispatched,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl SchedulerTaskAttemptLifecycleTransition {
+    fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+
+    pub(crate) fn summary(self) -> &'static str {
+        match self {
+            Self::Started => "task attempt started",
+            Self::Redispatched => "task attempt redispatched",
+            Self::Completed => "task attempt completed",
+            Self::Failed => "task attempt failed",
+            Self::Cancelled => "task attempt cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerTaskAttemptLifecycleChangedPayload {
+    pub scheduler_task_id: String,
+    pub scheduler_attempt_id: String,
+    pub execution_class: SchedulerTaskAttemptExecutionClass,
+    pub transition: SchedulerTaskAttemptLifecycleTransition,
+    pub started_at_ms: Option<i64>,
+    pub ended_at_ms: Option<i64>,
+    pub duration_ms: Option<u64>,
+    #[serde(default)]
+    pub selected_runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_key: Option<String>,
+    #[serde(default)]
+    pub selected_device_class: Option<String>,
+    #[serde(default)]
+    pub selected_device_id: Option<String>,
+    #[serde(default)]
+    pub selected_network_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reservation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_error_event_id: Option<String>,
+}
+
+impl SchedulerTaskAttemptLifecycleChangedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("scheduler_task_id", &self.scheduler_task_id, MAX_ID_LEN)?;
+        validate_required_text(
+            "scheduler_attempt_id",
+            &self.scheduler_attempt_id,
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_runtime_id",
+            self.selected_runtime_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_runtime_variant_id",
+            self.selected_runtime_variant_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_backend_key",
+            self.selected_backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_device_class",
+            self.selected_device_class.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_device_id",
+            self.selected_device_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_network_node_id",
+            self.selected_network_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text("reservation_id", self.reservation_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("attempt_reason", self.reason.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "attempt_error_summary",
+            self.error_summary.as_deref(),
+            MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
+        )?;
+        validate_optional_text(
+            "canonical_error_event_id",
+            self.canonical_error_event_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        if matches!(
+            self.transition,
+            SchedulerTaskAttemptLifecycleTransition::Started
+                | SchedulerTaskAttemptLifecycleTransition::Redispatched
+        ) && self.ended_at_ms.is_some()
+        {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "ended_at_ms",
+            });
+        }
+        if self.transition.is_terminal() {
+            let started_at_ms = self
+                .started_at_ms
+                .ok_or(DiagnosticsLedgerError::MissingField {
+                    field: "started_at_ms",
+                })?;
+            let ended_at_ms = self
+                .ended_at_ms
+                .ok_or(DiagnosticsLedgerError::MissingField {
+                    field: "ended_at_ms",
+                })?;
+            if ended_at_ms < started_at_ms {
+                return Err(DiagnosticsLedgerError::InvalidTimeRange);
+            }
+            let expected_duration_ms =
+                u64::try_from(ended_at_ms - started_at_ms).map_err(|_| {
+                    DiagnosticsLedgerError::InvalidField {
+                        field: "duration_ms",
+                    }
+                })?;
+            match self.duration_ms {
+                Some(duration_ms) if duration_ms == expected_duration_ms => {}
+                Some(_) => {
+                    return Err(DiagnosticsLedgerError::InvalidField {
+                        field: "duration_ms",
+                    });
+                }
+                None => {
+                    return Err(DiagnosticsLedgerError::MissingField {
+                        field: "duration_ms",
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -3237,6 +3412,7 @@ fn validate_event_scope(
         | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::SchedulerRunAdmitted
         | DiagnosticEventKind::SchedulerReservationChanged
+        | DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
         | DiagnosticEventKind::RunStarted
         | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
@@ -3369,6 +3545,7 @@ fn validate_event_source(
         | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::SchedulerRunAdmitted
         | DiagnosticEventKind::SchedulerReservationChanged
+        | DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
         | DiagnosticEventKind::RunStarted => {
             matches!(source_component, DiagnosticEventSourceComponent::Scheduler)
         }

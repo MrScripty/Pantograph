@@ -213,6 +213,12 @@ with a ledger/storage failure.
   and release with a typed transition, resource kind, reservation id, selected
   runtime, and reserved model ids. They describe scheduler-held capacity, not
   runtime execution lifecycle.
+- Scheduler task-attempt lifecycle events record scheduler-owned task
+  execution identity with typed task id, attempt id, execution class,
+  lifecycle transition, timing fields, and optional runtime/reservation facts.
+  They are the durable attempt/timing audit contract for scheduler task
+  execution and must not be represented as generic `WorkflowTimingObservation`
+  rows, which remain run/node timing history for expectation comparisons.
 - `run.snapshot_accepted` events carry bounded immutable snapshot metadata,
   including `workflow_run_snapshot_id`, `workflow_presentation_revision_id`,
   and `node_versions` entries with node id, node type, contract version, and

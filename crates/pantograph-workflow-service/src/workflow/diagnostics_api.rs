@@ -1551,6 +1551,7 @@ fn diagnostics_projection_kinds_for_payload(
         | DiagnosticEventPayload::SchedulerModelLifecycleChanged(_)
         | DiagnosticEventPayload::SchedulerRunAdmitted(_)
         | DiagnosticEventPayload::SchedulerReservationChanged(_)
+        | DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(_)
         | DiagnosticEventPayload::RunStarted(_)
         | DiagnosticEventPayload::RunTerminal(_)
         | DiagnosticEventPayload::RunSnapshotAccepted(_) => {

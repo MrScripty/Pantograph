@@ -2193,3 +2193,14 @@ durable task orchestration path.
   Workflow-service event emission, scheduler lifecycle producer wiring, and
   query/read-model behavior remain later slices after the ledger-owned
   contract and consumer compile adaptation are frozen.
+  2026-06-04 source update: the ledger-owned
+  `scheduler.task_attempt_lifecycle_changed` contract is implemented with
+  scheduler task id, attempt id, execution class, lifecycle transition,
+  terminal timing validation, optional runtime/reservation facts, public
+  exports, focused diagnostics-ledger tests, existing diagnostic event ledger
+  persistence/projection-summary support, and one workflow-service
+  projection-refresh classification test. The slice did not add
+  workflow-service event emission or scheduler lifecycle producer wiring.
+  Remaining follow-up: wire workflow-service start/terminal/cancel/redispatch
+  emission through the diagnostics-ledger append helper, then add
+  projection/read-model fields only after emitted event ordering is proven.

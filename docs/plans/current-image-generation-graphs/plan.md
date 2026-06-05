@@ -785,6 +785,34 @@ and consumer compile adaptation are frozen. This keeps DTO/schema ownership in
 `pantograph-workflow-service`, and avoids combining contract design, producer
 wiring, and projection behavior in one slice.
 
+2026-06-04 diagnostics-ledger task-attempt contract source update:
+`pantograph-diagnostics-ledger` now owns a typed
+`scheduler.task_attempt_lifecycle_changed` event contract with scheduler task
+id, scheduler attempt id, execution class, lifecycle transition,
+started/ended/duration timing fields, optional runtime/reservation facts, and
+typed validation for terminal timing. The slice exports the contract, persists
+it through the existing append-only diagnostic event ledger, includes it in the
+existing scheduler/run projection-refresh classification, and documents that
+generic `WorkflowTimingObservation` remains run/node timing history rather
+than scheduler attempt identity. No workflow-service scheduler producer emits
+the event yet. Verification passed: `cargo fmt -p
+pantograph-diagnostics-ledger -p pantograph-workflow-service`; `cargo test -p
+pantograph-diagnostics-ledger scheduler_task_attempt --lib`; `cargo test -p
+pantograph-workflow-service
+workflow_scheduler_task_attempt_event_requests_scheduler_projection_refresh
+--lib`; `cargo check -p pantograph-diagnostics-ledger`; `cargo check -p
+pantograph-workflow-service`; `cargo fmt -p pantograph-diagnostics-ledger -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy search over touched source/docs. Search matches were
+existing compatibility/front-end documentation, existing legacy migration
+regression tests, existing inference compatibility diagnostics, and existing
+documentation text about producers; no new fallback, old graph/backend/runtime,
+Tauri/frontend, Pumas, runtime-host execution, or workflow-service event
+emission path was added. Remaining lifecycle work: wire workflow-service
+start/terminal/cancel/redispatch emission through the existing
+diagnostics-ledger append helper, then add projection/read-model fields only
+after emitted event ordering is proven.
+
 ## Standards Rule
 
 The standards constraints in

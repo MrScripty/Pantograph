@@ -44,18 +44,20 @@ use crate::{
     SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
     SchedulerRunDelayedPayload, SchedulerSelectionDecisionCode,
     SchedulerSelectionHistoryThresholdState, SchedulerSelectionPolicyPhase,
-    SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
-    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
-    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
-    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS, MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES, MILLIS_PER_DAY,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    SchedulerSelectionPolicyTrace, SchedulerTaskAttemptExecutionClass,
+    SchedulerTaskAttemptLifecycleChangedPayload, SchedulerTaskAttemptLifecycleTransition,
+    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
+    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
+    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
+    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
+    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -245,6 +247,151 @@ fn scheduler_run_admitted_rejects_invalid_execution_plan_summary() {
         result,
         Err(DiagnosticsLedgerError::InvalidField {
             field: "execution_plan_summary"
+        })
+    ));
+}
+
+#[test]
+fn scheduler_task_attempt_payload_round_trips_contract() {
+    let payload = DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(
+        SchedulerTaskAttemptLifecycleChangedPayload {
+            scheduler_task_id: "task_runtime_image_alpha".to_string(),
+            scheduler_attempt_id: "attempt_runtime_image_alpha_001".to_string(),
+            execution_class: SchedulerTaskAttemptExecutionClass::Runtime,
+            transition: SchedulerTaskAttemptLifecycleTransition::Completed,
+            started_at_ms: Some(1_100),
+            ended_at_ms: Some(1_350),
+            duration_ms: Some(250),
+            selected_runtime_id: Some("pytorch".to_string()),
+            selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+            selected_backend_key: Some("pytorch".to_string()),
+            selected_device_class: Some("cuda".to_string()),
+            selected_device_id: Some("cuda:0".to_string()),
+            selected_network_node_id: Some("local-node-alpha".to_string()),
+            reservation_id: Some("reservation_runtime_image_alpha".to_string()),
+            reason: Some("runtime task completed".to_string()),
+            error_summary: None,
+            canonical_error_event_id: None,
+        },
+    );
+
+    let value = serde_json::to_value(&payload).expect("task attempt payload serializes");
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "payload_type": "scheduler_task_attempt_lifecycle_changed",
+            "scheduler_task_id": "task_runtime_image_alpha",
+            "scheduler_attempt_id": "attempt_runtime_image_alpha_001",
+            "execution_class": "runtime",
+            "transition": "completed",
+            "started_at_ms": 1100,
+            "ended_at_ms": 1350,
+            "duration_ms": 250,
+            "selected_runtime_id": "pytorch",
+            "selected_runtime_variant_id": "pytorch.cuda",
+            "selected_backend_key": "pytorch",
+            "selected_device_class": "cuda",
+            "selected_device_id": "cuda:0",
+            "selected_network_node_id": "local-node-alpha",
+            "reservation_id": "reservation_runtime_image_alpha",
+            "reason": "runtime task completed"
+        })
+    );
+
+    let round_tripped: DiagnosticEventPayload =
+        serde_json::from_value(value).expect("task attempt payload deserializes");
+    assert_eq!(round_tripped, payload);
+}
+
+#[test]
+fn scheduler_task_attempt_event_appends_with_scheduler_scope() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let event = sample_scheduler_task_attempt_event(
+        "workflow_run_alpha",
+        SchedulerTaskAttemptLifecycleTransition::Started,
+    );
+
+    let record = ledger
+        .append_diagnostic_event(event)
+        .expect("task attempt event appends");
+
+    assert_eq!(
+        record.event_kind,
+        DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+    );
+    assert_eq!(
+        record.workflow_run_id.as_ref().unwrap().as_str(),
+        "workflow_run_alpha"
+    );
+    assert_eq!(
+        record.workflow_id.as_ref().unwrap().as_str(),
+        "workflow_alpha"
+    );
+}
+
+#[test]
+fn scheduler_task_attempt_event_validates_scope_source_and_timing() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut missing_run = sample_scheduler_task_attempt_event(
+        "workflow_run_alpha",
+        SchedulerTaskAttemptLifecycleTransition::Started,
+    );
+    missing_run.workflow_run_id = None;
+    let result = ledger.append_diagnostic_event(missing_run);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::MissingField {
+            field: "workflow_run_id"
+        })
+    ));
+
+    let mut wrong_source = sample_scheduler_task_attempt_event(
+        "workflow_run_alpha",
+        SchedulerTaskAttemptLifecycleTransition::Started,
+    );
+    wrong_source.source_component = DiagnosticEventSourceComponent::WorkflowService;
+    let result = ledger.append_diagnostic_event(wrong_source);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidEventSource {
+            event_kind: "scheduler.task_attempt_lifecycle_changed",
+            source_component: "workflow_service"
+        })
+    ));
+
+    let mut terminal_without_duration = sample_scheduler_task_attempt_event(
+        "workflow_run_alpha",
+        SchedulerTaskAttemptLifecycleTransition::Completed,
+    );
+    let DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) =
+        &mut terminal_without_duration.payload
+    else {
+        panic!("sample task attempt event uses task attempt payload");
+    };
+    payload.duration_ms = None;
+    let result = ledger.append_diagnostic_event(terminal_without_duration);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::MissingField {
+            field: "duration_ms"
+        })
+    ));
+
+    let mut mismatched_duration = sample_scheduler_task_attempt_event(
+        "workflow_run_alpha",
+        SchedulerTaskAttemptLifecycleTransition::Failed,
+    );
+    let DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) =
+        &mut mismatched_duration.payload
+    else {
+        panic!("sample task attempt event uses task attempt payload");
+    };
+    payload.duration_ms = Some(999);
+    let result = ledger.append_diagnostic_event(mismatched_duration);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidField {
+            field: "duration_ms"
         })
     ));
 }
@@ -5781,6 +5928,67 @@ fn sample_scheduler_reservation_event(workflow_run_id: &str) -> DiagnosticEventA
                 selected_network_node_id: None,
                 reserved_model_ids: vec!["model-alpha".to_string()],
                 reason: Some("local runtime slot admitted".to_string()),
+            },
+        ),
+    }
+}
+
+fn sample_scheduler_task_attempt_event(
+    workflow_run_id: &str,
+    transition: SchedulerTaskAttemptLifecycleTransition,
+) -> DiagnosticEventAppendRequest {
+    let is_terminal = matches!(
+        transition,
+        SchedulerTaskAttemptLifecycleTransition::Completed
+            | SchedulerTaskAttemptLifecycleTransition::Failed
+            | SchedulerTaskAttemptLifecycleTransition::Cancelled
+    );
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("scheduler-local".to_string()),
+        occurred_at_ms: 1_019,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some("image-node".to_string()),
+        node_type: Some("image-generation".to_string()),
+        node_version: Some("node-v1".to_string()),
+        runtime_id: Some("pytorch".to_string()),
+        runtime_version: Some("runtime-v1".to_string()),
+        model_id: Some("model_alpha".to_string()),
+        model_version: Some("model-v1".to_string()),
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(
+            SchedulerTaskAttemptLifecycleChangedPayload {
+                scheduler_task_id: "task_runtime_image_alpha".to_string(),
+                scheduler_attempt_id: "attempt_runtime_image_alpha_001".to_string(),
+                execution_class: SchedulerTaskAttemptExecutionClass::Runtime,
+                transition,
+                started_at_ms: Some(1_100),
+                ended_at_ms: is_terminal.then_some(1_350),
+                duration_ms: is_terminal.then_some(250),
+                selected_runtime_id: Some("pytorch".to_string()),
+                selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+                selected_backend_key: Some("pytorch".to_string()),
+                selected_device_class: Some("cuda".to_string()),
+                selected_device_id: Some("cuda:0".to_string()),
+                selected_network_node_id: Some("local-node-alpha".to_string()),
+                reservation_id: Some("reservation_runtime_image_alpha".to_string()),
+                reason: Some("scheduler task attempt lifecycle".to_string()),
+                error_summary: matches!(
+                    transition,
+                    SchedulerTaskAttemptLifecycleTransition::Failed
+                )
+                .then_some("runtime task failed".to_string()),
+                canonical_error_event_id: None,
             },
         ),
     }

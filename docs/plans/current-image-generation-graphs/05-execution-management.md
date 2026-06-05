@@ -24769,6 +24769,50 @@ Worker rules:
       through the existing diagnostics-ledger append helper, then add
       projection/read-model support only after emitted event ordering is
       proven.
+  - 2026-06-04 Milestone 5c diagnostics-ledger task-attempt contract source
+    slice:
+    - Smallest vertical slice: add the ledger-owned scheduler task-attempt
+      event contract, validation, append/projection-summary support through
+      existing diagnostic event ledger mechanics, public exports, focused
+      tests, and the minimal workflow-service projection-refresh
+      classification needed by the shared public enum.
+    - Allowed write set used: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+      `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+      `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+      `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+      `crates/pantograph-diagnostics-ledger/src/README.md`,
+      `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`,
+      and these plan files.
+    - No-fallback/no-legacy confirmation: the slice adds no scheduler
+      producer emission, no graph/node-engine/runtime fallback path, no
+      workflow-service lifecycle policy, no Tauri/frontend behavior, no Pumas
+      fact changes, no runtime-host execution path, no lockfiles, no generated
+      files, and no saved workflow fixture changes. Generic
+      `WorkflowTimingObservation` remains separate run/node timing history and
+      is not reused as a scheduler attempt identity shim.
+    - Deviation resolved through re-plan: adding a public diagnostics payload
+      enum variant required one direct workflow-service exhaustive-match
+      adaptation. The plan was updated before editing workflow-service, and
+      the adaptation was limited to existing projection-refresh
+      classification plus a focused test.
+    - Verification passed:
+      - `cargo fmt -p pantograph-diagnostics-ledger -p pantograph-workflow-service`
+      - `cargo test -p pantograph-diagnostics-ledger scheduler_task_attempt --lib`
+      - `cargo test -p pantograph-workflow-service workflow_scheduler_task_attempt_event_requests_scheduler_projection_refresh --lib`
+      - `cargo check -p pantograph-diagnostics-ledger`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-diagnostics-ledger -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source/docs search. Matches were
+        existing compatibility/front-end documentation, existing legacy
+        migration regression tests, existing inference compatibility
+        diagnostics, and existing documentation text about producers; no new
+        fallback or legacy execution path was introduced.
+    - Remaining follow-up: wire workflow-service
+      start/terminal/cancel/redispatch emission through the existing
+      diagnostics-ledger append helper, then add projection/read-model fields
+      only after emitted event ordering is proven.
 
 ### Traceability Links
 
