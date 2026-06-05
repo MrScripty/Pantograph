@@ -43,7 +43,6 @@ fn python_runtime_backend_id_uses_model_ref_engine_before_node_default() {
             serde_json::json!({
                 "engine": "onnx-runtime",
                 "modelId": "model-a",
-                "modelPath": "/tmp/model.onnx",
                 "taskTypePrimary": "text-to-audio",
                 "dependencyBindings": [],
                 "dependencyRequirementsId": null,
@@ -56,6 +55,41 @@ fn python_runtime_backend_id_uses_model_ref_engine_before_node_default() {
         TauriTaskExecutor::python_runtime_backend_id("audio-generation", &inputs),
         "onnx-runtime"
     );
+}
+
+#[test]
+fn python_runtime_metadata_does_not_project_legacy_model_path_targets() {
+    let request = PythonNodeExecutionRequest {
+        node_type: "onnx-inference".to_string(),
+        inputs: HashMap::from([
+            (
+                "model_ref".to_string(),
+                serde_json::json!({
+                    "engine": "onnx-runtime",
+                    "modelId": "model-a",
+                    "modelPath": "/tmp/model.onnx",
+                    "taskTypePrimary": "text-to-audio",
+                    "dependencyBindings": [],
+                    "dependencyRequirementsId": null,
+                    "contractVersion": 2
+                }),
+            ),
+            (
+                "model_path".to_string(),
+                serde_json::json!("/tmp/legacy.onnx"),
+            ),
+        ]),
+        env_ids: Vec::new(),
+    };
+
+    let metadata =
+        TauriTaskExecutor::python_runtime_execution_metadata("onnx-inference", &request, false);
+
+    assert_eq!(
+        metadata.snapshot.runtime_id.as_deref(),
+        Some("onnx-runtime")
+    );
+    assert_eq!(metadata.model_target, None);
 }
 
 struct FailingPythonAdapter;

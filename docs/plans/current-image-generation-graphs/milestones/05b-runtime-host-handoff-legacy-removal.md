@@ -570,7 +570,12 @@ canonical scheduler/runtime-host facts are adapted back into legacy shapes.
   model-ref builder, worker module loading, or audio/ONNX generation calls.
   Python package readiness probes and env resolution remain backend-owned and
   available for readiness diagnostics; runtime execution still belongs to
-  scheduler task state/results plus runtime-host execution.
+  scheduler task state/results plus runtime-host execution. 2026-06-05
+  follow-up: removed the Python task-executor metadata helper that projected
+  `model_ref.modelPath`, `model_path`, or `modelPath` into runtime trace model
+  targets. Python runtime metadata may still report backend/runtime identity
+  from typed engine facts, but it no longer carries graph path targets from
+  retired Python runtime inputs.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

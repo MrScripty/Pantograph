@@ -110,22 +110,6 @@ impl TauriTaskExecutor {
         }
     }
 
-    pub(super) fn python_runtime_model_target(
-        inputs: &HashMap<String, serde_json::Value>,
-    ) -> Option<String> {
-        inputs
-            .get("model_ref")
-            .and_then(|value| value.get("modelPath"))
-            .and_then(|value| value.as_str())
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .or_else(|| {
-                Self::read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-                    .map(|value| value.trim().to_string())
-                    .filter(|value| !value.is_empty())
-            })
-    }
-
     pub(super) fn python_runtime_instance_id(runtime_id: &str, env_ids: &[String]) -> String {
         if env_ids.is_empty() {
             return format!("python-runtime:{}:default", runtime_id);
@@ -170,7 +154,7 @@ impl TauriTaskExecutor {
                 active: true,
                 last_error: None,
             },
-            model_target: Self::python_runtime_model_target(&request.inputs),
+            model_target: None,
             health_assessment: None,
         }
     }

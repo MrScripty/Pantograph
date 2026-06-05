@@ -25370,6 +25370,33 @@ Worker rules:
       Python-backed graph fixtures/tests and task-executor metadata helpers
       that still mention `model_path`/`modelPath`, while preserving backend
       Python package readiness probes as diagnostics/readiness infrastructure.
+  - 2026-06-05 Milestone 5b Python runtime metadata path cleanup slice:
+    - Smallest vertical slice: stop the embedded-runtime Python task-executor
+      metadata path from projecting `model_ref.modelPath`, `model_path`, or
+      `modelPath` into runtime trace model targets.
+    - Allowed write set used:
+      `crates/pantograph-embedded-runtime/src/task_executor/python_execution.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests/recorder_stream.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: runtime metadata may still report
+      backend/runtime identity from typed engine facts, but it no longer turns
+      path-shaped graph or `ModelRefV2`-style fields into trace model targets.
+      No adapter launch behavior, scheduler policy, Tauri/frontend policy, or
+      runtime-host contract changed.
+    - Focused tests added/updated:
+      `python_runtime_metadata_does_not_project_legacy_model_path_targets`
+      proves path-shaped Python runtime inputs and `modelRef` path fields do
+      not become metadata model targets.
+    - Verification passed:
+      - `cargo test -p pantograph-embedded-runtime python_runtime_metadata_does_not_project_legacy_model_path_targets --lib`
+      - `cargo test -p pantograph-embedded-runtime task_executor --lib`
+      - `cargo fmt -p pantograph-embedded-runtime`
+      - `cargo check -p pantograph-embedded-runtime`
+    - Verification deviation resolved: the first
+      `cargo fmt -p pantograph-embedded-runtime -- --check` run failed on the
+      new assertion formatting only; `cargo fmt -p pantograph-embedded-runtime`
+      was applied and the subsequent crate check passed.
 
 ### Traceability Links
 
