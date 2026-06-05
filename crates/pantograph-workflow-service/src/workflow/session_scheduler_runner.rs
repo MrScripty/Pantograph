@@ -130,6 +130,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             output_targets,
             summary,
             started_at,
+            SchedulerTaskAttemptLifecycleTransition::Started,
         )
         .await
     }
@@ -143,6 +144,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         output_targets: Option<&[WorkflowOutputTarget]>,
         summary: &WorkflowSchedulerTaskRunSummary,
         started_at: Instant,
+        attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         if !summary.has_runtime_inference() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
@@ -158,6 +160,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             output_targets,
             summary,
             started_at,
+            attempt_start_transition,
         )
         .await
     }
@@ -179,6 +182,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         output_targets: Option<&[WorkflowOutputTarget]>,
         summary: &WorkflowSchedulerTaskRunSummary,
         started_at: Instant,
+        attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         self.run_progress_loop(session_id, workflow_run_id).await?;
         self.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
@@ -203,6 +207,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             summary,
             started_at,
             &readiness_admission.admitted,
+            attempt_start_transition,
         )
         .await
     }
@@ -343,6 +348,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 started.task(),
                 started.attempt_id().as_str(),
                 started.started_at_ms(),
+                SchedulerTaskAttemptLifecycleTransition::Started,
             )?;
             let execution_result = self
                 .service
@@ -648,6 +654,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         summary: &WorkflowSchedulerTaskRunSummary,
         started_at: Instant,
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
+        attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let runtime_task_ids =
             runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
@@ -714,6 +721,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 started_runtime_task.task(),
                 started_runtime_task.attempt_id().as_str(),
                 started_runtime_task.started_at_ms(),
+                attempt_start_transition,
             )?;
             let selected_dispatch = self
                 .service
@@ -985,7 +993,19 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         task: &WorkflowSchedulerTask,
         attempt_id: &str,
         started_at_ms: u64,
+        transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<(), WorkflowServiceError> {
+        if !matches!(
+            transition,
+            SchedulerTaskAttemptLifecycleTransition::Started
+                | SchedulerTaskAttemptLifecycleTransition::Redispatched
+        ) {
+            return Err(WorkflowServiceError::Internal(format!(
+                "scheduler task '{}' start event received terminal transition {:?}",
+                task.task_id.as_str(),
+                transition
+            )));
+        }
         let started_at_ms = i64::try_from(started_at_ms).map_err(|_| {
             WorkflowServiceError::Internal(format!(
                 "scheduler task '{}' start time exceeded diagnostics ledger timestamp range",
@@ -1023,7 +1043,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         scheduler_task_id: task.task_id.as_str().to_string(),
                         scheduler_attempt_id: attempt_id.to_string(),
                         execution_class: scheduler_task_attempt_execution_class(task)?,
-                        transition: SchedulerTaskAttemptLifecycleTransition::Started,
+                        transition,
                         started_at_ms: Some(started_at_ms),
                         ended_at_ms: None,
                         duration_ms: None,
@@ -1034,7 +1054,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         selected_device_id: None,
                         selected_network_node_id: None,
                         reservation_id: None,
-                        reason: Some("scheduler task attempt started".to_string()),
+                        reason: Some(scheduler_task_attempt_start_reason(transition).to_string()),
                         error_summary: None,
                         canonical_error_event_id: None,
                     },
@@ -1178,6 +1198,22 @@ fn scheduler_task_attempt_terminal_transition_from_result(
                     }),
             ),
         ),
+    }
+}
+
+fn scheduler_task_attempt_start_reason(
+    transition: SchedulerTaskAttemptLifecycleTransition,
+) -> &'static str {
+    match transition {
+        SchedulerTaskAttemptLifecycleTransition::Started => "scheduler task attempt started",
+        SchedulerTaskAttemptLifecycleTransition::Redispatched => {
+            "scheduler task attempt redispatched"
+        }
+        SchedulerTaskAttemptLifecycleTransition::Completed
+        | SchedulerTaskAttemptLifecycleTransition::Failed
+        | SchedulerTaskAttemptLifecycleTransition::Cancelled => {
+            unreachable!("terminal scheduler task attempt transition cannot start an attempt")
+        }
     }
 }
 

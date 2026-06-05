@@ -914,6 +914,37 @@ supervisor cancellation observation. Remaining lifecycle work: redispatch
 attempt lifecycle events and projection/read-model fields after event ordering
 is proven.
 
+2026-06-05 scheduler redispatch attempt diagnostics update: bootstrap recovery
+now marks ready-runtime redispatch attempt starts with the existing
+`scheduler.task_attempt_lifecycle_changed` `Redispatched` transition instead
+of emitting an ordinary `Started` event. The public runtime dependency
+readiness resume request remains unchanged and continues to emit `Started`;
+only the backend-owned bootstrap recovery decision path carries the private
+redispatch transition into the workflow-service session runner. This uses the
+existing diagnostics-ledger contract, scheduler attempt identity, persisted
+readiness proof, and duplicate-dispatch guard path without adding
+diagnostics-ledger schema/DTO changes, projection/read-model fields, graph-path
+or reduced-plan launch behavior, node-engine runtime launch branch,
+Tauri/frontend policy, runtime adapter lifecycle ownership, Pumas fact change,
+lockfile/generated/workflow fixture change, or compatibility shim.
+Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo test
+-p pantograph-workflow-service
+workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task
+--lib`; `cargo test -p pantograph-workflow-service
+bootstrap_recovery_plan_accepts_ready_redispatch_with_recovery_state --lib`;
+`cargo test -p pantograph-workflow-service
+workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run
+--lib`; `cargo test -p pantograph-workflow-service
+workflow_execution_session_records_non_runtime_scheduler_attempt_lifecycle_events
+--lib`; `cargo test -p pantograph-workflow-service task_orchestrator --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Search matches were existing legacy
+negative tests, compatibility fixture fields, and existing no-compatible
+candidate diagnostic text only. Remaining lifecycle work: add projection/
+read-model fields now that started, terminal, cancelled, and redispatched
+event ordering has been proven.
+
 ## Standards Rule
 
 The standards constraints in

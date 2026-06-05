@@ -1352,6 +1352,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
         .with_dependency_environment_provider(std::sync::Arc::new(
             dependency_readiness_provider.clone(),
         ))
@@ -1510,6 +1511,46 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     );
     assert!(recovery_result.final_plan.decisions.is_empty());
     assert_eq!(runtime_host_port.requests().len(), 1);
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 40,
+        )
+        .expect("diagnostic events")
+    };
+    let redispatched_attempt_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.node_id.as_deref() == Some("infer")
+                && event.payload_json.contains("\"transition\":\"redispatched\"")
+        })
+        .expect("runtime scheduler attempt redispatched event");
+    assert_eq!(
+        redispatched_attempt_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert!(redispatched_attempt_event
+        .payload_json
+        .contains("\"execution_class\":\"runtime\""));
+    assert!(redispatched_attempt_event
+        .payload_json
+        .contains("\"scheduler_attempt_id\":\"scheduler-task-attempt."));
+    assert!(redispatched_attempt_event
+        .payload_json
+        .contains("\"started_at_ms\":"));
+    assert!(
+        !diagnostic_events.iter().any(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.node_id.as_deref() == Some("infer")
+                && event.payload_json.contains("\"transition\":\"started\"")
+        }),
+        "bootstrap redispatch should not also emit a started event for the same runtime attempt"
+    );
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }

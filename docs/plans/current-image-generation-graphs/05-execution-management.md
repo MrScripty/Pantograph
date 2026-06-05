@@ -25108,6 +25108,62 @@ Worker rules:
       cancellation observation.
     - Remaining follow-up: emit redispatch attempt lifecycle events, then add
       projection/read-model fields only after emitted event ordering is proven.
+  - 2026-06-05 Milestone 5c scheduler redispatch attempt diagnostics source
+    slice:
+    - Smallest vertical slice: emit the existing
+      `scheduler.task_attempt_lifecycle_changed` `Redispatched` transition for
+      backend-owned bootstrap recovery ready-runtime redispatch attempts,
+      without changing diagnostics-ledger schema/DTOs or projection/read-model
+      files.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and these plan files.
+    - No-fallback/no-legacy confirmation: redispatch diagnostics use the
+      existing bootstrap recovery `RedispatchReadyRuntime` decision, persisted
+      readiness proof, scheduler start-attempt guard, diagnostics-ledger append
+      helper, and existing scheduler attempt identity. The slice adds no
+      graph-path or reduced-plan runtime execution, node-engine runtime launch,
+      Tauri/frontend policy, runtime adapter lifecycle policy, Pumas fact
+      changes, diagnostics-ledger schema/DTO changes, generated files,
+      lockfiles, saved workflow fixtures, or compatibility shims.
+    - Simplicity/complection confirmation: bootstrap recovery policy stays in
+      `session_execution_api`, attempt event construction stays in the session
+      runner, and the diagnostics-ledger contract remains a passive event DTO.
+      The public resume request remains unchanged; only the private
+      workflow-service bootstrap recovery path carries the redispatch
+      transition.
+    - Implementation summary: bootstrap recovery runtime resume requests now
+      carry a private attempt-start transition. `RedispatchReadyRuntime`
+      decisions pass `Redispatched`; ordinary runtime dependency readiness
+      resumes pass `Started`. The session runner validates that only
+      non-terminal start transitions are emitted and records the selected
+      transition with the scheduler-owned attempt id and start time.
+    - Focused tests added/updated:
+      `bootstrap_recovery_plan_accepts_ready_redispatch_with_recovery_state`
+      now verifies the private bootstrap runtime resume carries
+      `Redispatched`, and
+      `workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task`
+      verifies a diagnostics-ledger redispatched attempt event is emitted
+      without also emitting a started event for the same recovered runtime
+      task.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery_plan_accepts_ready_redispatch_with_recovery_state --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_non_runtime_scheduler_attempt_lifecycle_events --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched
+        workflow-service files. Matches were existing legacy negative tests,
+        existing compatibility fixture fields, and existing no-compatible
+        candidate diagnostic text only.
+    - Remaining follow-up: add projection/read-model fields now that started,
+      terminal, cancelled, and redispatched event ordering has been proven.
 
 ### Traceability Links
 

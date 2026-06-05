@@ -23,6 +23,7 @@ use pantograph_diagnostics_ledger::{
     RunResourceObservationRollupQuery, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
     RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
     SchedulerEstimateProducedPayload, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
+    SchedulerTaskAttemptLifecycleTransition,
 };
 use pantograph_inference_interface_contracts::INFERENCE_INTERFACE_CONTRACT_VERSION;
 use pantograph_runtime_attribution::{
@@ -492,6 +493,22 @@ impl WorkflowService {
         host: &H,
         request: WorkflowExecutionSessionResumeRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition(
+            host,
+            request,
+            SchedulerTaskAttemptLifecycleTransition::Started,
+        )
+        .await
+    }
+
+    async fn resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition<
+        H: WorkflowHost,
+    >(
+        &self,
+        host: &H,
+        request: WorkflowExecutionSessionResumeRequest,
+        attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim().to_string();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -550,6 +567,7 @@ impl WorkflowService {
                     active_run.output_targets.as_deref(),
                     &scheduler_task_run_summary,
                     started_at,
+                    attempt_start_transition,
                 );
                 match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
                     Ok(result) => result,
@@ -569,6 +587,7 @@ impl WorkflowService {
                         active_run.output_targets.as_deref(),
                         &scheduler_task_run_summary,
                         started_at,
+                        attempt_start_transition,
                     )
                     .await
             }
@@ -651,10 +670,14 @@ impl WorkflowService {
         let resume_plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
         workflow_bootstrap_recovery_apply_gate(&resume_plan)?;
         let mut resumed_runs = Vec::new();
-        for request in workflow_bootstrap_recovery_runtime_resume_requests(&resume_plan) {
+        for runtime_resume in workflow_bootstrap_recovery_runtime_resume_requests(&resume_plan) {
             resumed_runs.push(
-                self.resume_workflow_execution_session_runtime_dependency_readiness(host, request)
-                    .await?,
+                self.resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition(
+                    host,
+                    runtime_resume.request,
+                    runtime_resume.attempt_start_transition,
+                )
+                .await?,
             );
         }
 
@@ -1707,9 +1730,15 @@ fn workflow_bootstrap_recovery_progress_loop_requests(
     requests
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowBootstrapRecoveryRuntimeResume {
+    request: WorkflowExecutionSessionResumeRequest,
+    attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
+}
+
 fn workflow_bootstrap_recovery_runtime_resume_requests(
     plan: &WorkflowExecutionSessionBootstrapRecoveryPlan,
-) -> Vec<WorkflowExecutionSessionResumeRequest> {
+) -> Vec<WorkflowBootstrapRecoveryRuntimeResume> {
     let mut requests = Vec::new();
     let mut request_keys = BTreeSet::new();
     for decision in plan.decisions.iter().filter(|decision| {
@@ -1724,13 +1753,39 @@ fn workflow_bootstrap_recovery_runtime_resume_requests(
             decision.workflow_run_id.clone(),
         );
         if request_keys.insert(key) {
-            requests.push(WorkflowExecutionSessionResumeRequest {
-                session_id: decision.session_id.clone(),
-                workflow_run_id: decision.workflow_run_id.clone(),
+            requests.push(WorkflowBootstrapRecoveryRuntimeResume {
+                request: WorkflowExecutionSessionResumeRequest {
+                    session_id: decision.session_id.clone(),
+                    workflow_run_id: decision.workflow_run_id.clone(),
+                },
+                attempt_start_transition: workflow_bootstrap_recovery_attempt_start_transition(
+                    decision.decision_kind,
+                ),
             });
         }
     }
     requests
+}
+
+fn workflow_bootstrap_recovery_attempt_start_transition(
+    decision_kind: WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
+) -> SchedulerTaskAttemptLifecycleTransition {
+    match decision_kind {
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime => {
+            SchedulerTaskAttemptLifecycleTransition::Redispatched
+        }
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness => {
+            SchedulerTaskAttemptLifecycleTransition::Started
+        }
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+        | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired
+        | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired
+        | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::NoopCompleted
+        | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedTerminalDiagnostic
+        | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedMissingTaskStateRecord => {
+            SchedulerTaskAttemptLifecycleTransition::Started
+        }
+    }
 }
 
 fn queue_position_u32(
@@ -2236,9 +2291,12 @@ mod tests {
         assert!(plan.decisions[0].diagnostic.is_none());
         assert_eq!(
             workflow_bootstrap_recovery_runtime_resume_requests(&plan),
-            vec![WorkflowExecutionSessionResumeRequest {
-                session_id: "session-a".to_string(),
-                workflow_run_id: "run-a".to_string(),
+            vec![WorkflowBootstrapRecoveryRuntimeResume {
+                request: WorkflowExecutionSessionResumeRequest {
+                    session_id: "session-a".to_string(),
+                    workflow_run_id: "run-a".to_string(),
+                },
+                attempt_start_transition: SchedulerTaskAttemptLifecycleTransition::Redispatched,
             }]
         );
     }
