@@ -768,6 +768,15 @@ Option 3 thin implementation sequence:
      slices must first add the lifecycle owner/component registry and then
      attach real component state one concern at a time before public snapshot
      queries or diagnostics-ledger worker lifecycle events are added.
+   - 2026-06-05 scheduler lifecycle registry slice: added the first
+     workflow-service typed component registry for the required Option 3
+     lifecycle components. The registry owns explicit `NotStarted` records for
+     queue worker, dependency-readiness action, resource observation loop,
+     runtime-host dispatch, retry loop, and reservation cleanup. It is not a
+     public snapshot, does not emit ledger events, and does not fabricate
+     component state in projections. The next slice must attach real
+     runtime-host dispatch/task-supervisor state to the registry before any
+     public lifecycle query is added.
 
 Option 3 standards gates:
 

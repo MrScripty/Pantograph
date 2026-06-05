@@ -44,6 +44,16 @@ component states have real owners. This keeps lifecycle ownership,
 diagnostics persistence, retry/defer policy, replay recovery, transport, and
 UI display decomposed per the coding standards' simplicity/complection rule.
 
+2026-06-05 scheduler lifecycle registry update: workflow-service now has the
+first typed scheduler lifecycle component registry slice. It owns the required
+component vocabulary for queue worker, dependency-readiness action, resource
+observation loop, runtime-host dispatch, retry loop, and reservation cleanup,
+with each component starting from an explicit `NotStarted` owner record. This
+does not expose public worker snapshots, emit diagnostics-ledger lifecycle
+events, infer missing component facts, or re-enable legacy runtime launch
+paths. The next lifecycle slice must attach real runtime-host dispatch/task
+supervisor state to this registry before any public snapshot/query work.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a

@@ -1,4 +1,5 @@
 mod contracts;
+mod lifecycle;
 mod policy;
 mod readiness_lifecycle;
 mod store;

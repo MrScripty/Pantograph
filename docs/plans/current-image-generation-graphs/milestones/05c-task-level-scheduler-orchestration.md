@@ -625,7 +625,13 @@ durable task orchestration path.
   add or wire component ownership first, then expose public snapshots and
   diagnostics-ledger worker lifecycle events. Do not fabricate missing
   component state in a projection, and do not ship a task-supervisor-only
-  snapshot as the final worker lifecycle model.
+  snapshot as the final worker lifecycle model. 2026-06-05 scheduler
+  lifecycle registry update: the first typed workflow-service component
+  registry now owns explicit `NotStarted` records for queue worker,
+  dependency-readiness action, resource observation loop, runtime-host
+  dispatch, retry loop, and reservation cleanup. Remaining work: attach real
+  runtime-host dispatch/task-supervisor state, then attach the other component
+  owners before public snapshot/query or diagnostics-ledger lifecycle events.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

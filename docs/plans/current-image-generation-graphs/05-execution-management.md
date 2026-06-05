@@ -25425,6 +25425,52 @@ Worker rules:
       `cargo check -p pantograph-workflow-service`, `cargo fmt -p
       pantograph-workflow-service -- --check`, `git diff --check`, and
       targeted no-fallback/no-legacy searches over touched files.
+  - 2026-06-05 Milestone 5c scheduler lifecycle registry slice:
+    - Smallest vertical slice: add the workflow-service typed scheduler
+      lifecycle owner/component registry before public worker lifecycle
+      snapshots, diagnostics-ledger events, or concrete component owner
+      attachment.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the registry owns only typed
+      component identity and explicit coarse state for queue worker,
+      dependency-readiness action, resource observation loop, runtime-host
+      dispatch, retry loop, and reservation cleanup. It does not expose a
+      public snapshot, emit ledger lifecycle events, synthesize missing
+      component facts, infer state from Tauri/frontend/projections, or restore
+      graph-path/node-engine/planned-inference/runtime fallback launch paths.
+    - Implementation notes: added
+      `WorkflowSchedulerLifecycleComponentRegistry`,
+      `WorkflowSchedulerLifecycleOwnerId`,
+      `WorkflowSchedulerLifecycleComponentKind`,
+      `WorkflowSchedulerLifecycleComponentState`, typed component records, and
+      lifecycle diagnostics. Every required component is seeded with an
+      explicit `NotStarted` owner record; later slices must update records from
+      real owners rather than projection defaults.
+    - Tests added: focused lifecycle tests prove required component ownership,
+      explicit `NotStarted` state, stable component names, state updates, and
+      invalid owner-id diagnostics.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service scheduler::lifecycle::tests --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched scheduler files
+    - Search deviations: targeted search matched existing scheduler README
+      standards/legacy/no-fallback boundary text only; new source and tests did
+      not introduce fallback or legacy launch behavior.
+    - Remaining follow-up: attach real runtime-host dispatch/task-supervisor
+      state to the registry as the next component-state slice, then attach
+      dependency readiness, resource observation, retry, queue, and reservation
+      cleanup state before any public lifecycle query or diagnostics-ledger
+      worker lifecycle event.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

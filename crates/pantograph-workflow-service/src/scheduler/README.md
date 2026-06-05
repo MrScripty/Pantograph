@@ -11,6 +11,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | ----------- | ----------- |
 | `mod.rs` | Internal module entrypoint that re-exports scheduler contracts and store helpers to the workflow facade. |
 | `contracts.rs` | Scheduler request/response DTOs, queue item contracts, keep-alive/unload semantics, and stale-cleanup worker types. |
+| `lifecycle.rs` | Workflow-service scheduler lifecycle component registry that owns required component presence and explicit coarse state before public snapshots or ledger events are exposed. |
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `readiness_lifecycle.rs` | Workflow-service lifecycle owner that builds typed dependency-readiness requests for admitted runtime tasks, calls a readiness provider, and applies scheduler readiness admission without owning dependency policy. |
@@ -145,6 +146,13 @@ only a path-free `DependencyPreflightResult`, applies
 `pantograph-scheduler` readiness policy, and persists the resulting validated
 task-state transition; it must not resolve dependencies through node-engine,
 legacy preflight, Tauri, or graph-authored paths.
+The scheduler lifecycle registry owns the required component vocabulary for
+future worker diagnostics: queue worker, dependency-readiness action, resource
+observation loop, runtime-host dispatch, retry loop, and reservation cleanup.
+Each component starts from an explicit `NotStarted` owner record. Public
+diagnostics snapshots and ledger events must not invent missing component
+facts; later slices must attach real owners to these registry records before
+exposing them outside workflow-service.
 The dependency-readiness lifecycle is the workflow-service owner for producing
 the readiness request that precedes that bridge. It reads the admitted active
 run scheduler task graph, constructs a validated
