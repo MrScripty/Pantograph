@@ -219,7 +219,10 @@ direct graph input named `model_ref` as an alias for `pumas_model_ref`.
 Backend-internal Pumas and resolved-source DTOs may still carry their
 contractual nested `model_ref` fields, but direct graph-authored `model_ref`
 no longer provides runtime model identity, lifecycle model id, or launch
-inputs.
+inputs. A follow-up node-engine diagnostic cleanup removed lifecycle model-id
+extraction from retired `resolved_model_source.model_ref` as well; that
+retired resolved-source shape remains ignored or fail-closed by existing
+request and dependency-preflight guardrails.
 
 2026-06-05 embedded-runtime Python metadata cleanup result: the retired
 Python task-executor metadata path no longer reads `model_ref` for dependency
@@ -623,6 +626,9 @@ come from node-type defaults while the Python adapter remains fail-closed.
   extraction no longer read a direct graph input named `model_ref` as a
   `pumas_model_ref` alias. Nested Pumas/resolved-source DTO fields named
   `model_ref` remain backend-internal contract fields only. 2026-06-05
+  follow-up: node-engine lifecycle model-id extraction no longer reads retired
+  `resolved_model_source.model_ref`; resolved-source inputs remain ignored by
+  request construction or fail closed before dependency preflight. 2026-06-05
   progress: embedded-runtime Python task-executor metadata no longer reads
   legacy `model_ref.dependencyBindings` for environment ids or
   `model_ref.engine` for runtime backend selection. Explicit

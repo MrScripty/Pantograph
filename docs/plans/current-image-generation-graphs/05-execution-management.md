@@ -25615,6 +25615,31 @@ Worker rules:
       - `cargo check -p pantograph-embedded-runtime`
       - strict production search for removed Python task-executor
         `model_ref` reads and the now-deleted backend-key helper
+  - 2026-06-05 Milestone 5b node-engine resolved-source lifecycle metadata
+    cleanup slice:
+    - Smallest vertical slice: remove retired
+      `resolved_model_source.model_ref` model-id extraction from node-engine
+      lifecycle validation metadata.
+    - Allowed write set used:
+      `crates/node-engine/src/core_executor.rs`,
+      `crates/node-engine/src/core_executor/inference_tests.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: retired resolved-source payloads no
+      longer provide lifecycle model identity or a compatibility bridge back
+      to model-ref-shaped graph inputs. Existing request construction ignores
+      `resolved_model_source`, and dependency preflight still fails closed for
+      retired resolved-source payloads.
+    - Focused tests updated: node-engine model-id extraction now asserts both
+      direct `model_ref` and nested `resolved_model_source.model_ref` are
+      ignored until canonical `pumas_model_ref` is present.
+    - Verification passed:
+      - `cargo test -p node-engine --features inference-nodes test_inference_model_id_from_inputs_ignores_retired_direct_model_ref_alias --lib`
+      - `cargo test -p node-engine --features inference-nodes core_executor::tests::inference_tests --lib`
+      - strict production search for direct and resolved-source model-ref
+        extraction in `core_executor.rs` and `core_executor/inference_nodes.rs`
+      - `cargo fmt -p node-engine -- --check`
+      - `cargo check -p node-engine --features inference-nodes`
 
 ### Traceability Links
 

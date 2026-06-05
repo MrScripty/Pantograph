@@ -723,20 +723,6 @@ fn inference_model_id_from_inputs(inputs: &HashMap<String, serde_json::Value>) -
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned)
         })
-        .or_else(|| {
-            inputs
-                .get("resolved_model_source")
-                .and_then(|value| value.get("model_ref").or_else(|| value.get("modelRef")))
-                .and_then(|value| {
-                    value
-                        .get("model_id")
-                        .or_else(|| value.get("modelId"))
-                        .and_then(serde_json::Value::as_str)
-                })
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-        })
 }
 
 #[cfg(feature = "inference-nodes")]

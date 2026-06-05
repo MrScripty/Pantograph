@@ -157,6 +157,10 @@ fn test_inference_model_id_from_inputs_ignores_retired_direct_model_ref_alias() 
             "model_id": "pumas://models/retired-alias"
         }),
     );
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_value("pumas://models/retired-source", "/models/tiny/model.gguf"),
+    );
 
     assert_eq!(inference_model_id_from_inputs(&inputs), None);
 
