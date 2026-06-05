@@ -24874,6 +24874,56 @@ Worker rules:
       lifecycle events with runtime/reservation/error facts after their
       ordering is defined, then add projection/read-model fields after emitted
       event ordering is proven.
+  - 2026-06-04 Milestone 5c scheduler attempt lifecycle diagnostics
+    re-plan decision:
+    - Selected path: Option 3, the decomposed lifecycle producer path, with
+      Option 1 as the next immediate implementation slice. Implement
+      terminal `Completed`/`Failed` attempt events first, then `Cancelled`
+      events, then `Redispatched` events and recovery ordering, and only then
+      projection/read-model fields.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection rule by separating scheduler lifecycle state,
+      diagnostics emission, cancellation/shutdown behavior, redispatch/replay
+      ordering, and read-model schema changes into independent decisions.
+      It also follows the planning standards' thin-slice rule by selecting
+      the smallest useful producer slice before broadening to all lifecycle
+      transitions or projections.
+    - Next source slice allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`
+      only if terminal mutation return data needs to expose already-owned
+      timing/reservation facts,
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`
+      only if terminal mutation return data needs to expose already-owned
+      timing/reservation facts, focused workflow-service tests, and these
+      plan files. Do not edit diagnostics-ledger schema/DTOs unless the
+      existing contract cannot represent a terminal producer fact and a new
+      re-plan explicitly expands scope.
+    - Next source slice no-fallback/no-legacy confirmation: terminal
+      producer wiring must use the existing diagnostics-ledger append helper
+      and existing scheduler attempt identity. It must not add graph-path or
+      reduced-plan launch behavior, node-engine runtime launch, Tauri/frontend
+      policy, runtime-host adapter lifecycle policy, Pumas fact changes,
+      lockfiles, generated files, saved workflow fixtures, or compatibility
+      shims. If terminal timing or reservation facts are unavailable from
+      canonical scheduler state, stop and re-plan instead of deriving them
+      from graph paths, UI state, runtime adapter guesses, or legacy timing
+      observations.
+    - Rejected next-step options:
+      - Option 2, cancellation first, is deferred because cancellation
+        intersects lifecycle signals, abort handling, terminal mutation, and
+        reservation release. It is more complected than normal terminal
+        completion/failure and should follow the terminal producer slice.
+      - Option 4, projection/read-model fields now, is rejected because the
+        plan requires projection fields only after terminal/cancel/redispatch
+        event ordering is proven. Adding schema against only `Started` events
+        would encode partial lifecycle semantics and likely churn.
+    - Verification expected for the next source slice: focused runtime
+      success, runtime failure, non-runtime success, and non-runtime failure
+      session/orchestrator tests that assert terminal attempt events; relevant
+      scheduler store/orchestrator tests if return contracts change;
+      `cargo check -p pantograph-workflow-service`; fmt check; `git diff
+      --check`; and targeted no-fallback/no-legacy search over touched files.
 
 ### Traceability Links
 

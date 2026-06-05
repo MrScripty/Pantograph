@@ -299,6 +299,19 @@ fixture rewrite. Remaining lifecycle work: emit terminal/cancel/redispatch
 attempt events with runtime/reservation/error facts after ordering is defined,
 then add projection/read-model fields after emitted event ordering is proven.
 
+2026-06-04 scheduler attempt lifecycle diagnostics re-plan decision: use the
+decomposed producer path. The next immediate source slice is terminal
+`Completed`/`Failed` attempt events from existing successful and failing
+runtime and non-runtime terminal paths. Later slices must add `Cancelled`
+events, then `Redispatched` events and recovery ordering, and only then add
+projection/read-model fields after emitted event ordering is proven. This
+keeps scheduler lifecycle state, diagnostics emission, recovery ordering, and
+read-model schema changes as separate reasoning axes under the
+simplicity/complection standards. Do not combine cancellation, redispatch,
+replay, and projection schema work into the next slice, and do not introduce
+graph-path, reduced-plan, node-engine runtime launch, Tauri/frontend policy,
+runtime-host adapter policy, or diagnostics fallback behavior.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.
