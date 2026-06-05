@@ -24726,6 +24726,37 @@ Worker rules:
         existing Pumas test fixtures, and existing node-engine non-runtime
         task diagnostics only.
     - Remaining follow-up: add diagnostics-ledger attempt/timing facts.
+  - 2026-06-04 Milestone 5c diagnostics-ledger attempt/timing re-plan
+    decision:
+    - Selected path: Option 1. Add the diagnostics-ledger scheduler
+      task-attempt event contract first, then wire workflow-service emission
+      and projections in later validated slices.
+    - Standards alignment: `pantograph-diagnostics-ledger` owns the shared
+      event DTO/schema and validation; `pantograph-workflow-service` remains
+      the scheduler task lifecycle owner and must only emit the frozen
+      contract after the ledger shape is validated. This follows the
+      simplicity/complection rule by separating DTO/schema shape from
+      lifecycle policy and persistence contract from producer wiring.
+    - Next source slice allowed write set: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+      focused diagnostics-ledger tests, diagnostics-ledger README/module docs
+      if the public contract text changes, and these plan files. Do not edit
+      workflow-service, projection refresh logic, sqlite schema/storage,
+      generated files, lockfiles, saved workflow fixtures, Tauri/frontend
+      files, Pumas files, or runtime-host code in that slice unless a new
+      re-plan explicitly expands scope.
+    - Required event contract shape: scheduler task id, scheduler attempt id,
+      execution class, lifecycle transition, started/ended/duration timing
+      fields where applicable, and optional runtime/reservation facts such as
+      runtime id, runtime variant id, backend key, device id, network node id,
+      reservation id, and typed reason/error summary for terminal outcomes.
+    - Explicit rejection: do not reuse `WorkflowTimingObservation` for
+      scheduler task attempts. It is run/node timing-history data with legacy
+      graph fingerprint semantics and lacks scheduler task-attempt identity,
+      lifecycle transitions, redispatch, and reservation facts.
+    - Follow-up order after the contract slice: wire workflow-service
+      start/terminal/cancel/redispatch emission through the existing
+      diagnostics-ledger append helper, then add projection/read-model support
+      only after emitted event ordering is proven.
 
 ### Traceability Links
 

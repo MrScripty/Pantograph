@@ -2178,3 +2178,14 @@ durable task orchestration path.
   compatibility payload fields, existing Pumas test fixtures, and existing
   node-engine non-runtime task diagnostics only.
   Remaining follow-up: add diagnostics-ledger attempt/timing facts.
+  2026-06-04 diagnostics-ledger attempt/timing re-plan decision: use Option 1
+  next. The next source slice must add a `pantograph-diagnostics-ledger`
+  scheduler task-attempt event contract and focused validation tests before
+  workflow-service emits any attempt events. The event contract must include
+  scheduler task id, attempt id, execution class, lifecycle transition,
+  started/ended/duration timing fields where applicable, and optional
+  runtime/reservation facts. Do not reuse `WorkflowTimingObservation` for this
+  contract because it is run/node timing-history data and does not own
+  scheduler attempt lifecycle identity. Workflow-service event emission,
+  projection refresh, and query/read-model behavior remain later slices after
+  the ledger-owned contract is frozen.

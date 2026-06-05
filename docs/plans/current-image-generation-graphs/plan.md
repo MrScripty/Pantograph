@@ -764,6 +764,20 @@ pantograph-workflow-service -- --check`; `git diff --check`; and targeted
 no-fallback/no-legacy source search. Remaining lifecycle work:
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 diagnostics-ledger attempt/timing re-plan decision: implement
+Option 1 next. The next source slice must first add a diagnostics-ledger owned
+scheduler task-attempt event contract and validation tests before workflow
+service emits any events. The contract must represent scheduler task id,
+attempt id, execution class, lifecycle transition, timing fields, and optional
+runtime/reservation facts without reusing `WorkflowTimingObservation`, because
+that existing type is run/node timing history and does not own scheduler
+attempt lifecycle identity. Workflow-service emission, projection refresh, and
+query/read-model behavior remain follow-up slices after the ledger contract is
+frozen. This keeps DTO/schema ownership in `pantograph-diagnostics-ledger`,
+scheduler lifecycle ownership in `pantograph-workflow-service`, and avoids
+combining contract design, producer wiring, and projection behavior in one
+slice.
+
 ## Standards Rule
 
 The standards constraints in
