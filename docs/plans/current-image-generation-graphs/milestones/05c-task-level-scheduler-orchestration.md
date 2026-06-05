@@ -50,9 +50,13 @@ durable task orchestration path.
   for active runs, hide transition ids/state versions/handoffs/load targets,
   expose pre-intent unknown model/runtime/device facts, and now project
   scheduler state diagnostics plus runtime/non-runtime execution category.
-  Timing and attempt counters remain open because the scheduler lifecycle
-  record does not yet carry those typed facts; they must be added with the
-  retry/defer/ledger lifecycle slice rather than inferred from state version.
+  2026-06-05 active-attempt read-model update: the active-run query now joins
+  scheduler-owned active attempt id and attempt start time from the active-run
+  store into schema version 2 task-state read models while an attempt is
+  running. Historical counters, retry/defer decisions, replay outcomes, worker
+  lifecycle diagnostics, and additional timing summaries remain open and must
+  come from scheduler lifecycle/ledger facts rather than inferred state
+  versions.
 - [x] Align graph-visible scheduler constraints before materialization relies
   on them. The workflow-service task graph currently models optional hard
   `runtime` and `device` constraints, while the canonical inference node
@@ -603,10 +607,12 @@ durable task orchestration path.
   facts, and reservation id. The scheduler timeline projection now drains
   those events and exposes typed read-model fields, and Scheduler page display
   consumes those fields through presenter rows without payload parsing.
-  Remaining work in this broader lifecycle item is retry/defer idempotency,
-  replay/recovery outcomes, worker lifecycle diagnostics, any additional
-  task-state read-model attempt counters, and any unresolved cooperative
-  runtime/worker cancellation response mapping.
+  The active task-state read model also exposes the scheduler-owned active
+  attempt id and started-at time from active-run store facts while an attempt
+  is running. Remaining work in this broader lifecycle item is retry/defer
+  idempotency, replay/recovery outcomes, worker lifecycle diagnostics, any
+  historical task-state attempt counters/timing summaries, and any unresolved
+  cooperative runtime/worker cancellation response mapping.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

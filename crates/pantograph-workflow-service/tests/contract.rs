@@ -11,7 +11,14 @@ use pantograph_diagnostics_ledger::{
     RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus, SchedulerModelCacheState,
     SchedulerTimelineProjectionRecord, WorkflowExecutionSessionResumeState,
 };
+use pantograph_scheduler::SchedulerTaskStateKind;
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
+use pantograph_workflow_service::workflow::{
+    WorkflowSchedulerTaskStateExecutionKind, WorkflowSchedulerTaskStateReadModel,
+    WorkflowSchedulerTaskStateReadModelQueryRequest,
+    WorkflowSchedulerTaskStateReadModelQueryResponse,
+    WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,
+};
 use pantograph_workflow_service::{
     ArtifactFormatCapabilities, ArtifactFormatSettingsQueryResponse, ArtifactPolicy,
     ResolvedNodeIoDirection, ResolvedNodeIoProvenanceKind, ResolvedNodeIoRecord,
@@ -755,6 +762,71 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
     });
 
     assert_eq!(value, expected);
+}
+
+#[test]
+fn workflow_scheduler_task_state_read_model_query_contract_snapshot() {
+    let request = WorkflowSchedulerTaskStateReadModelQueryRequest {
+        session_id: "session-1".to_string(),
+        workflow_run_id: "run-1".to_string(),
+    };
+    let response = WorkflowSchedulerTaskStateReadModelQueryResponse {
+        session_id: "session-1".to_string(),
+        workflow_run_id: "run-1".to_string(),
+        tasks: vec![WorkflowSchedulerTaskStateReadModel {
+            schema_version: WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,
+            workflow_id: "wf-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
+            node_id: "node-image".to_string(),
+            task_id: "task-image".to_string(),
+            node_type: "image-generation".to_string(),
+            dependency_task_ids: vec!["task-prompt".to_string()],
+            input_bindings: Vec::new(),
+            projection_diagnostics: Vec::new(),
+            state_diagnostics: Vec::new(),
+            execution_kind: Some(WorkflowSchedulerTaskStateExecutionKind::Runtime),
+            task_type: Some("image_generation".to_string()),
+            model_id: Some("pumas://models/image-model".to_string()),
+            non_runtime_task_kind: None,
+            state: SchedulerTaskStateKind::Running,
+            active_attempt_id: Some("attempt-1".to_string()),
+            active_attempt_started_at_ms: Some(1234),
+            requested_runtime_id: Some("stable_diffusion".to_string()),
+            requested_device_id: Some("local-gpu-0".to_string()),
+            trait_settings: Vec::new(),
+        }],
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize task state request");
+    let expected_request = serde_json::json!({
+        "session_id": "session-1",
+        "workflow_run_id": "run-1"
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize task state response");
+    let expected_response = serde_json::json!({
+        "session_id": "session-1",
+        "workflow_run_id": "run-1",
+        "tasks": [{
+            "schema_version": 2,
+            "workflow_id": "wf-1",
+            "workflow_run_id": "run-1",
+            "node_id": "node-image",
+            "task_id": "task-image",
+            "node_type": "image-generation",
+            "dependency_task_ids": ["task-prompt"],
+            "execution_kind": "runtime",
+            "task_type": "image_generation",
+            "model_id": "pumas://models/image-model",
+            "state": "running",
+            "active_attempt_id": "attempt-1",
+            "active_attempt_started_at_ms": 1234,
+            "requested_runtime_id": "stable_diffusion",
+            "requested_device_id": "local-gpu-0"
+        }]
+    });
+    assert_eq!(response_value, expected_response);
 }
 
 #[test]

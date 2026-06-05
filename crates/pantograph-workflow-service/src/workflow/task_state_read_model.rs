@@ -12,9 +12,10 @@ use super::{
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic, WorkflowService,
     WorkflowServiceError, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
+use crate::scheduler::WorkflowSchedulerTaskAttemptReadFact;
 
 /// Current schema version for workflow-visible scheduler task state.
-pub const WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION: u16 = 1;
+pub const WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION: u16 = 2;
 
 /// Presentation-neutral task-state fact for graph editor and run inspection.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +45,10 @@ pub struct WorkflowSchedulerTaskStateReadModel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub non_runtime_task_kind: Option<String>,
     pub state: SchedulerTaskStateKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_attempt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_attempt_started_at_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -119,11 +124,25 @@ impl WorkflowService {
         let state = {
             let mut store = self.session_store_guard()?;
             store.touch_session(session_id)?;
-            store.active_run_scheduler_task_state(session_id, workflow_run_id)?
+            match store.active_run_scheduler_task_state(session_id, workflow_run_id)? {
+                Some((task_graph, records)) => Some((
+                    task_graph,
+                    records,
+                    store.active_run_scheduler_task_attempt_read_facts(
+                        session_id,
+                        workflow_run_id,
+                    )?,
+                )),
+                None => None,
+            }
         };
         let tasks = match state {
-            Some((task_graph, records)) => {
-                workflow_scheduler_task_state_read_models(&task_graph, &records)?
+            Some((task_graph, records, attempt_facts)) => {
+                workflow_scheduler_task_state_read_models_with_attempts(
+                    &task_graph,
+                    &records,
+                    &attempt_facts,
+                )?
             }
             None => Vec::new(),
         };
@@ -141,6 +160,14 @@ impl WorkflowService {
 pub fn workflow_scheduler_task_state_read_models(
     task_graph: &WorkflowSchedulerTaskGraph,
     records: &[SchedulerTaskStateRecord],
+) -> Result<Vec<WorkflowSchedulerTaskStateReadModel>, WorkflowServiceError> {
+    workflow_scheduler_task_state_read_models_with_attempts(task_graph, records, &BTreeMap::new())
+}
+
+pub(crate) fn workflow_scheduler_task_state_read_models_with_attempts(
+    task_graph: &WorkflowSchedulerTaskGraph,
+    records: &[SchedulerTaskStateRecord],
+    attempt_facts: &BTreeMap<String, WorkflowSchedulerTaskAttemptReadFact>,
 ) -> Result<Vec<WorkflowSchedulerTaskStateReadModel>, WorkflowServiceError> {
     validate_task_graph_for_read_model(task_graph)?;
     let tasks_by_id = task_graph
@@ -199,7 +226,12 @@ pub fn workflow_scheduler_task_state_read_models(
         let record = records_by_task_id
             .get(task.task_id.as_str())
             .expect("record existence checked above");
-        read_models.push(read_model_from_record(task_graph, task, record));
+        read_models.push(read_model_from_record(
+            task_graph,
+            task,
+            record,
+            attempt_facts.get(task.task_id.as_str()),
+        ));
     }
     Ok(read_models)
 }
@@ -208,6 +240,7 @@ fn read_model_from_record(
     task_graph: &WorkflowSchedulerTaskGraph,
     task: &WorkflowSchedulerTask,
     record: &SchedulerTaskStateRecord,
+    attempt_fact: Option<&WorkflowSchedulerTaskAttemptReadFact>,
 ) -> WorkflowSchedulerTaskStateReadModel {
     WorkflowSchedulerTaskStateReadModel {
         schema_version: WORKFLOW_SCHEDULER_TASK_STATE_READ_MODEL_SCHEMA_VERSION,
@@ -243,6 +276,8 @@ fn read_model_from_record(
             .and_then(SchedulerTaskExecutionIntent::non_runtime_task_intent)
             .map(|intent| intent.task_kind.as_str().to_string()),
         state: record.state.kind(),
+        active_attempt_id: attempt_fact.map(|fact| fact.attempt_id.as_str().to_string()),
+        active_attempt_started_at_ms: attempt_fact.map(|fact| fact.started_at_ms),
         requested_runtime_id: record.state.task_intent().and_then(|intent| {
             intent
                 .constraints

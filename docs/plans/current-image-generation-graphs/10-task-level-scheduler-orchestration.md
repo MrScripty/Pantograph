@@ -321,7 +321,11 @@ implementation can be considered complete:
    2026-05-23 slice joined immutable task graph facts with task-state records
    and made mismatched graph/state reads fail closed. The broader
    diagnostics/timing/attempt projection remains open for the orchestrator and
-   ledger slices.
+   ledger slices. A 2026-06-05 active-attempt read-model slice advanced the
+   task-state schema to version 2 and joins scheduler-owned active attempt id
+   plus started-at time from the active-run store while an attempt is running;
+   historical counters, retry/defer, replay, worker lifecycle, and timing
+   summaries remain lifecycle/ledger follow-ups.
 4. Align graph-visible scheduler constraints before relying on them in
    materialization or admission. The workflow-service task graph already
    models optional hard `runtime` and `device` constraints. Completed
@@ -1650,8 +1654,11 @@ runtime-host dispatch cutover remain open.
 state diagnostics and a path-free execution category. Runtime execution states
 show runtime task facts; non-runtime execution states show only the
 non-runtime task kind. Pre-intent states still show unknown model/runtime/device
-facts without fabricating intent. Timing and attempt counters remain open until
-the retry/defer/ledger lifecycle slice adds typed scheduler facts for them.
+facts without fabricating intent. Active running states now expose the
+scheduler-owned active attempt id and started-at time from active-run store
+facts. Historical timing/attempt counters remain open until the retry/defer,
+replay, worker lifecycle, and ledger lifecycle slices add typed scheduler
+facts for them.
 
 2026-05-23 implementation status: node-engine now owns the focused
 `single_task` API planned for the non-runtime adapter boundary. The API exposes

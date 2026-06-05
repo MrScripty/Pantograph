@@ -25290,6 +25290,54 @@ Worker rules:
       frontend/Tauri policy, runtime adapter policy, Pumas, or compatibility
       shim paths.
     - Verification passed: `git diff --check`.
+  - 2026-06-05 Milestone 5c scheduler task-state active-attempt read-model
+    slice:
+    - Smallest vertical slice: expose scheduler-owned active task attempt id
+      and attempt started-at time through the workflow-service active-run
+      scheduler task-state read model, sourced from active-run store attempt
+      facts.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_state_read_model.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/task_state_read_model.rs`,
+      `crates/pantograph-workflow-service/tests/contract.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the slice reads attempt identity and
+      start time only from the workflow-service active-run store, advances the
+      task-state read-model schema to version 2, and adds no graph-path,
+      reduced-plan, node-engine runtime, frontend/Tauri policy, runtime
+      adapter policy, Pumas load-target, diagnostics-text parsing, or
+      compatibility-shim path.
+    - Implementation summary: active-run task attempts now have a narrow
+      read-fact DTO, the store exposes active attempt facts keyed by task id,
+      active-run scheduler task-state queries join those facts into optional
+      `active_attempt_id` and `active_attempt_started_at_ms` fields, and the
+      pure read-model projection remains reusable with an empty attempt-fact
+      map for non-active callers.
+    - Tests/fixtures: `scheduler_task_state_query_reads_active_run_records`
+      now starts a runtime task and asserts the read model reports `Running`
+      with the matching active attempt id and start time. The workflow-service
+      contract test now snapshots the schema version 2 task-state query
+      request/response shape.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service --test contract workflow_scheduler_task_state_read_model_query_contract_snapshot`
+      - `cargo test -p pantograph-workflow-service task_state_read_model --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched source/tests
+    - Search deviations: the targeted search matched only an existing
+      task-state negative assertion for `model_path` and existing trace
+      contract fixture fields unrelated to this read-model path.
+    - Remaining follow-up: historical attempt counters/timing summaries,
+      retry/defer decisions, replay outcomes, worker lifecycle diagnostics,
+      and cooperative runtime/worker cancellation response mapping remain
+      Milestone 5c lifecycle hardening work.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -42,8 +42,8 @@ pub(crate) use store::{
     unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionPreflightCache,
     WorkflowExecutionSessionStore, WorkflowSchedulerBootstrapRecoveryAction,
     WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
-    WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskTerminalMutation,
-    WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskAttemptReadFact,
+    WorkflowSchedulerTaskTerminalMutation, WORKFLOW_SESSION_QUEUE_POLL_MS,
 };
 pub(crate) use task_orchestrator::{
     WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError,

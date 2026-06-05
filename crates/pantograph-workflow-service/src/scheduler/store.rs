@@ -95,10 +95,15 @@ impl WorkflowSchedulerTaskAttemptId {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSchedulerTaskAttemptReadFact {
+    pub(crate) attempt_id: WorkflowSchedulerTaskAttemptId,
+    pub(crate) started_at_ms: u64,
+}
+
 #[derive(Debug, Clone)]
 struct WorkflowExecutionSessionTaskAttempt {
     attempt_id: WorkflowSchedulerTaskAttemptId,
-    #[allow(dead_code)]
     started_at_ms: u64,
     reservation: Option<WorkflowSchedulerTaskReservationBinding>,
 }

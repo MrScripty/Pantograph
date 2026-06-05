@@ -13,8 +13,8 @@ use crate::workflow::{
 
 use super::{
     unix_timestamp_ms, WorkflowExecutionSessionStore, WorkflowExecutionSessionTaskAttempt,
-    WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskReservationBinding,
-    WorkflowSchedulerTaskReservationReleaseIntent,
+    WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskAttemptReadFact,
+    WorkflowSchedulerTaskReservationBinding, WorkflowSchedulerTaskReservationReleaseIntent,
 };
 
 #[derive(Debug, Clone)]
@@ -355,6 +355,41 @@ impl WorkflowExecutionSessionStore {
                     task_id
                 ))
             })
+    }
+
+    pub(crate) fn active_run_scheduler_task_attempt_read_facts(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<BTreeMap<String, WorkflowSchedulerTaskAttemptReadFact>, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_ref().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+        Ok(active_run
+            .scheduler_task_attempts
+            .iter()
+            .map(|(task_id, attempt)| {
+                (
+                    task_id.clone(),
+                    WorkflowSchedulerTaskAttemptReadFact {
+                        attempt_id: attempt.attempt_id.clone(),
+                        started_at_ms: attempt.started_at_ms,
+                    },
+                )
+            })
+            .collect())
     }
 
     pub(crate) fn record_active_run_runtime_dispatch_readiness_proof(

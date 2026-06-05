@@ -381,7 +381,7 @@ async fn scheduler_task_state_query_reads_active_run_records() {
             )
             .expect("create session")
     };
-    let workflow_run_id = {
+    let (workflow_run_id, active_attempt_id) = {
         let mut store = service
             .session_store
             .lock()
@@ -410,11 +410,15 @@ async fn scheduler_task_state_query_reads_active_run_records() {
                 vec![scheduler_record(
                     &workflow_run_id,
                     "image-task",
-                    SchedulerTaskStateKind::WaitingResources,
+                    SchedulerTaskStateKind::Ready,
                 )],
             )
             .expect("set task records");
-        workflow_run_id
+        let started = service
+            .scheduler_task_orchestrator
+            .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, "image-task")
+            .expect("start runtime scheduler task attempt");
+        (workflow_run_id, started.attempt_id().as_str().to_string())
     };
 
     let response = service
@@ -430,9 +434,14 @@ async fn scheduler_task_state_query_reads_active_run_records() {
     assert_eq!(response.session_id, session_id);
     assert_eq!(response.workflow_run_id, workflow_run_id);
     assert_eq!(response.tasks.len(), 1);
-    assert_eq!(
-        response.tasks[0].state,
-        SchedulerTaskStateKind::WaitingResources
-    );
+    assert_eq!(response.tasks[0].state, SchedulerTaskStateKind::Running);
     assert_eq!(response.tasks[0].task_id, "image-task");
+    assert_eq!(
+        response.tasks[0].active_attempt_id.as_deref(),
+        Some(active_attempt_id.as_str())
+    );
+    assert!(
+        response.tasks[0].active_attempt_started_at_ms.is_some(),
+        "running task should expose active attempt start time"
+    );
 }

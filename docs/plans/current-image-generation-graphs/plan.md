@@ -14,6 +14,15 @@ runtime-host responses, or typed fail-closed diagnostics. Do not start
 Milestone 6 real PyTorch/diffusers execution until the remaining successful
 legacy runtime paths are deleted or fail closed.
 
+2026-06-05 scheduler task-state active-attempt read-model update: the
+workflow-service active-run task-state query now exposes scheduler-owned
+active attempt id and attempt started-at time from active-run store facts in
+schema version 2 read models. The slice did not infer lifecycle state from
+frontend, Tauri, runtime adapters, Pumas, graph paths, or diagnostics text.
+Remaining Milestone 5c hardening is historical attempt counters/timing
+summaries, retry/defer decisions, replay outcomes, worker lifecycle
+diagnostics, and cooperative runtime/worker cancellation response mapping.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a
