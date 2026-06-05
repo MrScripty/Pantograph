@@ -153,6 +153,12 @@ Each component starts from an explicit `NotStarted` owner record. Public
 diagnostics snapshots and ledger events must not invent missing component
 facts; later slices must attach real owners to these registry records before
 exposing them outside workflow-service.
+The task lifecycle manager now owns the first concrete component attachment:
+runtime-host dispatch state changes from explicit `NotStarted` to `Running`
+only when a runtime task supervisor abort handle is tracked. Non-runtime task
+handles do not mark runtime-host dispatch as running. Shutdown transitions move
+that same component to `ShuttingDown` and `Shutdown` through the task lifecycle
+owner, still without public snapshot projection or ledger writes.
 The dependency-readiness lifecycle is the workflow-service owner for producing
 the readiness request that precedes that bridge. It reads the admitted active
 run scheduler task graph, constructs a validated

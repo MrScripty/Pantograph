@@ -777,6 +777,16 @@ Option 3 thin implementation sequence:
      component state in projections. The next slice must attach real
      runtime-host dispatch/task-supervisor state to the registry before any
      public lifecycle query is added.
+   - 2026-06-05 runtime-host dispatch lifecycle attachment slice: the task
+     lifecycle manager now drives the registry's `runtime_host_dispatch`
+     component from real supervisor ownership. Non-runtime task handles keep
+     the component explicitly `NotStarted`; tracking a runtime task supervisor
+     abort handle marks it `Running`; handle completion restores `NotStarted`
+     while running; lifecycle shutdown records `ShuttingDown` then `Shutdown`.
+     No public snapshot, ledger event, projection default, Tauri/frontend
+     policy, or legacy runtime launch path was added. Remaining component
+     attachment work covers dependency readiness, resource observation, retry,
+     queue, and reservation cleanup before public lifecycle queries.
 
 Option 3 standards gates:
 

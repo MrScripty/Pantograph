@@ -2,6 +2,9 @@ use pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationState;
 use pantograph_scheduler::SchedulerTaskId;
 
 use crate::scheduler::{
+    lifecycle::{
+        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentState,
+    },
     task_lifecycle::{
         WorkflowSchedulerTaskLifecycleManager, WorkflowSchedulerTaskLifecycleOwnerId,
         WorkflowSchedulerTaskLifecycleShutdownState,
@@ -32,6 +35,13 @@ fn task_lifecycle_manager_tracks_active_task_handle() {
     assert_eq!(record.attempt_id, attempt_id);
     assert_eq!(manager.active_task_handle_count(), 1);
     assert!(manager.active_task_handle(&record.task_id).is_some());
+    assert_eq!(
+        manager
+            .runtime_host_dispatch_lifecycle_component()
+            .expect("runtime host dispatch component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::NotStarted
+    );
 }
 
 #[test]
@@ -316,6 +326,93 @@ async fn task_lifecycle_manager_aborts_tracked_task_supervisors() {
         .await
         .expect_err("supervisor join should be cancelled");
     assert!(error.is_cancelled());
+}
+
+#[tokio::test]
+async fn task_lifecycle_manager_marks_runtime_host_dispatch_running_for_supervisor_handle() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+    let join_handle = tokio::spawn(async {
+        std::future::pending::<()>().await;
+    });
+
+    manager
+        .track_task_supervisor_abort_handle(&task_id, &attempt_id, join_handle.abort_handle())
+        .expect("track supervisor abort handle");
+
+    let component = manager
+        .runtime_host_dispatch_lifecycle_component()
+        .expect("runtime host dispatch component");
+    assert_eq!(
+        component.component,
+        WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch
+    );
+    assert_eq!(
+        component.state,
+        WorkflowSchedulerLifecycleComponentState::Running
+    );
+
+    join_handle.abort();
+    let _ = join_handle.await;
+}
+
+#[tokio::test]
+async fn task_lifecycle_manager_marks_runtime_host_dispatch_not_started_after_supervisor_completion(
+) {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+    let join_handle = tokio::spawn(async {
+        std::future::pending::<()>().await;
+    });
+    manager
+        .track_task_supervisor_abort_handle(&task_id, &attempt_id, join_handle.abort_handle())
+        .expect("track supervisor abort handle");
+
+    manager
+        .complete_task_handle(&task_id, &attempt_id)
+        .expect("complete task handle");
+
+    assert_eq!(
+        manager
+            .runtime_host_dispatch_lifecycle_component()
+            .expect("runtime host dispatch component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::NotStarted
+    );
+
+    join_handle.abort();
+    let _ = join_handle.await;
+}
+
+#[test]
+fn task_lifecycle_manager_marks_runtime_host_dispatch_shutdown_states() {
+    let mut manager = lifecycle_manager();
+
+    manager.begin_shutdown();
+
+    assert_eq!(
+        manager
+            .runtime_host_dispatch_lifecycle_component()
+            .expect("runtime host dispatch component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::ShuttingDown
+    );
+    manager.finish_shutdown().expect("finish shutdown");
+    assert_eq!(
+        manager
+            .runtime_host_dispatch_lifecycle_component()
+            .expect("runtime host dispatch component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::Shutdown
+    );
 }
 
 #[test]

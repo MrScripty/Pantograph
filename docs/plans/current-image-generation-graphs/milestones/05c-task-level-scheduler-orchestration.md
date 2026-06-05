@@ -632,6 +632,10 @@ durable task orchestration path.
   dispatch, retry loop, and reservation cleanup. Remaining work: attach real
   runtime-host dispatch/task-supervisor state, then attach the other component
   owners before public snapshot/query or diagnostics-ledger lifecycle events.
+  2026-06-05 runtime-host dispatch attachment update: runtime-host dispatch
+  component state is now attached to real task-supervisor ownership in the
+  task lifecycle manager. Remaining component attachments: dependency
+  readiness, resource observation, retry, queue, and reservation cleanup.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

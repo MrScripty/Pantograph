@@ -54,6 +54,17 @@ events, infer missing component facts, or re-enable legacy runtime launch
 paths. The next lifecycle slice must attach real runtime-host dispatch/task
 supervisor state to this registry before any public snapshot/query work.
 
+2026-06-05 runtime-host dispatch lifecycle attachment update: the task
+lifecycle manager now updates the scheduler lifecycle registry's
+`runtime_host_dispatch` component from real task-supervisor ownership. Plain
+task handles leave the component at explicit `NotStarted`; tracking a runtime
+task supervisor abort handle moves it to `Running`; completion returns it to
+`NotStarted` while the owner is running; lifecycle shutdown moves it through
+`ShuttingDown` to `Shutdown`. This remains backend-owned workflow-service
+state only and does not add public snapshots, diagnostics-ledger events,
+projection-inferred component facts, Tauri/frontend policy, or legacy runtime
+launch behavior.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a

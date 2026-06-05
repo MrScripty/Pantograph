@@ -16,7 +16,14 @@ use tokio::task::AbortHandle;
 
 use crate::workflow::WorkflowServiceError;
 
-use super::WorkflowSchedulerTaskAttemptId;
+use super::{
+    lifecycle::{
+        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRecord,
+        WorkflowSchedulerLifecycleComponentRegistry, WorkflowSchedulerLifecycleComponentState,
+        WorkflowSchedulerLifecycleOwnerId,
+    },
+    WorkflowSchedulerTaskAttemptId,
+};
 
 /// Workflow-service task lifecycle owner.
 ///
@@ -28,14 +35,20 @@ pub(crate) struct WorkflowSchedulerTaskLifecycleManager {
     owner_id: WorkflowSchedulerTaskLifecycleOwnerId,
     shutdown_state: WorkflowSchedulerTaskLifecycleShutdownState,
     active_task_handles: BTreeMap<String, WorkflowSchedulerTaskLifecycleHandleRecord>,
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistry,
 }
 
 impl WorkflowSchedulerTaskLifecycleManager {
     pub(crate) fn new(owner_id: WorkflowSchedulerTaskLifecycleOwnerId) -> Self {
+        let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistry::new(
+            WorkflowSchedulerLifecycleOwnerId::parse(owner_id.as_str())
+                .expect("task lifecycle owner id must be valid scheduler lifecycle owner id"),
+        );
         Self {
             owner_id,
             shutdown_state: WorkflowSchedulerTaskLifecycleShutdownState::Running,
             active_task_handles: BTreeMap::new(),
+            scheduler_lifecycle,
         }
     }
 
@@ -56,6 +69,14 @@ impl WorkflowSchedulerTaskLifecycleManager {
         task_id: &SchedulerTaskId,
     ) -> Option<&WorkflowSchedulerTaskLifecycleHandleRecord> {
         self.active_task_handles.get(task_id.as_str())
+    }
+
+    pub(crate) fn runtime_host_dispatch_lifecycle_component(
+        &self,
+    ) -> Result<WorkflowSchedulerLifecycleComponentRecord, WorkflowServiceError> {
+        self.scheduler_lifecycle
+            .component(WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch)
+            .cloned()
     }
 
     pub(crate) fn track_task_handle(
@@ -114,6 +135,10 @@ impl WorkflowSchedulerTaskLifecycleManager {
     ) -> Result<(), WorkflowServiceError> {
         let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
         tracked.task_supervisor_abort_handle = Some(abort_handle);
+        self.scheduler_lifecycle.update_component_state(
+            WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch,
+            WorkflowSchedulerLifecycleComponentState::Running,
+        )?;
         Ok(())
     }
 
@@ -204,7 +229,8 @@ impl WorkflowSchedulerTaskLifecycleManager {
             ));
         }
 
-        self.active_task_handles
+        let completed = self
+            .active_task_handles
             .remove(task_id.as_str())
             .ok_or_else(|| {
                 lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
@@ -215,12 +241,18 @@ impl WorkflowSchedulerTaskLifecycleManager {
                     ),
                     None,
                 ))
-            })
+            })?;
+        self.refresh_runtime_host_dispatch_lifecycle_component()?;
+        Ok(completed)
     }
 
     pub(crate) fn begin_shutdown(&mut self) -> WorkflowSchedulerTaskLifecycleShutdownState {
         if self.shutdown_state == WorkflowSchedulerTaskLifecycleShutdownState::Running {
             self.shutdown_state = WorkflowSchedulerTaskLifecycleShutdownState::ShuttingDown;
+            let _ = self.scheduler_lifecycle.update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch,
+                WorkflowSchedulerLifecycleComponentState::ShuttingDown,
+            );
             for record in self.active_task_handles.values_mut() {
                 let reason =
                     Some("workflow-service task lifecycle owner is shutting down".to_string());
@@ -266,7 +298,34 @@ impl WorkflowSchedulerTaskLifecycleManager {
         }
 
         self.shutdown_state = WorkflowSchedulerTaskLifecycleShutdownState::Shutdown;
+        self.scheduler_lifecycle.update_component_state(
+            WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch,
+            WorkflowSchedulerLifecycleComponentState::Shutdown,
+        )?;
         Ok(self.shutdown_state)
+    }
+
+    fn refresh_runtime_host_dispatch_lifecycle_component(
+        &mut self,
+    ) -> Result<(), WorkflowServiceError> {
+        if self.shutdown_state != WorkflowSchedulerTaskLifecycleShutdownState::Running {
+            return Ok(());
+        }
+        let has_runtime_supervisor = self
+            .active_task_handles
+            .values()
+            .any(|record| record.task_supervisor_abort_handle.is_some());
+        let state = if has_runtime_supervisor {
+            WorkflowSchedulerLifecycleComponentState::Running
+        } else {
+            WorkflowSchedulerLifecycleComponentState::NotStarted
+        };
+        self.scheduler_lifecycle
+            .update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch,
+                state,
+            )
+            .map(|_record| ())
     }
 
     fn matching_task_handle_mut(

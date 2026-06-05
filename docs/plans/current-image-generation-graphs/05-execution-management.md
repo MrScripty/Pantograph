@@ -25471,6 +25471,50 @@ Worker rules:
       dependency readiness, resource observation, retry, queue, and reservation
       cleanup state before any public lifecycle query or diagnostics-ledger
       worker lifecycle event.
+  - 2026-06-05 Milestone 5c runtime-host dispatch lifecycle attachment slice:
+    - Smallest vertical slice: attach the scheduler lifecycle registry's
+      `runtime_host_dispatch` component to real task-supervisor ownership in
+      the workflow-service task lifecycle manager.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: non-runtime task handles do not mark
+      runtime-host dispatch as running. The component moves to `Running` only
+      when a runtime task supervisor abort handle is tracked, returns to
+      explicit `NotStarted` after the supervisor handle completes while the
+      lifecycle owner is running, and records `ShuttingDown`/`Shutdown` from
+      task lifecycle shutdown. No public snapshot, diagnostics-ledger worker
+      lifecycle event, projection-inferred component state, Tauri/frontend
+      policy, graph-path/node-engine/planned-inference runtime fallback, or
+      compatibility shim was added.
+    - Implementation notes: `WorkflowSchedulerTaskLifecycleManager` now owns a
+      `WorkflowSchedulerLifecycleComponentRegistry` and exposes the internal
+      runtime-host dispatch component record for focused tests. Supervisor
+      handle tracking is the real component-state owner for runtime dispatch;
+      ordinary scheduler task handles remain separate from runtime-host
+      dispatch state.
+    - Tests added: task lifecycle tests now prove plain task handles leave
+      runtime-host dispatch `NotStarted`, supervisor handles set it `Running`,
+      matching completion restores `NotStarted`, and shutdown records
+      `ShuttingDown` then `Shutdown`.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service scheduler::task_lifecycle::tests --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched scheduler files
+    - Search deviations: targeted search matched existing scheduler README
+      standards/legacy/no-fallback boundary text only; touched source/tests did
+      not introduce fallback or legacy launch behavior.
+    - Remaining follow-up: attach dependency readiness, resource observation,
+      retry, queue, and reservation cleanup component states from their real
+      workflow-service owners before adding public lifecycle queries or
+      diagnostics-ledger worker lifecycle events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
