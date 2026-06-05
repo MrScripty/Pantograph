@@ -25709,6 +25709,29 @@ Worker rules:
       - strict source search for deleted graph resolver imports and old path
         discovery helpers
       - `git diff --check`
+  - 2026-06-05 Milestone 5b parallel embedding startup fail-closed follow-up:
+    - Smallest vertical slice: remove the Tauri sidecar inference command's
+      silent main-server-only continuation when configured parallel embedding
+      startup cannot resolve or start the explicit embedding model.
+    - Allowed write set used:
+      `src-tauri/src/llm/commands/server.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: invalid configured parallel
+      embedding paths and embedding server startup failures now return command
+      errors instead of falling back to inference-only startup. Sequential
+      embedding mode remains on-demand and does not resolve a dedicated
+      embedding path during inference startup. Tauri still does not own path
+      validation policy; it calls the backend-owned helper and propagates the
+      diagnostic.
+    - Focused tests added: parallel embedding model path resolution fails
+      closed for invalid configured paths and skips resolution only for
+      sequential mode.
+    - Verification passed:
+      - `cargo test --manifest-path src-tauri/Cargo.toml parallel_embedding_model_path_fails_closed_for_invalid_config`
+      - `cargo test --manifest-path src-tauri/Cargo.toml server::tests`
+      - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
+      - `cargo check --manifest-path src-tauri/Cargo.toml`
 
 ### Traceability Links
 

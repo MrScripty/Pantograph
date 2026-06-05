@@ -12,6 +12,19 @@ use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway, SharedRunti
 use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
 use tauri::{command, AppHandle, State};
 
+fn resolve_parallel_embedding_model_path(
+    embedding_model_path: Option<&str>,
+    embedding_memory_mode: &EmbeddingMemoryMode,
+) -> Result<Option<std::path::PathBuf>, String> {
+    if *embedding_memory_mode == EmbeddingMemoryMode::Sequential {
+        return Ok(None);
+    }
+
+    embedding_model_path
+        .map(resolve_configured_embedding_model_path)
+        .transpose()
+}
+
 #[command]
 pub async fn connect_to_server(
     gateway: State<'_, SharedGateway>,
@@ -97,54 +110,38 @@ pub async fn start_sidecar_inference(
 
     log::info!("Started sidecar in inference mode");
 
-    // Start embedding server for parallel modes (if embedding model is configured)
-    if let Some(ref emb_path) = embedding_model_path {
-        if embedding_memory_mode != EmbeddingMemoryMode::Sequential {
-            let resolved_embedding_path = match resolve_configured_embedding_model_path(emb_path) {
-                Ok(path) => path,
-                Err(e) => {
-                    log::warn!(
-                        "Failed to resolve configured embedding model path '{}': {}",
-                        emb_path,
-                        e
-                    );
-                    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
-                    return Ok(
-                        synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await,
-                    );
-                }
-            };
+    if let Some(resolved_embedding_path) = resolve_parallel_embedding_model_path(
+        embedding_model_path.as_deref(),
+        &embedding_memory_mode,
+    )? {
+        // Get device info for VRAM checking
+        let devices = list_devices(app.clone()).await.unwrap_or_default();
 
-            // Get device info for VRAM checking
-            let devices = list_devices(app.clone()).await.unwrap_or_default();
-
-            match gateway
-                .start_embedding_server(
-                    &resolved_embedding_path.to_string_lossy(),
-                    embedding_memory_mode.clone(),
-                    &devices,
-                )
-                .await
-            {
-                Ok(()) => {
-                    if sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner())
-                        .await
-                        .is_some()
-                    {
-                        log::info!("Embedding server started and RAG manager configured");
-                    }
-                }
-                Err(e) => {
-                    // Log but don't fail - embedding server is optional
-                    log::warn!(
-                        "Failed to start embedding server: {}. Vector search may not work.",
-                        e
-                    );
+        match gateway
+            .start_embedding_server(
+                &resolved_embedding_path.to_string_lossy(),
+                embedding_memory_mode.clone(),
+                &devices,
+            )
+            .await
+        {
+            Ok(()) => {
+                if sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner())
+                    .await
+                    .is_some()
+                {
+                    log::info!("Embedding server started and RAG manager configured");
                 }
             }
-        } else {
-            log::info!("Sequential embedding mode: embedding server will start on-demand");
+            Err(e) => {
+                return Err(format!(
+                    "Failed to start configured embedding server: {}",
+                    e
+                ));
+            }
         }
+    } else if embedding_memory_mode == EmbeddingMemoryMode::Sequential {
+        log::info!("Sequential embedding mode: embedding server will start on-demand");
     }
 
     sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
@@ -197,6 +194,8 @@ mod tests {
     use pantograph_runtime_registry::{RuntimeRegistry, RuntimeRegistryStatus};
     use tokio::sync::mpsc;
 
+    use super::resolve_parallel_embedding_model_path;
+    use crate::config::EmbeddingMemoryMode;
     use crate::llm::commands::shared::synced_server_mode_info;
     use crate::llm::gateway::InferenceGateway;
     use crate::llm::startup::validate_external_server_url;
@@ -317,6 +316,31 @@ mod tests {
         );
         assert!(validate_external_server_url("").is_err());
         assert!(validate_external_server_url("ftp://127.0.0.1").is_err());
+    }
+
+    #[test]
+    fn parallel_embedding_model_path_fails_closed_for_invalid_config() {
+        let missing = std::env::temp_dir().join(format!(
+            "pantograph-missing-server-embedding-{}.gguf",
+            std::process::id()
+        ));
+        let error = resolve_parallel_embedding_model_path(
+            missing
+                .to_str()
+                .expect("temporary missing path should be utf-8")
+                .into(),
+            &EmbeddingMemoryMode::CpuParallel,
+        )
+        .expect_err("parallel embedding mode must fail closed for invalid configured path");
+
+        assert!(error.contains("does not exist"));
+
+        let sequential = resolve_parallel_embedding_model_path(
+            Some("/missing/sequential.gguf"),
+            &EmbeddingMemoryMode::Sequential,
+        )
+        .expect("sequential mode should not resolve dedicated embedding path");
+        assert!(sequential.is_none());
     }
 
     #[tokio::test]

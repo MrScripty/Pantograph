@@ -648,7 +648,13 @@ come from node-type defaults while the Python adapter remains fail-closed.
   missing, directory, blank, or non-GGUF paths without searching Pumas/model
   directories or repairing graph-derived paths. This keeps app-shell code as a
   caller/transport surface while preserving explicit local embedding
-  configuration as a non-graph runtime setting.
+  configuration as a non-graph runtime setting. 2026-06-05 follow-up: Tauri
+  sidecar inference startup now fails closed when parallel embedding mode has
+  an invalid configured embedding path or the configured embedding server
+  fails to start. It no longer logs the error and continues with a
+  main-server-only mode that silently omits configured parallel embedding
+  capability. Sequential embedding mode remains on-demand and does not resolve
+  a dedicated embedding path during inference startup.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition
