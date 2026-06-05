@@ -730,6 +730,17 @@ Option 3 thin implementation sequence:
    cancelled attempt timings, retry/defer decisions, replay outcomes, and
    worker lifecycle events only after the ordering and replay semantics are
    stable.
+   - 2026-06-05 partial implementation update: scheduler attempt lifecycle
+     events now cover started, redispatched, completed, failed, and cancelled
+     transitions with scheduler task id, attempt id, execution class,
+     start/end/duration timing, selected runtime/backend/device/network-node
+     facts, and reservation id. The diagnostics-ledger scheduler timeline
+     projection now drains those events and exposes typed read-model fields,
+     and the Scheduler page consumes those fields without payload parsing.
+     Remaining work in this item is retry/defer decision facts, replay
+     outcomes, worker lifecycle events, and any additional task-state read
+     model attempt counters that must be sourced from canonical lifecycle
+     facts rather than inferred from frontend or projection text.
 
 Option 3 standards gates:
 

@@ -25272,6 +25272,24 @@ Worker rules:
     - Remaining follow-up: optional Diagnostics/Network page reuse of the same
       presenter rows can be scheduled separately if those operator views also
       need expanded attempt facts.
+  - 2026-06-05 Milestone 5c attempt/timing checklist reconciliation slice:
+    - Smallest vertical slice: reconcile the task-level scheduler
+      orchestration checklist after the committed diagnostics-ledger
+      attempt/timing projection and Scheduler page display slices, without
+      editing production source.
+    - Allowed write set used:
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: documentation now records that
+      scheduler attempt lifecycle/timing projection is partially complete from
+      canonical lifecycle events, while retry/defer decisions, replay
+      outcomes, worker lifecycle events, additional task-state read-model
+      attempt counters, and unresolved cancellation response mapping remain
+      open. It does not reopen graph-path, reduced-plan, node-engine runtime,
+      frontend/Tauri policy, runtime adapter policy, Pumas, or compatibility
+      shim paths.
+    - Verification passed: `git diff --check`.
 
 ### Traceability Links
 

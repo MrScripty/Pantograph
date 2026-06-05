@@ -596,6 +596,17 @@ durable task orchestration path.
   is rejected. After the cancellable contract exists, implement the full
   workflow-service task supervisor with tracked handles, child cancellation
   tokens, shutdown draining, timeout/abort behavior, and panic observation.
+  2026-06-05 diagnostics-ledger attempt/timing update: scheduler attempt
+  lifecycle events now cover started, redispatched, completed, failed, and
+  cancelled transitions with scheduler-owned task/attempt identity, execution
+  class, start/end/duration timing, selected runtime/backend/device/network
+  facts, and reservation id. The scheduler timeline projection now drains
+  those events and exposes typed read-model fields, and Scheduler page display
+  consumes those fields through presenter rows without payload parsing.
+  Remaining work in this broader lifecycle item is retry/defer idempotency,
+  replay/recovery outcomes, worker lifecycle diagnostics, any additional
+  task-state read-model attempt counters, and any unresolved cooperative
+  runtime/worker cancellation response mapping.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
