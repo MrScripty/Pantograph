@@ -96,6 +96,25 @@ fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_text_generation_request_ignores_retired_direct_model_ref_alias() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/retired-alias",
+            "revision": "abc"
+        }),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("retired direct model_ref alias should not break prompt validation");
+
+    assert_eq!(request.model_ref, None);
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_text_generation_execution_request_projects_kv_cache_options() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
@@ -125,6 +144,32 @@ fn test_build_text_generation_execution_request_projects_kv_cache_options() {
             },
             ..GenerationOptions::default()
         })
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_inference_model_id_from_inputs_ignores_retired_direct_model_ref_alias() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/retired-alias"
+        }),
+    );
+
+    assert_eq!(inference_model_id_from_inputs(&inputs), None);
+
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/canonical"
+        }),
+    );
+
+    assert_eq!(
+        inference_model_id_from_inputs(&inputs).as_deref(),
+        Some("pumas://models/canonical")
     );
 }
 

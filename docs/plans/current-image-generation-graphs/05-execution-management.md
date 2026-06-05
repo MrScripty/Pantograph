@@ -25559,6 +25559,33 @@ Worker rules:
       - `cargo check -p pantograph-workflow-service`
       - strict production search for `MODEL_REF_TARGET_PORTS`/`"model_ref"`
         in `runtime_host_task_input_mapping.rs`
+  - 2026-06-05 Milestone 5b node-engine direct `model_ref` alias cleanup
+    slice:
+    - Smallest vertical slice: remove direct graph input `model_ref` alias
+      parsing from node-engine inference request builders and lifecycle
+      model-id extraction.
+    - Allowed write set used:
+      `crates/node-engine/src/core_executor/inference_nodes.rs`,
+      `crates/node-engine/src/core_executor.rs`,
+      `crates/node-engine/src/core_executor/inference_tests.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: graph-authored `model_ref` no
+      longer provides runtime model identity, lifecycle model id, executable
+      launch input, or a compatibility alias for `pumas_model_ref`.
+      Backend-internal Pumas/resolved-source DTO fields named `model_ref`
+      remain as their owned contract fields and are not graph identity.
+    - Focused tests added: text-generation request construction ignores a
+      direct retired `model_ref` alias, and node-engine model-id extraction
+      ignores the same alias while still reading canonical `pumas_model_ref`.
+    - Verification passed:
+      - `cargo test -p node-engine --features inference-nodes test_text_generation_request_ignores_retired_direct_model_ref_alias --lib`
+      - `cargo test -p node-engine --features inference-nodes test_inference_model_id_from_inputs_ignores_retired_direct_model_ref_alias --lib`
+      - `cargo test -p node-engine --features inference-nodes core_executor::tests::inference_tests --lib`
+      - `cargo fmt -p node-engine -- --check`
+      - `cargo check -p node-engine --features inference-nodes`
+      - strict production search for direct `inputs.get("model_ref")` aliases
+        in `core_executor.rs` and `core_executor/inference_nodes.rs`
 
 ### Traceability Links
 

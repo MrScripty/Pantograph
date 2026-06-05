@@ -213,6 +213,14 @@ target port. `PumasModelRef` task results are skipped only for the canonical
 handoff rather than materialized runtime inputs. A retired `model_ref` target
 port now fails closed with a typed unsupported-input diagnostic.
 
+2026-06-05 node-engine inference request cleanup result: node-engine
+inference request builders and lifecycle model-id extraction no longer read a
+direct graph input named `model_ref` as an alias for `pumas_model_ref`.
+Backend-internal Pumas and resolved-source DTOs may still carry their
+contractual nested `model_ref` fields, but direct graph-authored `model_ref`
+no longer provides runtime model identity, lifecycle model id, or launch
+inputs.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -604,7 +612,11 @@ port now fails closed with a typed unsupported-input diagnostic.
   runtime-host task input materialization no longer treats `model_ref` as a
   model identity target port. Canonical `pumas_model_ref` bindings are skipped
   because scheduler handoff owns model identity; retired `model_ref` target
-  ports now fail closed as unsupported materialized runtime inputs.
+  ports now fail closed as unsupported materialized runtime inputs. 2026-06-05
+  progress: node-engine inference request builders and lifecycle model-id
+  extraction no longer read a direct graph input named `model_ref` as a
+  `pumas_model_ref` alias. Nested Pumas/resolved-source DTO fields named
+  `model_ref` remain backend-internal contract fields only.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

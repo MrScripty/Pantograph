@@ -378,7 +378,6 @@ fn parse_pumas_model_ref(
 ) -> Option<inference::PumasModelRef> {
     inputs
         .get("pumas_model_ref")
-        .or_else(|| inputs.get("model_ref"))
         .and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 

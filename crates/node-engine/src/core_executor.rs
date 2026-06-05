@@ -713,7 +713,6 @@ fn inference_model_id_from_inputs(inputs: &HashMap<String, serde_json::Value>) -
         .or_else(|| {
             inputs
                 .get("pumas_model_ref")
-                .or_else(|| inputs.get("model_ref"))
                 .and_then(|value| {
                     value
                         .get("model_id")
