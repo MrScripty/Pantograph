@@ -134,7 +134,7 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
 }
 
 #[tokio::test]
-async fn workflow_execution_session_records_non_runtime_scheduler_attempt_started_event() {
+async fn workflow_execution_session_records_non_runtime_scheduler_attempt_lifecycle_events() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2)
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
@@ -212,6 +212,27 @@ async fn workflow_execution_session_records_non_runtime_scheduler_attempt_starte
         .payload_json
         .contains("\"scheduler_attempt_id\":\"scheduler-task-attempt."));
     assert!(attempt_event.payload_json.contains("\"started_at_ms\":"));
+    let completed_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.node_id.as_deref() == Some("text-output-1")
+                && event.payload_json.contains("\"transition\":\"completed\"")
+        })
+        .expect("non-runtime scheduler attempt completed event");
+    assert_eq!(
+        completed_event
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert!(completed_event
+        .payload_json
+        .contains("\"execution_class\":\"non_runtime_node_engine\""));
+    assert!(completed_event.payload_json.contains("\"ended_at_ms\":"));
+    assert!(completed_event.payload_json.contains("\"duration_ms\":"));
 }
 
 #[tokio::test]
@@ -976,6 +997,36 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
     assert!(runtime_attempt_event
         .payload_json
         .contains("\"scheduler_task_id\":\"infer\""));
+    let runtime_completed_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    == Some(workflow_run_id.as_str())
+                && event.node_id.as_deref() == Some("infer")
+                && event.payload_json.contains("\"transition\":\"completed\"")
+        })
+        .expect("runtime scheduler attempt completed event");
+    assert_eq!(
+        runtime_completed_event.runtime_id.as_deref(),
+        Some("pytorch")
+    );
+    assert!(runtime_completed_event
+        .payload_json
+        .contains("\"execution_class\":\"runtime\""));
+    assert!(runtime_completed_event
+        .payload_json
+        .contains("\"selected_runtime_id\":\"pytorch\""));
+    assert!(runtime_completed_event
+        .payload_json
+        .contains("\"reservation_id\":\"reservation.runtime_session_test\""));
+    assert!(runtime_completed_event
+        .payload_json
+        .contains("\"ended_at_ms\":"));
+    assert!(runtime_completed_event
+        .payload_json
+        .contains("\"duration_ms\":"));
     assert!(diagnostic_events.iter().any(|event| {
         event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
             && event.workflow_run_id.as_ref().map(|id| id.as_str())
@@ -1587,6 +1638,7 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
         .with_dependency_environment_provider(std::sync::Arc::new(
             dependency_readiness_provider.clone(),
         ))
@@ -1673,6 +1725,47 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
             &ReservationLifecycleOutcome::RuntimeHostFailed,
         ]
     );
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 40,
+        )
+        .expect("diagnostic events")
+    };
+    let failed_attempt_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.node_id.as_deref() == Some("infer")
+                && event.payload_json.contains("\"transition\":\"failed\"")
+        })
+        .expect("runtime scheduler attempt failed event");
+    assert_eq!(
+        failed_attempt_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert_eq!(failed_attempt_event.runtime_id.as_deref(), Some("pytorch"));
+    assert!(failed_attempt_event
+        .payload_json
+        .contains("\"execution_class\":\"runtime\""));
+    assert!(failed_attempt_event
+        .payload_json
+        .contains("\"selected_runtime_id\":\"pytorch\""));
+    assert!(failed_attempt_event
+        .payload_json
+        .contains("\"reservation_id\":\"reservation.runtime_session_test\""));
+    assert!(failed_attempt_event
+        .payload_json
+        .contains("\"error_summary\":"));
+    assert!(failed_attempt_event
+        .payload_json
+        .contains("\"ended_at_ms\":"));
+    assert!(failed_attempt_event
+        .payload_json
+        .contains("\"duration_ms\":"));
 }
 
 #[tokio::test]

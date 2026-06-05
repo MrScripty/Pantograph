@@ -21,7 +21,8 @@ use pantograph_scheduler::{
     SchedulerDispatchSelectionState, SchedulerNodeId, SchedulerRuntimeDeviceConstraints,
     SchedulerRuntimeHandoffState, SchedulerTaskId, SchedulerTaskState,
     SchedulerTaskStateDiagnosticCode, SchedulerTaskStateDiagnosticSeverity, SchedulerTaskStateKind,
-    SchedulerWorkflowId, SchedulerWorkflowRunId, ValidatedSchedulerDispatchSelectionRequest,
+    SchedulerTaskStateRecord, SchedulerTaskStateTransitionApplyResult, SchedulerWorkflowId,
+    SchedulerWorkflowRunId, ValidatedSchedulerDispatchSelectionRequest,
 };
 use serde_json::json;
 
@@ -1608,15 +1609,18 @@ fn orchestrator_preserves_dispatch_no_selection_diagnostics_on_started_runtime_t
     .expect("dispatch selection should return no-selection decision")
     .into_inner();
 
-    let failed = orchestrator
-        .fail_started_runtime_task_dispatch_selection(
-            &mut store,
-            &session_id,
-            &workflow_run_id,
-            &started,
-            &selection,
-        )
-        .expect("persist no-selection diagnostics");
+    let failed = applied_test_terminal_task_state_record(
+        orchestrator
+            .fail_started_runtime_task_dispatch_selection_terminal_mutation(
+                &mut store,
+                &session_id,
+                &workflow_run_id,
+                &started,
+                &selection,
+            )
+            .expect("persist no-selection diagnostics")
+            .apply_result,
+    );
 
     let SchedulerTaskState::TerminalFailed { diagnostics } = failed.state else {
         panic!("expected terminal failed runtime task");
@@ -1661,15 +1665,18 @@ fn orchestrator_marks_started_runtime_dispatch_error_terminal_without_result() {
         }),
     );
 
-    let failed = orchestrator
-        .fail_started_runtime_task_dispatch_error(
-            &mut store,
-            &session_id,
-            &workflow_run_id,
-            &started,
-            &dispatch_error,
-        )
-        .expect("persist dispatch error failure");
+    let failed = applied_test_terminal_task_state_record(
+        orchestrator
+            .fail_started_runtime_task_dispatch_error_terminal_mutation(
+                &mut store,
+                &session_id,
+                &workflow_run_id,
+                &started,
+                &dispatch_error,
+            )
+            .expect("persist dispatch error failure")
+            .apply_result,
+    );
 
     let SchedulerTaskState::TerminalFailed { diagnostics } = failed.state else {
         panic!("expected terminal failed runtime task");
@@ -2244,6 +2251,15 @@ fn dependency_readiness_source() -> crate::workflow::WorkflowSchedulerDependency
             "dependency-overrides-blake3:test",
         )
         .expect("dependency override fingerprint"),
+    }
+}
+
+fn applied_test_terminal_task_state_record(
+    apply_result: SchedulerTaskStateTransitionApplyResult,
+) -> SchedulerTaskStateRecord {
+    match apply_result {
+        SchedulerTaskStateTransitionApplyResult::Applied(record)
+        | SchedulerTaskStateTransitionApplyResult::AlreadyApplied(record) => record,
     }
 }
 

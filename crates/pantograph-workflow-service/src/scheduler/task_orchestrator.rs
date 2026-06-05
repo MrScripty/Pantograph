@@ -115,6 +115,16 @@ impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
     }
 }
 
+impl SelectedRuntimeTaskDispatch {
+    pub(crate) fn dispatch_decision(&self) -> Option<&SchedulerDispatchDecision> {
+        self.handoff.dispatch_decision.as_ref()
+    }
+
+    pub(crate) fn reservation_lease_id(&self) -> &SchedulerReservationLeaseId {
+        &self.reservation_lease_id
+    }
+}
+
 impl StartedNonRuntimeTaskExecution {
     pub(crate) fn task(&self) -> &WorkflowSchedulerTask {
         &self.task
@@ -1002,24 +1012,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         Ok(mutation)
     }
 
-    pub(crate) fn fail_started_runtime_task_dispatch_selection(
-        &self,
-        store: &mut WorkflowExecutionSessionStore,
-        session_id: &str,
-        workflow_run_id: &str,
-        started: &StartedRuntimeTaskExecution,
-        selection: &SchedulerDispatchSelectionDecision,
-    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
-        self.fail_started_runtime_task_dispatch_selection_terminal_mutation(
-            store,
-            session_id,
-            workflow_run_id,
-            started,
-            selection,
-        )
-        .and_then(applied_terminal_task_state_record)
-    }
-
     pub(crate) fn fail_started_runtime_task_dispatch_selection_terminal_mutation(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -1042,24 +1034,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
         self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
         Ok(mutation)
-    }
-
-    pub(crate) fn fail_started_runtime_task_dispatch_error(
-        &self,
-        store: &mut WorkflowExecutionSessionStore,
-        session_id: &str,
-        workflow_run_id: &str,
-        started: &StartedRuntimeTaskExecution,
-        error: &WorkflowSchedulerTaskOrchestratorError,
-    ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
-        self.fail_started_runtime_task_dispatch_error_terminal_mutation(
-            store,
-            session_id,
-            workflow_run_id,
-            started,
-            error,
-        )
-        .and_then(applied_terminal_task_state_record)
     }
 
     pub(crate) fn fail_started_runtime_task_dispatch_error_terminal_mutation(

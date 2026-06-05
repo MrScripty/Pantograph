@@ -24924,6 +24924,70 @@ Worker rules:
       scheduler store/orchestrator tests if return contracts change;
       `cargo check -p pantograph-workflow-service`; fmt check; `git diff
       --check`; and targeted no-fallback/no-legacy search over touched files.
+  - 2026-06-04 Milestone 5c workflow-service terminal scheduler attempt
+    diagnostics producer slice:
+    - Smallest vertical slice: emit terminal `Completed`/`Failed`
+      `scheduler.task_attempt_lifecycle_changed` events from workflow-service
+      after existing terminal scheduler mutations, without changing the
+      diagnostics-ledger contract or projection/read-model schema.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and these plan files.
+    - No-fallback/no-legacy confirmation: producer wiring uses the existing
+      diagnostics-ledger append helper, existing scheduler task/attempt
+      identity, existing terminal store mutations, and selected dispatch/
+      reservation facts owned by workflow-service scheduler state. It adds no
+      graph-path or reduced-plan runtime execution, node-engine runtime launch,
+      Tauri/frontend policy, runtime adapter lifecycle policy, Pumas fact
+      changes, diagnostics-ledger schema/DTO changes, generated files,
+      lockfiles, saved workflow fixtures, or compatibility shims.
+    - Simplicity/complection confirmation: scheduler state and orchestrator
+      terminal mutations remain the source of task/attempt/reservation facts;
+      the session runner records diagnostics at the workflow-service
+      composition boundary. The slice does not move lifecycle policy into
+      diagnostics-ledger or business logic into Tauri/frontend.
+    - Implementation summary: non-runtime completion/failure paths now record
+      terminal attempt events after the matching store transition; runtime
+      dispatch selection and dispatch/supervisor failures record failed
+      attempt events after terminal mutation; runtime task results record
+      completed or failed attempt events based on
+      `WorkflowSchedulerTaskResultStatus`, so a failed `Ok(result)` is not
+      misclassified as completed. Selected runtime id, runtime variant id,
+      selected device id, and reservation id are projected from canonical
+      selected-dispatch/terminal-mutation facts when present.
+    - Discovered issue fixed: `cargo check` exposed obsolete
+      dispatch-failure wrapper methods after the runner moved to the
+      terminal-mutation API. Those wrappers were removed, and focused
+      orchestrator tests now assert through the terminal-mutation contract.
+    - Focused tests added/updated:
+      `workflow_execution_session_records_non_runtime_scheduler_attempt_lifecycle_events`
+      verifies non-runtime started/completed emission,
+      `workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run`
+      verifies runtime started/completed emission with runtime and reservation
+      facts, and
+      `workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure`
+      verifies failed runtime result emission with error summary.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_non_runtime_scheduler_attempt_lifecycle_events --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched
+        workflow-service files. Matches were existing legacy negative tests,
+        existing compatibility fixture fields, existing bounded summary text
+        for a missing result diagnostic, and an existing task-orchestrator
+        blocked-binding helper; no execution fallback or compatibility shim was
+        introduced.
+    - Remaining follow-up: emit cancel and redispatch attempt lifecycle
+      events, then add projection/read-model fields only after emitted event
+      ordering is proven.
 
 ### Traceability Links
 

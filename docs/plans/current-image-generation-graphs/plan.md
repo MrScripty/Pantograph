@@ -839,6 +839,27 @@ start/terminal/cancel/redispatch emission through the existing
 diagnostics-ledger append helper, then add projection/read-model fields only
 after emitted event ordering is proven.
 
+2026-06-04 workflow-service terminal scheduler attempt diagnostics update:
+workflow-service now emits `scheduler.task_attempt_lifecycle_changed`
+`Completed`/`Failed` events after canonical terminal store mutations for
+non-runtime completion/failure, runtime dispatch selection failure, runtime
+dispatch/supervisor failure, and runtime task results. Terminal runtime events
+carry selected runtime and reservation facts from scheduler-owned dispatch/
+terminal mutation data; failed `Ok(result)` runtime task statuses now emit a
+failed attempt event instead of being classified by host-call success. The
+obsolete non-terminal dispatch-failure wrappers were removed and tests use the
+terminal-mutation API directly. This adds no diagnostics-ledger schema change,
+projection/read-model fields, graph-path or reduced-plan launch behavior,
+node-engine runtime launch branch, Tauri/frontend policy, runtime-adapter
+lifecycle ownership, Pumas fact change, lockfile/generated/workflow fixture
+change, or compatibility shim. Verification passed with focused non-runtime
+completed, runtime completed, and runtime failed-result session tests,
+`cargo test -p pantograph-workflow-service task_orchestrator --lib`, `cargo
+check -p pantograph-workflow-service`, fmt check, `git diff --check`, and
+targeted no-fallback/no-legacy source search. Remaining lifecycle work: emit
+cancel and redispatch attempt lifecycle events, then add projection/read-model
+fields only after emitted event ordering is proven.
+
 ## Standards Rule
 
 The standards constraints in
