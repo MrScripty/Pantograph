@@ -561,6 +561,16 @@ canonical scheduler/runtime-host facts are adapted back into legacy shapes.
   path-shaped options, and persist only `modelName`, `model_id`, and
   `pumas_model_ref`, so the reusable package surface no longer keeps
   `modelPath` persistence or `puma-lib.model_path` option lookup alive.
+  2026-06-05 progress: retired the embedded-runtime process Python adapter as
+  a successful launch path. `ProcessPythonRuntimeAdapter` now fails closed
+  before resolving Python, writing the bridge script, spawning a process,
+  loading audio/ONNX workers, reading graph `model_path`, or returning
+  `modelRef`/`modelPath` outputs. The bundled `python_runtime_bridge.py` is
+  also fail-closed if invoked directly and no longer contains the fallback
+  model-ref builder, worker module loading, or audio/ONNX generation calls.
+  Python package readiness probes and env resolution remain backend-owned and
+  available for readiness diagnostics; runtime execution still belongs to
+  scheduler task state/results plus runtime-host execution.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

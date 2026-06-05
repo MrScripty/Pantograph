@@ -1,152 +1,34 @@
 #!/usr/bin/env python3
 
-"""Process bridge for python-backed Pantograph workflow nodes.
+"""Retired process bridge for python-backed Pantograph workflow nodes.
 
-Reads a JSON request from stdin, executes the requested node by loading
-Pantograph worker modules (audio/onnx) from explicit file
-paths, and writes a JSON response to stdout.
+The old bridge must not launch runtime work from graph paths. Runtime execution
+is scheduler-owned and must flow through runtime-host contracts.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import os
-import pathlib
 import traceback
-from typing import Any, Callable, Dict
-
-def _load_module(module_name: str, module_path: str):
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load module spec for {module_name} at {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+from typing import Any, Dict
 
 
-def _as_float(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return default
-
-
-def _as_int(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _input_model_ref(inputs: Dict[str, Any]) -> Dict[str, Any] | None:
-    model_ref = inputs.get("model_ref")
-    if isinstance(model_ref, dict):
-        return model_ref
-    return None
-
-
-def _fallback_model_ref(engine: str, model_path: str, task_type_primary: str) -> Dict[str, Any]:
-    model_name = os.path.basename(os.path.normpath(model_path)) or f"{engine}-model"
-    return {
-        "contractVersion": 2,
-        "engine": engine,
-        "modelId": model_name,
-        "modelPath": model_path,
-        "taskTypePrimary": task_type_primary,
-    }
-
-
-def _run_audio(inputs: Dict[str, Any], audio_worker_path: str) -> Dict[str, Any]:
-    worker = _load_module("pantograph_audio_worker_process", audio_worker_path)
-
-    model_path = inputs.get("model_path")
-    if not isinstance(model_path, str) or not model_path.strip():
-        raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
-    model_path = model_path.strip()
-
-    prompt = inputs.get("prompt")
-    if not isinstance(prompt, str) or not prompt.strip():
-        raise RuntimeError("Missing prompt input")
-
-    model_info = worker.get_loaded_info()
-    loaded_path = ""
-    if isinstance(model_info, dict):
-        loaded_path = str(model_info.get("model_path", ""))
-    if loaded_path != model_path:
-        worker.load_model(model_path=model_path, device="auto")
-
-    result = worker.generate_audio_from_text(
-        prompt=prompt,
-        duration=_as_float(inputs.get("duration", 30.0), 30.0),
-        steps=_as_int(inputs.get("num_inference_steps", 100), 100),
-        guidance_scale=_as_float(inputs.get("guidance_scale", 7.0), 7.0),
-        seed=_as_int(inputs.get("seed", -1), -1),
+def _retired_runtime_error(node_type: str) -> RuntimeError:
+    return RuntimeError(
+        "retired_python_runtime_bridge: "
+        f"Python-backed node '{node_type}' must run through scheduler task "
+        "state/results and runtime-host execution, not the old process bridge."
     )
-    if not isinstance(result, dict):
-        raise RuntimeError("Audio worker returned unexpected payload shape")
-
-    outputs: Dict[str, Any] = {
-        "audio": result.get("audio_base64", ""),
-        "duration_seconds": result.get("duration_seconds", 0.0),
-        "sample_rate": result.get("sample_rate", 44100),
-    }
-    outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
-        "stable_audio", model_path, "text-to-audio"
-    )
-    return outputs
 
 
-def _run_onnx(
-    inputs: Dict[str, Any],
-    onnx_worker_path: str,
-    emit_stream: Callable[[Dict[str, Any]], None] | None = None,
-) -> Dict[str, Any]:
-    worker = _load_module("pantograph_onnx_worker_process", onnx_worker_path)
-
-    model_path = inputs.get("model_path")
-    if not isinstance(model_path, str) or not model_path.strip():
-        raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
-    model_path = model_path.strip()
-
-    if not isinstance(inputs.get("prompt"), str) or not str(inputs.get("prompt")).strip():
-        raise RuntimeError("Missing prompt input")
-
-    result = worker.generate_audio(inputs, emit_stream=emit_stream)
-    if not isinstance(result, dict):
-        raise RuntimeError("ONNX worker returned unexpected payload shape")
-
-    outputs: Dict[str, Any] = {
-        "audio": result.get("audio", ""),
-        "duration_seconds": result.get("duration_seconds", 0.0),
-        "sample_rate": result.get("sample_rate", 24000),
-        "stream": result.get("stream", []),
-        "voice_used": result.get("voice_used"),
-        "speed_used": result.get("speed_used"),
-    }
-    outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
-        "onnx-runtime", model_path, "text-to-audio"
-    )
-    return outputs
+def _run_audio(inputs: Dict[str, Any]) -> Dict[str, Any]:
+    _ = inputs
+    raise _retired_runtime_error("audio-generation")
 
 
-def _ensure_worker_path(path: Any, label: str) -> str:
-    if not isinstance(path, str) or not path.strip():
-        raise RuntimeError(f"Missing worker path for {label}")
-    resolved = pathlib.Path(path).expanduser().resolve()
-    if not resolved.exists():
-        raise RuntimeError(f"Worker path for {label} does not exist: {resolved}")
-    return str(resolved)
-
-
-def _emit_stream_event(port: str, chunk: Dict[str, Any]) -> None:
-    print(
-        json.dumps(
-            {"event": "stream", "port": port, "chunk": chunk},
-            separators=(",", ":"),
-        ),
-        flush=True,
-    )
+def _run_onnx(inputs: Dict[str, Any]) -> Dict[str, Any]:
+    _ = inputs
+    raise _retired_runtime_error("onnx-inference")
 
 
 def _main() -> int:
@@ -166,21 +48,10 @@ def _main() -> int:
         if not isinstance(inputs, dict):
             inputs = {}
 
-        worker_paths = payload.get("worker_paths")
-        if not isinstance(worker_paths, dict):
-            raise RuntimeError("Missing worker_paths in python runtime bridge payload")
-
-        audio_worker = _ensure_worker_path(worker_paths.get("audio_worker"), "audio")
-        onnx_worker = _ensure_worker_path(worker_paths.get("onnx_worker"), "onnx")
-
         if node_type == "audio-generation":
-            outputs = _run_audio(inputs, audio_worker)
+            outputs = _run_audio(inputs)
         elif node_type == "onnx-inference":
-            outputs = _run_onnx(
-                inputs,
-                onnx_worker,
-                emit_stream=lambda chunk: _emit_stream_event("stream", chunk),
-            )
+            outputs = _run_onnx(inputs)
         else:
             raise RuntimeError(f"Unsupported python runtime node_type '{node_type}'")
 

@@ -25322,6 +25322,54 @@ Worker rules:
       touched files plus relevant typecheck/build gates and record the
       broad-lint deviation.
     - Verification passed: `git diff --check`.
+  - 2026-06-05 Milestone 5b embedded-runtime process Python runtime
+    retirement slice:
+    - Smallest vertical slice: retire the process Python runtime adapter and
+      bridge as a successful legacy runtime launch path for Python-backed
+      audio/ONNX nodes.
+    - Allowed write set used:
+      `crates/pantograph-embedded-runtime/src/python_runtime.rs`,
+      `crates/pantograph-embedded-runtime/src/python_runtime_bridge.py`,
+      `crates/pantograph-embedded-runtime/src/README.md`,
+      `crates/pantograph-embedded-runtime/src/lib_tests/edit_session_execution_tests.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the process adapter now returns a
+      retired-path diagnostic before resolving Python, writing the bridge
+      script, spawning a process, loading audio/ONNX workers, reading graph
+      `model_path`, or emitting `ModelRefV2`/`modelPath`-shaped outputs. The
+      bridge script is fail-closed if invoked directly and no longer contains
+      fallback model-ref construction, worker loading, or audio/ONNX generation
+      calls. No scheduler/runtime-host/Pumas facts were adapted back into
+      legacy DTOs, and no Tauri/frontend business logic was added.
+    - Focused tests added/updated:
+      `process_python_runtime_adapter_fails_closed_without_spawning_bridge`
+      proves the default process adapter returns the retired diagnostic for a
+      path-shaped ONNX request before launching Python. Existing retired
+      preflight coverage still proves task-executor execution blocks before
+      recorder/adapter use. The stale edit-session runtime-metrics test was
+      converted to prove path-shaped Python nodes do not call the Python
+      adapter and do not report ONNX/stable-audio runtime ids from the retired
+      path.
+    - Verification passed:
+      - `cargo fmt -p pantograph-embedded-runtime -- --check`
+      - `cargo test -p pantograph-embedded-runtime process_python_runtime_adapter_fails_closed_without_spawning_bridge --lib`
+      - `cargo test -p pantograph-embedded-runtime python_runtime_recorder_is_not_used_after_retired_preflight_blocks --lib`
+      - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_does_not_report_retired_python_runtime_ids --lib`
+      - `cargo test -p pantograph-embedded-runtime python_runtime --lib`
+      - `cargo test -p pantograph-embedded-runtime task_executor --lib`
+      - `cargo check -p pantograph-embedded-runtime`
+      - `python3 -m py_compile crates/pantograph-embedded-runtime/src/python_runtime_bridge.py`
+    - Verification deviation resolved: the first broad `python_runtime` filter
+      failed because
+      `execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metrics`
+      still expected ONNX/stable-audio runtime metrics from the path-shaped
+      legacy Python graph. The test now asserts the retired adapter is not
+      called and those runtime ids are not projected from the old path.
+    - Remaining follow-up: continue classifying and deleting retained
+      Python-backed graph fixtures/tests and task-executor metadata helpers
+      that still mention `model_path`/`modelPath`, while preserving backend
+      Python package readiness probes as diagnostics/readiness infrastructure.
 
 ### Traceability Links
 

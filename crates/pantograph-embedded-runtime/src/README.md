@@ -75,7 +75,7 @@ packages.
 | `technical_fit_package_readiness.rs` | Owns technical-fit package-readiness request collection, mapping validated PyTorch/Diffusers execution evidence candidates into runtime-scoped provider requests and returning dependency-readiness facts without probing per candidate or selecting runtimes. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_env_resolution.rs` | Owns Python executable resolution from explicit env-map ids, default host configuration, `PYO3_PYTHON`, repo-local virtualenvs, and PATH commands without mixing executable lookup into bridge process execution. |
-| `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
+| `python_runtime_bridge.py` | Retired process bridge kept fail-closed so old Python-backed audio/ONNX nodes cannot launch from graph model paths while scheduler/runtime-host execution replaces them. |
 | `python_package_readiness_probe.rs` | Owns the no-shell default-host Python package-readiness probe runner used by the runtime-scoped package-readiness provider, including bounded timeout/output handling and typed provider diagnostics. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `reservation_lifecycle.rs` | Implements the shared runtime-host reservation lifecycle port against runtime-registry release, retention, and reclaim/reconcile APIs. |

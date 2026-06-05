@@ -513,13 +513,16 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
 }
 
 #[tokio::test]
-async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metrics() {
+async fn execute_edit_session_graph_does_not_report_retired_python_runtime_ids() {
     let temp = TempDir::new().expect("temp dir");
 
     let app_data_dir = temp.path().join("app-data");
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
     install_fake_default_runtime(&app_data_dir);
 
+    let python_runtime = Arc::new(MockMediaPythonRuntime {
+        requests: Mutex::new(Vec::new()),
+    });
     let runtime = EmbeddedRuntime::from_components(
         EmbeddedRuntimeConfig {
             app_data_dir,
@@ -531,9 +534,7 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-        Arc::new(MockMediaPythonRuntime {
-            requests: Mutex::new(Vec::new()),
-        }),
+        python_runtime.clone(),
     );
 
     let graph = multi_python_edit_session_graph();
@@ -556,23 +557,27 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
         .await
         .expect("edit-session execution");
 
-    assert_eq!(
-        outcome.trace_runtime_metrics.runtime_id.as_deref(),
-        Some("onnx-runtime")
+    assert!(
+        python_runtime
+            .requests
+            .lock()
+            .expect("python runtime requests")
+            .is_empty(),
+        "retired Python runtime nodes must not call the adapter"
     );
-    assert_eq!(
-        outcome.trace_runtime_metrics.observed_runtime_ids,
-        vec!["onnx-runtime".to_string(), "stable_audio".to_string()]
-    );
-    assert_eq!(
-        outcome.trace_runtime_metrics.model_target.as_deref(),
-        Some("/tmp/mock-onnx-model")
-    );
-    assert_eq!(
+    assert!(!outcome
+        .trace_runtime_metrics
+        .observed_runtime_ids
+        .contains(&"onnx-runtime".to_string()));
+    assert!(!outcome
+        .trace_runtime_metrics
+        .observed_runtime_ids
+        .contains(&"stable_audio".to_string()));
+    assert_ne!(
         outcome.runtime_snapshot.runtime_id.as_deref(),
         Some("onnx-runtime")
     );
-    assert_eq!(
+    assert_ne!(
         outcome.runtime_model_target.as_deref(),
         Some("/tmp/mock-onnx-model")
     );
