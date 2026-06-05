@@ -25397,6 +25397,34 @@ Worker rules:
       `cargo fmt -p pantograph-embedded-runtime -- --check` run failed on the
       new assertion formatting only; `cargo fmt -p pantograph-embedded-runtime`
       was applied and the subsequent crate check passed.
+  - 2026-06-05 Milestone 5b workflow-service memory-impact legacy path cleanup
+    slice:
+    - Smallest vertical slice: stop workflow-service KV memory-impact
+      classification from treating graph-local `model_path` as model identity
+      for `llm-inference` nodes.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/graph/memory_impact.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: canonical `pumas_model_ref` remains
+      the model-identity signal for this classifier; changing a legacy
+      `model_path` field no longer produces a model-change reason that could
+      preserve path-shaped graph semantics. No scheduler/runtime-host/Pumas
+      facts were adapted into legacy DTOs, and no Tauri/frontend business
+      logic was added.
+    - Focused tests added:
+      `kv_capable_legacy_model_path_change_is_not_model_identity` proves a
+      path-shaped graph field is not treated as model identity by the memory
+      impact classifier.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service kv_capable_legacy_model_path_change_is_not_model_identity --lib`
+      - `cargo test -p pantograph-workflow-service memory_impact --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+    - Remaining follow-up: top-level `model` and `model_id` remain classified
+      separately from `model_path`; they need their own caller inventory before
+      deletion or replacement so stable canonical model ids are not removed by
+      accident.
 
 ### Traceability Links
 

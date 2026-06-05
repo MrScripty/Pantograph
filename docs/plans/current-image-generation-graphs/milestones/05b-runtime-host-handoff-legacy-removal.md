@@ -2050,3 +2050,20 @@ canonical scheduler/runtime-host facts are adapted back into legacy shapes.
   using selector summaries as executable authority, assuming memory will free
   after unrelated running tasks complete, or duplicating runtime/Pumas
   interpretation inside graph session state.
+- 2026-06-05 workflow-service memory-impact legacy path cleanup slice
+  completed. Smallest useful vertical slice: stop `llm-inference`
+  memory-impact classification from treating graph-local `model_path` as
+  model identity. Implementation removed `model_path` from the KV-capable
+  model-change classifier while preserving canonical `pumas_model_ref` model
+  identity handling. No-fallback/no-legacy result: path-shaped graph data can
+  no longer produce the model-change reason in this backend classifier, and no
+  scheduler/runtime-host/Pumas facts were adapted back into legacy graph
+  fields or DTOs. Verification passed: `cargo test -p
+  pantograph-workflow-service
+  kv_capable_legacy_model_path_change_is_not_model_identity --lib`; `cargo
+  test -p pantograph-workflow-service memory_impact --lib`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `cargo check -p
+  pantograph-workflow-service`. Remaining follow-up: top-level `model` and
+  `model_id` still require a separate caller inventory before cleanup because
+  they may represent stable canonical identity rather than legacy path
+  semantics.

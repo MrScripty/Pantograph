@@ -190,7 +190,6 @@ fn kv_capable_node_data_change_reason(
     }
 
     if tracked_value_changed(before_node, after_node, &["pumas_model_ref"])
-        || tracked_value_changed(before_node, after_node, &["model_path"])
         || tracked_value_changed(before_node, after_node, &["model"])
         || tracked_value_changed(before_node, after_node, &["model_id"])
     {
@@ -626,6 +625,22 @@ mod tests {
         assert_eq!(
             impact.node_decisions[1].reason.as_deref(),
             Some("upstream_dependency_changed")
+        );
+    }
+
+    #[test]
+    fn kv_capable_legacy_model_path_change_is_not_model_identity() {
+        let before = sample_kv_graph();
+        let mut after = sample_kv_graph();
+        after.find_node_mut("llm").expect("llm").data["model_path"] =
+            serde_json::json!("/models/legacy-path.gguf");
+
+        let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])
+            .expect("impact");
+
+        assert_eq!(
+            impact.node_decisions[0].reason.as_deref(),
+            Some("tokenizer_or_config_changed")
         );
     }
 
