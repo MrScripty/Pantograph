@@ -134,7 +134,7 @@ function extractSelectedModelRef(value: unknown): string | undefined {
   if (!value || typeof value !== 'object') return undefined;
 
   const record = value as Record<string, unknown>;
-  const nested = extractSelectedModelRef(record.model_ref ?? record.pumas_model_ref);
+  const nested = extractSelectedModelRef(record.pumas_model_ref);
   if (nested) return nested;
 
   const modelId = extractString(record.model_id ?? record.modelId ?? record.id);

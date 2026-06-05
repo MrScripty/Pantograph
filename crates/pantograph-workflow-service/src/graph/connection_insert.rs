@@ -87,7 +87,7 @@ fn edge_anchors(edge: &GraphEdge) -> (ConnectionAnchor, ConnectionAnchor) {
 fn edge_insert_input_priority(port: &PortDefinition) -> u8 {
     match port.id.as_str() {
         "prompt" => 0,
-        "task_kind" | "model" | "model_name" | "model_id" | "model_ref" | "pumas_model_ref" => 4,
+        "task_kind" | "model" | "model_name" | "model_id" | "pumas_model_ref" => 4,
         "context" | "system_prompt" => 3,
         _ if port.required => 1,
         _ => 2,
@@ -403,7 +403,7 @@ mod tests {
     fn edge_insert_priority_does_not_prefer_retired_model_fact_ports() {
         assert_eq!(
             edge_insert_input_priority(&optional_json_port("model_ref")),
-            4
+            2
         );
         assert_eq!(
             edge_insert_input_priority(&optional_json_port("pumas_model_ref")),

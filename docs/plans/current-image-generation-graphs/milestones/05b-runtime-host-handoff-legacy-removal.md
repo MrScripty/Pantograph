@@ -2085,3 +2085,30 @@ and canonical workflows/fixtures should use `pumas_model_ref`.
   `model_id` still require a separate caller inventory before cleanup because
   they may represent stable canonical identity rather than legacy path
   semantics.
+- 2026-06-05 graph-facing `model_ref` alias cleanup slice completed.
+  Smallest useful vertical slice: remove graph-facing `model_ref` aliases from
+  Pumas option metadata, Tauri hydration, frontend selection helpers, mock
+  graph node definitions, graph validation, graph fingerprint fixtures, and
+  automatic edge-insert priority. Implementation keeps backend-internal Pumas
+  selector DTO `model_ref` fields where they are source-contract field names,
+  but option metadata and graph authoring now expose only `pumas_model_ref` as
+  model identity. Non-null `data.model_ref` now produces a typed
+  `InvalidPumasModelReference` stale graph diagnostic; edge insertion demotes
+  `model_ref` and keeps `pumas_model_ref` preferred. No-fallback/no-legacy
+  result: no migration shim, frontend inference, Tauri policy, runtime launch
+  input, or compatibility alias was added. Verification passed: focused
+  workflow-service contract validation, connection-insert, and graph
+  fingerprint tests; `src-tauri` `puma_lib` tests; targeted Node helper/mock
+  tests; `cargo fmt` checks for workflow-service/workflow-nodes/src-tauri;
+  `cargo check` for workflow-service, workflow-nodes, and src-tauri;
+  `npm run typecheck`; targeted ESLint for touched frontend files; strict
+  graph-facing alias search; and `git diff --check`. Verification deviation:
+  selector option tests inside
+  `crates/workflow-nodes/src/input/puma_lib.rs` are not compiled under the
+  default `workflow-nodes --lib` target; `cargo test -p workflow-nodes --lib
+  -- --list` currently exposes only the puma-lib descriptor/run tests.
+  Remaining follow-up: `unload-model` still exposes a graph-facing `model_ref`
+  input in `crates/workflow-nodes/src/processing/unload_model.rs`; remove or
+  retire that port in a separate descriptor slice because runtime lifecycle is
+  scheduler/runtime-host-owned and the node is already host-specific/fail-
+  closed.

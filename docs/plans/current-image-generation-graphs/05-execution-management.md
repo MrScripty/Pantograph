@@ -25449,6 +25449,71 @@ Worker rules:
       diagnostics; canonical workflows and fixtures should use
       `pumas_model_ref`.
     - Verification passed: plan-only change pending `git diff --check`.
+  - 2026-06-05 Milestone 5b graph-facing `model_ref` alias cleanup slice:
+    - Smallest vertical slice: remove graph-facing `model_ref` aliases from
+      Pumas option metadata, frontend selection helpers, mock graph node
+      definitions, graph validation, graph fingerprint fixtures, and automatic
+      edge-insert priority.
+    - Allowed write set used:
+      `crates/workflow-nodes/src/input/puma_lib.rs`,
+      `crates/pantograph-workflow-service/src/graph/contract_validation.rs`,
+      `crates/pantograph-workflow-service/src/graph/contract_validation_tests.rs`,
+      `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+      `crates/pantograph-workflow-service/src/graph/types.rs`,
+      `src-tauri/src/workflow/puma_lib_commands.rs`,
+      `src/components/nodes/workflow/pumaLibNodeState.ts`,
+      `src/components/nodes/workflow/selectionInputProviderOptions.ts`,
+      `packages/svelte-graph/src/backends/MockWorkflowBackend.ts`,
+      `packages/svelte-graph/src/components/nodes/PumaLibNode.svelte`,
+      `src/services/workflow/mocks.ts`, the Milestone 5b file, and this plan
+      file.
+    - No-fallback/no-legacy confirmation: Pumas selector DTOs may still use
+      their backend-internal `model_ref` field name, but option metadata,
+      graph validation, frontend selection, mocks, and edge insertion no longer
+      accept or project `model_ref` as a graph identity substitute. Stale
+      graph `data.model_ref` now receives a typed
+      `InvalidPumasModelReference` diagnostic telling callers to use
+      `data.pumas_model_ref`. No migration shim, frontend inference, Tauri
+      policy, runtime launch input, or compatibility alias was added.
+    - Focused tests added/updated:
+      graph contract validation now asserts non-null `data.model_ref` is a
+      retired field diagnostic; graph fingerprint fixtures use
+      `pumas_model_ref`; edge-insert priority keeps `pumas_model_ref` preferred
+      while demoting `model_ref`; frontend helper and mock tests were run
+      against the canonical metadata-only path.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service contract_diagnostics_classify_invalid_pumas_model_refs_without_live_lookup --lib`
+      - `cargo test -p pantograph-workflow-service edge_insert_priority_does_not_prefer_retired_model_fact_ports --lib`
+      - `cargo test -p pantograph-workflow-service graph_fingerprint_canonicalizes_node_data_object_key_order --lib`
+      - `cargo test -p pantograph-workflow-service contract_validation --lib`
+      - `cargo test -p pantograph-workflow-service connection_insert --lib`
+      - `cargo test -p workflow-nodes test_selector_row_option_uses_pumas_model_ref_as_value --lib` (0 tests matched; see deviation)
+      - `cargo test -p workflow-nodes pumas_model_ref --lib` (0 tests matched; see deviation)
+      - `cargo test -p workflow-nodes --lib -- --list | rg "selector|puma|model_ref"`
+      - `cargo fmt -p pantograph-workflow-service -p workflow-nodes`
+      - `cargo fmt -p pantograph-workflow-service -p workflow-nodes -- --check`
+      - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
+      - `cargo test --manifest-path src-tauri/Cargo.toml puma_lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo check -p workflow-nodes`
+      - `cargo check --manifest-path src-tauri/Cargo.toml`
+      - `node --experimental-strip-types --test src/components/nodes/workflow/pumaLibNodeState.test.ts src/components/nodes/workflow/selectionInputProviderOptions.test.ts packages/svelte-graph/src/backends/MockWorkflowBackend.test.ts`
+      - `npm run typecheck`
+      - `npx eslint src/components/nodes/workflow/pumaLibNodeState.ts src/components/nodes/workflow/selectionInputProviderOptions.ts packages/svelte-graph/src/backends/MockWorkflowBackend.ts packages/svelte-graph/src/components/nodes/PumaLibNode.svelte src/services/workflow/mocks.ts --max-warnings 0`
+      - strict alias search for graph-facing `model_ref` fallback/metadata
+        patterns in touched areas
+      - `git diff --check`
+    - Verification deviation: the expected selector option test name in
+      `crates/workflow-nodes/src/input/puma_lib.rs` is not compiled in the
+      default `workflow-nodes --lib` test target; the test listing showed only
+      the descriptor/run tests for `input::puma_lib`. Coverage for the changed
+      Tauri option hydration path is provided by the `src-tauri` `puma_lib`
+      test group, and the Rust crate still passes `cargo check`.
+    - Remaining follow-up: `unload-model` still exposes a graph-facing
+      `model_ref` input in `crates/workflow-nodes/src/processing/unload_model.rs`.
+      Because runtime lifecycle is scheduler/runtime-host-owned and the node is
+      already host-specific/fail-closed, remove or retire that port in a
+      separate descriptor slice with focused workflow-node contract tests.
 
 ### Traceability Links
 

@@ -185,7 +185,6 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
       { id: 'top_score', label: 'Top Score', data_type: 'number', required: false, multiple: false, inference_payloads: RERANK_RESULT_PAYLOADS },
       { id: 'embedding', label: 'Embedding', data_type: 'embedding', required: false, multiple: false, inference_payloads: EMBEDDING_RESULT_PAYLOADS },
       { id: 'metadata', label: 'Metadata', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_DIAGNOSTIC_PAYLOADS },
-      { id: 'model_ref', label: 'Model Ref', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
       { id: 'tool_calls', label: 'Tool Calls', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_OUTPUT_PAYLOADS },
       { id: 'has_tool_calls', label: 'Has Tool Calls', data_type: 'boolean', required: false, multiple: false, inference_payloads: TEXT_CHAT_OUTPUT_PAYLOADS },
       { id: 'kv_cache_out', label: 'KV Cache Out', data_type: 'kv_cache', required: false, multiple: false, inference_payloads: TEXT_CHAT_KV_OUTPUT_PAYLOADS },

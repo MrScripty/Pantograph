@@ -65,7 +65,7 @@
   }
 
   function pumasModelRefFromOption(option: PortOption): Record<string, unknown> | null {
-    const metadataModelRef = option.metadata?.pumas_model_ref ?? option.metadata?.model_ref;
+    const metadataModelRef = option.metadata?.pumas_model_ref;
     if (isObjectRecord(metadataModelRef)) return metadataModelRef;
     if (isObjectRecord(option.value)) return option.value;
     return null;

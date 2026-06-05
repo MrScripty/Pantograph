@@ -104,7 +104,7 @@ fn contract_diagnostics_classify_invalid_pumas_model_refs_without_live_lookup() 
                 }),
             },
             GraphNode {
-                id: "llm-invalid-shape".to_string(),
+                id: "llm-retired-model-ref".to_string(),
                 node_type: "llm-inference".to_string(),
                 position: Position::default(),
                 data: serde_json::json!({
@@ -146,17 +146,27 @@ fn contract_diagnostics_classify_invalid_pumas_model_refs_without_live_lookup() 
         Some("data.pumas_model_ref")
     );
 
-    let invalid_shape = diagnostics
+    let retired_model_ref = diagnostics
         .iter()
-        .find(|diagnostic| diagnostic.node_id.as_deref() == Some("llm-invalid-shape"))
-        .expect("invalid shape diagnostic");
+        .find(|diagnostic| diagnostic.node_id.as_deref() == Some("llm-retired-model-ref"))
+        .expect("retired model_ref diagnostic");
     assert_eq!(
-        invalid_shape.code,
+        retired_model_ref.code,
         WorkflowGraphDiagnosticCode::InvalidPumasModelReference
     );
     assert_eq!(
-        invalid_shape.details.get("field_path").map(String::as_str),
+        retired_model_ref
+            .details
+            .get("field_path")
+            .map(String::as_str),
         Some("data.model_ref")
+    );
+    assert_eq!(
+        retired_model_ref
+            .details
+            .get("model_ref_error")
+            .map(String::as_str),
+        Some("retired graph model identity field")
     );
 
     assert!(

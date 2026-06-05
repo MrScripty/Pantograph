@@ -490,7 +490,6 @@ mod options_provider {
 
         serde_json::json!({
             "id": row.model_ref.model_id,
-            "model_ref": model_ref,
             "pumas_model_ref": model_ref,
             "repo_id": row.repo_id,
             "model_type": row.model_type,

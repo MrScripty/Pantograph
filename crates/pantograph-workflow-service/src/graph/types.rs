@@ -221,7 +221,7 @@ mod tests {
     fn graph_fingerprint_canonicalizes_node_data_object_key_order() {
         let mut first = semantic_revision_graph();
         first.find_node_mut("infer").expect("infer node").data = serde_json::json!({
-            "model_ref": {
+            "pumas_model_ref": {
                 "model_id": "image/example/tiny",
                 "selected_artifact_id": "artifact.diffusers"
             },
@@ -230,7 +230,7 @@ mod tests {
         let mut second = semantic_revision_graph();
         second.find_node_mut("infer").expect("infer node").data = serde_json::json!({
             "runtime": "auto",
-            "model_ref": {
+            "pumas_model_ref": {
                 "selected_artifact_id": "artifact.diffusers",
                 "model_id": "image/example/tiny"
             }
@@ -247,7 +247,7 @@ mod tests {
                     node_type: "puma-lib".to_string(),
                     position: Position { x: 0.0, y: 0.0 },
                     data: serde_json::json!({
-                        "model_ref": {
+                        "pumas_model_ref": {
                             "model_id": "image/example/tiny",
                             "selected_artifact_id": "artifact.diffusers"
                         }
@@ -265,9 +265,9 @@ mod tests {
             edges: vec![GraphEdge {
                 id: "model-to-infer".to_string(),
                 source: "model".to_string(),
-                source_handle: "model_ref".to_string(),
+                source_handle: "pumas_model_ref".to_string(),
                 target: "infer".to_string(),
-                target_handle: "model_ref".to_string(),
+                target_handle: "pumas_model_ref".to_string(),
             }],
             derived_graph: None,
         }

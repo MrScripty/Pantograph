@@ -366,7 +366,6 @@ fn build_selected_model_option_from_detail(
         }),
         metadata: Some(json!({
             "id": model_ref.model_id,
-            "model_ref": model_ref_value.clone(),
             "pumas_model_ref": model_ref_value,
             "model_type": model_type,
             "cleaned_name": display_name,
@@ -404,7 +403,6 @@ fn build_hydrated_node_data(option: &node_engine::PortOption) -> Result<Value, S
         .ok_or_else(|| "Puma-Lib option metadata is missing".to_string())?;
     let pumas_model_ref = metadata
         .get("pumas_model_ref")
-        .or_else(|| metadata.get("model_ref"))
         .cloned()
         .filter(|value| !value.is_null())
         .ok_or_else(|| "Puma-Lib option is missing pumas_model_ref".to_string())?;

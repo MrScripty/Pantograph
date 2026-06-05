@@ -104,7 +104,7 @@ fn validate_node_payload_contract(
     diagnostics: &mut Vec<WorkflowGraphDiagnostic>,
 ) {
     validate_pumas_model_ref_field(node, "pumas_model_ref", diagnostics);
-    validate_pumas_model_ref_field(node, "model_ref", diagnostics);
+    validate_retired_model_ref_field(node, diagnostics);
 }
 
 fn validate_pumas_model_ref_field(
@@ -163,6 +163,34 @@ fn invalid_pumas_model_ref_diagnostic(
     )
     .with_detail("field_path", format!("data.{field_name}"))
     .with_detail("model_ref_error", reason)
+}
+
+fn validate_retired_model_ref_field(
+    node: &GraphNode,
+    diagnostics: &mut Vec<WorkflowGraphDiagnostic>,
+) {
+    let Some(value) = node.data.get("model_ref") else {
+        return;
+    };
+    if value.is_null() {
+        return;
+    }
+
+    diagnostics.push(
+        WorkflowGraphDiagnostic::node(
+            WorkflowGraphDiagnosticCode::InvalidPumasModelReference,
+            WorkflowGraphDiagnosticSeverity::Error,
+            &node.id,
+            &node.node_type,
+            format!(
+                "node '{}' uses retired data.model_ref; use data.pumas_model_ref instead",
+                node.id
+            ),
+            true,
+        )
+        .with_detail("field_path", "data.model_ref")
+        .with_detail("model_ref_error", "retired graph model identity field"),
+    );
 }
 
 fn validate_edge_contract(
