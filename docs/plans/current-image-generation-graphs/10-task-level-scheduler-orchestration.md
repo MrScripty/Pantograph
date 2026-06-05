@@ -787,6 +787,14 @@ Option 3 thin implementation sequence:
      policy, or legacy runtime launch path was added. Remaining component
      attachment work covers dependency readiness, resource observation, retry,
      queue, and reservation cleanup before public lifecycle queries.
+   - 2026-06-05 shared scheduler lifecycle registry handle slice: before
+     attaching the next component, the registry now has a cloneable
+     workflow-service owner handle and the task lifecycle manager accepts that
+     handle. This prevents dependency-readiness, resource, retry, queue, and
+     reservation-cleanup owners from depending on the task lifecycle manager as
+     an unrelated registry container. The slice is preparatory only: no public
+     snapshot, ledger event, inferred component state, or fallback runtime path
+     was added.
 
 Option 3 standards gates:
 

@@ -3,7 +3,8 @@ use pantograph_scheduler::SchedulerTaskId;
 
 use crate::scheduler::{
     lifecycle::{
-        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentState,
+        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+        WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
     },
     task_lifecycle::{
         WorkflowSchedulerTaskLifecycleManager, WorkflowSchedulerTaskLifecycleOwnerId,
@@ -413,6 +414,49 @@ fn task_lifecycle_manager_marks_runtime_host_dispatch_shutdown_states() {
             .state,
         WorkflowSchedulerLifecycleComponentState::Shutdown
     );
+}
+
+#[tokio::test]
+async fn task_lifecycle_manager_updates_shared_scheduler_lifecycle_registry() {
+    let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistryHandle::new(
+        WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.shared-lifecycle.test")
+            .expect("scheduler lifecycle owner id"),
+    );
+    let mut manager = WorkflowSchedulerTaskLifecycleManager::new_with_scheduler_lifecycle(
+        WorkflowSchedulerTaskLifecycleOwnerId::parse("workflow-service.lifecycle.test")
+            .expect("task lifecycle owner id"),
+        scheduler_lifecycle.clone(),
+    );
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.current");
+    let join_handle = tokio::spawn(async {
+        std::future::pending::<()>().await;
+    });
+
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .expect("track task handle");
+    manager
+        .track_task_supervisor_abort_handle(&task_id, &attempt_id, join_handle.abort_handle())
+        .expect("track supervisor abort handle");
+
+    assert_eq!(
+        scheduler_lifecycle
+            .component(WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch)
+            .expect("runtime-host dispatch shared component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::Running
+    );
+    assert_eq!(
+        scheduler_lifecycle
+            .required_component_records()
+            .expect("required component records")
+            .len(),
+        WorkflowSchedulerLifecycleComponentKind::required_components().len()
+    );
+
+    join_handle.abort();
+    let _ = join_handle.await;
 }
 
 #[test]

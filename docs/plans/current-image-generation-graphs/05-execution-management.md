@@ -25515,6 +25515,50 @@ Worker rules:
       retry, queue, and reservation cleanup component states from their real
       workflow-service owners before adding public lifecycle queries or
       diagnostics-ledger worker lifecycle events.
+  - 2026-06-05 Milestone 5c shared scheduler lifecycle registry handle slice:
+    - Smallest vertical slice: make the scheduler lifecycle registry available
+      through a cloneable workflow-service owner handle before attaching more
+      component owners.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: this is a lifecycle ownership
+      refactor only. It does not add public lifecycle queries, diagnostics
+      ledger worker events, projection-inferred component state,
+      Tauri/frontend policy, graph-path/node-engine/planned-inference runtime
+      fallback, or compatibility shim behavior.
+    - Discovered issue resolved: after the runtime-host dispatch attachment
+      slice, the registry lived inside the task lifecycle manager. Attaching
+      dependency readiness, resource observation, retry, queue, or reservation
+      cleanup directly through that manager would couple unrelated lifecycle
+      owners. The shared handle preserves one registry state core while letting
+      each component owner remain separate.
+    - Implementation notes: added
+      `WorkflowSchedulerLifecycleComponentRegistryHandle` with typed lock
+      diagnostics, changed `WorkflowSchedulerTaskLifecycleManager` to accept a
+      provided shared handle, and kept the existing default constructor for
+      current production wiring.
+    - Tests added: task lifecycle tests now prove runtime-host dispatch updates
+      are visible through a shared scheduler lifecycle registry handle and that
+      the shared handle still owns all required component records.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service scheduler::task_lifecycle::tests --lib`
+      - `cargo test -p pantograph-workflow-service scheduler::lifecycle::tests --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched lifecycle source/tests
+    - Search deviations: none for touched lifecycle source/tests.
+    - Remaining follow-up: attach dependency readiness, resource observation,
+      retry, queue, and reservation cleanup state from their real owners using
+      the shared registry handle before adding any public lifecycle query or
+      diagnostics-ledger worker lifecycle event.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

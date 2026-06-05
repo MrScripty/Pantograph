@@ -153,6 +153,11 @@ Each component starts from an explicit `NotStarted` owner record. Public
 diagnostics snapshots and ledger events must not invent missing component
 facts; later slices must attach real owners to these registry records before
 exposing them outside workflow-service.
+The registry is available through a cloneable workflow-service handle so
+component owners can share one lifecycle state core without depending on the
+task lifecycle manager as an unrelated owner. Runtime-host dispatch currently
+uses that handle first; future dependency-readiness, resource observation,
+retry, queue, and reservation cleanup owners must use the same pattern.
 The task lifecycle manager now owns the first concrete component attachment:
 runtime-host dispatch state changes from explicit `NotStarted` to `Running`
 only when a runtime task supervisor abort handle is tracked. Non-runtime task

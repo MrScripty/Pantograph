@@ -65,6 +65,16 @@ state only and does not add public snapshots, diagnostics-ledger events,
 projection-inferred component facts, Tauri/frontend policy, or legacy runtime
 launch behavior.
 
+2026-06-05 shared scheduler lifecycle registry handle update: before attaching
+dependency-readiness, resource, retry, queue, or reservation-cleanup component
+states, the lifecycle registry now has a cloneable workflow-service owner
+handle. The task lifecycle manager accepts that shared handle and updates the
+same registry through it, so future component owners do not need to depend on
+the task lifecycle manager as an unrelated state container. This resolves the
+component-ownership complection risk discovered after the runtime-host
+dispatch attachment slice without adding public snapshots, diagnostics-ledger
+events, inferred component state, or fallback runtime behavior.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a

@@ -636,6 +636,10 @@ durable task orchestration path.
   component state is now attached to real task-supervisor ownership in the
   task lifecycle manager. Remaining component attachments: dependency
   readiness, resource observation, retry, queue, and reservation cleanup.
+  2026-06-05 shared registry handle update: the scheduler lifecycle registry
+  now has a cloneable workflow-service owner handle so remaining component
+  owners can share one lifecycle core without depending on task lifecycle
+  ownership.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

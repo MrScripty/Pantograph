@@ -19,8 +19,8 @@ use crate::workflow::WorkflowServiceError;
 use super::{
     lifecycle::{
         WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRecord,
-        WorkflowSchedulerLifecycleComponentRegistry, WorkflowSchedulerLifecycleComponentState,
-        WorkflowSchedulerLifecycleOwnerId,
+        WorkflowSchedulerLifecycleComponentRegistryHandle,
+        WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
     },
     WorkflowSchedulerTaskAttemptId,
 };
@@ -35,15 +35,22 @@ pub(crate) struct WorkflowSchedulerTaskLifecycleManager {
     owner_id: WorkflowSchedulerTaskLifecycleOwnerId,
     shutdown_state: WorkflowSchedulerTaskLifecycleShutdownState,
     active_task_handles: BTreeMap<String, WorkflowSchedulerTaskLifecycleHandleRecord>,
-    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistry,
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
 }
 
 impl WorkflowSchedulerTaskLifecycleManager {
     pub(crate) fn new(owner_id: WorkflowSchedulerTaskLifecycleOwnerId) -> Self {
-        let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistry::new(
+        let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistryHandle::new(
             WorkflowSchedulerLifecycleOwnerId::parse(owner_id.as_str())
                 .expect("task lifecycle owner id must be valid scheduler lifecycle owner id"),
         );
+        Self::new_with_scheduler_lifecycle(owner_id, scheduler_lifecycle)
+    }
+
+    pub(crate) fn new_with_scheduler_lifecycle(
+        owner_id: WorkflowSchedulerTaskLifecycleOwnerId,
+        scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    ) -> Self {
         Self {
             owner_id,
             shutdown_state: WorkflowSchedulerTaskLifecycleShutdownState::Running,
@@ -76,7 +83,6 @@ impl WorkflowSchedulerTaskLifecycleManager {
     ) -> Result<WorkflowSchedulerLifecycleComponentRecord, WorkflowServiceError> {
         self.scheduler_lifecycle
             .component(WorkflowSchedulerLifecycleComponentKind::RuntimeHostDispatch)
-            .cloned()
     }
 
     pub(crate) fn track_task_handle(

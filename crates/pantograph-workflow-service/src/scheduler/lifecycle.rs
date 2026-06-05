@@ -4,8 +4,64 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 use crate::workflow::WorkflowServiceError;
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowSchedulerLifecycleComponentRegistryHandle {
+    inner: Arc<Mutex<WorkflowSchedulerLifecycleComponentRegistry>>,
+}
+
+impl WorkflowSchedulerLifecycleComponentRegistryHandle {
+    pub(crate) fn new(owner_id: WorkflowSchedulerLifecycleOwnerId) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(
+                WorkflowSchedulerLifecycleComponentRegistry::new(owner_id),
+            )),
+        }
+    }
+
+    pub(crate) fn component(
+        &self,
+        component: WorkflowSchedulerLifecycleComponentKind,
+    ) -> Result<WorkflowSchedulerLifecycleComponentRecord, WorkflowServiceError> {
+        self.registry_guard()?.component(component).cloned()
+    }
+
+    pub(crate) fn update_component_state(
+        &self,
+        component: WorkflowSchedulerLifecycleComponentKind,
+        state: WorkflowSchedulerLifecycleComponentState,
+    ) -> Result<WorkflowSchedulerLifecycleComponentRecord, WorkflowServiceError> {
+        self.registry_guard()?
+            .update_component_state(component, state)
+    }
+
+    pub(crate) fn required_component_records(
+        &self,
+    ) -> Result<Vec<WorkflowSchedulerLifecycleComponentRecord>, WorkflowServiceError> {
+        self.registry_guard()?.required_component_records()
+    }
+
+    fn registry_guard(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, WorkflowSchedulerLifecycleComponentRegistry>,
+        WorkflowServiceError,
+    > {
+        self.inner.lock().map_err(|_error| {
+            lifecycle_error(WorkflowSchedulerLifecycleDiagnostic::error(
+                WorkflowSchedulerLifecycleDiagnosticCode::LifecycleRegistryLockPoisoned,
+                "scheduler lifecycle registry lock was poisoned",
+                Some(
+                    "Recreate the workflow-service scheduler lifecycle owner before continuing."
+                        .to_string(),
+                ),
+            ))
+        })
+    }
+}
 
 /// Workflow-service owned scheduler lifecycle component registry.
 ///
@@ -187,6 +243,7 @@ pub(crate) enum WorkflowSchedulerLifecycleDiagnosticSeverity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkflowSchedulerLifecycleDiagnosticCode {
     InvalidLifecycleOwnerId,
+    LifecycleRegistryLockPoisoned,
     RequiredComponentMissing,
 }
 
