@@ -747,8 +747,8 @@ Option 3 thin implementation sequence:
      facts rather than inferred from frontend or projection text.
    - 2026-06-05 active-lane reconciliation: this milestone is complete enough
      to stop preserving successful legacy runtime launch paths. The remaining
-     retry/defer, replay/bootstrap, worker lifecycle diagnostics, cooperative
-     cancellation response mapping, and task-state attempt-counter work stays
+     retry/defer, replay/bootstrap, worker lifecycle diagnostics, terminal
+     cooperative cancellation observation, and task-state attempt-counter work stays
      in Milestone 5c as lifecycle hardening. It is not a blocker for the next
      Milestone 5b deletion/replacement slices because the minimal production
      image inference path has already been proven through scheduler task state
@@ -756,6 +756,18 @@ Option 3 thin implementation sequence:
      scheduler lifecycle fact needed for safe replacement, stop and re-plan
      that fact as a shared backend contract extension instead of preserving a
      legacy path.
+   - 2026-06-05 worker lifecycle diagnostics re-plan: use Option 3 as the
+     selected path. Do not add a task-supervisor-only public snapshot as the
+     final worker lifecycle model. Instead, build toward the full
+     `SchedulerLifecycleOwnerSnapshot` contract by wiring real
+     workflow-service lifecycle ownership for every required component: queue
+     worker, dependency-readiness action, resource observation loop,
+     runtime-host dispatch, retry loop, and reservation cleanup. A component
+     may report `not_started` only if that state is owned by an explicit
+     lifecycle component record, not invented by a projection. The next source
+     slices must first add the lifecycle owner/component registry and then
+     attach real component state one concern at a time before public snapshot
+     queries or diagnostics-ledger worker lifecycle events are added.
 
 Option 3 standards gates:
 

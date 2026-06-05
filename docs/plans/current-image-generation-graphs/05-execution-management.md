@@ -25285,7 +25285,7 @@ Worker rules:
       scheduler attempt lifecycle/timing projection is partially complete from
       canonical lifecycle events, while retry/defer decisions, replay
       outcomes, worker lifecycle events, additional task-state read-model
-      attempt counters, and unresolved cancellation response mapping remain
+      attempt counters, and terminal cooperative cancellation observation remain
       open. It does not reopen graph-path, reduced-plan, node-engine runtime,
       frontend/Tauri policy, runtime adapter policy, Pumas, or compatibility
       shim paths.
@@ -25338,10 +25338,10 @@ Worker rules:
       retry/defer decisions, replay outcomes, worker lifecycle diagnostics,
       and terminal cooperative runtime/worker cancellation observation remain
       Milestone 5c lifecycle hardening work.
-  - 2026-06-05 Milestone 5c active runtime cancellation response mapping
+  - 2026-06-05 Milestone 5c active runtime cancellation observation
     slice:
-    - Smallest vertical slice: replace the bare active runtime task
-      cancellation response with typed backend-owned cancellation intent
+    - Smallest vertical slice: record terminal active runtime task
+      cancellation observation with typed backend-owned cancellation intent
       status and scheduler task/attempt identity.
     - Allowed write set used:
       `crates/pantograph-workflow-service/src/scheduler/contracts.rs`,
@@ -25385,6 +25385,46 @@ Worker rules:
       lifecycle diagnostics, historical attempt/timing summaries, and terminal
       cooperative runtime/worker cancellation observation remain Milestone 5c
       hardening work.
+  - 2026-06-05 Milestone 5c worker lifecycle diagnostics re-plan:
+    - Decision: use Option 3, the full scheduler lifecycle owner snapshot
+      path, not the shorter task-supervisor-only snapshot.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection rule by separating lifecycle ownership,
+      diagnostics persistence, retry/defer policy, replay recovery, transport,
+      and UI display. It also follows the Rust API standards by using the
+      existing typed `SchedulerLifecycleOwnerSnapshot` contract instead of
+      adding stringly or boolean status fields.
+    - Selected implementation sequence:
+      1. Add or wire a workflow-service lifecycle owner/component registry
+         backed by real state for all required scheduler lifecycle components:
+         queue worker, dependency-readiness action, resource observation loop,
+         runtime-host dispatch, retry loop, and reservation cleanup.
+      2. Allow `not_started` only when it is the explicit state of an owned
+         lifecycle component record; do not fabricate component facts inside a
+         projection.
+      3. Attach runtime-host dispatch/task-supervisor state to that owner as
+         the first real component-state slice.
+      4. Attach dependency readiness, resource observation, retry, queue, and
+         reservation cleanup state in separate slices as each owner exists.
+      5. Add public snapshot/query and diagnostics-ledger worker lifecycle
+         events only after component ordering and replay semantics are
+         backed by owned lifecycle state.
+    - Rejected shortcuts: do not expose a task-supervisor-only snapshot as the
+      final worker lifecycle model, do not emit ledger worker lifecycle events
+      from ad hoc call sites, do not let Tauri/frontend infer worker state,
+      and do not preserve legacy runtime launch paths while waiting for this
+      hardening.
+    - Allowed next source slice scope: workflow-service lifecycle owner/
+      component registry and focused tests, plan updates, and README updates
+      if the new boundary changes module API guidance. Shared contracts,
+      generated files, lockfiles, saved workflows, and frontend/Tauri files
+      stay out of scope unless a new re-plan explicitly assigns them.
+    - Verification expected for the next source slice: focused
+      workflow-service lifecycle owner/component registry tests, relevant
+      contract serialization/validation tests if a public query is added,
+      `cargo check -p pantograph-workflow-service`, `cargo fmt -p
+      pantograph-workflow-service -- --check`, `git diff --check`, and
+      targeted no-fallback/no-legacy searches over touched files.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
@@ -25399,8 +25439,8 @@ Worker rules:
       and this plan file.
     - Decision: proceed with Milestone 5b classified legacy deletion slices
       before Milestone 6. Remaining Milestone 5c retry/defer,
-      replay/bootstrap, worker lifecycle diagnostics, cooperative runtime
-      cancellation response mapping, and task-state attempt counters remain
+      replay/bootstrap, worker lifecycle diagnostics, terminal cooperative
+      runtime cancellation observation, and task-state attempt counters remain
       hardening follow-ups. They do not justify retaining successful
       node-engine runtime launch, planned-inference launch, graph
       `model_path`, `ModelRefV2`, or `ModelDependencyRequest` paths.
@@ -25891,7 +25931,7 @@ Worker rules:
       negative tests; they are not successful runtime graph launch paths.
     - Remaining follow-up: Milestone 5c lifecycle hardening stays open
       separately for durable retry/defer, replay/bootstrap, worker lifecycle,
-      cooperative cancellation response mapping, and attempt/timing ledger
+      terminal cooperative cancellation observation, and attempt/timing ledger
       facts.
     - Verification passed:
       - strict active Rust production search for retired concrete

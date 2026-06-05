@@ -616,7 +616,16 @@ durable task orchestration path.
   cancellation response update: the active runtime task cancellation API now
   returns typed `cancellation_requested` status with scheduler-owned task id,
   active attempt id, and a message that terminal cancellation is reported only
-  after runtime observation.
+  after runtime observation. 2026-06-05 worker lifecycle diagnostics re-plan:
+  use Option 3 as the target. Full worker diagnostics must be backed by the
+  scheduler `SchedulerLifecycleOwnerSnapshot` contract with real
+  workflow-service lifecycle ownership for queue worker,
+  dependency-readiness action, resource observation loop, runtime-host
+  dispatch, retry loop, and reservation cleanup. The next source slices must
+  add or wire component ownership first, then expose public snapshots and
+  diagnostics-ledger worker lifecycle events. Do not fabricate missing
+  component state in a projection, and do not ship a task-supervisor-only
+  snapshot as the final worker lifecycle model.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

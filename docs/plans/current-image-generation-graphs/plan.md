@@ -31,6 +31,19 @@ by the runtime task supervisor. This keeps cancellation business state in the
 backend and does not add Tauri/frontend inference, runtime adapter policy,
 graph-path fallback, or compatibility launch behavior.
 
+2026-06-05 worker lifecycle diagnostics re-plan decision: use Option 3, the
+full scheduler lifecycle owner snapshot path, instead of a narrow
+task-supervisor-only snapshot. The next lifecycle work must first introduce or
+wire real workflow-service lifecycle ownership for every component required by
+`SchedulerLifecycleOwnerSnapshot`: queue worker, dependency-readiness action,
+resource observation loop, runtime-host dispatch, retry loop, and reservation
+cleanup. Components may report `not_started` only from an explicit lifecycle
+owner record; do not fabricate component facts in a projection. Public
+snapshot/query and diagnostics-ledger worker lifecycle events come after those
+component states have real owners. This keeps lifecycle ownership,
+diagnostics persistence, retry/defer policy, replay recovery, transport, and
+UI display decomposed per the coding standards' simplicity/complection rule.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a
