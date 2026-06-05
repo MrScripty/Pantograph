@@ -1875,6 +1875,7 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
         .with_dependency_environment_provider(std::sync::Arc::new(
             dependency_readiness_provider.clone(),
         ))
@@ -1958,13 +1959,13 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
     let error = run_handle
         .await
         .expect("run task should not panic")
-        .expect_err("aborted runtime dispatch should fail the workflow run");
+        .expect_err("aborted runtime dispatch should cancel the workflow run");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert_eq!(error.code(), WorkflowErrorCode::Cancelled);
     assert!(
         error
             .message()
-            .contains("runtime task supervisor join failed"),
+            .contains("runtime dispatch task was cancelled before completion"),
         "unexpected error: {error}"
     );
     let cancellation_snapshot = runtime_host_port
@@ -1982,9 +1983,53 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
             .collect::<Vec<_>>(),
         vec![
             &ReservationLifecycleOutcome::DispatchStarted,
-            &ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
+            &ReservationLifecycleOutcome::WorkflowCancelled,
         ]
     );
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 40,
+        )
+        .expect("diagnostic events")
+    };
+    let cancelled_attempt_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.node_id.as_deref() == Some("infer")
+                && event.payload_json.contains("\"transition\":\"cancelled\"")
+        })
+        .expect("runtime scheduler attempt cancelled event");
+    assert_eq!(
+        cancelled_attempt_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert_eq!(
+        cancelled_attempt_event.runtime_id.as_deref(),
+        Some("pytorch")
+    );
+    assert!(cancelled_attempt_event
+        .payload_json
+        .contains("\"execution_class\":\"runtime\""));
+    assert!(cancelled_attempt_event
+        .payload_json
+        .contains("\"selected_runtime_id\":\"pytorch\""));
+    assert!(cancelled_attempt_event
+        .payload_json
+        .contains("\"reservation_id\":\"reservation.runtime_session_test\""));
+    assert!(cancelled_attempt_event
+        .payload_json
+        .contains("\"error_summary\":"));
+    assert!(cancelled_attempt_event
+        .payload_json
+        .contains("\"ended_at_ms\":"));
+    assert!(cancelled_attempt_event
+        .payload_json
+        .contains("\"duration_ms\":"));
 }
 
 #[tokio::test]

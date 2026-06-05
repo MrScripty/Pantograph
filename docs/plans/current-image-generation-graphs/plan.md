@@ -881,6 +881,39 @@ lifecycle ownership, Pumas fact changes, diagnostics-ledger schema/DTO change,
 projection/read-model fields, lockfile/generated/workflow fixture changes, or
 compatibility shim.
 
+2026-06-05 observed scheduler cancellation terminalization update:
+workflow-service now treats observed runtime supervisor cancellation as a
+canonical terminal cancellation path. When the lifecycle owner aborts a
+blocked runtime dispatch supervisor, the session runner applies the matching
+scheduler cancel terminal mutation, releases the reservation through
+`WorkflowCancelled`, emits a
+`scheduler.task_attempt_lifecycle_changed` event with transition `Cancelled`,
+and returns `WorkflowServiceError::Cancelled` so the run terminal status is
+cancelled. Cancellation request remains intent-only and still does not mark the
+attempt terminal or release the reservation before runtime observation. This
+adds no diagnostics-ledger schema/DTO change, projection/read-model fields,
+graph-path or reduced-plan launch behavior, node-engine runtime launch branch,
+Tauri/frontend policy, runtime adapter lifecycle ownership, Pumas fact change,
+lockfile/generated/workflow fixture change, or compatibility shim.
+Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo test
+-p pantograph-workflow-service
+workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor --lib`; `cargo
+test -p pantograph-workflow-service
+workflow_cancel_active_task_records_intent_without_terminal_mutation --lib`;
+`cargo test -p pantograph-workflow-service
+workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure
+--lib`; `cargo test -p pantograph-workflow-service task_orchestrator --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Search matches were existing legacy
+negative tests and compatibility fixture fields only. Discovered/deferred
+issue: the runtime-host execution contract still has no explicit cancelled
+terminal response state, so cooperative runtime-host cancellation response
+mapping remains a later re-plan if needed; this slice covers workflow-service
+supervisor cancellation observation. Remaining lifecycle work: redispatch
+attempt lifecycle events and projection/read-model fields after event ordering
+is proven.
+
 ## Standards Rule
 
 The standards constraints in

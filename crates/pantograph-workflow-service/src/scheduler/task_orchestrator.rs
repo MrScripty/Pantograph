@@ -108,8 +108,14 @@ impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
         self,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
         self.join_handle.await.map_err(|error| {
-            WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorJoin {
-                message: runtime_task_supervisor_join_error_message(error),
+            if error.is_cancelled() {
+                WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled {
+                    message: runtime_task_supervisor_join_error_message(error),
+                }
+            } else {
+                WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorJoin {
+                    message: runtime_task_supervisor_join_error_message(error),
+                }
             }
         })?
     }
@@ -568,6 +574,31 @@ impl WorkflowSchedulerTaskOrchestrator {
                     ReservationLifecycleDiagnosticSeverity::Error,
                     ReservationLifecycleDiagnosticCode::RuntimeHostRejected,
                     format!("runtime-host dispatch failed: {error}"),
+                )],
+            )?)
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn apply_runtime_task_cancellation_reservation_lifecycle(
+        &self,
+        task: &WorkflowSchedulerTask,
+        mutation: &WorkflowSchedulerTaskTerminalMutation,
+        reason: &str,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
+            return Ok(());
+        };
+        let _ = self
+            .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+                task,
+                release_intent.reservation_lease_id.clone(),
+                release_intent.candidate_id.clone(),
+                ReservationLifecycleOutcome::WorkflowCancelled,
+                vec![reservation_lifecycle_diagnostic(
+                    ReservationLifecycleDiagnosticSeverity::Info,
+                    ReservationLifecycleDiagnosticCode::WorkflowCancelled,
+                    reason.to_string(),
                 )],
             )?)
             .await?;
@@ -1054,6 +1085,30 @@ impl WorkflowSchedulerTaskOrchestrator {
                 workflow_run_id,
                 &started.attempt_id,
                 failure_transition,
+            )
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
+        Ok(mutation)
+    }
+
+    pub(crate) fn cancel_started_runtime_task_terminal_mutation(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        started: &StartedRuntimeTaskExecution,
+        reason: &str,
+    ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowSchedulerTaskOrchestratorError> {
+        let cancel_transition = terminal_failure_transition_from_running(
+            &started.running_record,
+            runtime_cancellation_diagnostic(reason),
+        )?;
+        let mutation = store
+            .cancel_active_run_scheduler_task_attempt(
+                session_id,
+                workflow_run_id,
+                &started.attempt_id,
+                cancel_transition,
             )
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
         self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
@@ -1808,6 +1863,8 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     NonRuntimeTaskAdapter(WorkflowSchedulerNonRuntimeTaskAdapterError),
     #[error("runtime task supervisor join failed: {message}")]
     RuntimeTaskSupervisorJoin { message: String },
+    #[error("runtime task supervisor cancelled: {message}")]
+    RuntimeTaskSupervisorCancelled { message: String },
 }
 
 fn runtime_task_supervisor_join_error_message(error: tokio::task::JoinError) -> String {
@@ -2001,6 +2058,18 @@ fn runtime_dispatch_failure_diagnostic(
         message: format!("runtime scheduler task dispatch failed: {error}"),
         hint: Some(
             "Inspect runtime-host dispatch diagnostics and retry with a valid scheduler-selected runtime candidate."
+                .to_string(),
+        ),
+    }
+}
+
+fn runtime_cancellation_diagnostic(reason: &str) -> SchedulerTaskStateDiagnostic {
+    SchedulerTaskStateDiagnostic {
+        severity: SchedulerTaskStateDiagnosticSeverity::Info,
+        code: SchedulerTaskStateDiagnosticCode::TerminalFailure,
+        message: reason.to_string(),
+        hint: Some(
+            "Runtime task cancellation was observed by the workflow-service lifecycle owner."
                 .to_string(),
         ),
     }

@@ -25042,6 +25042,72 @@ Worker rules:
       store/orchestrator tests if return contracts change; `cargo check -p
       pantograph-workflow-service`; fmt check; `git diff --check`; and
       targeted no-fallback/no-legacy source search over touched files.
+  - 2026-06-05 Milestone 5c observed scheduler cancellation terminalization
+    source slice:
+    - Smallest vertical slice: terminalize only observed runtime supervisor
+      cancellation in workflow-service by applying the existing matching
+      scheduler cancel terminal mutation, releasing the selected reservation
+      through `WorkflowCancelled`, emitting `scheduler.task_attempt_lifecycle_changed`
+      with transition `Cancelled`, and returning `WorkflowServiceError::Cancelled`.
+      Cancellation request remains intent-only and is covered by regression
+      verification.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and these plan files. The existing store cancel mutation contract was
+      sufficient, so `store_task_results.rs` was not edited.
+    - No-fallback/no-legacy confirmation: the slice uses existing scheduler
+      attempt identity, active-run task state,
+      `cancel_active_run_scheduler_task_attempt`, terminal mutation release
+      intent, reservation lifecycle port, and diagnostics-ledger append helper.
+      It adds no graph-path or reduced-plan runtime execution, node-engine
+      runtime launch, Tauri/frontend policy, runtime adapter lifecycle policy,
+      Pumas fact changes, diagnostics-ledger schema/DTO changes, generated
+      files, lockfiles, saved workflow fixtures, or compatibility shims.
+    - Simplicity/complection confirmation: cancellation intent, lifecycle
+      owner shutdown, runtime supervisor observation, scheduler terminal
+      mutation, reservation release, and diagnostics emission remain distinct
+      responsibilities. Business logic remains backend-owned in
+      workflow-service; runtime adapters and Tauri/frontend do not infer or
+      own terminal cancellation.
+    - Implementation summary: runtime supervisor join errors are now split
+      into cancellation and non-cancellation cases. Cancellation joins flow
+      through a cancel terminal mutation, emit `Cancelled` attempt diagnostics
+      with selected runtime/reservation facts, apply a `WorkflowCancelled`
+      reservation lifecycle event outside the store lock, and cancel the
+      workflow run. Non-cancellation dispatch/supervisor failures continue to
+      terminally fail the attempt and release through the dispatch-failure
+      lifecycle path.
+    - Focused tests added/updated:
+      `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor` now
+      verifies lifecycle-owner shutdown drives a cancelled run, preserves the
+      runtime-host shutdown cancellation signal, releases the reservation with
+      `WorkflowCancelled`, and emits the cancelled scheduler attempt event with
+      runtime and reservation facts.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor --lib`
+      - `cargo test -p pantograph-workflow-service workflow_cancel_active_task_records_intent_without_terminal_mutation --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched
+        workflow-service files. Matches were existing legacy negative tests
+        and existing compatibility fixture fields only.
+    - Verification deviation: the first shutdown-test rerun failed because the
+      test service did not yet configure a diagnostics ledger for the new
+      assertion. The setup was corrected and the focused test passed.
+    - Discovered/deferred issue: the runtime-host execution contract still has
+      no explicit cancelled terminal response state, and current response
+      mapping rejects unsupported cancellation diagnostics. Cooperative
+      runtime-host cancellation response terminalization remains a later
+      re-plan if needed; this slice covers workflow-service supervisor
+      cancellation observation.
+    - Remaining follow-up: emit redispatch attempt lifecycle events, then add
+      projection/read-model fields only after emitted event ordering is proven.
 
 ### Traceability Links
 
