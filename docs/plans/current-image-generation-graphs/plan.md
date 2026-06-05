@@ -945,6 +945,39 @@ candidate diagnostic text only. Remaining lifecycle work: add projection/
 read-model fields now that started, terminal, cancelled, and redispatched
 event ordering has been proven.
 
+2026-06-05 diagnostics-ledger scheduler attempt timeline projection update:
+diagnostics-ledger now includes `scheduler.task_attempt_lifecycle_changed`
+events in the scheduler timeline projection drain and exposes typed nullable
+attempt fields on `SchedulerTimelineProjectionRecord`: scheduler task id,
+attempt id, execution class, lifecycle transition, start/end/duration timing,
+selected runtime/backend/device/network-node facts, and reservation id. The
+projection version was bumped and schema repair adds the columns for existing
+ledgers. Workflow-service remains a pass-through owner for the read model; its
+contract snapshot was updated to include the new nullable fields. Discovered
+issue fixed: the scheduler timeline record builder already understood task
+attempt events, but the drain query excluded them, so attempt events could not
+appear in the timeline read model. This slice adds no graph-path or
+reduced-plan launch behavior, node-engine runtime launch branch, Tauri/frontend
+policy, runtime adapter lifecycle ownership, Pumas fact change, lockfile,
+generated file, saved workflow fixture change, or compatibility shim.
+Verification passed: `cargo test -p pantograph-diagnostics-ledger
+scheduler_timeline_projection_exposes_scheduler_task_attempt_fields --lib`;
+`cargo test -p pantograph-diagnostics-ledger
+scheduler_timeline_projection_drains_events_incrementally --lib`; `cargo test
+-p pantograph-diagnostics-ledger current_schema_repairs_all_drifted_projection_tables
+--lib`; `cargo test -p pantograph-workflow-service
+workflow_scheduler_timeline_query_reads_refreshed_projection --lib`; `cargo
+test -p pantograph-workflow-service --test contract
+workflow_scheduler_timeline_query_contract_snapshot`; `cargo check -p
+pantograph-diagnostics-ledger`; `cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-diagnostics-ledger -p pantograph-workflow-service
+-- --check`; `git diff --check`; and targeted no-fallback/no-legacy source
+search. Search matches were pre-existing compatibility/legacy terminology,
+schema compatibility helpers, and legacy negative tests only. Remaining
+follow-up: consume these typed scheduler attempt facts from frontend/UI or
+operator diagnostics views only through the backend-owned scheduler timeline
+read model when that display slice is scheduled.
+
 ## Standards Rule
 
 The standards constraints in

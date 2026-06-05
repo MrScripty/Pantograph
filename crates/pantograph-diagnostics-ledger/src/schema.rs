@@ -454,6 +454,20 @@ fn apply_scheduler_timeline_projection_schema(
             error_severity TEXT,
             error_phase TEXT,
             related_event_ids_json TEXT,
+            scheduler_task_id TEXT,
+            scheduler_attempt_id TEXT,
+            scheduler_attempt_execution_class TEXT,
+            scheduler_attempt_transition TEXT,
+            scheduler_attempt_started_at_ms INTEGER,
+            scheduler_attempt_ended_at_ms INTEGER,
+            scheduler_attempt_duration_ms INTEGER,
+            scheduler_attempt_runtime_id TEXT,
+            scheduler_attempt_runtime_variant_id TEXT,
+            scheduler_attempt_backend_key TEXT,
+            scheduler_attempt_device_class TEXT,
+            scheduler_attempt_device_id TEXT,
+            scheduler_attempt_network_node_id TEXT,
+            scheduler_attempt_reservation_id TEXT,
             payload_json TEXT NOT NULL
         );
         "#,
@@ -511,6 +525,90 @@ fn ensure_scheduler_timeline_projection_columns(
         tx,
         "scheduler_timeline_projection",
         "related_event_ids_json",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_task_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_execution_class",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_transition",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_started_at_ms",
+        "INTEGER",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_ended_at_ms",
+        "INTEGER",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_duration_ms",
+        "INTEGER",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_runtime_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_runtime_variant_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_backend_key",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_device_class",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_device_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_network_node_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_attempt_reservation_id",
         "TEXT",
     )?;
     Ok(())

@@ -17,7 +17,8 @@ use crate::event::{
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus, RunMemoryFailureKind,
     SchedulerModelCacheState, SchedulerQueueControlAction, SchedulerQueueControlActorScope,
-    SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
+    SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTaskAttemptExecutionClass,
+    SchedulerTaskAttemptLifecycleTransition, SchedulerTimelineProjectionQuery,
     SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
     IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
     LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
@@ -385,6 +386,7 @@ pub(super) fn drain_scheduler_timeline_projection(
                     'scheduler.model_lifecycle_changed',
                     'scheduler.run_admitted',
                     'scheduler.reservation_changed',
+                    'scheduler.task_attempt_lifecycle_changed',
                     'run.started',
                     'run.terminal',
                     'run.snapshot_accepted',
@@ -435,6 +437,13 @@ pub(super) fn query_scheduler_timeline_projection(
                 recorded_at_ms, workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, scheduler_policy_id, retention_policy_id,
                 summary, detail, error_severity, error_phase, related_event_ids_json,
+                scheduler_task_id, scheduler_attempt_id, scheduler_attempt_execution_class,
+                scheduler_attempt_transition, scheduler_attempt_started_at_ms,
+                scheduler_attempt_ended_at_ms, scheduler_attempt_duration_ms,
+                scheduler_attempt_runtime_id, scheduler_attempt_runtime_variant_id,
+                scheduler_attempt_backend_key, scheduler_attempt_device_class,
+                scheduler_attempt_device_id, scheduler_attempt_network_node_id,
+                scheduler_attempt_reservation_id,
                 payload_json
          FROM scheduler_timeline_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
@@ -1470,6 +1479,7 @@ fn scheduler_timeline_record_from_event(
 ) -> Result<Option<SchedulerTimelineProjectionRecord>, DiagnosticsLedgerError> {
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
     let error_fields = scheduler_timeline_error_fields(&payload);
+    let attempt_fields = scheduler_timeline_attempt_fields(&payload);
     let (summary, detail) = match payload {
         DiagnosticEventPayload::SchedulerEstimateProduced(payload) => {
             let mut details = Vec::new();
@@ -1845,8 +1855,80 @@ fn scheduler_timeline_record_from_event(
         error_severity: error_fields.error_severity,
         error_phase: error_fields.error_phase,
         related_event_ids: error_fields.related_event_ids,
+        scheduler_task_id: attempt_fields.scheduler_task_id,
+        scheduler_attempt_id: attempt_fields.scheduler_attempt_id,
+        scheduler_attempt_execution_class: attempt_fields.scheduler_attempt_execution_class,
+        scheduler_attempt_transition: attempt_fields.scheduler_attempt_transition,
+        scheduler_attempt_started_at_ms: attempt_fields.scheduler_attempt_started_at_ms,
+        scheduler_attempt_ended_at_ms: attempt_fields.scheduler_attempt_ended_at_ms,
+        scheduler_attempt_duration_ms: attempt_fields.scheduler_attempt_duration_ms,
+        scheduler_attempt_runtime_id: attempt_fields.scheduler_attempt_runtime_id,
+        scheduler_attempt_runtime_variant_id: attempt_fields.scheduler_attempt_runtime_variant_id,
+        scheduler_attempt_backend_key: attempt_fields.scheduler_attempt_backend_key,
+        scheduler_attempt_device_class: attempt_fields.scheduler_attempt_device_class,
+        scheduler_attempt_device_id: attempt_fields.scheduler_attempt_device_id,
+        scheduler_attempt_network_node_id: attempt_fields.scheduler_attempt_network_node_id,
+        scheduler_attempt_reservation_id: attempt_fields.scheduler_attempt_reservation_id,
         payload_json: event.payload_json.clone(),
     }))
+}
+
+struct SchedulerTimelineAttemptFields {
+    scheduler_task_id: Option<String>,
+    scheduler_attempt_id: Option<String>,
+    scheduler_attempt_execution_class: Option<SchedulerTaskAttemptExecutionClass>,
+    scheduler_attempt_transition: Option<SchedulerTaskAttemptLifecycleTransition>,
+    scheduler_attempt_started_at_ms: Option<i64>,
+    scheduler_attempt_ended_at_ms: Option<i64>,
+    scheduler_attempt_duration_ms: Option<u64>,
+    scheduler_attempt_runtime_id: Option<String>,
+    scheduler_attempt_runtime_variant_id: Option<String>,
+    scheduler_attempt_backend_key: Option<String>,
+    scheduler_attempt_device_class: Option<String>,
+    scheduler_attempt_device_id: Option<String>,
+    scheduler_attempt_network_node_id: Option<String>,
+    scheduler_attempt_reservation_id: Option<String>,
+}
+
+fn scheduler_timeline_attempt_fields(
+    payload: &DiagnosticEventPayload,
+) -> SchedulerTimelineAttemptFields {
+    match payload {
+        DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) => {
+            SchedulerTimelineAttemptFields {
+                scheduler_task_id: Some(payload.scheduler_task_id.clone()),
+                scheduler_attempt_id: Some(payload.scheduler_attempt_id.clone()),
+                scheduler_attempt_execution_class: Some(payload.execution_class),
+                scheduler_attempt_transition: Some(payload.transition),
+                scheduler_attempt_started_at_ms: payload.started_at_ms,
+                scheduler_attempt_ended_at_ms: payload.ended_at_ms,
+                scheduler_attempt_duration_ms: payload.duration_ms,
+                scheduler_attempt_runtime_id: payload.selected_runtime_id.clone(),
+                scheduler_attempt_runtime_variant_id: payload.selected_runtime_variant_id.clone(),
+                scheduler_attempt_backend_key: payload.selected_backend_key.clone(),
+                scheduler_attempt_device_class: payload.selected_device_class.clone(),
+                scheduler_attempt_device_id: payload.selected_device_id.clone(),
+                scheduler_attempt_network_node_id: payload.selected_network_node_id.clone(),
+                scheduler_attempt_reservation_id: payload.reservation_id.clone(),
+            }
+        }
+        _ => SchedulerTimelineAttemptFields {
+            scheduler_task_id: None,
+            scheduler_attempt_id: None,
+            scheduler_attempt_execution_class: None,
+            scheduler_attempt_transition: None,
+            scheduler_attempt_started_at_ms: None,
+            scheduler_attempt_ended_at_ms: None,
+            scheduler_attempt_duration_ms: None,
+            scheduler_attempt_runtime_id: None,
+            scheduler_attempt_runtime_variant_id: None,
+            scheduler_attempt_backend_key: None,
+            scheduler_attempt_device_class: None,
+            scheduler_attempt_device_id: None,
+            scheduler_attempt_network_node_id: None,
+            scheduler_attempt_reservation_id: None,
+        },
+    }
 }
 
 fn inference_option_support_timeline_detail(
@@ -3580,9 +3662,17 @@ fn insert_scheduler_timeline_projection(
              recorded_at_ms, workflow_run_id, workflow_id, workflow_version_id,
              workflow_semantic_version, scheduler_policy_id, retention_policy_id,
              summary, detail, error_severity, error_phase, related_event_ids_json,
+             scheduler_task_id, scheduler_attempt_id, scheduler_attempt_execution_class,
+             scheduler_attempt_transition, scheduler_attempt_started_at_ms,
+             scheduler_attempt_ended_at_ms, scheduler_attempt_duration_ms,
+             scheduler_attempt_runtime_id, scheduler_attempt_runtime_variant_id,
+             scheduler_attempt_backend_key, scheduler_attempt_device_class,
+             scheduler_attempt_device_id, scheduler_attempt_network_node_id,
+             scheduler_attempt_reservation_id,
              payload_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18)",
+             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27,
+             ?28, ?29, ?30, ?31, ?32)",
         params![
             record.event_seq,
             record.event_id.as_str(),
@@ -3604,6 +3694,24 @@ fn insert_scheduler_timeline_projection(
             record.error_severity.map(DiagnosticErrorSeverity::as_db),
             record.error_phase.as_deref(),
             serde_json::to_string(&record.related_event_ids)?,
+            record.scheduler_task_id.as_deref(),
+            record.scheduler_attempt_id.as_deref(),
+            record
+                .scheduler_attempt_execution_class
+                .map(SchedulerTaskAttemptExecutionClass::as_db),
+            record
+                .scheduler_attempt_transition
+                .map(SchedulerTaskAttemptLifecycleTransition::as_db),
+            record.scheduler_attempt_started_at_ms,
+            record.scheduler_attempt_ended_at_ms,
+            record.scheduler_attempt_duration_ms,
+            record.scheduler_attempt_runtime_id.as_deref(),
+            record.scheduler_attempt_runtime_variant_id.as_deref(),
+            record.scheduler_attempt_backend_key.as_deref(),
+            record.scheduler_attempt_device_class.as_deref(),
+            record.scheduler_attempt_device_id.as_deref(),
+            record.scheduler_attempt_network_node_id.as_deref(),
+            record.scheduler_attempt_reservation_id.as_deref(),
             record.payload_json.as_str(),
         ],
     )?;
@@ -3729,7 +3837,29 @@ fn scheduler_timeline_projection_from_row(
             .map(|value| serde_json::from_str(&value).map_err(sqlite_conversion_error))
             .transpose()?
             .unwrap_or_default(),
-        payload_json: row.get(17)?,
+        scheduler_task_id: row.get(17)?,
+        scheduler_attempt_id: row.get(18)?,
+        scheduler_attempt_execution_class: row
+            .get::<_, Option<String>>(19)?
+            .map(|value| SchedulerTaskAttemptExecutionClass::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        scheduler_attempt_transition: row
+            .get::<_, Option<String>>(20)?
+            .map(|value| SchedulerTaskAttemptLifecycleTransition::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        scheduler_attempt_started_at_ms: row.get(21)?,
+        scheduler_attempt_ended_at_ms: row.get(22)?,
+        scheduler_attempt_duration_ms: row.get(23)?,
+        scheduler_attempt_runtime_id: row.get(24)?,
+        scheduler_attempt_runtime_variant_id: row.get(25)?,
+        scheduler_attempt_backend_key: row.get(26)?,
+        scheduler_attempt_device_class: row.get(27)?,
+        scheduler_attempt_device_id: row.get(28)?,
+        scheduler_attempt_network_node_id: row.get(29)?,
+        scheduler_attempt_reservation_id: row.get(30)?,
+        payload_json: row.get(31)?,
     })
 }
 

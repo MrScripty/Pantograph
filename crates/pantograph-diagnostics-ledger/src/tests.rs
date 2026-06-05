@@ -1536,6 +1536,86 @@ fn scheduler_timeline_projection_includes_inference_execution_diagnostics() {
 }
 
 #[test]
+fn scheduler_timeline_projection_exposes_scheduler_task_attempt_fields() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let event = ledger
+        .append_diagnostic_event(sample_scheduler_task_attempt_event(
+            "workflow_run_alpha",
+            SchedulerTaskAttemptLifecycleTransition::Completed,
+        ))
+        .expect("scheduler task attempt event appends");
+
+    let state = ledger
+        .drain_scheduler_timeline_projection(20)
+        .expect("scheduler timeline projection drains");
+    assert_eq!(state.last_applied_event_seq, event.event_seq);
+
+    let timeline = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            ..SchedulerTimelineProjectionQuery::default()
+        })
+        .expect("scheduler timeline projection loads");
+
+    assert_eq!(timeline.len(), 1);
+    let record = &timeline[0];
+    assert_eq!(
+        record.event_kind,
+        DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+    );
+    assert_eq!(record.summary, "task attempt completed");
+    assert_eq!(
+        record.scheduler_task_id.as_deref(),
+        Some("task_runtime_image_alpha")
+    );
+    assert_eq!(
+        record.scheduler_attempt_id.as_deref(),
+        Some("attempt_runtime_image_alpha_001")
+    );
+    assert_eq!(
+        record.scheduler_attempt_execution_class,
+        Some(SchedulerTaskAttemptExecutionClass::Runtime)
+    );
+    assert_eq!(
+        record.scheduler_attempt_transition,
+        Some(SchedulerTaskAttemptLifecycleTransition::Completed)
+    );
+    assert_eq!(record.scheduler_attempt_started_at_ms, Some(1_100));
+    assert_eq!(record.scheduler_attempt_ended_at_ms, Some(1_350));
+    assert_eq!(record.scheduler_attempt_duration_ms, Some(250));
+    assert_eq!(
+        record.scheduler_attempt_runtime_id.as_deref(),
+        Some("pytorch")
+    );
+    assert_eq!(
+        record.scheduler_attempt_runtime_variant_id.as_deref(),
+        Some("pytorch.cuda")
+    );
+    assert_eq!(
+        record.scheduler_attempt_backend_key.as_deref(),
+        Some("pytorch")
+    );
+    assert_eq!(
+        record.scheduler_attempt_device_class.as_deref(),
+        Some("cuda")
+    );
+    assert_eq!(
+        record.scheduler_attempt_device_id.as_deref(),
+        Some("cuda:0")
+    );
+    assert_eq!(
+        record.scheduler_attempt_network_node_id.as_deref(),
+        Some("local-node-alpha")
+    );
+    assert_eq!(
+        record.scheduler_attempt_reservation_id.as_deref(),
+        Some("reservation_runtime_image_alpha")
+    );
+}
+
+#[test]
 fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

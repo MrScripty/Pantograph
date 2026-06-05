@@ -25164,6 +25164,68 @@ Worker rules:
         candidate diagnostic text only.
     - Remaining follow-up: add projection/read-model fields now that started,
       terminal, cancelled, and redispatched event ordering has been proven.
+  - 2026-06-05 Milestone 5c diagnostics-ledger scheduler attempt timeline
+    projection slice:
+    - Smallest vertical slice: project the already-emitted
+      `scheduler.task_attempt_lifecycle_changed` events into the backend-owned
+      scheduler timeline read model and expose typed nullable attempt fields,
+      without changing scheduler lifecycle policy or moving business logic into
+      workflow-service pass-through, Tauri/frontend, runtime adapters, or
+      Pumas.
+    - Allowed write set used:
+      `crates/pantograph-diagnostics-ledger/src/event.rs`,
+      `crates/pantograph-diagnostics-ledger/src/schema.rs`,
+      `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+      `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+      `crates/pantograph-workflow-service/tests/contract.rs`, and these plan
+      files.
+    - No-fallback/no-legacy confirmation: the slice rebuilds the read model
+      from append-only diagnostics events, uses typed enum parsing for the new
+      fields, and preserves existing schema repair mechanics. It adds no
+      graph-path or reduced-plan runtime execution, node-engine runtime
+      launch, Tauri/frontend policy, runtime adapter lifecycle policy, Pumas
+      fact changes, generated files, lockfiles, saved workflow fixtures, or
+      compatibility shims.
+    - Simplicity/complection confirmation: diagnostics-ledger owns projection
+      storage and typed read-model fields; workflow-service only exposes the
+      existing read model contract; scheduler lifecycle policy remains in
+      workflow-service producers; UI/runtime/Pumas do not infer attempt state.
+    - Implementation summary: scheduler timeline projection version advanced
+      to include nullable scheduler task id, attempt id, execution class,
+      lifecycle transition, start/end/duration timing, selected
+      runtime/backend/device/network-node facts, and reservation id.
+      `scheduler.task_attempt_lifecycle_changed` was added to the scheduler
+      timeline drain query, projection inserts/queries now persist the typed
+      facts, and schema repair adds the columns to drifted existing ledgers.
+      The workflow-service contract snapshot includes the new nullable fields
+      for non-attempt timeline records.
+    - Focused tests added/updated:
+      `scheduler_timeline_projection_exposes_scheduler_task_attempt_fields`
+      verifies a completed runtime task-attempt event appears in the timeline
+      and exposes all typed attempt/timing/runtime/reservation fields.
+      `workflow_scheduler_timeline_query_contract_snapshot` was updated for
+      the expanded public record shape.
+    - Verification passed:
+      - `cargo test -p pantograph-diagnostics-ledger scheduler_timeline_projection_exposes_scheduler_task_attempt_fields --lib`
+      - `cargo test -p pantograph-diagnostics-ledger scheduler_timeline_projection_drains_events_incrementally --lib`
+      - `cargo test -p pantograph-diagnostics-ledger current_schema_repairs_all_drifted_projection_tables --lib`
+      - `cargo test -p pantograph-workflow-service workflow_scheduler_timeline_query_reads_refreshed_projection --lib`
+      - `cargo test -p pantograph-workflow-service --test contract workflow_scheduler_timeline_query_contract_snapshot`
+      - `cargo check -p pantograph-diagnostics-ledger`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-diagnostics-ledger -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched source and
+        test files. Matches were pre-existing compatibility/legacy
+        terminology, schema compatibility helpers, and legacy negative tests
+        only.
+    - Discovered issue fixed: the scheduler timeline record builder already
+      handled scheduler task-attempt events, but the scheduler timeline drain
+      query did not include `scheduler.task_attempt_lifecycle_changed`, so
+      emitted attempt events could not populate the timeline read model.
+    - Remaining follow-up: consume these typed attempt facts from frontend/UI
+      or operator diagnostics views only through the backend-owned scheduler
+      timeline read model when that display slice is scheduled.
 
 ### Traceability Links
 

@@ -9,7 +9,7 @@ use crate::DiagnosticsLedgerError;
 pub const DIAGNOSTIC_EVENT_SCHEMA_VERSION: i64 = 1;
 pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
-pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 4;
+pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 5;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
 pub const RUN_LIST_PROJECTION_VERSION: i64 = 10;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
@@ -770,6 +770,25 @@ pub enum SchedulerTaskAttemptExecutionClass {
     NonRuntimeNodeEngine,
 }
 
+impl SchedulerTaskAttemptExecutionClass {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Runtime => "runtime",
+            Self::NonRuntimeNodeEngine => "non_runtime_node_engine",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "runtime" => Ok(Self::Runtime),
+            "non_runtime_node_engine" => Ok(Self::NonRuntimeNodeEngine),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "scheduler_attempt_execution_class",
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SchedulerTaskAttemptLifecycleTransition {
@@ -781,6 +800,29 @@ pub enum SchedulerTaskAttemptLifecycleTransition {
 }
 
 impl SchedulerTaskAttemptLifecycleTransition {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Started => "started",
+            Self::Redispatched => "redispatched",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "started" => Ok(Self::Started),
+            "redispatched" => Ok(Self::Redispatched),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "scheduler_attempt_transition",
+            }),
+        }
+    }
+
     fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
@@ -2682,6 +2724,20 @@ pub struct SchedulerTimelineProjectionRecord {
     pub error_severity: Option<DiagnosticErrorSeverity>,
     pub error_phase: Option<String>,
     pub related_event_ids: Vec<String>,
+    pub scheduler_task_id: Option<String>,
+    pub scheduler_attempt_id: Option<String>,
+    pub scheduler_attempt_execution_class: Option<SchedulerTaskAttemptExecutionClass>,
+    pub scheduler_attempt_transition: Option<SchedulerTaskAttemptLifecycleTransition>,
+    pub scheduler_attempt_started_at_ms: Option<i64>,
+    pub scheduler_attempt_ended_at_ms: Option<i64>,
+    pub scheduler_attempt_duration_ms: Option<u64>,
+    pub scheduler_attempt_runtime_id: Option<String>,
+    pub scheduler_attempt_runtime_variant_id: Option<String>,
+    pub scheduler_attempt_backend_key: Option<String>,
+    pub scheduler_attempt_device_class: Option<String>,
+    pub scheduler_attempt_device_id: Option<String>,
+    pub scheduler_attempt_network_node_id: Option<String>,
+    pub scheduler_attempt_reservation_id: Option<String>,
     pub payload_json: String,
 }
 
