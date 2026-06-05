@@ -2107,8 +2107,16 @@ and canonical workflows/fixtures should use `pumas_model_ref`.
   `crates/workflow-nodes/src/input/puma_lib.rs` are not compiled under the
   default `workflow-nodes --lib` target; `cargo test -p workflow-nodes --lib
   -- --list` currently exposes only the puma-lib descriptor/run tests.
-  Remaining follow-up: `unload-model` still exposes a graph-facing `model_ref`
-  input in `crates/workflow-nodes/src/processing/unload_model.rs`; remove or
-  retire that port in a separate descriptor slice because runtime lifecycle is
-  scheduler/runtime-host-owned and the node is already host-specific/fail-
-  closed.
+  Remaining follow-up resolved in the next descriptor slice.
+- 2026-06-05 `unload-model` descriptor model-ref cleanup slice completed.
+  Smallest useful vertical slice: remove the graph-facing `model_ref` input
+  from the `unload-model` workflow-node descriptor. Implementation updates the
+  descriptor to expose only the trigger input and updates the module docs/tests
+  to state runtime lifecycle is scheduler/runtime-host-owned, not selected by
+  graph model reference ports. No-fallback/no-legacy result: the node remains
+  fail-closed if executed and no replacement graph lifecycle command,
+  compatibility alias, Tauri/frontend policy, or runtime launch input was
+  added. Verification passed: `cargo test -p workflow-nodes unload_model
+  --lib`; `cargo fmt -p workflow-nodes -- --check`; `cargo check -p
+  workflow-nodes`; strict search for `model_ref` input/port references in
+  `crates/workflow-nodes/src/processing/unload_model.rs`.

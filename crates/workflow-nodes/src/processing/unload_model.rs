@@ -6,10 +6,9 @@
 //!
 //! # Usage
 //!
-//! Connect the `model_ref` input to an inference node's `model_ref`
-//! output to identify which engine and model to unload. Connect the
-//! `trigger` input to any upstream node's output — the unload will
-//! execute only after that node completes (pull-based dependency).
+//! Connect the `trigger` input to any upstream node's output. Runtime lifecycle
+//! operations are scheduler/runtime-host owned and are not selected through
+//! graph model reference ports.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -17,7 +16,6 @@ use node_engine::{
     ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata,
 };
 
-const PORT_MODEL_REF: &str = "model_ref";
 const PORT_TRIGGER: &str = "trigger";
 const PORT_STATUS: &str = "status";
 const PORT_TRIGGER_PASSTHROUGH: &str = "trigger_passthrough";
@@ -47,10 +45,11 @@ impl TaskDescriptor for UnloadModelTask {
             category: NodeCategory::Processing,
             label: "Unload Model".to_string(),
             description: "Unloads a model from an inference engine when triggered".to_string(),
-            inputs: vec![
-                PortMetadata::required(PORT_MODEL_REF, "Model Reference", PortDataType::Json),
-                PortMetadata::required(PORT_TRIGGER, "Trigger", PortDataType::Any),
-            ],
+            inputs: vec![PortMetadata::required(
+                PORT_TRIGGER,
+                "Trigger",
+                PortDataType::Any,
+            )],
             outputs: vec![
                 PortMetadata::optional(PORT_STATUS, "Status", PortDataType::String),
                 PortMetadata::optional(PORT_TRIGGER_PASSTHROUGH, "Trigger Data", PortDataType::Any),
@@ -89,9 +88,8 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = UnloadModelTask::descriptor();
 
-        // 2 inputs: model_ref, trigger
-        assert_eq!(meta.inputs.len(), 2);
-        assert!(meta.inputs.iter().any(|p| p.id == "model_ref"));
+        assert_eq!(meta.inputs.len(), 1);
+        assert!(meta.inputs.iter().all(|p| p.id != "model_ref"));
         assert!(meta.inputs.iter().any(|p| p.id == "trigger"));
 
         // 2 outputs: status, trigger_passthrough

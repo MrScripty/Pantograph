@@ -25514,6 +25514,26 @@ Worker rules:
       Because runtime lifecycle is scheduler/runtime-host-owned and the node is
       already host-specific/fail-closed, remove or retire that port in a
       separate descriptor slice with focused workflow-node contract tests.
+  - 2026-06-05 Milestone 5b `unload-model` descriptor model-ref cleanup slice:
+    - Smallest vertical slice: remove the graph-facing `model_ref` input from
+      the `unload-model` workflow-node descriptor.
+    - Allowed write set used:
+      `crates/workflow-nodes/src/processing/unload_model.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: runtime lifecycle remains
+      scheduler/runtime-host-owned and is not selected through a graph model
+      reference port. The node still fails closed if executed; the change does
+      not add a replacement graph lifecycle command, compatibility alias,
+      Tauri/frontend policy, or runtime launch input.
+    - Focused tests updated: `unload-model` descriptor tests now assert the
+      node has only the trigger input and no `model_ref` input.
+    - Verification passed:
+      - `cargo test -p workflow-nodes unload_model --lib`
+      - `cargo fmt -p workflow-nodes -- --check`
+      - `cargo check -p workflow-nodes`
+      - strict search for `model_ref` input/port references in
+        `crates/workflow-nodes/src/processing/unload_model.rs`
 
 ### Traceability Links
 
