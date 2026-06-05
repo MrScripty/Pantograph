@@ -25586,6 +25586,35 @@ Worker rules:
       - `cargo check -p node-engine --features inference-nodes`
       - strict production search for direct `inputs.get("model_ref")` aliases
         in `core_executor.rs` and `core_executor/inference_nodes.rs`
+  - 2026-06-05 Milestone 5b embedded-runtime Python metadata `model_ref`
+    cleanup slice:
+    - Smallest vertical slice: remove retired Python task-executor metadata
+      reads of `model_ref.dependencyBindings` and `model_ref.engine`.
+    - Allowed write set used:
+      `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor/python_execution.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests/input_helpers.rs`,
+      `crates/pantograph-embedded-runtime/src/task_executor_tests/recorder_stream.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the fail-closed Python task-executor
+      path no longer uses retired `model_ref` payloads to choose dependency
+      env ids or runtime backend ids. Environment ids come only from explicit
+      `environment_ref`, and backend ids come from node-type defaults. No
+      runtime launch path, model-ref compatibility shim, Tauri policy, or
+      frontend inference path was added.
+    - Focused tests updated: runtime env-id collection ignores
+      `model_ref.dependencyBindings`, and Python runtime backend selection
+      ignores `model_ref.engine`.
+    - Verification passed:
+      - `cargo test -p pantograph-embedded-runtime python_runtime_backend_id_ignores_retired_model_ref_engine --lib`
+      - `cargo test -p pantograph-embedded-runtime collect_runtime_env_ids_includes_environment_ref --lib`
+      - `cargo test -p pantograph-embedded-runtime task_executor::tests::input_helpers --lib`
+      - `cargo test -p pantograph-embedded-runtime task_executor::tests::recorder_stream --lib`
+      - `cargo fmt -p pantograph-embedded-runtime -- --check`
+      - `cargo check -p pantograph-embedded-runtime`
+      - strict production search for removed Python task-executor
+        `model_ref` reads and the now-deleted backend-key helper
 
 ### Traceability Links
 

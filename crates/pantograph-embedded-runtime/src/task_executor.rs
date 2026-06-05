@@ -13,7 +13,6 @@ use node_engine::{
     core_executor::resolve_node_type, Context, EventSink, ExecutorExtensions, NodeEngineError,
     Result, TaskExecutor, WorkflowEvent,
 };
-use pantograph_runtime_identity::canonical_engine_backend_key;
 
 use crate::python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
@@ -65,10 +64,6 @@ impl TauriTaskExecutor {
     const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
     const FNV64_PRIME: u64 = 0x0000_0100_0000_01B3;
     const PYTHON_RUNTIME_FAILURE_THRESHOLD: u32 = 3;
-
-    fn canonical_backend_key(value: Option<&str>) -> Option<String> {
-        canonical_engine_backend_key(value)
-    }
 
     /// Create a new task executor with the default process Python runtime.
     pub fn new(rag_backend: Option<Arc<dyn RagBackend>>) -> Self {

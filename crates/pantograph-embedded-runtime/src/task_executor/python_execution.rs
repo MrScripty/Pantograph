@@ -1,35 +1,6 @@
 use super::*;
 
 impl TauriTaskExecutor {
-    pub(super) fn collect_model_ref_env_ids(
-        inputs: &HashMap<String, serde_json::Value>,
-    ) -> Vec<String> {
-        let model_ref = inputs.get("model_ref");
-        let Some(bindings) = model_ref
-            .and_then(|v| v.get("dependencyBindings"))
-            .and_then(|v| v.as_array())
-        else {
-            return Vec::new();
-        };
-
-        let mut out = Vec::new();
-        for binding in bindings {
-            let env_id = binding
-                .get("envId")
-                .and_then(|v| v.as_str())
-                .or_else(|| binding.get("env_id").and_then(|v| v.as_str()));
-            if let Some(env_id) = env_id {
-                let trimmed = env_id.trim();
-                if !trimmed.is_empty() {
-                    out.push(trimmed.to_string());
-                }
-            }
-        }
-        out.sort();
-        out.dedup();
-        out
-    }
-
     pub(super) fn collect_environment_ref_env_ids(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Vec<String> {
@@ -73,8 +44,7 @@ impl TauriTaskExecutor {
     pub(super) fn collect_runtime_env_ids(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Vec<String> {
-        let mut out = Self::collect_model_ref_env_ids(inputs);
-        out.extend(Self::collect_environment_ref_env_ids(inputs));
+        let mut out = Self::collect_environment_ref_env_ids(inputs);
         out.sort();
         out.dedup();
         out
@@ -92,17 +62,8 @@ impl TauriTaskExecutor {
 
     pub(super) fn python_runtime_backend_id(
         node_type: &str,
-        inputs: &HashMap<String, serde_json::Value>,
+        _inputs: &HashMap<String, serde_json::Value>,
     ) -> String {
-        if let Some(engine) = inputs
-            .get("model_ref")
-            .and_then(|value| value.get("engine"))
-            .and_then(|value| value.as_str())
-            .and_then(|value| Self::canonical_backend_key(Some(value)))
-        {
-            return engine;
-        }
-
         match node_type {
             "onnx-inference" => "onnx-runtime".to_string(),
             "audio-generation" => "stable_audio".to_string(),

@@ -35,7 +35,7 @@ async fn python_runtime_recorder_is_not_used_after_retired_preflight_blocks() {
 }
 
 #[test]
-fn python_runtime_backend_id_uses_model_ref_engine_before_node_default() {
+fn python_runtime_backend_id_ignores_retired_model_ref_engine() {
     let inputs = HashMap::from([
         ("backend_key".to_string(), serde_json::json!("pytorch")),
         (
@@ -53,7 +53,7 @@ fn python_runtime_backend_id_uses_model_ref_engine_before_node_default() {
 
     assert_eq!(
         TauriTaskExecutor::python_runtime_backend_id("audio-generation", &inputs),
-        "onnx-runtime"
+        "stable_audio"
     );
 }
 

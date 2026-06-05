@@ -99,11 +99,7 @@ fn collect_runtime_env_ids_includes_environment_ref() {
     let env_ids = TauriTaskExecutor::collect_runtime_env_ids(&inputs);
     assert_eq!(
         env_ids,
-        vec![
-            "env:extra".to_string(),
-            "env:primary".to_string(),
-            "env:secondary".to_string(),
-        ]
+        vec!["env:extra".to_string(), "env:primary".to_string()]
     );
 }
 
