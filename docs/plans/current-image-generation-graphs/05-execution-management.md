@@ -24729,21 +24729,32 @@ Worker rules:
   - 2026-06-04 Milestone 5c diagnostics-ledger attempt/timing re-plan
     decision:
     - Selected path: Option 1. Add the diagnostics-ledger scheduler
-      task-attempt event contract first, then wire workflow-service emission
-      and projections in later validated slices.
+      task-attempt event contract first, with the minimal workflow-service
+      consumer compile adaptation needed for the shared public payload enum,
+      then wire workflow-service emission and projections in later validated
+      slices.
     - Standards alignment: `pantograph-diagnostics-ledger` owns the shared
       event DTO/schema and validation; `pantograph-workflow-service` remains
       the scheduler task lifecycle owner and must only emit the frozen
       contract after the ledger shape is validated. This follows the
       simplicity/complection rule by separating DTO/schema shape from
-      lifecycle policy and persistence contract from producer wiring.
+      lifecycle policy and persistence contract from producer wiring. The
+      follow-up re-plan adjustment permits the direct consumer compile
+      adaptation because shared contract changes must keep existing
+      downstream matches exhaustive without moving business logic into the
+      consumer.
     - Next source slice allowed write set: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+      `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+      `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
       focused diagnostics-ledger tests, diagnostics-ledger README/module docs
-      if the public contract text changes, and these plan files. Do not edit
-      workflow-service, projection refresh logic, sqlite schema/storage,
-      generated files, lockfiles, saved workflow fixtures, Tauri/frontend
-      files, Pumas files, or runtime-host code in that slice unless a new
-      re-plan explicitly expands scope.
+      if the public contract text changes,
+      `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`
+      only for classifying the new payload in the existing projection-refresh
+      match, and these plan files. Do not edit workflow-service event
+      producers, scheduler lifecycle policy, sqlite schema/storage, generated
+      files, lockfiles, saved workflow fixtures, Tauri/frontend files, Pumas
+      files, or runtime-host code in that slice unless a new re-plan
+      explicitly expands scope.
     - Required event contract shape: scheduler task id, scheduler attempt id,
       execution class, lifecycle transition, started/ended/duration timing
       fields where applicable, and optional runtime/reservation facts such as
@@ -24753,10 +24764,11 @@ Worker rules:
       scheduler task attempts. It is run/node timing-history data with legacy
       graph fingerprint semantics and lacks scheduler task-attempt identity,
       lifecycle transitions, redispatch, and reservation facts.
-    - Follow-up order after the contract slice: wire workflow-service
-      start/terminal/cancel/redispatch emission through the existing
-      diagnostics-ledger append helper, then add projection/read-model support
-      only after emitted event ordering is proven.
+    - Follow-up order after the contract and consumer compile-adaptation
+      slice: wire workflow-service start/terminal/cancel/redispatch emission
+      through the existing diagnostics-ledger append helper, then add
+      projection/read-model support only after emitted event ordering is
+      proven.
 
 ### Traceability Links
 

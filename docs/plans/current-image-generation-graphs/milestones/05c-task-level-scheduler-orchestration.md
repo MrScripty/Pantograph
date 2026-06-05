@@ -2186,6 +2186,10 @@ durable task orchestration path.
   started/ended/duration timing fields where applicable, and optional
   runtime/reservation facts. Do not reuse `WorkflowTimingObservation` for this
   contract because it is run/node timing-history data and does not own
-  scheduler attempt lifecycle identity. Workflow-service event emission,
-  projection refresh, and query/read-model behavior remain later slices after
-  the ledger-owned contract is frozen.
+  scheduler attempt lifecycle identity. 2026-06-04 follow-up adjustment:
+  because the payload enum is a shared public contract, the same slice may
+  update `workflow/diagnostics_api.rs` only to classify the new payload in the
+  existing projection-refresh match so workflow-service remains compilable.
+  Workflow-service event emission, scheduler lifecycle producer wiring, and
+  query/read-model behavior remain later slices after the ledger-owned
+  contract and consumer compile adaptation are frozen.

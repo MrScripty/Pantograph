@@ -771,12 +771,19 @@ service emits any events. The contract must represent scheduler task id,
 attempt id, execution class, lifecycle transition, timing fields, and optional
 runtime/reservation facts without reusing `WorkflowTimingObservation`, because
 that existing type is run/node timing history and does not own scheduler
-attempt lifecycle identity. Workflow-service emission, projection refresh, and
-query/read-model behavior remain follow-up slices after the ledger contract is
-frozen. This keeps DTO/schema ownership in `pantograph-diagnostics-ledger`,
-scheduler lifecycle ownership in `pantograph-workflow-service`, and avoids
-combining contract design, producer wiring, and projection behavior in one
-slice.
+attempt lifecycle identity. 2026-06-04 follow-up re-plan adjustment: because
+`DiagnosticEventPayload` is a shared public enum, this same contract slice may
+also update the existing `pantograph-workflow-service` projection-refresh
+classification match so direct consumers continue compiling. That adaptation
+must be limited to classifying the new payload for existing diagnostics
+projection refresh behavior; it must not emit scheduler attempt events, change
+scheduler lifecycle policy, add projection/read-model fields, or write
+frontend/Tauri/runtime/Pumas code. Workflow-service event emission and
+query/read-model behavior remain follow-up slices after the ledger contract
+and consumer compile adaptation are frozen. This keeps DTO/schema ownership in
+`pantograph-diagnostics-ledger`, scheduler lifecycle ownership in
+`pantograph-workflow-service`, and avoids combining contract design, producer
+wiring, and projection behavior in one slice.
 
 ## Standards Rule
 
