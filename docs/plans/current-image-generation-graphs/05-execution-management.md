@@ -25425,6 +25425,30 @@ Worker rules:
       separately from `model_path`; they need their own caller inventory before
       deletion or replacement so stable canonical model ids are not removed by
       accident.
+  - 2026-06-05 Milestone 5b `model_ref` contract-lane cleanup re-plan:
+    - Re-plan trigger: graph contract validation still accepted
+      `data.model_ref` as a Pumas model identity field, but inspection showed
+      `model_ref` spans shared workflow-node descriptors, semantic graph
+      fingerprint fixtures, Pumas option metadata fallbacks, mock backend
+      ports, and frontend selection helpers.
+    - Selected option: contract-lane cleanup. `pumas_model_ref` is the only
+      canonical graph model identity value/port for inference graph authoring
+      and validation. Remove graph-facing `model_ref` as a shared contract
+      cleanup rather than patching only the validator.
+    - Future implementation write-set candidates:
+      `crates/workflow-nodes`, workflow-service graph validation/types/tests,
+      Tauri Pumas option metadata, frontend selection helpers, Svelte graph
+      mocks, and this plan. Shared contracts, generated DTOs, saved workflows,
+      lockfiles, READMEs, and ADRs remain serial integration-owner work unless
+      reassigned.
+    - No-fallback/no-legacy confirmation: retained `model_ref` names may exist
+      only where they are backend-internal Pumas/dependency-planning DTO field
+      names. They must not be accepted as graph model identity, executable
+      runtime launch input, frontend inference, Tauri policy, compatibility
+      alias, or migration shim. Stale saved graphs should receive typed
+      diagnostics; canonical workflows and fixtures should use
+      `pumas_model_ref`.
+    - Verification passed: plan-only change pending `git diff --check`.
 
 ### Traceability Links
 

@@ -188,6 +188,24 @@ remaining legacy surface, choose delete/replace/fail-closed based on active
 callers, keep Tauri/frontend as transport/display only, and verify no
 canonical scheduler/runtime-host facts are adapted back into legacy shapes.
 
+Selected `model_ref` graph identity cleanup re-plan as of 2026-06-05: use the
+contract-lane cleanup path. `pumas_model_ref` is the only canonical graph model
+identity value/port for inference graph authoring and validation. The remaining
+`model_ref` surface is not a single stale validator field: it spans
+workflow-node descriptors, graph contract validation, semantic fingerprint
+fixtures, Pumas option metadata fallbacks, mock backend ports, and frontend
+selection helpers. Therefore it must be removed as a shared contract cleanup
+slice, not as a validator-only patch. The slice must inventory and update
+`crates/workflow-nodes`, workflow-service graph validation/types/fixtures,
+Tauri/frontend Pumas option metadata and selection helpers, and Svelte graph
+mocks so no graph authoring, validation, or presentation path accepts
+`model_ref` as a model identity substitute. Retained uses of `model_ref` may
+exist only in backend-internal Pumas/dependency-planning DTOs where the field
+name is part of the Pumas contract, not as graph identity or executable runtime
+launch input. Do not add compatibility aliases, migrations, frontend
+inference, or Tauri policy; stale saved graphs should receive typed diagnostics
+and canonical workflows/fixtures should use `pumas_model_ref`.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
