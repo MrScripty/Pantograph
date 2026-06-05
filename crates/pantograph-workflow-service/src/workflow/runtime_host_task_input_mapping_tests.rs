@@ -92,6 +92,38 @@ fn skips_model_ref_binding_because_model_identity_lives_in_scheduler_handoff() {
 }
 
 #[test]
+fn rejects_retired_model_ref_target_port() {
+    let task = runtime_task(vec![input_binding(
+        "model-selector",
+        "pumas_model_ref",
+        "model_ref",
+    )]);
+    let results = vec![task_result(
+        "model-selector",
+        "pumas_model_ref",
+        WorkflowSchedulerTaskResultValue::PumasModelRef(PumasModelRef {
+            model_id: "image/example/tiny-diffusion".to_string(),
+            revision: Some("main".to_string()),
+            selected_artifact_id: Some("diffusers-bundle".to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        }),
+    )];
+
+    let error = materialize_runtime_host_inputs(&task, &results)
+        .expect_err("retired model_ref target must not be accepted as model identity");
+
+    assert!(matches!(
+        error,
+        WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {
+            value_type: "pumas_model_ref",
+            target_port_id,
+            ..
+        } if target_port_id == "model_ref"
+    ));
+}
+
+#[test]
 fn rejects_model_ref_on_non_model_runtime_input_port() {
     let task = runtime_task(vec![input_binding(
         "model-selector",

@@ -206,6 +206,13 @@ launch input. Do not add compatibility aliases, migrations, frontend
 inference, or Tauri policy; stale saved graphs should receive typed diagnostics
 and canonical workflows/fixtures should use `pumas_model_ref`.
 
+2026-06-05 runtime-host mapping cleanup result: workflow-service runtime-host
+task input materialization no longer accepts `model_ref` as a model identity
+target port. `PumasModelRef` task results are skipped only for the canonical
+`pumas_model_ref` target, because graph model identity lives in scheduler
+handoff rather than materialized runtime inputs. A retired `model_ref` target
+port now fails closed with a typed unsupported-input diagnostic.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must
@@ -593,7 +600,11 @@ and canonical workflows/fixtures should use `pumas_model_ref`.
   `model_ref.modelPath`, `model_path`, or `modelPath` into runtime trace model
   targets. Python runtime metadata may still report backend/runtime identity
   from typed engine facts, but it no longer carries graph path targets from
-  retired Python runtime inputs.
+  retired Python runtime inputs. 2026-06-05 progress: workflow-service
+  runtime-host task input materialization no longer treats `model_ref` as a
+  model identity target port. Canonical `pumas_model_ref` bindings are skipped
+  because scheduler handoff owns model identity; retired `model_ref` target
+  ports now fail closed as unsupported materialized runtime inputs.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

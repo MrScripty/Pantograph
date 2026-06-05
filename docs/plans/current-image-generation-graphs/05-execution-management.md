@@ -25534,6 +25534,31 @@ Worker rules:
       - `cargo check -p workflow-nodes`
       - strict search for `model_ref` input/port references in
         `crates/workflow-nodes/src/processing/unload_model.rs`
+  - 2026-06-05 Milestone 5b runtime-host mapper `model_ref` target cleanup
+    slice:
+    - Smallest vertical slice: remove retired `model_ref` target-port
+      acceptance from workflow-service runtime-host task input
+      materialization.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/runtime_host_task_input_mapping.rs`,
+      `crates/pantograph-workflow-service/src/workflow/runtime_host_task_input_mapping_tests.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: `PumasModelRef` task results are
+      skipped only for canonical `pumas_model_ref` runtime inputs because
+      scheduler handoff owns model identity. Retired `model_ref` target ports
+      now fail closed with a typed unsupported-input diagnostic; no graph
+      identity alias, runtime launch input, compatibility shim, Tauri policy,
+      or frontend inference path was added.
+    - Focused tests added: workflow-service runtime-host task input mapping
+      now asserts a `pumas_model_ref` source bound to retired target
+      `model_ref` is rejected.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service runtime_host_task_input_mapping --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+      - strict production search for `MODEL_REF_TARGET_PORTS`/`"model_ref"`
+        in `runtime_host_task_input_mapping.rs`
 
 ### Traceability Links
 

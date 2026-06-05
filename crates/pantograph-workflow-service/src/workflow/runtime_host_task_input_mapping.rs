@@ -10,7 +10,7 @@ use super::{
     WorkflowSchedulerTaskResultValue,
 };
 
-const MODEL_REF_TARGET_PORTS: &[&str] = &["pumas_model_ref", "model_ref"];
+const MODEL_REF_TARGET_PORTS: &[&str] = &["pumas_model_ref"];
 
 pub(crate) fn materialize_runtime_host_inputs(
     task: &WorkflowSchedulerTask,
