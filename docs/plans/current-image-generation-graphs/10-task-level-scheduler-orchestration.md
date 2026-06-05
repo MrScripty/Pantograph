@@ -1660,6 +1660,12 @@ facts. Historical timing/attempt counters remain open until the retry/defer,
 replay, worker lifecycle, and ledger lifecycle slices add typed scheduler
 facts for them.
 
+2026-06-05 implementation status: active runtime task cancellation responses
+now report the backend-owned intent state as typed `cancellation_requested`
+with scheduler task id and active attempt id. The response explicitly remains
+an accepted-intent response; terminal cancellation is still owned by the
+runtime task supervisor observation and diagnostics lifecycle.
+
 2026-05-23 implementation status: node-engine now owns the focused
 `single_task` API planned for the non-runtime adapter boundary. The API exposes
 validated `NodeEngineSingleTaskRequest` / `NodeEngineSingleTaskResponse`

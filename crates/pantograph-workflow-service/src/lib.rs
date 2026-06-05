@@ -144,6 +144,7 @@ pub use workflow::{
     WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanError,
     WorkflowExecutionPlanNodeDecision, WorkflowExecutionSessionActiveTaskCancelRequest,
     WorkflowExecutionSessionActiveTaskCancelResponse,
+    WorkflowExecutionSessionActiveTaskCancelStatus,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionAttributionRequest, WorkflowExecutionSessionBootstrapRecoveryAction,
     WorkflowExecutionSessionBootstrapRecoveryDecision,

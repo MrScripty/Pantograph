@@ -21,7 +21,15 @@ schema version 2 read models. The slice did not infer lifecycle state from
 frontend, Tauri, runtime adapters, Pumas, graph paths, or diagnostics text.
 Remaining Milestone 5c hardening is historical attempt counters/timing
 summaries, retry/defer decisions, replay outcomes, worker lifecycle
-diagnostics, and cooperative runtime/worker cancellation response mapping.
+diagnostics, and terminal cooperative runtime/worker cancellation observation.
+
+2026-06-05 scheduler active cancellation response update: the
+workflow-service active runtime task cancellation API now returns a typed
+`cancellation_requested` response with scheduler-owned task id, active attempt
+id, and message text clarifying that terminal cancellation is observed later
+by the runtime task supervisor. This keeps cancellation business state in the
+backend and does not add Tauri/frontend inference, runtime adapter policy,
+graph-path fallback, or compatibility launch behavior.
 
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in

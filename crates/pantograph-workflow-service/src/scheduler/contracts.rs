@@ -312,6 +312,18 @@ pub struct WorkflowExecutionSessionActiveTaskCancelRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionActiveTaskCancelResponse {
     pub ok: bool,
+    pub status: WorkflowExecutionSessionActiveTaskCancelStatus,
+    pub task_id: String,
+    pub active_attempt_id: String,
+    pub message: String,
+}
+
+/// Active runtime task cancellation response status.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowExecutionSessionActiveTaskCancelStatus {
+    CancellationRequested,
 }
 
 /// Privileged GUI-admin queue cancellation request.

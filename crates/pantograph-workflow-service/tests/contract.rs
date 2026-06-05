@@ -35,7 +35,9 @@ use pantograph_workflow_service::{
     WorkflowDiagnosticsProjectionAdvance, WorkflowDiagnosticsProjectionFailure,
     WorkflowDiagnosticsProjectionInvalidation, WorkflowDiagnosticsProjectionKind,
     WorkflowDiagnosticsProjectionRefreshReason, WorkflowDiagnosticsProjectionRefreshRequest,
-    WorkflowDiagnosticsProjectionRefreshResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowDiagnosticsProjectionRefreshResponse, WorkflowExecutionSessionActiveTaskCancelRequest,
+    WorkflowExecutionSessionActiveTaskCancelResponse,
+    WorkflowExecutionSessionActiveTaskCancelStatus, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
@@ -2129,6 +2131,44 @@ fn workflow_library_asset_access_record_contract_snapshot() {
         serde_json::to_value(response).expect("serialize library asset access response");
     let expected_response = serde_json::json!({
         "event_seq": 42
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_active_task_cancel_contract_snapshot() {
+    let request = WorkflowExecutionSessionActiveTaskCancelRequest {
+        session_id: "session-1".to_string(),
+        workflow_run_id: "run-1".to_string(),
+        task_id: "task-image".to_string(),
+        reason: Some("user cancelled active image generation".to_string()),
+    };
+    let response = WorkflowExecutionSessionActiveTaskCancelResponse {
+        ok: true,
+        status: WorkflowExecutionSessionActiveTaskCancelStatus::CancellationRequested,
+        task_id: "task-image".to_string(),
+        active_attempt_id: "attempt-1".to_string(),
+        message: "runtime task cancellation intent recorded; terminal cancellation is reported after runtime observation".to_string(),
+    };
+
+    let request_value =
+        serde_json::to_value(request).expect("serialize active task cancel request");
+    let expected_request = serde_json::json!({
+        "session_id": "session-1",
+        "workflow_run_id": "run-1",
+        "task_id": "task-image",
+        "reason": "user cancelled active image generation"
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value =
+        serde_json::to_value(response).expect("serialize active task cancel response");
+    let expected_response = serde_json::json!({
+        "ok": true,
+        "status": "cancellation_requested",
+        "task_id": "task-image",
+        "active_attempt_id": "attempt-1",
+        "message": "runtime task cancellation intent recorded; terminal cancellation is reported after runtime observation"
     });
     assert_eq!(response_value, expected_response);
 }

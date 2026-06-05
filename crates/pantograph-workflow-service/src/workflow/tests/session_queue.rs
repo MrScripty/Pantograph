@@ -143,7 +143,7 @@ async fn workflow_cancel_active_task_records_intent_without_terminal_mutation() 
         priority: None,
     };
 
-    {
+    let active_attempt_id = {
         let mut store = service
             .session_store
             .lock()
@@ -180,7 +180,8 @@ async fn workflow_cancel_active_task_records_intent_without_terminal_mutation() 
             .start_ready_runtime_task(&mut store, &created.session_id, &workflow_run_id, &task_id)
             .expect("start ready runtime task");
         assert_eq!(started.task.task_id.as_str(), task_id);
-    }
+        started.attempt_id().as_str().to_string()
+    };
 
     let response = service
         .workflow_cancel_active_execution_session_task(
@@ -194,6 +195,16 @@ async fn workflow_cancel_active_task_records_intent_without_terminal_mutation() 
         .await
         .expect("cancel active runtime task");
     assert!(response.ok);
+    assert_eq!(
+        response.status,
+        WorkflowExecutionSessionActiveTaskCancelStatus::CancellationRequested
+    );
+    assert_eq!(response.task_id, task_id);
+    assert_eq!(response.active_attempt_id, active_attempt_id);
+    assert!(
+        response.message.contains("terminal cancellation"),
+        "response should clarify that terminal cancellation is observed later"
+    );
 
     let records = {
         let store = service

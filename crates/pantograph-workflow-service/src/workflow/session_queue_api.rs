@@ -12,7 +12,8 @@ use super::{
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowExecutionSessionActiveTaskCancelRequest,
-    WorkflowExecutionSessionActiveTaskCancelResponse, WorkflowExecutionSessionInspectionRequest,
+    WorkflowExecutionSessionActiveTaskCancelResponse,
+    WorkflowExecutionSessionActiveTaskCancelStatus, WorkflowExecutionSessionInspectionRequest,
     WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionQueueCancelRequest,
     WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
@@ -289,7 +290,13 @@ impl WorkflowService {
                     "active runtime task cancellation failed: {error}"
                 ))
             })?;
-        Ok(WorkflowExecutionSessionActiveTaskCancelResponse { ok: true })
+        Ok(WorkflowExecutionSessionActiveTaskCancelResponse {
+            ok: true,
+            status: WorkflowExecutionSessionActiveTaskCancelStatus::CancellationRequested,
+            task_id: scheduler_task_id.as_str().to_string(),
+            active_attempt_id: attempt_id.as_str().to_string(),
+            message: "runtime task cancellation intent recorded; terminal cancellation is reported after runtime observation".to_string(),
+        })
     }
 
     pub async fn workflow_admin_cancel_queue_item(

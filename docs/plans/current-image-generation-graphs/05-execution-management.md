@@ -25336,8 +25336,55 @@ Worker rules:
       contract fixture fields unrelated to this read-model path.
     - Remaining follow-up: historical attempt counters/timing summaries,
       retry/defer decisions, replay outcomes, worker lifecycle diagnostics,
-      and cooperative runtime/worker cancellation response mapping remain
+      and terminal cooperative runtime/worker cancellation observation remain
       Milestone 5c lifecycle hardening work.
+  - 2026-06-05 Milestone 5c active runtime cancellation response mapping
+    slice:
+    - Smallest vertical slice: replace the bare active runtime task
+      cancellation response with typed backend-owned cancellation intent
+      status and scheduler task/attempt identity.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/contracts.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_queue_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/lib.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_queue.rs`,
+      `crates/pantograph-workflow-service/tests/contract.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the response reports only
+      workflow-service lifecycle-owner state from the active task/attempt. It
+      does not terminally mark the task, parse diagnostics text, move
+      cancellation policy into Tauri/frontend/runtime adapters, use graph
+      paths, build reduced plans, or adapt scheduler/runtime facts into legacy
+      launch DTOs.
+    - Implementation summary: `WorkflowExecutionSessionActiveTaskCancelResponse`
+      now includes typed `status`, `task_id`, `active_attempt_id`, and
+      `message` fields. The service returns `cancellation_requested` after the
+      lifecycle owner accepts the cancellation intent; terminal cancellation
+      remains reported by the runtime task supervisor observation path.
+    - Tests/fixtures: the active cancellation test now asserts response
+      status, task id, active attempt id, and terminal-observation message.
+      The workflow-service contract test snapshots the active cancellation
+      request/response shape.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service workflow_cancel_active_task_records_intent_without_terminal_mutation --lib`
+      - `cargo test -p pantograph-workflow-service workflow_cancel_active_execution_session_task_rejects_non_running_runtime_task --lib`
+      - `cargo test -p pantograph-workflow-service --test contract workflow_active_task_cancel_contract_snapshot`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched source/tests
+    - Search deviations: the targeted search matched existing trace fixture
+      compatibility fields and a crate-level transport adapter documentation
+      comment only.
+    - Remaining follow-up: retry/defer decisions, replay outcomes, worker
+      lifecycle diagnostics, historical attempt/timing summaries, and terminal
+      cooperative runtime/worker cancellation observation remain Milestone 5c
+      hardening work.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
