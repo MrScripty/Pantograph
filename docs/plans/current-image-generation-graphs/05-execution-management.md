@@ -24650,6 +24650,48 @@ Worker rules:
     - Remaining follow-up: persist ready runtime dispatch recovery state
       needed for bootstrap redispatch, then diagnostics-ledger attempt/timing
       facts.
+  - 2026-06-04 Milestone 5c ready runtime dispatch recovery proof
+    persistence slice:
+    - Smallest vertical slice: persist the admitted dependency readiness proof
+      when a runtime task reaches canonical `Ready` state, then project whether
+      that proof exists through bootstrap recovery report and plan DTOs.
+    - Allowed write set used: `scheduler/store.rs`,
+      `scheduler/store_queue.rs`, `scheduler/store_task_results.rs`,
+      `scheduler/task_orchestrator.rs`, `scheduler/store_tests.rs`,
+      `scheduler/task_orchestrator_tests.rs`, `workflow/contracts.rs`,
+      `workflow/session_execution_api.rs`, and these plan docs.
+    - No-fallback/no-legacy confirmation: this slice does not redispatch ready
+      runtime tasks, does not add graph/node-engine/reduced-plan execution,
+      does not move policy to Tauri/frontend, does not edit Pumas/package
+      facts, lockfiles, generated files, or workflow fixtures, and does not
+      preserve old runtime behavior. Bootstrap recovery remains fail-closed
+      with typed diagnostics until duplicate-dispatch/idempotency guard state
+      is durable.
+    - Implementation summary: active-run state now stores
+      `DependencyReadinessProofEnvelope` values keyed by scheduler task id.
+      The orchestrator records that proof only after readiness admission
+      applies a `Ready` task-state transition. Bootstrap recovery snapshots,
+      workflow reports, and recovery decisions expose
+      `runtime_dispatch_recovery_state_available`, and the ready-redispatch
+      diagnostic now distinguishes missing proof from proof-present but
+      missing duplicate-dispatch guard state.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service orchestrator_persists_started_runtime_task_result --lib`
+      - `cargo test -p pantograph-workflow-service active_run_bootstrap_recovery_snapshot_classifies_runtime_task_states --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery_plan_reports_persisted_proof_when_guard_state_missing --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched source
+        files. Matches were existing diagnostics compatibility payload fields,
+        existing negative legacy tests, existing Pumas test fixtures, existing
+        warm-compatibility naming, and existing node-engine non-runtime task
+        diagnostics only.
+    - Remaining follow-up: implement durable duplicate-dispatch/idempotency
+      guard state for ready runtime redispatch, then add diagnostics-ledger
+      attempt/timing facts.
 
 ### Traceability Links
 

@@ -2107,3 +2107,42 @@ durable task orchestration path.
   Pumas test fixtures only.
   Remaining follow-up: persist ready runtime dispatch recovery state needed for
   bootstrap redispatch, then diagnostics-ledger attempt/timing facts.
+- 2026-06-04 ready runtime dispatch recovery proof persistence slice completed.
+  Smallest useful vertical slice: persist the admitted dependency readiness
+  proof when a runtime task reaches canonical `Ready` state, then project proof
+  availability through bootstrap recovery report and plan DTOs. Allowed write
+  set used: `scheduler/store.rs`, `scheduler/store_queue.rs`,
+  `scheduler/store_task_results.rs`, `scheduler/task_orchestrator.rs`,
+  `scheduler/store_tests.rs`, `scheduler/task_orchestrator_tests.rs`,
+  `workflow/contracts.rs`, `workflow/session_execution_api.rs`, and the plan
+  docs.
+  No-fallback/no-legacy confirmation: no ready runtime redispatch is
+  implemented yet, no graph/node-engine/reduced-plan execution is added, no
+  policy moves to Tauri/frontend, no Pumas/package facts, lockfiles, generated
+  files, or workflow fixtures are edited, and old runtime behavior is not
+  preserved. Bootstrap recovery remains typed diagnostics until durable
+  duplicate-dispatch/idempotency guard state exists.
+  Implementation summary: workflow-service active-run state now stores
+  `DependencyReadinessProofEnvelope` by scheduler task id. The orchestrator
+  records the proof only after readiness admission applies `Ready`; bootstrap
+  recovery snapshots and workflow DTOs expose
+  `runtime_dispatch_recovery_state_available`, and the blocked redispatch
+  diagnostic distinguishes missing proof from proof-present but missing guard
+  state.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  orchestrator_persists_started_runtime_task_result --lib`; `cargo test -p
+  pantograph-workflow-service
+  active_run_bootstrap_recovery_snapshot_classifies_runtime_task_states
+  --lib`; `cargo test -p pantograph-workflow-service
+  bootstrap_recovery_plan_reports_persisted_proof_when_guard_state_missing
+  --lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery
+  --lib`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+  no-fallback/no-legacy source search. Search matches were existing diagnostics
+  compatibility payload fields, existing negative legacy tests, existing Pumas
+  test fixtures, existing warm-compatibility naming, and existing node-engine
+  non-runtime task diagnostics only.
+  Remaining follow-up: implement durable duplicate-dispatch/idempotency guard
+  state for ready runtime redispatch, then diagnostics-ledger attempt/timing
+  facts.

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
 use pantograph_scheduler::{
     apply_scheduler_task_state_transition, SchedulerDispatchCandidateId,
     SchedulerReservationLeaseId, SchedulerTaskExecutionIntent, SchedulerTaskId,
@@ -352,6 +353,105 @@ impl WorkflowExecutionSessionStore {
                     task_id
                 ))
             })
+    }
+
+    pub(crate) fn record_active_run_runtime_dispatch_readiness_proof(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+        readiness_proof: DependencyReadinessProofEnvelope,
+    ) -> Result<(), WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_mut().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+
+        let task_graph = active_run.scheduler_task_graph.as_ref().ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "workflow run '{}' has no scheduler task graph",
+                workflow_run_id
+            ))
+        })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler runtime task '{}' is not present in the task graph",
+                    task_id
+                ))
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be a runtime inference task before recording runtime dispatch readiness proof",
+                task_id
+            )));
+        }
+
+        let current = active_run
+            .scheduler_task_records
+            .get(task_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' has no active task-state record",
+                    task_id
+                ))
+            })?;
+        if current.state.kind() != SchedulerTaskStateKind::Ready {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "scheduler runtime task '{}' must be ready before recording runtime dispatch readiness proof, found {:?}",
+                task_id,
+                current.state.kind()
+            )));
+        }
+
+        active_run
+            .runtime_dispatch_readiness_proofs
+            .insert(task_id.to_string(), readiness_proof);
+        Self::mark_session_access(state, tick);
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn active_run_runtime_dispatch_readiness_proof(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+    ) -> Result<Option<DependencyReadinessProofEnvelope>, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let active_run = state.active_run.as_ref().ok_or_else(|| {
+            WorkflowServiceError::QueueItemNotFound(format!(
+                "session '{}' has no active workflow run",
+                session_id
+            ))
+        })?;
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "workflow run '{}' is not active in session '{}'",
+                workflow_run_id, session_id
+            )));
+        }
+        Ok(active_run
+            .runtime_dispatch_readiness_proofs
+            .get(task_id)
+            .cloned())
     }
 
     /// Atomically fail the matching active scheduler task attempt.

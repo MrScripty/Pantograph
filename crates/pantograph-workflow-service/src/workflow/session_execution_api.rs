@@ -1493,6 +1493,7 @@ fn workflow_bootstrap_recovery_task_from_scheduler(
         task_id: task.task_id,
         state_kind: task.state_kind,
         action: workflow_bootstrap_recovery_action_from_scheduler(task.action),
+        runtime_dispatch_recovery_state_available: task.runtime_dispatch_recovery_state_available,
     }
 }
 
@@ -1556,6 +1557,8 @@ fn workflow_bootstrap_recovery_plan_from_report(
                 task_id: task.task_id,
                 state_kind: task.state_kind,
                 recovery_action: task.action,
+                runtime_dispatch_recovery_state_available: task
+                    .runtime_dispatch_recovery_state_available,
                 decision_kind,
                 diagnostic,
             });
@@ -1615,10 +1618,17 @@ fn workflow_bootstrap_recovery_diagnostic(
 ) -> Option<String> {
     match decision_kind {
         WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired => {
-            Some(format!(
-                "runtime task '{}' is ready for dispatch; bootstrap recovery requires persisted readiness proof and duplicate-dispatch guard state before redispatch",
-                task.task_id
-            ))
+            if task.runtime_dispatch_recovery_state_available {
+                Some(format!(
+                    "runtime task '{}' is ready for dispatch with persisted readiness proof; bootstrap recovery requires duplicate-dispatch guard state before redispatch",
+                    task.task_id
+                ))
+            } else {
+                Some(format!(
+                    "runtime task '{}' is ready for dispatch; bootstrap recovery requires persisted readiness proof and duplicate-dispatch guard state before redispatch",
+                    task.task_id
+                ))
+            }
         }
         WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired => {
             Some(format!(
@@ -2141,6 +2151,7 @@ mod tests {
                     task_id: "infer".to_string(),
                     state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::Ready),
                     action: WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime,
+                    runtime_dispatch_recovery_state_available: false,
                 }],
             }],
         };
@@ -2167,6 +2178,35 @@ mod tests {
     }
 
     #[test]
+    fn bootstrap_recovery_plan_reports_persisted_proof_when_guard_state_missing() {
+        let report = WorkflowExecutionSessionBootstrapRecoveryReport {
+            active_runs: vec![WorkflowExecutionSessionBootstrapRecoveryRun {
+                session_id: "session-a".to_string(),
+                workflow_run_id: "run-a".to_string(),
+                runtime_tasks: vec![WorkflowExecutionSessionBootstrapRecoveryTask {
+                    task_id: "infer".to_string(),
+                    state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::Ready),
+                    action: WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime,
+                    runtime_dispatch_recovery_state_available: true,
+                }],
+            }],
+        };
+
+        let plan = workflow_bootstrap_recovery_plan_from_report(report);
+
+        assert_eq!(plan.blocking_decision_count, 1);
+        assert_eq!(plan.decisions.len(), 1);
+        assert!(plan.decisions[0].runtime_dispatch_recovery_state_available);
+        let diagnostic = plan.decisions[0]
+            .diagnostic
+            .as_deref()
+            .expect("blocking diagnostic");
+        assert!(diagnostic.contains("with persisted readiness proof"));
+        assert!(diagnostic.contains("duplicate-dispatch guard"));
+        assert!(!diagnostic.contains("requires persisted readiness proof and"));
+    }
+
+    #[test]
     fn bootstrap_recovery_progress_loop_requests_dedupe_by_active_run() {
         let plan = WorkflowExecutionSessionBootstrapRecoveryPlan {
             decisions: vec![
@@ -2177,6 +2217,7 @@ mod tests {
                     state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs),
                     recovery_action:
                         WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop,
+                    runtime_dispatch_recovery_state_available: false,
                     decision_kind:
                         WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop,
                     diagnostic: None,
@@ -2188,6 +2229,7 @@ mod tests {
                     state_kind: Some(pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs),
                     recovery_action:
                         WorkflowExecutionSessionBootstrapRecoveryAction::ResumeProgressLoop,
+                    runtime_dispatch_recovery_state_available: false,
                     decision_kind:
                         WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop,
                     diagnostic: None,

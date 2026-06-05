@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use uuid::Uuid;
 
+use pantograph_dependency_planning::DependencyReadinessProofEnvelope;
 use pantograph_diagnostics_ledger::SchedulerModelCacheState;
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerTaskId,
@@ -67,6 +68,7 @@ struct WorkflowExecutionSessionActiveRun {
     // Milestone 5c stages task-result storage before durable ledger replay.
     scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
     scheduler_task_attempts: BTreeMap<String, WorkflowExecutionSessionTaskAttempt>,
+    runtime_dispatch_readiness_proofs: BTreeMap<String, DependencyReadinessProofEnvelope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,6 +193,7 @@ pub(crate) struct WorkflowSchedulerBootstrapRecoveryTask {
     pub(crate) task_id: String,
     pub(crate) state_kind: Option<pantograph_scheduler::SchedulerTaskStateKind>,
     pub(crate) action: WorkflowSchedulerBootstrapRecoveryAction,
+    pub(crate) runtime_dispatch_recovery_state_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

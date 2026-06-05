@@ -726,6 +726,26 @@ no-fallback/no-legacy source search. Remaining lifecycle work: persist the
 ready runtime dispatch recovery state needed for bootstrap redispatch, then add
 diagnostics-ledger attempt/timing facts.
 
+2026-06-04 ready runtime dispatch recovery proof persistence update:
+workflow-service active-run state now persists the admitted dependency
+readiness proof when a runtime task reaches `Ready`, and bootstrap recovery
+report/plan DTOs expose whether that persisted redispatch recovery input is
+available. Ready runtime redispatch remains blocked until durable
+duplicate-dispatch/idempotency guard state is implemented; diagnostics now
+distinguish missing proof from proof-present-but-guard-missing. Verification
+passed: `cargo fmt -p pantograph-workflow-service`; `cargo test -p
+pantograph-workflow-service orchestrator_persists_started_runtime_task_result
+--lib`; `cargo test -p pantograph-workflow-service
+active_run_bootstrap_recovery_snapshot_classifies_runtime_task_states --lib`;
+`cargo test -p pantograph-workflow-service
+bootstrap_recovery_plan_reports_persisted_proof_when_guard_state_missing
+--lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: implement the
+durable duplicate-dispatch/idempotency guard for ready runtime redispatch,
+then add diagnostics-ledger attempt/timing facts.
+
 ## Standards Rule
 
 The standards constraints in

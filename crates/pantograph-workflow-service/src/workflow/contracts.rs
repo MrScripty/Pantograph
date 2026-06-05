@@ -920,6 +920,8 @@ pub struct WorkflowExecutionSessionBootstrapRecoveryTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_kind: Option<SchedulerTaskStateKind>,
     pub action: WorkflowExecutionSessionBootstrapRecoveryAction,
+    #[serde(default)]
+    pub runtime_dispatch_recovery_state_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -959,6 +961,8 @@ pub struct WorkflowExecutionSessionBootstrapRecoveryDecision {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_kind: Option<SchedulerTaskStateKind>,
     pub recovery_action: WorkflowExecutionSessionBootstrapRecoveryAction,
+    #[serde(default)]
+    pub runtime_dispatch_recovery_state_available: bool,
     pub decision_kind: WorkflowExecutionSessionBootstrapRecoveryDecisionKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnostic: Option<String>,

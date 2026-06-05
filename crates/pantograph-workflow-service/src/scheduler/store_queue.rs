@@ -212,6 +212,7 @@ impl WorkflowExecutionSessionStore {
             scheduler_task_records: Default::default(),
             scheduler_task_results: Default::default(),
             scheduler_task_attempts: Default::default(),
+            runtime_dispatch_readiness_proofs: Default::default(),
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {
@@ -427,6 +428,9 @@ impl WorkflowExecutionSessionStore {
                     task_id,
                     state_kind,
                     action: bootstrap_recovery_action_for_state(state_kind),
+                    runtime_dispatch_recovery_state_available: active_run
+                        .runtime_dispatch_readiness_proofs
+                        .contains_key(task.task_id.as_str()),
                 }
             })
             .collect();

@@ -1350,12 +1350,27 @@ impl WorkflowSchedulerTaskOrchestrator {
         )
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
         .into_inner();
+        let runtime_dispatch_readiness_proof = match decision.state {
+            SchedulerReadinessAdmissionState::Ready => decision.readiness_proof.clone(),
+            _ => None,
+        };
         let transition =
             readiness_admission_transition_from_waiting(record, execution_intent, decision)?;
-        store
+        let ready_record = store
             .apply_active_run_scheduler_task_transition(session_id, workflow_run_id, transition)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_task_state_record)
+            .and_then(applied_task_state_record)?;
+        if let Some(readiness_proof) = runtime_dispatch_readiness_proof {
+            store
+                .record_active_run_runtime_dispatch_readiness_proof(
+                    session_id,
+                    workflow_run_id,
+                    task_id,
+                    readiness_proof,
+                )
+                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        }
+        Ok(ready_record)
     }
 
     pub(crate) fn retry_deferred_runtime_dependency_readiness(

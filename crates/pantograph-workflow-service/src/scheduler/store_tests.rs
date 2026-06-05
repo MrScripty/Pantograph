@@ -488,6 +488,14 @@ fn active_run_bootstrap_recovery_snapshot_classifies_runtime_task_states() {
         actions.get("ready-runtime"),
         Some(&WorkflowSchedulerBootstrapRecoveryAction::RedispatchReadyRuntime)
     );
+    assert!(
+        !snapshot
+            .runtime_tasks
+            .iter()
+            .find(|task| task.task_id == "ready-runtime")
+            .expect("ready runtime recovery task")
+            .runtime_dispatch_recovery_state_available
+    );
     assert_eq!(
         actions.get("running-runtime"),
         Some(&WorkflowSchedulerBootstrapRecoveryAction::RuntimeRecoveryRequired)

@@ -1197,6 +1197,7 @@ fn orchestrator_persists_started_runtime_task_result() {
             task_graph.clone(),
         )
         .expect("initialize active run task state");
+    let readiness_proof = ready_readiness_proof();
     orchestrator
         .apply_runtime_dependency_readiness_admission(
             &mut store,
@@ -1204,9 +1205,27 @@ fn orchestrator_persists_started_runtime_task_result() {
             &workflow_run_id,
             &task_id,
             DependencyReadinessPolicy::CheckOnly,
-            Some(ready_readiness_proof()),
+            Some(readiness_proof.clone()),
         )
         .expect("admit runtime task readiness");
+    assert_eq!(
+        store
+            .active_run_runtime_dispatch_readiness_proof(&session_id, &workflow_run_id, &task_id)
+            .expect("stored readiness proof"),
+        Some(readiness_proof)
+    );
+    let recovery_snapshot = store
+        .active_run_bootstrap_recovery_snapshot(&session_id, &workflow_run_id)
+        .expect("bootstrap recovery snapshot")
+        .expect("active recovery snapshot");
+    assert!(
+        recovery_snapshot
+            .runtime_tasks
+            .iter()
+            .find(|task| task.task_id == task_id)
+            .expect("runtime recovery task")
+            .runtime_dispatch_recovery_state_available
+    );
 
     let started = orchestrator
         .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
