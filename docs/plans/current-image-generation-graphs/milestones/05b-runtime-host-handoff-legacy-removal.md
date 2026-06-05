@@ -654,7 +654,11 @@ come from node-type defaults while the Python adapter remains fail-closed.
   fails to start. It no longer logs the error and continues with a
   main-server-only mode that silently omits configured parallel embedding
   capability. Sequential embedding mode remains on-demand and does not resolve
-  a dedicated embedding path during inference startup.
+  a dedicated embedding path during inference startup. 2026-06-05 follow-up:
+  configured embedding startup no longer treats device discovery failure as an
+  empty device list. Sidecar inference startup and recovery now propagate a
+  typed device-listing diagnostic before starting the configured embedding
+  runtime, instead of silently continuing with no device facts.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

@@ -25732,6 +25732,28 @@ Worker rules:
       - `cargo test --manifest-path src-tauri/Cargo.toml server::tests`
       - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
       - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - 2026-06-05 Milestone 5b configured embedding device-list fail-closed
+    follow-up:
+    - Smallest vertical slice: remove the remaining empty-device fallback in
+      configured embedding startup for sidecar inference and recovery.
+    - Allowed write set used:
+      `src-tauri/src/llm/startup.rs`,
+      `src-tauri/src/llm/commands/server.rs`,
+      `src-tauri/src/llm/recovery.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: configured embedding startup now
+      propagates device-listing failure as a typed command/recovery diagnostic
+      instead of passing an empty device list into embedding runtime startup.
+      No graph path, scheduler/runtime-host, Pumas, frontend, or Tauri policy
+      fallback was added.
+    - Focused tests added: startup helper maps device-listing failure into a
+      configured embedding startup diagnostic.
+    - Verification passed:
+      - `cargo test --manifest-path src-tauri/Cargo.toml configured_embedding_startup_devices_fail_closed_on_listing_error`
+      - `cargo test --manifest-path src-tauri/Cargo.toml server::tests`
+      - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
+      - `cargo check --manifest-path src-tauri/Cargo.toml`
 
 ### Traceability Links
 

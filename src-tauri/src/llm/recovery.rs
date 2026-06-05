@@ -16,7 +16,9 @@ use crate::llm::health_monitor::ServerEvent;
 use crate::llm::port_manager::{check_port_available, find_available_port};
 use crate::llm::runtime_registry::run_runtime_transition_and_sync_runtime_registry;
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
-use crate::llm::startup::validate_external_server_url;
+use crate::llm::startup::{
+    require_configured_embedding_startup_devices, validate_external_server_url,
+};
 use crate::llm::sync_rag_embedding_url_from_gateway;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
@@ -412,7 +414,7 @@ async fn restart_dedicated_embedding_runtime(
     };
 
     let resolved_embedding_path = resolve_configured_embedding_model_path(embedding_model_path)?;
-    let devices = list_devices(app.clone()).await.unwrap_or_default();
+    let devices = require_configured_embedding_startup_devices(list_devices(app.clone()).await)?;
 
     gateway
         .start_embedding_server(

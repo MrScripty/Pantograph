@@ -4,7 +4,7 @@ use inference::BackendStartupDeviceIntent;
 use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
 use reqwest::Url;
 
-use crate::config::{AppConfig, DeviceConfig};
+use crate::config::{AppConfig, DeviceConfig, DeviceInfo};
 use crate::llm::{EmbeddingStartRequest, InferenceStartRequest};
 
 pub(crate) fn validate_external_server_url(url: &str) -> Result<String, String> {
@@ -75,6 +75,17 @@ pub(crate) fn build_configured_embedding_request(
     )
 }
 
+pub(crate) fn require_configured_embedding_startup_devices(
+    devices: Result<Vec<DeviceInfo>, String>,
+) -> Result<Vec<DeviceInfo>, String> {
+    devices.map_err(|error| {
+        format!(
+            "Failed to list devices for configured embedding startup: {}",
+            error
+        )
+    })
+}
+
 fn llama_cpp_startup_device_intent(
     device: &DeviceConfig,
 ) -> Result<BackendStartupDeviceIntent, String> {
@@ -96,7 +107,8 @@ mod tests {
     use super::{
         build_configured_embedding_request, build_configured_inference_request,
         build_external_inference_request, build_resolved_embedding_request,
-        resolve_configured_embedding_model_path, validate_external_server_url,
+        require_configured_embedding_startup_devices, resolve_configured_embedding_model_path,
+        validate_external_server_url,
     };
 
     #[test]
@@ -204,6 +216,15 @@ mod tests {
             .expect_err("canonical scheduler ids are not llama.cpp selectors");
 
         assert!(error.contains("Invalid configured llama.cpp startup device 'cuda:0'"));
+    }
+
+    #[test]
+    fn configured_embedding_startup_devices_fail_closed_on_listing_error() {
+        let error = require_configured_embedding_startup_devices(Err("probe failed".to_string()))
+            .expect_err("device listing failure must fail configured embedding startup");
+
+        assert!(error.contains("Failed to list devices for configured embedding startup"));
+        assert!(error.contains("probe failed"));
     }
 
     #[test]

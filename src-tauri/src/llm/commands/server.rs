@@ -6,7 +6,7 @@ use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::startup::{
     build_configured_embedding_request, build_configured_inference_request,
-    build_external_inference_request,
+    build_external_inference_request, require_configured_embedding_startup_devices,
 };
 use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
@@ -114,8 +114,8 @@ pub async fn start_sidecar_inference(
         embedding_model_path.as_deref(),
         &embedding_memory_mode,
     )? {
-        // Get device info for VRAM checking
-        let devices = list_devices(app.clone()).await.unwrap_or_default();
+        let devices =
+            require_configured_embedding_startup_devices(list_devices(app.clone()).await)?;
 
         match gateway
             .start_embedding_server(
