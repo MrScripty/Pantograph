@@ -173,6 +173,21 @@ diagnostics`, `cargo test --manifest-path src-tauri/Cargo.toml event_adapter`,
 strict deleted-symbol search for the removed event input/variant symbols, and
 `git diff --check`.
 
+Selected active lane as of 2026-06-05: resume Milestone 5b deletion/
+replacement of remaining successful legacy runtime paths before Milestone 6.
+The production image inference proof through scheduler task state,
+runtime-host execution, embedded image gateway execution, artifact persistence,
+task-result mapping, and output projection is complete enough to remove the
+old launch surfaces. Remaining Milestone 5c retry/defer, replay/bootstrap,
+worker lifecycle diagnostics, cooperative cancellation response mapping, and
+extra task-state attempt counters stay tracked as hardening follow-ups; they
+must not be used to justify retaining node-engine runtime launch,
+planned-inference launch, `ModelRefV2`, `ModelDependencyRequest`, or graph
+`model_path` success behavior. The next source slice must inventory one
+remaining legacy surface, choose delete/replace/fail-closed based on active
+callers, keep Tauri/frontend as transport/display only, and verify no
+canonical scheduler/runtime-host facts are adapted back into legacy shapes.
+
 **Tasks:**
 
 - [x] Define the runtime-host execution request/response contract first. It must

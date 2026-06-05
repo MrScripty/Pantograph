@@ -187,6 +187,16 @@ Tauri may store and shut down the returned handle, but must not own the
 business loop. A producer/snapshot notification stream is recorded as the later
 event-first improvement after the bounded polling lifecycle proves the complete
 path.
+2026-06-05 active-lane reconciliation: after the committed scheduler attempt
+diagnostics projection/display slices, the next implementation lane returns to
+Milestone 5b legacy runtime deletion/replacement. Milestone 5c still owns
+retry/defer, replay/bootstrap, additional worker lifecycle diagnostics,
+cooperative runtime cancellation response mapping, and task-state attempt
+counter follow-ups, but those are durability hardening slices and must not keep
+old successful `model_path`, `ModelRefV2`, node-engine runtime, or
+planned-inference launch paths alive. Before each source slice, classify the
+specific remaining legacy surface and keep the allowed write set to that
+surface plus focused tests and plan notes.
 
 Milestone 6 must wait for the
 execution planner contracts, backend normalization boundary, scheduler-facing

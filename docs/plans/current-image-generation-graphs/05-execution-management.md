@@ -25290,6 +25290,38 @@ Worker rules:
       frontend/Tauri policy, runtime adapter policy, Pumas, or compatibility
       shim paths.
     - Verification passed: `git diff --check`.
+  - 2026-06-05 active execution lane reconciliation slice:
+    - Smallest vertical slice: record that the next implementation lane returns
+      to Milestone 5b legacy runtime deletion/replacement now that the minimal
+      production image inference path and scheduler attempt timeline
+      diagnostics are proven.
+    - Allowed write set used:
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/04-milestones.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - Decision: proceed with Milestone 5b classified legacy deletion slices
+      before Milestone 6. Remaining Milestone 5c retry/defer,
+      replay/bootstrap, worker lifecycle diagnostics, cooperative runtime
+      cancellation response mapping, and task-state attempt counters remain
+      hardening follow-ups. They do not justify retaining successful
+      node-engine runtime launch, planned-inference launch, graph
+      `model_path`, `ModelRefV2`, or `ModelDependencyRequest` paths.
+    - No-fallback/no-legacy confirmation: the next source slice must choose one
+      classified legacy surface and delete, replace, or fail it closed through
+      canonical scheduler task state/results, runtime-host responses, or typed
+      diagnostics. It must not adapt scheduler/runtime-host/Pumas facts back
+      into legacy DTOs, move business logic into Tauri/frontend, or start
+      Milestone 6 while successful legacy runtime paths remain.
+    - Verification deviation recorded: broad `npm run lint:full` still fails
+      on an unrelated existing `svelte/prefer-writable-derived` issue in
+      `src/components/nodes/workflow/PumaLibNode.svelte`. Until fixed in a
+      separate cleanup slice, frontend slices must use targeted ESLint for
+      touched files plus relevant typecheck/build gates and record the
+      broad-lint deviation.
+    - Verification passed: `git diff --check`.
 
 ### Traceability Links
 

@@ -2215,3 +2215,13 @@ durable task orchestration path.
   Remaining follow-up: wire workflow-service start/terminal/cancel/redispatch
   emission through the diagnostics-ledger append helper, then add
   projection/read-model fields only after emitted event ordering is proven.
+  2026-06-05 active-lane reconciliation: later committed slices have emitted
+  started, terminal, cancelled, and redispatched attempt lifecycle events,
+  projected them into the backend scheduler timeline, and displayed those
+  typed facts on the Scheduler page. Remaining retry/defer decision facts,
+  replay outcomes, worker lifecycle events, cooperative runtime cancellation
+  response mapping, and additional task-state attempt counters are still
+  Milestone 5c hardening work, but they are not blockers for returning to
+  Milestone 5b legacy runtime deletion. If a 5b deletion slice needs a missing
+  lifecycle fact to avoid preserving a legacy path, stop and re-plan that fact
+  as a backend-owned scheduler/runtime-host contract extension.

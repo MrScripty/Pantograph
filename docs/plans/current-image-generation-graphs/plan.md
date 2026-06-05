@@ -1,5 +1,27 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-05 active execution lane re-plan decision: use a short
+documentation-only reconciliation slice, then continue Milestone 5b legacy
+runtime deletion/replacement. The minimal production image inference path has
+already been proven through backend scheduler task state, the runtime-host
+port, embedded image execution, artifact persistence, scheduler task-result
+mapping, and path-free output projection. Remaining Milestone 5c lifecycle
+hardening is still required, but it is not a reason to preserve successful
+node-engine/planned-inference/model-path launch paths. The next source slice
+must therefore choose one classified 5b legacy surface, prove its current
+owner and callers, and delete or replace it with scheduler task state/results,
+runtime-host responses, or typed fail-closed diagnostics. Do not start
+Milestone 6 real PyTorch/diffusers execution until the remaining successful
+legacy runtime paths are deleted or fail closed.
+
+2026-06-05 verification gate note: broad `npm run lint:full` currently fails
+on an unrelated existing `svelte/prefer-writable-derived` issue in
+`src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a
+separate cleanup slice, frontend slices must run targeted ESLint for touched
+files plus `npm run typecheck`/`npm run build` as relevant and record the
+broad-lint deviation. The unrelated proposal document changes currently in the
+worktree are not part of this plan slice.
+
 2026-06-03 Tauri edit-session launcher deletion update: after the minimal
 scheduler/runtime-host image inference path was proven, the unregistered
 `run_workflow_execution_session` Tauri wrapper and desktop-local

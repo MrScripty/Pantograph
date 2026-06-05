@@ -741,6 +741,17 @@ Option 3 thin implementation sequence:
      outcomes, worker lifecycle events, and any additional task-state read
      model attempt counters that must be sourced from canonical lifecycle
      facts rather than inferred from frontend or projection text.
+   - 2026-06-05 active-lane reconciliation: this milestone is complete enough
+     to stop preserving successful legacy runtime launch paths. The remaining
+     retry/defer, replay/bootstrap, worker lifecycle diagnostics, cooperative
+     cancellation response mapping, and task-state attempt-counter work stays
+     in Milestone 5c as lifecycle hardening. It is not a blocker for the next
+     Milestone 5b deletion/replacement slices because the minimal production
+     image inference path has already been proven through scheduler task state
+     and runtime-host execution. If a 5b deletion slice exposes a missing
+     scheduler lifecycle fact needed for safe replacement, stop and re-plan
+     that fact as a shared backend contract extension instead of preserving a
+     legacy path.
 
 Option 3 standards gates:
 
