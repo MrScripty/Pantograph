@@ -1580,7 +1580,7 @@ fn workflow_bootstrap_recovery_decision_kind(
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness
         }
         WorkflowExecutionSessionBootstrapRecoveryAction::RedispatchReadyRuntime => {
-            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired
         }
         WorkflowExecutionSessionBootstrapRecoveryAction::RuntimeRecoveryRequired => {
             WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired
@@ -1602,7 +1602,7 @@ fn workflow_bootstrap_recovery_decision_blocks(
 ) -> bool {
     matches!(
         decision_kind,
-        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired
             | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRecoveryRequired
             | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedTerminalDiagnostic
             | WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedMissingTaskStateRecord
@@ -1614,9 +1614,9 @@ fn workflow_bootstrap_recovery_diagnostic(
     task: &WorkflowExecutionSessionBootstrapRecoveryTask,
 ) -> Option<String> {
     match decision_kind {
-        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired => {
+        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired => {
             Some(format!(
-                "runtime task '{}' is ready for dispatch; bootstrap recovery must prove duplicate-dispatch guard state before redispatch",
+                "runtime task '{}' is ready for dispatch; bootstrap recovery requires persisted readiness proof and duplicate-dispatch guard state before redispatch",
                 task.task_id
             ))
         }
@@ -2132,7 +2132,7 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard() {
+    fn bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state() {
         let report = WorkflowExecutionSessionBootstrapRecoveryReport {
             active_runs: vec![WorkflowExecutionSessionBootstrapRecoveryRun {
                 session_id: "session-a".to_string(),
@@ -2152,8 +2152,13 @@ mod tests {
         assert_eq!(plan.decisions.len(), 1);
         assert_eq!(
             plan.decisions[0].decision_kind,
-            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedDuplicateDispatchGuardRequired
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::BlockedRuntimeRedispatchRecoveryStateRequired
         );
+        assert!(plan.decisions[0]
+            .diagnostic
+            .as_deref()
+            .expect("blocking diagnostic")
+            .contains("persisted readiness proof"));
         assert!(plan.decisions[0]
             .diagnostic
             .as_deref()

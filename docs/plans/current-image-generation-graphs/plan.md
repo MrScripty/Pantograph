@@ -648,12 +648,12 @@ deduplicated dependency-readiness resume requests. The planner is read-only and
 performs no replay, task-state mutation, runtime-host call, reservation
 release, diagnostics-ledger write, Tauri/frontend policy, or graph-path/
 node-engine/reduced-plan fallback. Ready runtime redispatch is intentionally
-blocked with a duplicate-dispatch guard diagnostic until durable dispatch
-idempotency is implemented; unsafe runtime recovery, terminal, and missing
+blocked with a persisted readiness proof and duplicate-dispatch guard diagnostic until durable dispatch
+idempotency state is implemented; unsafe runtime recovery, terminal, and missing
 task-state conditions are also typed blocking decisions. Verification passed:
 `cargo fmt -p pantograph-workflow-service`; `cargo test -p
 pantograph-workflow-service
-bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard --lib`;
+bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state --lib`;
 `cargo test -p pantograph-workflow-service
 workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
 --lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
@@ -705,6 +705,25 @@ workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readi
 pantograph-workflow-service -- --check`; `git diff --check`; and targeted
 no-fallback/no-legacy source search. Remaining lifecycle work: implement the
 durable duplicate-dispatch/idempotency guard for ready runtime redispatch and
+diagnostics-ledger attempt/timing facts.
+
+2026-06-04 runtime redispatch recovery-state diagnostic update: bootstrap
+recovery now classifies ready runtime redispatch as
+`BlockedRuntimeRedispatchRecoveryStateRequired` instead of implying that
+duplicate-dispatch protection alone is sufficient. The diagnostic explicitly
+requires persisted readiness proof plus duplicate-dispatch/idempotency state
+before ready runtime tasks can be recovered through redispatch. This records
+the discovered implementation constraint from the canonical dispatch path:
+ready dispatch currently needs an admitted readiness proof that is held in the
+runner flow, not durably persisted in the ready task record. Verification
+passed: `cargo fmt -p pantograph-workflow-service`; `cargo test -p
+pantograph-workflow-service
+bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state
+--lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`;
+`cargo check -p pantograph-workflow-service`; `cargo fmt -p
+pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+no-fallback/no-legacy source search. Remaining lifecycle work: persist the
+ready runtime dispatch recovery state needed for bootstrap redispatch, then add
 diagnostics-ledger attempt/timing facts.
 
 ## Standards Rule

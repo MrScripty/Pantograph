@@ -24528,12 +24528,12 @@ Worker rules:
       decision DTOs. `WorkflowService` exposes
       `workflow_execution_session_bootstrap_recovery_plan`; the pure planner
       maps `RetryDependencyReadiness` to resume requests, blocks
-      `RedispatchReadyRuntime` with a duplicate-dispatch guard diagnostic, and
+      `RedispatchReadyRuntime` with a persisted-readiness-proof and duplicate-dispatch guard diagnostic, and
       returns typed blocking decisions for runtime recovery, terminal
       diagnostics, and missing task-state records.
     - Verification passed:
       - `cargo fmt -p pantograph-workflow-service`
-      - `cargo test -p pantograph-workflow-service bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state --lib`
       - `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`
       - `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`
       - `cargo check -p pantograph-workflow-service`
@@ -24618,6 +24618,38 @@ Worker rules:
     - Remaining follow-up: implement durable duplicate-dispatch/idempotency
       guard for ready runtime redispatch, then diagnostics-ledger
       attempt/timing facts.
+  - 2026-06-04 Milestone 5c runtime redispatch recovery-state diagnostic
+    slice:
+    - Smallest vertical slice: refine ready-runtime bootstrap redispatch from a
+      duplicate-dispatch-only blocker into a typed
+      `BlockedRuntimeRedispatchRecoveryStateRequired` decision that names both
+      required durable inputs: persisted readiness proof and
+      duplicate-dispatch/idempotency state.
+    - Allowed write set used: `workflow/contracts.rs`,
+      `workflow/session_execution_api.rs`, and these plan docs.
+    - No-fallback/no-legacy confirmation: the slice does not redispatch ready
+      runtime tasks, add graph/node-engine/reduced-plan execution, move policy
+      to Tauri/frontend, edit Pumas/package facts, lockfiles, generated files,
+      or workflow fixtures, or preserve old runtime behavior. It returns typed
+      diagnostics until canonical planning can provide recoverable dispatch
+      state.
+    - Discovered issue: the canonical dispatch-ready path requires an admitted
+      readiness proof, but the ready task record does not currently persist
+      that proof for bootstrap replay. Ready redispatch cannot be implemented
+      safely until that state and the duplicate-dispatch guard are durable.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state --lib`
+      - `cargo test -p pantograph-workflow-service bootstrap_recovery --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched source
+        files. Matches were existing diagnostics compatibility payload fields,
+        existing negative legacy tests, and existing Pumas test fixtures only.
+    - Remaining follow-up: persist ready runtime dispatch recovery state
+      needed for bootstrap redispatch, then diagnostics-ledger attempt/timing
+      facts.
 
 ### Traceability Links
 

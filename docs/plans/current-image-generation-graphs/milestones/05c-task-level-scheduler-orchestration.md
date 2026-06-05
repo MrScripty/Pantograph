@@ -1999,12 +1999,12 @@ durable task orchestration path.
   plan DTOs. `WorkflowService` exposes
   `workflow_execution_session_bootstrap_recovery_plan`; the pure planner maps
   dependency-readiness retry actions to deduplicated resume requests, blocks
-  ready runtime redispatch with a duplicate-dispatch guard diagnostic, and
+  ready runtime redispatch with a persisted-readiness-proof and duplicate-dispatch guard diagnostic, and
   emits typed blocking decisions for runtime recovery required, terminal
   diagnostic, and missing task-state records.
   Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
   test -p pantograph-workflow-service
-  bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_guard
+  bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state
   --lib`; `cargo test -p pantograph-workflow-service
   workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
   --lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery
@@ -2062,7 +2062,7 @@ durable task orchestration path.
   runtime tasks, does not create graph/node-engine/reduced-plan execution, does
   not move policy to Tauri/frontend, does not edit Pumas/package facts,
   lockfiles, generated files, or workflow fixtures, and still blocks ready
-  runtime redispatch through the recomputed duplicate-dispatch guard decision.
+  runtime redispatch through the recomputed runtime redispatch recovery-state decision.
   Implementation summary: `WorkflowSchedulerSessionRunner` exposes a narrow
   `resume_progress_loop` wrapper; bootstrap recovery deduplicates active runs
   needing progress-loop replay, applies progress, replans, gates the recomputed
@@ -2080,3 +2080,30 @@ durable task orchestration path.
   Pumas test fixtures only.
   Remaining follow-up: implement durable duplicate-dispatch/idempotency guard
   for ready runtime redispatch, then diagnostics-ledger attempt/timing facts.
+- 2026-06-04 runtime redispatch recovery-state diagnostic slice completed.
+  Smallest useful vertical slice: refine ready-runtime bootstrap redispatch
+  from a duplicate-dispatch-only blocker into a typed
+  `BlockedRuntimeRedispatchRecoveryStateRequired` decision that names both
+  durable prerequisites: persisted readiness proof and
+  duplicate-dispatch/idempotency state. Allowed write set used:
+  `workflow/contracts.rs`, `workflow/session_execution_api.rs`, and the plan
+  docs.
+  No-fallback/no-legacy confirmation: no ready runtime task is redispatched,
+  no graph/node-engine/reduced-plan execution path is added, no policy moves
+  to Tauri/frontend, no Pumas/package facts, lockfiles, generated files, or
+  workflow fixtures are edited, and old runtime behavior is not preserved.
+  Discovered issue: canonical ready dispatch needs an admitted readiness proof,
+  but the ready task record does not currently persist that proof for bootstrap
+  replay. Ready redispatch must remain typed diagnostics until that proof and
+  duplicate-dispatch guard state are durable.
+  Verification passed: `cargo fmt -p pantograph-workflow-service`; `cargo
+  test -p pantograph-workflow-service
+  bootstrap_recovery_plan_blocks_ready_runtime_redispatch_without_recovery_state
+  --lib`; `cargo test -p pantograph-workflow-service bootstrap_recovery
+  --lib`; `cargo check -p pantograph-workflow-service`; `cargo fmt -p
+  pantograph-workflow-service -- --check`; `git diff --check`; and targeted
+  no-fallback/no-legacy source search. Search matches were existing diagnostics
+  compatibility payload fields, existing negative legacy tests, and existing
+  Pumas test fixtures only.
+  Remaining follow-up: persist ready runtime dispatch recovery state needed for
+  bootstrap redispatch, then diagnostics-ledger attempt/timing facts.
