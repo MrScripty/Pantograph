@@ -860,6 +860,27 @@ targeted no-fallback/no-legacy source search. Remaining lifecycle work: emit
 cancel and redispatch attempt lifecycle events, then add projection/read-model
 fields only after emitted event ordering is proven.
 
+2026-06-05 scheduler cancellation diagnostics re-plan decision: use Option 1,
+the canonical observed-cancellation terminalization path. The next source
+slice must first add a workflow-service-owned path that turns observed runtime
+cancellation into a matching scheduler cancel terminal mutation, reservation
+release intent/application, and then a `scheduler.task_attempt_lifecycle_changed`
+`Cancelled` event. Cancellation request remains intent-only: it must not emit
+terminal attempt diagnostics, release reservations, or mark scheduler state
+terminal before runtime observation. This keeps scheduler task lifecycle,
+reservation release, and diagnostics ordering in `pantograph-workflow-service`
+instead of Tauri/frontend or runtime adapters. Option 2, emitting `Cancelled`
+at cancellation request time, is rejected because it would lie about terminal
+state and violate existing cancellation-intent semantics. Option 3, skipping to
+redispatch events, is deferred because it leaves cancellation ordering
+undefined. Option 4, adding a separate cancellation-requested diagnostics
+contract, is a possible later control-plane event but not part of scheduler
+attempt terminal lifecycle. The slice must add no graph-path or reduced-plan
+execution, node-engine runtime launch, Tauri/frontend policy, runtime adapter
+lifecycle ownership, Pumas fact changes, diagnostics-ledger schema/DTO change,
+projection/read-model fields, lockfile/generated/workflow fixture changes, or
+compatibility shim.
+
 ## Standards Rule
 
 The standards constraints in

@@ -24988,6 +24988,60 @@ Worker rules:
     - Remaining follow-up: emit cancel and redispatch attempt lifecycle
       events, then add projection/read-model fields only after emitted event
       ordering is proven.
+  - 2026-06-05 Milestone 5c scheduler cancellation diagnostics re-plan
+    decision:
+    - Selected path: Option 1, canonical observed-cancellation
+      terminalization. The next source slice must add a workflow-service-owned
+      path that converts observed runtime cancellation into the existing
+      matching scheduler cancel terminal mutation, applies the typed
+      reservation-release intent outside the store lock, and emits
+      `scheduler.task_attempt_lifecycle_changed` with transition `Cancelled`
+      only after that terminal mutation succeeds.
+    - Standards alignment: this preserves one backend lifecycle/state owner.
+      Cancellation request remains intent-only and may update the lifecycle
+      owner's runtime-host cancellation signal, but it must not emit terminal
+      scheduler attempt diagnostics, release reservations, or mark scheduler
+      task state terminal before runtime observation. This follows the
+      simplicity/complection rule by separating cancellation intent,
+      runtime-host observation, scheduler terminal mutation, reservation
+      release, diagnostics emission, redispatch/replay ordering, and
+      projection/read-model schema changes.
+    - Next source slice allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`
+      only if the existing cancel terminal mutation needs to expose
+      already-owned release/timing facts, focused workflow-service scheduler/
+      session tests, and these plan files. Do not edit diagnostics-ledger
+      schema/DTOs, projection/read-model files, generated files, lockfiles,
+      saved workflow fixtures, Tauri/frontend files, Pumas files, or runtime
+      adapter business logic unless a new re-plan explicitly expands scope.
+    - No-fallback/no-legacy confirmation for the next slice: observed
+      cancellation terminalization must use existing scheduler attempt
+      identity, active-run task state, `cancel_active_run_scheduler_task_attempt`,
+      reservation-release intent, reservation lifecycle port, and the existing
+      diagnostics-ledger append helper. It must not derive terminal state from
+      UI requests, graph paths, reduced-plan launch paths, runtime adapter
+      guesses, legacy timing observations, or compatibility shims.
+    - Rejected options:
+      - Option 2, emit `Cancelled` at cancellation request time, is rejected
+        because cancellation request is not terminal state. Existing behavior
+        and tests require the active attempt to remain running until runtime
+        observation.
+      - Option 3, skip to redispatch attempt events next, is deferred because
+        redispatch/replay ordering should not be defined before cancellation
+        terminal ordering.
+      - Option 4, add a separate cancellation-requested diagnostics contract
+        now, is deferred. It may become a control-plane diagnostic later, but
+        it is not a scheduler task-attempt terminal lifecycle event.
+    - Verification expected for the next source slice: focused service/session
+      tests proving cancellation request remains intent-only, observed runtime
+      cancellation terminally mutates the matching attempt, reservation release
+      is applied after the store mutation, and a `Cancelled` attempt event is
+      emitted with task/attempt/runtime/reservation facts; relevant scheduler
+      store/orchestrator tests if return contracts change; `cargo check -p
+      pantograph-workflow-service`; fmt check; `git diff --check`; and
+      targeted no-fallback/no-legacy source search over touched files.
 
 ### Traceability Links
 
