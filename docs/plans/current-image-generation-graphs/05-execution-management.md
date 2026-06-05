@@ -24813,6 +24813,67 @@ Worker rules:
       start/terminal/cancel/redispatch emission through the existing
       diagnostics-ledger append helper, then add projection/read-model fields
       only after emitted event ordering is proven.
+  - 2026-06-04 Milestone 5c workflow-service scheduler attempt-start
+    diagnostics producer slice:
+    - Smallest vertical slice: emit the already validated
+      `scheduler.task_attempt_lifecycle_changed` event for `Started`
+      scheduler attempts from workflow-service after the task attempt is
+      claimed and before non-runtime execution or runtime dispatch selection
+      continues.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and these plan files.
+    - No-fallback/no-legacy confirmation: the slice adds no terminal/cancel/
+      redispatch policy, no projection/read-model schema change, no graph path
+      or reduced-plan launch path, no node-engine runtime launch branch, no
+      Tauri/frontend behavior, no runtime-host adapter policy, no Pumas fact
+      change, no generated files, no lockfile changes, and no saved workflow
+      fixture changes. The diagnostics ledger is still optional through the
+      existing workflow-service append helper; if present, invalid event
+      requests fail closed through typed workflow-service errors.
+    - Simplicity/complection confirmation: scheduler store/orchestrator
+      continue to own attempt identity and start time; the session runner owns
+      diagnostic emission at the composition boundary. The slice does not move
+      ledger schema into workflow-service or scheduler lifecycle policy into
+      diagnostics-ledger.
+    - Implementation summary: scheduler start mutation now returns the
+      scheduler-owned `started_at_ms`, started runtime and non-runtime task
+      handles expose task/attempt/timing facts, and the session runner records
+      `Started` task-attempt events for both execution classes with typed
+      scheduler/workflow/node attribution.
+    - Focused tests added/updated:
+      `workflow_execution_session_records_non_runtime_scheduler_attempt_started_event`
+      verifies non-runtime started-attempt ledger emission, and
+      `workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run`
+      verifies runtime started-attempt ledger emission during resumed
+      dispatch.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_records_non_runtime_scheduler_attempt_started_event --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`
+      - `cargo test -p pantograph-workflow-service task_orchestrator --lib`
+      - `cargo test -p pantograph-workflow-service scheduler::store --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - Targeted no-fallback/no-legacy source search over touched
+        workflow-service files. Matches were existing regression-test names
+        and messages that assert legacy whole-run/runtime launch paths are not
+        used.
+    - Verification deviation: an attempted Cargo command used two test
+      filters and failed before execution; the tests were rerun separately.
+      The pre-existing snapshot-heavy test
+      `workflow_execution_session_run_records_snapshot_before_execution`
+      currently fails before execution because its saved executable
+      validation snapshot is missing, so it was not used as this slice's
+      acceptance test.
+    - Remaining follow-up: emit terminal, cancel, and redispatch attempt
+      lifecycle events with runtime/reservation/error facts after their
+      ordering is defined, then add projection/read-model fields after emitted
+      event ordering is proven.
 
 ### Traceability Links
 

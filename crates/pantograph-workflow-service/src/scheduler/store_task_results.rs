@@ -248,6 +248,7 @@ impl WorkflowExecutionSessionStore {
         (
             SchedulerTaskStateTransitionApplyResult,
             WorkflowSchedulerTaskAttemptId,
+            u64,
         ),
         WorkflowServiceError,
     > {
@@ -310,16 +311,17 @@ impl WorkflowExecutionSessionStore {
         active_run
             .scheduler_task_records
             .insert(task_id.clone(), record.clone());
+        let started_at_ms = unix_timestamp_ms();
         active_run.scheduler_task_attempts.insert(
             task_id.clone(),
             WorkflowExecutionSessionTaskAttempt {
                 attempt_id: attempt_id.clone(),
-                started_at_ms: unix_timestamp_ms(),
+                started_at_ms,
                 reservation: None,
             },
         );
         Self::mark_session_access(state, tick);
-        Ok((apply_result, attempt_id))
+        Ok((apply_result, attempt_id, started_at_ms))
     }
 
     pub(crate) fn active_run_scheduler_task_attempt_id(
@@ -1291,7 +1293,7 @@ mod tests {
                 )],
             )
             .expect("set ready task");
-        let (_applied, attempt_id) = store
+        let (_applied, attempt_id, _started_at_ms) = store
             .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,

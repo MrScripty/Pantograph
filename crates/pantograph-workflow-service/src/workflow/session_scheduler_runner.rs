@@ -10,6 +10,13 @@ use pantograph_dependency_planning::{
     DependencyReadinessProofEnvelope, ValidatedDependencyEnvironmentRequest,
     ValidatedDependencyReadinessRequestEnvelope,
 };
+use pantograph_diagnostics_ledger::{
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
+    SchedulerTaskAttemptExecutionClass, SchedulerTaskAttemptLifecycleChangedPayload,
+    SchedulerTaskAttemptLifecycleTransition,
+};
+use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 
 use crate::scheduler::{
@@ -329,6 +336,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         ))
                     })?
             };
+            self.record_scheduler_task_attempt_started(
+                started.task(),
+                started.attempt_id().as_str(),
+                started.started_at_ms(),
+            )?;
             let execution_result = self
                 .service
                 .scheduler_task_orchestrator
@@ -673,6 +685,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         ))
                     })?
             };
+            self.record_scheduler_task_attempt_started(
+                started_runtime_task.task(),
+                started_runtime_task.attempt_id().as_str(),
+                started_runtime_task.started_at_ms(),
+            )?;
             let selected_dispatch = self
                 .service
                 .scheduler_task_orchestrator
@@ -845,6 +862,87 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             outputs,
             timing_ms: started_at.elapsed().as_millis(),
         })
+    }
+
+    fn record_scheduler_task_attempt_started(
+        &self,
+        task: &WorkflowSchedulerTask,
+        attempt_id: &str,
+        started_at_ms: u64,
+    ) -> Result<(), WorkflowServiceError> {
+        let started_at_ms = i64::try_from(started_at_ms).map_err(|_| {
+            WorkflowServiceError::Internal(format!(
+                "scheduler task '{}' start time exceeded diagnostics ledger timestamp range",
+                task.task_id.as_str()
+            ))
+        })?;
+        self.service
+            .workflow_diagnostic_event_record(DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms: started_at_ms,
+                workflow_run_id: Some(WorkflowRunId::try_from(
+                    task.workflow_run_id.as_str().to_string(),
+                )?),
+                workflow_id: Some(WorkflowId::try_from(task.workflow_id.as_str().to_string())?),
+                workflow_version_id: None,
+                workflow_semantic_version: None,
+                node_id: Some(task.node_id.as_str().to_string()),
+                node_type: Some(task.node_type.clone()),
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: Some("priority_then_fifo".to_string()),
+                retention_policy_id: None,
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(
+                    SchedulerTaskAttemptLifecycleChangedPayload {
+                        scheduler_task_id: task.task_id.as_str().to_string(),
+                        scheduler_attempt_id: attempt_id.to_string(),
+                        execution_class: scheduler_task_attempt_execution_class(task)?,
+                        transition: SchedulerTaskAttemptLifecycleTransition::Started,
+                        started_at_ms: Some(started_at_ms),
+                        ended_at_ms: None,
+                        duration_ms: None,
+                        selected_runtime_id: None,
+                        selected_runtime_variant_id: None,
+                        selected_backend_key: None,
+                        selected_device_class: None,
+                        selected_device_id: None,
+                        selected_network_node_id: None,
+                        reservation_id: None,
+                        reason: Some("scheduler task attempt started".to_string()),
+                        error_summary: None,
+                        canonical_error_event_id: None,
+                    },
+                ),
+            })?;
+        Ok(())
+    }
+}
+
+fn scheduler_task_attempt_execution_class(
+    task: &WorkflowSchedulerTask,
+) -> Result<SchedulerTaskAttemptExecutionClass, WorkflowServiceError> {
+    match task.execution_class {
+        WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
+            Ok(SchedulerTaskAttemptExecutionClass::Runtime)
+        }
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine => {
+            Ok(SchedulerTaskAttemptExecutionClass::NonRuntimeNodeEngine)
+        }
+        other => Err(WorkflowServiceError::Internal(format!(
+            "scheduler task '{}' has unsupported started-attempt execution class {:?}",
+            task.task_id.as_str(),
+            other
+        ))),
     }
 }
 

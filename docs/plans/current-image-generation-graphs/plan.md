@@ -286,6 +286,19 @@ or reduced-plan launch fallback, Pumas fact change, lockfile edit, generated
 file, or workflow fixture rewrite. Remaining lifecycle work: replay/bootstrap
 recovery and diagnostics-ledger attempt/timing facts.
 
+2026-06-04 scheduler attempt-start diagnostics update: workflow-service now
+emits the ledger-owned `scheduler.task_attempt_lifecycle_changed` `Started`
+event after runtime and non-runtime scheduler attempts are claimed. Scheduler
+state remains the source of attempt identity and start time, while the session
+runner records the diagnostic event through the existing workflow-service
+append helper. This adds no terminal/cancel/redispatch policy, projection
+schema/read-model change, graph-path or reduced-plan launch fallback,
+node-engine runtime launch branch, Tauri/frontend behavior, runtime-host
+adapter policy, Pumas fact change, lockfile edit, generated file, or workflow
+fixture rewrite. Remaining lifecycle work: emit terminal/cancel/redispatch
+attempt events with runtime/reservation/error facts after ordering is defined,
+then add projection/read-model fields after emitted event ordering is proven.
+
 This plan is split into focused documents so each section stays readable while
 still preserving the planning standards' required traceability, verification,
 risk, lifecycle, and execution-management content.

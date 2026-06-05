@@ -75,6 +75,7 @@ pub(crate) struct StartedNonRuntimeTaskExecution {
     materialized_results: Vec<WorkflowSchedulerTaskResult>,
     running_record: SchedulerTaskStateRecord,
     attempt_id: WorkflowSchedulerTaskAttemptId,
+    started_at_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +85,7 @@ pub(crate) struct StartedRuntimeTaskExecution {
     pub(crate) materialized_results: Vec<WorkflowSchedulerTaskResult>,
     running_record: SchedulerTaskStateRecord,
     attempt_id: WorkflowSchedulerTaskAttemptId,
+    started_at_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +112,34 @@ impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
                 message: runtime_task_supervisor_join_error_message(error),
             }
         })?
+    }
+}
+
+impl StartedNonRuntimeTaskExecution {
+    pub(crate) fn task(&self) -> &WorkflowSchedulerTask {
+        &self.task
+    }
+
+    pub(crate) fn attempt_id(&self) -> &WorkflowSchedulerTaskAttemptId {
+        &self.attempt_id
+    }
+
+    pub(crate) fn started_at_ms(&self) -> u64 {
+        self.started_at_ms
+    }
+}
+
+impl StartedRuntimeTaskExecution {
+    pub(crate) fn task(&self) -> &WorkflowSchedulerTask {
+        &self.task
+    }
+
+    pub(crate) fn attempt_id(&self) -> &WorkflowSchedulerTaskAttemptId {
+        &self.attempt_id
+    }
+
+    pub(crate) fn started_at_ms(&self) -> u64 {
+        self.started_at_ms
     }
 }
 
@@ -768,7 +798,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
         let attempt_id = WorkflowSchedulerTaskAttemptId::new();
         self.track_task_lifecycle_handle(&task.task_id, &attempt_id)?;
-        let (running_record, attempt_id) = store
+        let (running_record, attempt_id, started_at_ms) = store
             .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
@@ -789,6 +819,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             materialized_results,
             running_record,
             attempt_id,
+            started_at_ms,
         })
     }
 
@@ -904,7 +935,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
         let attempt_id = WorkflowSchedulerTaskAttemptId::new();
         self.track_task_lifecycle_handle(&task.task_id, &attempt_id)?;
-        let (running_record, attempt_id) = store
+        let (running_record, attempt_id, started_at_ms) = store
             .start_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
@@ -925,6 +956,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             materialized_results,
             running_record,
             attempt_id,
+            started_at_ms,
         })
     }
 
@@ -2332,13 +2364,18 @@ fn applied_task_state_record_with_attempt(
     result: (
         pantograph_scheduler::SchedulerTaskStateTransitionApplyResult,
         WorkflowSchedulerTaskAttemptId,
+        u64,
     ),
 ) -> Result<
-    (SchedulerTaskStateRecord, WorkflowSchedulerTaskAttemptId),
+    (
+        SchedulerTaskStateRecord,
+        WorkflowSchedulerTaskAttemptId,
+        u64,
+    ),
     WorkflowSchedulerTaskOrchestratorError,
 > {
-    let (result, attempt_id) = result;
-    applied_task_state_record(result).map(|record| (record, attempt_id))
+    let (result, attempt_id, started_at_ms) = result;
+    applied_task_state_record(result).map(|record| (record, attempt_id, started_at_ms))
 }
 
 fn source_input_execution_intent(

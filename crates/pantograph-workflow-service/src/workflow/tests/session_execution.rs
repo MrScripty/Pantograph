@@ -134,6 +134,87 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_records_non_runtime_scheduler_attempt_started_event() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-non-runtime-attempt-diagnostics".to_string(),
+                usage_profile: Some("generic-run".to_string()),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("attempt diagnostics"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("run session");
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    let attempt_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.node_id.as_deref() == Some("text-output-1")
+        })
+        .expect("non-runtime scheduler attempt started event");
+    assert_eq!(
+        attempt_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert_eq!(
+        attempt_event.workflow_run_id.as_ref().map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert!(attempt_event
+        .payload_json
+        .contains("\"transition\":\"started\""));
+    assert!(attempt_event
+        .payload_json
+        .contains("\"execution_class\":\"non_runtime_node_engine\""));
+    assert!(attempt_event
+        .payload_json
+        .contains("\"scheduler_task_id\":\"text-output-1\""));
+    assert!(attempt_event
+        .payload_json
+        .contains("\"scheduler_attempt_id\":\"scheduler-task-attempt."));
+    assert!(attempt_event.payload_json.contains("\"started_at_ms\":"));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_timeout_applies_to_scheduler_task_runner() {
     let host = SlowWorkflowIoHost::new(std::time::Duration::from_millis(50));
     let service = WorkflowService::with_max_sessions(2);
@@ -872,6 +953,29 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
         )
         .expect("diagnostic events")
     };
+    let runtime_attempt_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    == Some(workflow_run_id.as_str())
+                && event.node_id.as_deref() == Some("infer")
+        })
+        .expect("runtime scheduler attempt started event");
+    assert_eq!(
+        runtime_attempt_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert!(runtime_attempt_event
+        .payload_json
+        .contains("\"transition\":\"started\""));
+    assert!(runtime_attempt_event
+        .payload_json
+        .contains("\"execution_class\":\"runtime\""));
+    assert!(runtime_attempt_event
+        .payload_json
+        .contains("\"scheduler_task_id\":\"infer\""));
     assert!(diagnostic_events.iter().any(|event| {
         event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
             && event.workflow_run_id.as_ref().map(|id| id.as_str())
