@@ -9,7 +9,7 @@ use crate::llm::startup::{
     build_external_inference_request,
 };
 use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway, SharedRuntimeRegistry};
-use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
+use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
 use tauri::{command, AppHandle, State};
 
 #[command]
@@ -100,7 +100,7 @@ pub async fn start_sidecar_inference(
     // Start embedding server for parallel modes (if embedding model is configured)
     if let Some(ref emb_path) = embedding_model_path {
         if embedding_memory_mode != EmbeddingMemoryMode::Sequential {
-            let resolved_embedding_path = match resolve_embedding_model_path(emb_path) {
+            let resolved_embedding_path = match resolve_configured_embedding_model_path(emb_path) {
                 Ok(path) => path,
                 Err(e) => {
                     log::warn!(

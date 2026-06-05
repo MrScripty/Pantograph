@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use inference::BackendStartupDeviceIntent;
-use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
+use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
 use reqwest::Url;
 
 use crate::config::{AppConfig, DeviceConfig};
@@ -64,7 +64,7 @@ pub(crate) fn build_configured_embedding_request(
             .models
             .embedding_model_path
             .as_deref()
-            .map(resolve_embedding_model_path)
+            .map(resolve_configured_embedding_model_path)
             .transpose()?,
         config
             .models
@@ -96,7 +96,7 @@ mod tests {
     use super::{
         build_configured_embedding_request, build_configured_inference_request,
         build_external_inference_request, build_resolved_embedding_request,
-        resolve_embedding_model_path, validate_external_server_url,
+        resolve_configured_embedding_model_path, validate_external_server_url,
     };
 
     #[test]
@@ -214,7 +214,7 @@ mod tests {
         let model_path = temp_dir.join("embed.gguf");
         fs::write(&model_path, b"gguf").expect("embedding model file should be written");
 
-        let resolved = resolve_embedding_model_path(
+        let resolved = resolve_configured_embedding_model_path(
             model_path
                 .to_str()
                 .expect("temporary embedding path should be utf-8"),

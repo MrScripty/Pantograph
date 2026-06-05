@@ -46,6 +46,7 @@ mod embedded_workflow_graph_api;
 mod embedded_workflow_host;
 mod embedded_workflow_host_helpers;
 mod embedded_workflow_service_api;
+pub mod embedding_model_config;
 pub mod embedding_workflow;
 pub mod host_runtime;
 mod inference_interface_facts_provider;

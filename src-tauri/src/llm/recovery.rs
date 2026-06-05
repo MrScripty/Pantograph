@@ -20,7 +20,7 @@ use crate::llm::startup::validate_external_server_url;
 use crate::llm::sync_rag_embedding_url_from_gateway;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
-use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
+use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
 use pantograph_embedded_runtime::runtime_recovery::{
     build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
     RecoveryAttemptPlan, RecoveryStrategy,
@@ -411,7 +411,7 @@ async fn restart_dedicated_embedding_runtime(
         return Ok(());
     };
 
-    let resolved_embedding_path = resolve_embedding_model_path(embedding_model_path)?;
+    let resolved_embedding_path = resolve_configured_embedding_model_path(embedding_model_path)?;
     let devices = list_devices(app.clone()).await.unwrap_or_default();
 
     gateway

@@ -9,7 +9,7 @@ use crate::llm::runtime_registry::{
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::SharedRuntimeRegistry;
 use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway};
-use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
+use pantograph_embedded_runtime::embedding_model_config::resolve_configured_embedding_model_path;
 use tauri::{command, ipc::Channel, AppHandle, State};
 
 /// Event sent during document indexing
@@ -193,7 +193,8 @@ pub async fn index_docs_with_switch(
         .clone();
     log::info!("Embedding model path: {:?}", embedding_model_path);
 
-    let resolved_embedding_model_path = resolve_embedding_model_path(&embedding_model_path)?;
+    let resolved_embedding_model_path =
+        resolve_configured_embedding_model_path(&embedding_model_path)?;
 
     let device = config_guard.device.clone();
     let candle_model_path = config_guard

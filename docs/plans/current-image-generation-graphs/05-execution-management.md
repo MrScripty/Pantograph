@@ -25675,6 +25675,40 @@ Worker rules:
       - `cargo check -p pantograph-embedded-runtime`
       - strict source search for removed embedding model-path resolver helpers
       - `git diff --check`
+  - 2026-06-05 Milestone 5b app-config embedding path validation follow-up:
+    - Smallest vertical slice: repair the compile boundary left by deleting
+      the graph workflow embedding path resolver by moving explicit
+      app-config embedding path validation into a backend-owned
+      embedded-runtime helper and updating Tauri startup/RAG/server/recovery
+      call sites to use it.
+    - Allowed write set used:
+      `crates/pantograph-embedded-runtime/src/embedding_model_config.rs`,
+      `crates/pantograph-embedded-runtime/src/lib.rs`,
+      `src-tauri/src/llm/startup.rs`,
+      `src-tauri/src/llm/recovery.rs`,
+      `src-tauri/src/llm/commands/rag.rs`,
+      `src-tauri/src/llm/commands/server.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the helper validates only explicit
+      existing `.gguf` files from local app configuration and fails closed for
+      blank, missing, directory, or non-GGUF paths. It does not search Pumas
+      directories, repair graph-derived paths, produce scheduler/runtime-host
+      facts, or move business policy into Tauri.
+    - Focused tests added/updated: embedded-runtime app-config helper tests
+      cover explicit GGUF success plus missing, directory, and non-GGUF
+      fail-closed behavior; Tauri startup tests now compile and build
+      embedding requests through the backend-owned helper.
+    - Verification passed:
+      - `cargo test -p pantograph-embedded-runtime embedding_model_config --lib`
+      - `cargo test --manifest-path src-tauri/Cargo.toml startup`
+      - `cargo fmt -p pantograph-embedded-runtime -- --check`
+      - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
+      - `cargo check -p pantograph-embedded-runtime`
+      - `cargo check --manifest-path src-tauri/Cargo.toml`
+      - strict source search for deleted graph resolver imports and old path
+        discovery helpers
+      - `git diff --check`
 
 ### Traceability Links
 

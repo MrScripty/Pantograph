@@ -641,7 +641,14 @@ come from node-type defaults while the Python adapter remains fail-closed.
   embedded embedding model-path resolver helpers and removed a stale
   task-executor helper test left behind by the earlier Python metadata cleanup.
   No scheduler/runtime-host facts are adapted back into graph `model_path`,
-  Pumas path, or legacy embedding runtime launch shapes.
+  Pumas path, or legacy embedding runtime launch shapes. 2026-06-05 follow-up:
+  app-config/RAG/server startup no longer imports a graph workflow embedding
+  resolver. Tauri now calls a backend-owned embedded-runtime app-config helper
+  that validates only explicit existing `.gguf` files and fails closed for
+  missing, directory, blank, or non-GGUF paths without searching Pumas/model
+  directories or repairing graph-derived paths. This keeps app-shell code as a
+  caller/transport surface while preserving explicit local embedding
+  configuration as a non-graph runtime setting.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition
