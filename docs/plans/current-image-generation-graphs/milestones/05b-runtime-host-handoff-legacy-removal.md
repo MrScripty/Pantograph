@@ -558,7 +558,7 @@ come from node-type defaults while the Python adapter remains fail-closed.
   that Stable Audio runtime execution is scheduler-owned and requires
   scheduler task state/results. The old node-engine Stable Audio launch module
   was deleted in the same slice.
-- [ ] Convert remaining runtime graph execution references to scheduler task
+- [x] Convert remaining runtime graph execution references to scheduler task
   state/results, runtime-host responses, or typed diagnostic-only fail-closed
   behavior. This includes PyTorch, llama.cpp, audio, and any node-engine
   inference/dependency path that can still launch from `model_path`,
@@ -663,7 +663,16 @@ come from node-type defaults while the Python adapter remains fail-closed.
   scheduler affinity policy selection as a fallback. The helper now delegates
   to the shared scheduler affinity policy by name in both registry-present and
   registry-absent paths; behavior and the existing registry eviction-order
-  selection remain unchanged.
+  selection remain unchanged. 2026-06-05 reconciliation: strict active Rust
+  production search no longer finds reachable `ModelDependencyRequest`,
+  `ModelDependencyResolver`, `ModelRefV2`, `build_model_ref_v2`, or
+  `fallback_runtime_unload_candidate` symbols in non-test source; the only
+  remaining non-test concrete-name hit is a fail-closed `python_runtime.rs`
+  module doc string describing prohibited launch inputs. Remaining
+  `model_path`/`modelPath` hits are explicit app configuration, backend-local
+  load-target fields, stale/negative diagnostics, persistence sanitization, or
+  tests proving retired graph fields are rejected/stripped; they are not
+  successful runtime graph execution launch paths.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition
@@ -739,7 +748,7 @@ come from node-type defaults while the Python adapter remains fail-closed.
   paths after runtime host load-target resolution, diagnostic-only legacy
   guardrails, and scheduler task-result/runtime-host response coverage are
   wired.
-- [ ] Remove retired node-engine contracts and helpers:
+- [x] Remove retired node-engine contracts and helpers:
   `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
   `build_model_ref_v2`, `PlannedInferenceExecutionHost`, path repair helpers,
   and successful `model_path` test fixtures only after scheduler-to-runtime-host
@@ -818,6 +827,14 @@ come from node-type defaults while the Python adapter remains fail-closed.
   still records backend execution metadata, artifact stream references, and
   diagnostics projection updates; graph snapshots remain owned by backend
   diagnostics/projection APIs rather than a Tauri adapter-local runtime hook.
+  2026-06-05 reconciliation: active non-test Rust source no longer contains
+  reachable symbols for the retired concrete node-engine contract/helper names
+  `ModelDependencyRequest`, `ModelDependencyResolver`, `ModelRefV2`,
+  `build_model_ref_v2`, or `PlannedInferenceExecutionHost`; the only remaining
+  non-test concrete-name hit is a fail-closed `python_runtime.rs` module doc
+  string. Retained model-path strings in node-engine/workflow-service are
+  rejection, sanitization, diagnostic, or test evidence, not successful launch
+  fixtures.
 - [x] Add backend-owned runtime session/load-proof state in
   `pantograph-embedded-runtime` keyed by workflow/task identity and populated
   from canonical inference planning, Pumas artifact/load-target decisions, and

@@ -25775,6 +25775,34 @@ Worker rules:
       - `cargo check -p pantograph-embedded-runtime`
       - strict source search for removed `fallback_runtime_unload_candidate`
         helper name
+  - 2026-06-05 Milestone 5b legacy runtime cleanup reconciliation:
+    - Smallest vertical slice: plan-only reconciliation after the source
+      cleanup slices proved active production Rust no longer retains
+      successful legacy model-dependency/model-ref/runtime graph launch
+      surfaces.
+    - Allowed write set used:
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the completed 5b cleanup tasks now
+      reflect the current code state. Strict active Rust production search no
+      longer finds reachable `ModelDependencyRequest`,
+      `ModelDependencyResolver`, `ModelRefV2`, `build_model_ref_v2`,
+      `PlannedInferenceExecutionHost`, or `fallback_runtime_unload_candidate`
+      reachable symbols outside tests/docs. The only remaining non-test
+      concrete-name hit is a fail-closed `python_runtime.rs` module doc string
+      describing prohibited launch inputs. Remaining `model_path`/`modelPath`
+      uses are explicit local app configuration, backend-local load-target
+      fields, rejection/sanitization diagnostics, persistence guardrails, or
+      negative tests; they are not successful runtime graph launch paths.
+    - Remaining follow-up: Milestone 5c lifecycle hardening stays open
+      separately for durable retry/defer, replay/bootstrap, worker lifecycle,
+      cooperative cancellation response mapping, and attempt/timing ledger
+      facts.
+    - Verification passed:
+      - strict active Rust production search for retired concrete
+        model-dependency/model-ref contract/helper names
+      - strict source search for removed `fallback_runtime_unload_candidate`
+      - `git diff --check`
 
 ### Traceability Links
 
