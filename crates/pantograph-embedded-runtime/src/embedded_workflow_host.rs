@@ -212,7 +212,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
     ) -> Result<Option<WorkflowExecutionSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
-            return Ok(Self::fallback_runtime_unload_candidate(target, candidates));
+            return Ok(Self::policy_runtime_unload_candidate(target, candidates));
         };
 
         if let Some((session_id, _runtime_id)) =
@@ -229,7 +229,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             }
         }
 
-        Ok(Self::fallback_runtime_unload_candidate(target, candidates))
+        Ok(Self::policy_runtime_unload_candidate(target, candidates))
     }
 
     async fn workflow_technical_fit_decision(

@@ -658,7 +658,12 @@ come from node-type defaults while the Python adapter remains fail-closed.
   configured embedding startup no longer treats device discovery failure as an
   empty device list. Sidecar inference startup and recovery now propagate a
   typed device-listing diagnostic before starting the configured embedding
-  runtime, instead of silently continuing with no device facts.
+  runtime, instead of silently continuing with no device facts. 2026-06-05
+  follow-up: embedded workflow-host runtime unload selection no longer names
+  scheduler affinity policy selection as a fallback. The helper now delegates
+  to the shared scheduler affinity policy by name in both registry-present and
+  registry-absent paths; behavior and the existing registry eviction-order
+  selection remain unchanged.
 - [x] Remove production embedded-runtime composition of
   `ModelDependencyResolver` and `ModelRefV2`-producing paths using the
   selected option 2 backend diagnostic/activity split. The next composition

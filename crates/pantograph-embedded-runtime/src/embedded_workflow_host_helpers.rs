@@ -530,7 +530,7 @@ impl EmbeddedWorkflowHost {
         outputs
     }
 
-    pub(crate) fn fallback_runtime_unload_candidate(
+    pub(crate) fn policy_runtime_unload_candidate(
         target: &WorkflowExecutionSessionRuntimeSelectionTarget,
         candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
     ) -> Option<WorkflowExecutionSessionRuntimeUnloadCandidate> {

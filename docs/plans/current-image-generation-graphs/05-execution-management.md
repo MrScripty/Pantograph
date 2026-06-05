@@ -25754,6 +25754,27 @@ Worker rules:
       - `cargo test --manifest-path src-tauri/Cargo.toml server::tests`
       - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
       - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - 2026-06-05 Milestone 5b embedded workflow-host unload policy naming
+    cleanup:
+    - Smallest vertical slice: rename the embedded workflow-host helper that
+      delegates runtime unload candidate selection to scheduler affinity policy
+      so it is no longer labeled as a fallback path.
+    - Allowed write set used:
+      `crates/pantograph-embedded-runtime/src/embedded_workflow_host.rs`,
+      `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`,
+      `docs/plans/current-image-generation-graphs/milestones/05b-runtime-host-handoff-legacy-removal.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: behavior did not change; registry
+      reclaim remains preferred when present, and both registry-present
+      no-match and registry-absent paths delegate to the shared scheduler
+      affinity policy by name instead of a fallback-labeled helper. No graph
+      path, node-engine launch, Tauri policy, or compatibility shim was added.
+    - Focused verification:
+      - `cargo test -p pantograph-embedded-runtime test_runtime_unload_candidate_selection_uses_registry_eviction_order --lib`
+      - `cargo fmt -p pantograph-embedded-runtime -- --check`
+      - `cargo check -p pantograph-embedded-runtime`
+      - strict source search for removed `fallback_runtime_unload_candidate`
+        helper name
 
 ### Traceability Links
 
