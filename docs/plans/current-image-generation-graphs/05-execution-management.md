@@ -26509,6 +26509,44 @@ Worker rules:
       await a worker-owned completion path for one execution branch while
       keeping runtime dispatch policy, reservation release, and terminal task
       mutation backend-owned.
+  - 2026-06-06 task-execution worker service-ownership sequencing update:
+    - Discovery: before the request branch enqueue/await slice, the service
+      still lacks a durable task-execution worker instance. Using a temporary
+      worker from the request path would make lifecycle ownership
+      request-scoped.
+    - Plan update: insert a narrow service-owned worker accessor slice before
+      branch migration. The slice must add a worker handle to
+      `WorkflowService`, lazily start the bounded worker from the backend
+      lifecycle owner, expose explicit shutdown, and keep task execution
+      behavior unchanged.
+    - No-fallback/no-legacy confirmation: do not use this sequencing slice to
+      execute, complete, retry, or fallback-run task attempts; do not add
+      public lifecycle snapshots or diagnostics-ledger worker events.
+  - 2026-06-06 task-execution worker service-ownership source slice:
+    - Smallest vertical slice: make `WorkflowService` own the worker instance
+      before request branches enqueue work.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      and the current image-generation plan docs. Request/session branch
+      migration, runtime dispatch movement, task completion signaling,
+      reservation policy changes, public DTOs, generated files, lockfiles,
+      saved workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, and legacy launch paths remained out
+      of scope.
+    - No-fallback/no-legacy confirmation: the service-owned worker handle only
+      provides lazy backend-lifecycle startup and explicit idempotent shutdown.
+      It does not enqueue request work, execute tasks, complete tasks, retry,
+      fallback-run, or route through node-engine whole-run launch,
+      planned-inference launch, graph-path inference, frontend/Tauri policy,
+      compatibility DTOs, or fake completion channels.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+    - Deviations/discovered issues: none.
+    - Remaining follow-up: migrate one request execution branch to enqueue and
+      await worker-owned completion using the service-owned worker.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

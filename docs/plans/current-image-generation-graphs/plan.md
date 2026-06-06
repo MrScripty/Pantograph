@@ -275,6 +275,27 @@ Next Option 4 slice: wire `WorkflowTaskExecutionOwner` to enqueue and await a
 worker-owned completion path for one execution branch without moving runtime
 dispatch policy into request code.
 
+2026-06-06 task-execution worker service-ownership sequencing update:
+discovered before the branch enqueue/await slice that `WorkflowService` does
+not yet own a task-execution worker instance. Wiring a request branch directly
+to an ad hoc worker would make the worker request-scoped and violate the
+lifecycle ownership standard. Insert a narrow service-owned worker accessor
+slice before branch migration: add the worker handle to `WorkflowService`,
+start it lazily from the backend lifecycle owner, and provide explicit
+shutdown. After that slice is verified, continue with the planned single
+branch enqueue/await migration.
+
+2026-06-06 task-execution worker service-ownership slice: completed the
+inserted ownership slice by adding an optional task-execution worker handle to
+`WorkflowService`, lazy backend-lifecycle startup through the scheduler
+lifecycle owner, and explicit idempotent worker shutdown. Task execution
+behavior remains unchanged: requests still do not enqueue task attempts,
+the worker does not complete attempts, and no fallback or legacy execution
+path was added. Verification: `cargo fmt -p pantograph-workflow-service` and
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`.
+Next Option 4 slice: migrate one request execution branch to enqueue and await
+worker-owned completion using the service-owned worker.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

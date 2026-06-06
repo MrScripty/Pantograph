@@ -72,6 +72,7 @@ impl WorkflowService {
             dependency_requirements_registry: Arc::new(
                 InMemoryDependencyRequirementsRegistry::new(),
             ),
+            task_execution_worker: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
