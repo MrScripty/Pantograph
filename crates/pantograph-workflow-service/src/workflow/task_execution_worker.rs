@@ -1,4 +1,120 @@
-use super::WorkflowSchedulerTaskExecutionClass;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use crate::scheduler::{
+    WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+    WorkflowSchedulerLifecycleComponentState,
+};
+
+use super::{WorkflowSchedulerTaskExecutionClass, WorkflowServiceError};
+
+const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
+
+#[derive(Debug)]
+pub(super) struct WorkflowTaskExecutionWorker {
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    command_tx: tokio::sync::mpsc::Sender<WorkflowTaskExecutionWorkerCommand>,
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+    join_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    observed_task_attempt_commands: Arc<AtomicU64>,
+}
+
+impl WorkflowTaskExecutionWorker {
+    pub(super) fn spawn(
+        scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    ) -> Result<Self, WorkflowServiceError> {
+        let runtime_handle = tokio::runtime::Handle::try_current().map_err(|_| {
+            WorkflowServiceError::Internal(
+                "task execution worker requires an active Tokio runtime".to_string(),
+            )
+        })?;
+        Self::spawn_with_handle(scheduler_lifecycle, runtime_handle)
+    }
+
+    pub(super) fn spawn_with_handle(
+        scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+        runtime_handle: tokio::runtime::Handle,
+    ) -> Result<Self, WorkflowServiceError> {
+        scheduler_lifecycle
+            .update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker,
+                WorkflowSchedulerLifecycleComponentState::Running,
+            )
+            .map(|_record| ())?;
+
+        let (command_tx, command_rx) =
+            tokio::sync::mpsc::channel(TASK_EXECUTION_WORKER_COMMAND_CAPACITY);
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let observed_task_attempt_commands = Arc::new(AtomicU64::new(0));
+        let join_handle = runtime_handle.spawn(task_execution_worker_loop(
+            scheduler_lifecycle.clone(),
+            command_rx,
+            shutdown_rx,
+            Arc::clone(&observed_task_attempt_commands),
+        ));
+
+        Ok(Self {
+            scheduler_lifecycle,
+            command_tx,
+            shutdown_tx,
+            join_handle: tokio::sync::Mutex::new(Some(join_handle)),
+            observed_task_attempt_commands,
+        })
+    }
+
+    pub(super) fn try_enqueue(
+        &self,
+        command: WorkflowTaskExecutionWorkerCommand,
+    ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+        self.command_tx.try_send(command).map_err(|error| {
+            WorkflowTaskExecutionWorkerOutcome::worker_unavailable(format!(
+                "task execution worker command queue unavailable: {error}"
+            ))
+        })
+    }
+
+    pub(super) async fn shutdown(&self) -> Result<(), WorkflowServiceError> {
+        self.mark_shutting_down_if_running()?;
+        let _ = self.shutdown_tx.send(true);
+        if let Some(join_handle) = self.join_handle.lock().await.take() {
+            join_handle.await.map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "task execution worker join failed during shutdown: {error}"
+                ))
+            })?;
+        }
+        self.mark_shutdown()
+    }
+
+    #[cfg(test)]
+    pub(super) fn observed_task_attempt_command_count(&self) -> u64 {
+        self.observed_task_attempt_commands.load(Ordering::SeqCst)
+    }
+
+    fn mark_shutting_down_if_running(&self) -> Result<(), WorkflowServiceError> {
+        let current = self
+            .scheduler_lifecycle
+            .component(WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker)?;
+        if current.state == WorkflowSchedulerLifecycleComponentState::Shutdown {
+            return Ok(());
+        }
+        self.scheduler_lifecycle
+            .update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker,
+                WorkflowSchedulerLifecycleComponentState::ShuttingDown,
+            )
+            .map(|_record| ())
+    }
+
+    fn mark_shutdown(&self) -> Result<(), WorkflowServiceError> {
+        self.scheduler_lifecycle
+            .update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker,
+                WorkflowSchedulerLifecycleComponentState::Shutdown,
+            )
+            .map(|_record| ())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
@@ -167,10 +283,152 @@ impl WorkflowTaskExecutionWorkerDiagnostic {
     }
 }
 
+async fn task_execution_worker_loop(
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    mut command_rx: tokio::sync::mpsc::Receiver<WorkflowTaskExecutionWorkerCommand>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
+    observed_task_attempt_commands: Arc<AtomicU64>,
+) {
+    loop {
+        tokio::select! {
+            changed = shutdown_rx.changed() => {
+                if changed.is_err() || *shutdown_rx.borrow() {
+                    break;
+                }
+            }
+            maybe_command = command_rx.recv() => {
+                match maybe_command {
+                    Some(WorkflowTaskExecutionWorkerCommand::ExecuteTaskAttempt(_command)) => {
+                        observed_task_attempt_commands.fetch_add(1, Ordering::SeqCst);
+                    }
+                    Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let _ = scheduler_lifecycle.update_component_state(
+        WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker,
+        WorkflowSchedulerLifecycleComponentState::Shutdown,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scheduler::{
+        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+        WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
+    };
     use crate::workflow::WorkflowSchedulerTaskExecutionClass;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn task_execution_worker_marks_running_until_shutdown() {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle.clone())
+            .expect("spawn task execution worker");
+
+        assert_eq!(
+            scheduler_lifecycle
+                .component(WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker)
+                .expect("task execution worker component")
+                .state,
+            WorkflowSchedulerLifecycleComponentState::Running
+        );
+
+        worker
+            .shutdown()
+            .await
+            .expect("shutdown task execution worker");
+
+        assert_eq!(
+            scheduler_lifecycle
+                .component(WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker)
+                .expect("task execution worker component")
+                .state,
+            WorkflowSchedulerLifecycleComponentState::Shutdown
+        );
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_observes_task_attempt_command_without_executing_task() {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle)
+            .expect("spawn task execution worker");
+
+        worker
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_task_attempt(
+                "session-1",
+                "run-1",
+                "task-1",
+                WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+                Some(500),
+            ))
+            .expect("enqueue task attempt command");
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if worker.observed_task_attempt_command_count() > 0 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("worker should observe command");
+
+        worker
+            .shutdown()
+            .await
+            .expect("shutdown task execution worker");
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_shutdown_is_idempotent() {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle.clone())
+            .expect("spawn task execution worker");
+
+        worker
+            .shutdown()
+            .await
+            .expect("first shutdown should complete");
+        worker
+            .shutdown()
+            .await
+            .expect("second shutdown should complete");
+
+        assert_eq!(
+            scheduler_lifecycle
+                .component(WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker)
+                .expect("task execution worker component")
+                .state,
+            WorkflowSchedulerLifecycleComponentState::Shutdown
+        );
+    }
+
+    #[test]
+    fn task_execution_worker_spawn_requires_active_tokio_runtime() {
+        let error = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle())
+            .expect_err("task execution worker spawn should require runtime");
+
+        assert!(
+            error
+                .to_string()
+                .contains("task execution worker requires an active Tokio runtime"),
+            "unexpected error: {error}"
+        );
+    }
+
+    fn scheduler_lifecycle() -> WorkflowSchedulerLifecycleComponentRegistryHandle {
+        WorkflowSchedulerLifecycleComponentRegistryHandle::new(
+            WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.task-execution-worker.test")
+                .expect("scheduler lifecycle owner id"),
+        )
+    }
 
     #[test]
     fn execute_task_attempt_command_is_task_scoped() {

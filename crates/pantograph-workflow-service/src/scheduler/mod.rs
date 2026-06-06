@@ -39,7 +39,7 @@ pub use contracts::{
 #[cfg(test)]
 pub(crate) use lifecycle::{
     WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
-    WorkflowSchedulerLifecycleComponentState,
+    WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
 };
 pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;

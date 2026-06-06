@@ -189,6 +189,7 @@ impl WorkflowSchedulerLifecycleOwnerId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum WorkflowSchedulerLifecycleComponentKind {
     QueueWorker,
+    TaskExecutionWorker,
     DependencyReadinessAction,
     ResourceObservationLoop,
     RuntimeHostDispatch,
@@ -200,6 +201,7 @@ impl WorkflowSchedulerLifecycleComponentKind {
     pub(crate) fn required_components() -> &'static [Self] {
         &[
             Self::QueueWorker,
+            Self::TaskExecutionWorker,
             Self::DependencyReadinessAction,
             Self::ResourceObservationLoop,
             Self::RuntimeHostDispatch,
@@ -211,6 +213,7 @@ impl WorkflowSchedulerLifecycleComponentKind {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::QueueWorker => "queue_worker",
+            Self::TaskExecutionWorker => "task_execution_worker",
             Self::DependencyReadinessAction => "dependency_readiness_action",
             Self::ResourceObservationLoop => "resource_observation_loop",
             Self::RuntimeHostDispatch => "runtime_host_dispatch",

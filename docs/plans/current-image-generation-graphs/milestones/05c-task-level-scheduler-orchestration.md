@@ -806,6 +806,16 @@ durable task orchestration path.
     `cargo test -p pantograph-workflow-service runtime_task_supervisor_ --lib`.
     Next Option 4 slice: add the bounded backend task-execution worker
     startup/shutdown shell without moving runtime dispatch behavior yet.
+  - 2026-06-06 bounded task-execution worker shell slice: added the
+    `task_execution_worker` lifecycle component and an internal bounded worker
+    shell with command observation and idempotent shutdown. Verified with
+    `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+    and
+    `cargo test -p pantograph-workflow-service lifecycle_component_kinds_have_stable_snapshot_names --lib`.
+    Next Option 4 slice: wire one request path branch to enqueue and await
+    worker-owned completion without moving runtime dispatch policy into
+    request code.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

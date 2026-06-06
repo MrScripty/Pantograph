@@ -1040,6 +1040,13 @@ Option 3 thin implementation sequence:
      cancellation and externally aborted joins. Runtime dispatch ownership and
      reservation policy did not move in this slice. Next slice: add the
      bounded backend task-execution worker startup/shutdown shell.
+   - 2026-06-06 bounded task-execution worker shell slice: added the
+     `task_execution_worker` scheduler lifecycle component and a bounded
+     internal worker shell with startup, command-queue observation, shutdown,
+     idempotent shutdown, and typed worker-unavailable enqueue diagnostics.
+     The shell is not wired into request execution and does not execute,
+     complete, retry, or fallback-run task attempts. Next slice: wire one
+     request path branch to enqueue and await worker-owned completion.
 
 Worker-system standards gates:
 

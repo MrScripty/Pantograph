@@ -26473,6 +26473,42 @@ Worker rules:
       bounded backend worker startup/shutdown shell and keep task execution
       behavior unchanged until the worker owns admission of execution
       commands.
+  - 2026-06-06 bounded task-execution worker shell source slice:
+    - Smallest vertical slice: add the backend task-execution worker
+      lifecycle component and a bounded startup/shutdown shell that can accept
+      internal task-attempt commands without executing them yet.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/scheduler/lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      and the current image-generation plan docs. Request/session API wiring,
+      runtime dispatch movement, task completion signaling, reservation
+      policy changes, public DTOs, generated files, lockfiles, saved
+      workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, and legacy launch paths remained out
+      of scope.
+    - No-fallback/no-legacy confirmation: the worker shell is not wired into
+      request execution and does not execute, complete, retry, or fallback-run
+      task attempts. It only owns lifecycle state, a bounded command queue,
+      shutdown signaling, and typed worker-unavailable diagnostics for enqueue
+      failures.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+      - `cargo test -p pantograph-workflow-service lifecycle_component_kinds_have_stable_snapshot_names --lib`
+    - Deviations/discovered issues:
+      - Initial verification found the worker module importing the private
+        scheduler lifecycle module; fixed by using scheduler re-exports.
+      - Initial verification found the sibling module tests needed a
+        test-only lifecycle owner id re-export; added it behind the existing
+        `#[cfg(test)]` scheduler re-export block.
+      - Initial verification attempted two Cargo test filters in one command;
+        reran the filters as separate valid commands.
+    - Remaining follow-up: wire `WorkflowTaskExecutionOwner` to enqueue and
+      await a worker-owned completion path for one execution branch while
+      keeping runtime dispatch policy, reservation release, and terminal task
+      mutation backend-owned.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

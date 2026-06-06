@@ -258,6 +258,23 @@ first-class lifecycle operation for the future worker. Verification:
 Next Option 4 slice: introduce the bounded backend task-execution worker loop
 startup/shutdown shell without moving runtime dispatch behavior yet.
 
+2026-06-06 bounded task-execution worker shell slice: completed the third
+Option 4 source slice by adding a scheduler lifecycle
+`task_execution_worker` component and a bounded internal worker shell with
+startup, command-queue observation, shutdown signaling, idempotent shutdown,
+and worker-unavailable diagnostics for queue send failures. The shell is not
+wired into request execution and does not execute, complete, retry, or
+fallback-run task attempts. Verification:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`, and
+`cargo test -p pantograph-workflow-service lifecycle_component_kinds_have_stable_snapshot_names --lib`.
+Discovery handled in-slice: the worker module needed the scheduler lifecycle
+types through crate re-exports instead of the private lifecycle module, and
+the test-only lifecycle owner id re-export was added for sibling module tests.
+Next Option 4 slice: wire `WorkflowTaskExecutionOwner` to enqueue and await a
+worker-owned completion path for one execution branch without moving runtime
+dispatch policy into request code.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

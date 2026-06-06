@@ -96,6 +96,7 @@ fn lifecycle_component_kinds_have_stable_snapshot_names() {
         names,
         vec![
             "queue_worker",
+            "task_execution_worker",
             "dependency_readiness_action",
             "resource_observation_loop",
             "runtime_host_dispatch",
