@@ -1090,6 +1090,13 @@ Option 3 thin implementation sequence:
      after the worker-owned inference path is complete, evolve to durable
      task-event-loop claiming so workers execute ready task attempts
      independently across workflow runs and enable batching/replay.
+   - 2026-06-06 worker-owned runtime branch contract slice: added internal
+     `ExecuteRuntimeBranch` command plus completed, failed, and deferred
+     runtime-branch outcomes to the task-execution worker contract. This
+     defines the run-scoped worker boundary without moving runtime dispatch,
+     request execution, durable task claiming, public worker snapshots, or
+     diagnostics-ledger worker events. Next slice: extract the runtime branch
+     execution context behind the composition-root owner.
 
 Worker-system standards gates:
 

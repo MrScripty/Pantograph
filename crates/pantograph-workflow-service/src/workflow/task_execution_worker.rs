@@ -6,7 +6,10 @@ use crate::scheduler::{
     WorkflowSchedulerLifecycleComponentState,
 };
 
-use super::{WorkflowSchedulerTaskExecutionClass, WorkflowServiceError};
+use super::{
+    WorkflowOutputTarget, WorkflowRunResponse, WorkflowSchedulerTaskExecutionClass,
+    WorkflowServiceError,
+};
 
 const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
 
@@ -120,6 +123,7 @@ impl WorkflowTaskExecutionWorker {
 #[must_use]
 pub(super) enum WorkflowTaskExecutionWorkerCommand {
     ExecuteTaskAttempt(WorkflowTaskExecutionWorkerTaskAttemptCommand),
+    ExecuteRuntimeBranch(WorkflowTaskExecutionWorkerRuntimeBranchCommand),
     Shutdown(WorkflowTaskExecutionWorkerShutdownCommand),
 }
 
@@ -135,6 +139,24 @@ pub(super) struct WorkflowTaskExecutionWorkerTaskAttemptCommand {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+    pub(super) session_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) workflow_id: String,
+    pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub(super) enum WorkflowTaskExecutionWorkerRuntimeBranchStartReason {
+    Started,
+    Redispatched,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub(super) struct WorkflowTaskExecutionWorkerShutdownCommand {
     pub(super) reason: WorkflowTaskExecutionWorkerShutdownReason,
 }
@@ -146,11 +168,14 @@ pub(super) enum WorkflowTaskExecutionWorkerShutdownReason {
     QueueClosed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[must_use]
 pub(super) enum WorkflowTaskExecutionWorkerOutcome {
     TaskTerminal(WorkflowTaskExecutionWorkerTerminalOutcome),
     TaskDeferred(WorkflowTaskExecutionWorkerDeferredOutcome),
+    RuntimeBranchCompleted(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome),
+    RuntimeBranchFailed(WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome),
+    RuntimeBranchDeferred(WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome),
     WorkerUnavailable(WorkflowTaskExecutionWorkerDiagnostic),
     ShutdownAccepted,
 }
@@ -191,6 +216,40 @@ pub(super) enum WorkflowTaskExecutionWorkerDeferredReason {
     ResourceReservationUnavailable,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+    pub(super) session_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) response: WorkflowRunResponse,
+    pub(super) diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+    pub(super) session_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) error_message: String,
+    pub(super) diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
+    pub(super) session_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) reason: WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason,
+    pub(super) deferred_task_ids: Vec<String>,
+    pub(super) diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub(super) enum WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason {
+    DependencyReadinessPending,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub(super) struct WorkflowTaskExecutionWorkerDiagnostic {
@@ -208,6 +267,7 @@ pub(super) enum WorkflowTaskExecutionWorkerDiagnosticCode {
     RuntimeSupervisorCancelled,
     ReservationReconcileFailed,
     TaskLifecycleHandleReleaseFailed,
+    RuntimeBranchFailed,
 }
 
 impl WorkflowTaskExecutionWorkerCommand {
@@ -224,6 +284,24 @@ impl WorkflowTaskExecutionWorkerCommand {
             task_id: task_id.into(),
             execution_class,
             timeout_ms,
+        })
+    }
+
+    pub(super) fn execute_runtime_branch(
+        session_id: impl Into<String>,
+        workflow_run_id: impl Into<String>,
+        workflow_id: impl Into<String>,
+        output_targets: Option<Vec<WorkflowOutputTarget>>,
+        timeout_ms: Option<u64>,
+        start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+    ) -> Self {
+        Self::ExecuteRuntimeBranch(WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id: session_id.into(),
+            workflow_run_id: workflow_run_id.into(),
+            workflow_id: workflow_id.into(),
+            output_targets,
+            timeout_ms,
+            start_reason,
         })
     }
 
@@ -257,6 +335,47 @@ impl WorkflowTaskExecutionWorkerOutcome {
             workflow_run_id: command.workflow_run_id.clone(),
             task_id: command.task_id.clone(),
             reason,
+            diagnostics,
+        })
+    }
+
+    pub(super) fn runtime_branch_completed(
+        command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        response: WorkflowRunResponse,
+        diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+    ) -> Self {
+        Self::RuntimeBranchCompleted(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+            session_id: command.session_id.clone(),
+            workflow_run_id: command.workflow_run_id.clone(),
+            response,
+            diagnostics,
+        })
+    }
+
+    pub(super) fn runtime_branch_failed(
+        command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        error_message: impl Into<String>,
+        diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+    ) -> Self {
+        Self::RuntimeBranchFailed(WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+            session_id: command.session_id.clone(),
+            workflow_run_id: command.workflow_run_id.clone(),
+            error_message: error_message.into(),
+            diagnostics,
+        })
+    }
+
+    pub(super) fn runtime_branch_deferred(
+        command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        reason: WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason,
+        deferred_task_ids: Vec<String>,
+        diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+    ) -> Self {
+        Self::RuntimeBranchDeferred(WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
+            session_id: command.session_id.clone(),
+            workflow_run_id: command.workflow_run_id.clone(),
+            reason,
+            deferred_task_ids,
             diagnostics,
         })
     }
@@ -301,6 +420,7 @@ async fn task_execution_worker_loop(
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteTaskAttempt(_command)) => {
                         observed_task_attempt_commands.fetch_add(1, Ordering::SeqCst);
                     }
+                    Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(_command)) => {}
                     Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
                         break;
                     }
@@ -455,6 +575,36 @@ mod tests {
     }
 
     #[test]
+    fn execute_runtime_branch_command_is_run_scoped() {
+        let output_targets = vec![WorkflowOutputTarget {
+            node_id: "image-output".to_string(),
+            port_id: "image".to_string(),
+        }];
+        let command = WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
+            "session-1",
+            "run-1",
+            "workflow-1",
+            Some(output_targets.clone()),
+            Some(1_000),
+            WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+        );
+
+        let WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(command) = command else {
+            panic!("expected runtime branch command");
+        };
+
+        assert_eq!(command.session_id, "session-1");
+        assert_eq!(command.workflow_run_id, "run-1");
+        assert_eq!(command.workflow_id, "workflow-1");
+        assert_eq!(command.output_targets, Some(output_targets));
+        assert_eq!(command.timeout_ms, Some(1_000));
+        assert_eq!(
+            command.start_reason,
+            WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started
+        );
+    }
+
+    #[test]
     fn terminal_outcome_preserves_task_scope_and_diagnostics() {
         let command = WorkflowTaskExecutionWorkerTaskAttemptCommand {
             session_id: "session-1".to_string(),
@@ -485,6 +635,88 @@ mod tests {
             outcome.status,
             WorkflowTaskExecutionWorkerTerminalStatus::TimedOut
         );
+        assert_eq!(outcome.diagnostics, vec![diagnostic]);
+    }
+
+    #[test]
+    fn runtime_branch_completed_outcome_preserves_run_scope_and_response() {
+        let command = runtime_branch_command();
+        let response = WorkflowRunResponse {
+            workflow_run_id: command.workflow_run_id.clone(),
+            outputs: Vec::new(),
+            timing_ms: 42,
+        };
+        let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchFailed,
+            "non-fatal runtime branch diagnostic",
+        );
+
+        let outcome = WorkflowTaskExecutionWorkerOutcome::runtime_branch_completed(
+            &command,
+            response.clone(),
+            vec![diagnostic.clone()],
+        );
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(outcome) = outcome else {
+            panic!("expected runtime branch completed outcome");
+        };
+
+        assert_eq!(outcome.session_id, command.session_id);
+        assert_eq!(outcome.workflow_run_id, command.workflow_run_id);
+        assert_eq!(outcome.response, response);
+        assert_eq!(outcome.diagnostics, vec![diagnostic]);
+    }
+
+    #[test]
+    fn runtime_branch_failed_outcome_preserves_typed_diagnostics() {
+        let command = runtime_branch_command();
+        let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeDispatchTimedOut,
+            "runtime branch dispatch timed out",
+        );
+
+        let outcome = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            &command,
+            "runtime branch failed",
+            vec![diagnostic.clone()],
+        );
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = outcome else {
+            panic!("expected runtime branch failed outcome");
+        };
+
+        assert_eq!(outcome.session_id, command.session_id);
+        assert_eq!(outcome.workflow_run_id, command.workflow_run_id);
+        assert_eq!(outcome.error_message, "runtime branch failed");
+        assert_eq!(outcome.diagnostics, vec![diagnostic]);
+    }
+
+    #[test]
+    fn runtime_branch_deferred_outcome_preserves_pending_task_ids() {
+        let command = runtime_branch_command();
+        let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
+            WorkflowTaskExecutionWorkerDiagnosticCode::QueueClosed,
+            "dependency readiness still pending",
+        );
+
+        let outcome = WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
+            &command,
+            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::DependencyReadinessPending,
+            vec!["runtime-task-1".to_string()],
+            vec![diagnostic.clone()],
+        );
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(outcome) = outcome else {
+            panic!("expected runtime branch deferred outcome");
+        };
+
+        assert_eq!(outcome.session_id, command.session_id);
+        assert_eq!(outcome.workflow_run_id, command.workflow_run_id);
+        assert_eq!(
+            outcome.reason,
+            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::DependencyReadinessPending
+        );
+        assert_eq!(outcome.deferred_task_ids, vec!["runtime-task-1"]);
         assert_eq!(outcome.diagnostics, vec![diagnostic]);
     }
 
@@ -533,5 +765,16 @@ mod tests {
             command.reason,
             WorkflowTaskExecutionWorkerShutdownReason::ServiceShutdown
         );
+    }
+
+    fn runtime_branch_command() -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+        WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id: "session-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
+            workflow_id: "workflow-1".to_string(),
+            output_targets: None,
+            timeout_ms: Some(500),
+            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched,
+        }
     }
 }

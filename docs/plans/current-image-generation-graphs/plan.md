@@ -400,6 +400,22 @@ public worker lifecycle snapshots, diagnostics-ledger worker events, frontend
 policy, or compatibility DTOs before the Option 2 worker-owned inference path
 is complete.
 
+2026-06-06 worker-owned runtime branch contract slice: completed the first
+Option 2 implementation slice by adding internal `ExecuteRuntimeBranch`
+command and `RuntimeBranchCompleted`, `RuntimeBranchFailed`, and
+`RuntimeBranchDeferred` outcomes to the task-execution worker contract. The
+contract is run-scoped and carries workflow/session/run identity, output
+targets, timeout, and a typed branch start reason; outcomes preserve typed
+diagnostics and do not introduce durable task claiming, public worker lifecycle
+snapshots, diagnostics-ledger worker events, request-scoped workers, frontend
+policy, compatibility DTOs, or a direct-execution oneshot. Runtime dispatch and
+request execution behavior remain unchanged. Verification:
+`cargo fmt -p pantograph-workflow-service` and
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`. Next
+Option 2 slice: extract the runtime branch execution context behind the
+composition-root owner while preserving long-lived runtime-host/runtime-registry
+reuse across workflow runs.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

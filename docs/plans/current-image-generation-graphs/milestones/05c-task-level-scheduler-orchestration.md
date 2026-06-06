@@ -856,6 +856,13 @@ durable task orchestration path.
     after the worker-owned inference path is complete and validated, evolve to
     durable task-event-loop claiming for independent task attempts, replay, and
     batching across simultaneous workflow runs.
+  - 2026-06-06 worker-owned runtime branch contract slice: added internal
+    runtime-branch command and completed/failed/deferred outcomes to the
+    task-execution worker contract. Verified with
+    `cargo fmt -p pantograph-workflow-service` and
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`.
+    Next Option 2 slice: extract runtime branch execution context behind the
+    composition-root owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

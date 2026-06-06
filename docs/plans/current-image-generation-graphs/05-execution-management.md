@@ -26729,6 +26729,36 @@ Worker rules:
       task claiming before the Option 2 path is complete, add public worker
       lifecycle snapshots, add diagnostics-ledger worker events, or add
       compatibility DTOs.
+  - 2026-06-06 worker-owned runtime branch contract source slice:
+    - Smallest vertical slice: define the internal worker-owned runtime branch
+      command/result contract needed before moving branch execution behind the
+      composition-root owner.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and the
+      current image-generation plan docs. Request/session branch migration,
+      runtime dispatch movement, task completion signaling, reservation
+      policy changes, public DTOs, generated files, lockfiles, saved
+      workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, durable task claiming, and legacy
+      launch paths remained out of scope.
+    - Implementation: added internal `ExecuteRuntimeBranch` command plus
+      `RuntimeBranchCompleted`, `RuntimeBranchFailed`, and
+      `RuntimeBranchDeferred` outcomes. The command is run-scoped and carries
+      session/workflow/run identity, output targets, timeout, and a typed
+      branch start reason. Outcomes preserve run scope and typed diagnostics.
+    - No-fallback/no-legacy confirmation: the contract does not execute,
+      complete, retry, fallback-run, wrap direct request execution in a
+      oneshot, create request-scoped workers, route through node-engine
+      whole-run launch, planned-inference launch, graph-path inference,
+      frontend/Tauri policy, public lifecycle snapshots, diagnostics-ledger
+      worker events, durable task claiming, or compatibility DTOs.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+    - Remaining follow-up: extract the runtime branch execution context behind
+      the composition-root owner while preserving long-lived
+      runtime-host/runtime-registry reuse across workflow runs.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
