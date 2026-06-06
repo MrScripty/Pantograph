@@ -1,5 +1,23 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-05 worker system alignment re-plan decision: complete the
+backend-owned worker systems for `queue_worker` and
+`resource_observation_loop` before exposing public worker lifecycle snapshots
+or diagnostics-ledger worker lifecycle events. The scheduler lifecycle
+registry intentionally introduced worker-shaped vocabulary ahead of those
+concrete owners; keeping that vocabulary now requires implementing real
+workflow-service/composition-root-owned workers rather than attaching state to
+request-scoped actions. Request APIs may remain as command/query surfaces, but
+they must not own queue progression, resource polling, retry loops, shutdown,
+or lifecycle business policy once the workers exist. This supersedes the
+earlier active execution-lane instruction to immediately continue Milestone 5b
+legacy runtime deletion wherever that would leave queue/resource lifecycle
+terms backed only by request-scoped behavior. The next source lane is
+Milestone 5c worker-system alignment: implement the queue worker and resource
+observation worker in thin slices, then attach their real lifecycle state,
+then add public lifecycle snapshots/ledger worker events only after ordering,
+shutdown, and replay semantics are validated.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
@@ -8,8 +26,9 @@ port, embedded image execution, artifact persistence, scheduler task-result
 mapping, and path-free output projection. Remaining Milestone 5c lifecycle
 hardening is still required, but it is not a reason to preserve successful
 node-engine/planned-inference/model-path launch paths. The next source slice
-must therefore choose one classified 5b legacy surface, prove its current
-owner and callers, and delete or replace it with scheduler task state/results,
+for Milestone 5b, after the worker-system alignment slice sequence above,
+must choose one classified legacy surface, prove its current owner and
+callers, and delete or replace it with scheduler task state/results,
 runtime-host responses, or typed fail-closed diagnostics. Do not start
 Milestone 6 real PyTorch/diffusers execution until the remaining successful
 legacy runtime paths are deleted or fail closed.

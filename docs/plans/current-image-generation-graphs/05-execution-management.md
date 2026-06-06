@@ -25404,9 +25404,13 @@ Worker rules:
          projection.
       3. Attach runtime-host dispatch/task-supervisor state to that owner as
          the first real component-state slice.
-      4. Attach dependency readiness, resource observation, retry, queue, and
-         reservation cleanup state in separate slices as each owner exists.
-      5. Add public snapshot/query and diagnostics-ledger worker lifecycle
+      4. Attach dependency readiness, retry, and reservation cleanup state in
+         separate slices where real workflow-service owners already exist.
+      5. Implement concrete backend-owned resource observation and queue
+         workers before attaching `resource_observation_loop` or
+         `queue_worker` lifecycle state; do not report request-scoped actions
+         as workers.
+      6. Add public snapshot/query and diagnostics-ledger worker lifecycle
          events only after component ordering and replay semantics are
          backed by owned lifecycle state.
     - Rejected shortcuts: do not expose a task-supervisor-only snapshot as the
@@ -25695,9 +25699,74 @@ Worker rules:
       node-engine diagnostics in `task_orchestrator.rs`. The reservation
       cleanup source/test changes did not introduce fallback or legacy launch
       behavior.
-    - Remaining follow-up: attach resource observation and queue component
-      states from their real owners before adding public lifecycle queries or
-      diagnostics-ledger worker lifecycle events.
+    - Remaining follow-up: implement real resource observation and queue
+      worker owners, then attach their lifecycle component states before
+      adding public lifecycle queries or diagnostics-ledger worker lifecycle
+      events.
+  - 2026-06-05 Milestone 5c worker system alignment re-plan:
+    - Decision: complete real backend-owned worker systems for
+      `queue_worker` and `resource_observation_loop` rather than renaming the
+      components or attaching their lifecycle state to request-scoped actions.
+      The existing scheduler lifecycle vocabulary was intentionally introduced
+      ahead of concrete owners, but it may remain only if the concrete owners
+      are implemented before public lifecycle snapshots or diagnostics-ledger
+      worker events.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection rule by keeping request command/query handling
+      separate from lifecycle/business-loop ownership. It also follows the
+      architecture and concurrency standards by placing long-running loops,
+      timers, startup, shutdown, cancellation, and worker health in a single
+      backend owner or composition root instead of Tauri, frontend
+      projections, runtime adapters, graph values, or ad hoc request paths.
+    - Selected worker implementation sequence:
+      1. Queue worker owner: add a workflow-service/composition-root-owned
+         queue worker or event listener with bounded wake mechanics,
+         cancellation/shutdown, lifecycle registry updates, and focused tests.
+         This slice must not add public snapshots, ledger worker events,
+         retry/defer policy, replay/bootstrap, resource observation, or
+         legacy runtime launch behavior.
+      2. Queue progression migration: move queue progression business
+         behavior out of request-scoped session execution paths. Enqueue,
+         cancel, reprioritize, and query APIs may remain request scoped, but
+         they must signal/query the worker and return typed diagnostics if the
+         worker is unavailable or cannot make progress. Do not preserve a
+         parallel request-owned progression path.
+      3. Resource observation worker owner: add a workflow-service/
+         composition-root-owned observation loop with bounded refresh or wake
+         mechanics, observation-source contracts, stale/missing fact
+         diagnostics, lifecycle registry updates, and shutdown tests. This
+         worker may consume Pumas logical artifact facts, scheduler/runtime
+         resource facts, and memory-ledger observations, but Pantograph owns
+         loaded-memory estimates and observed-memory learning.
+      4. Resource-fit migration: make scheduler admission and runtime-fit
+         checks consume owned resource observation snapshots and typed
+         diagnostics. Remove or replace request-scoped resource refresh as
+         business policy; request paths may ask for snapshots or diagnostics
+         but must not infer resource state from frontend/Tauri/projection text,
+         graph paths, runtime adapter side channels, or fallback defaults.
+      5. Public lifecycle diagnostics: expose
+         `SchedulerLifecycleOwnerSnapshot` and diagnostics-ledger worker
+         lifecycle events only after queue and resource worker ordering,
+         shutdown, stale fact handling, and replay/recovery semantics are
+         validated.
+    - No-fallback/no-legacy confirmation: this re-plan keeps old graph,
+      backend runtime, node-engine, planned-inference, model-path, frontend,
+      Tauri, and request-scoped worker-emulation paths from becoming
+      compatibility shims. Missing worker state must remain typed diagnostics
+      or explicit owned `NotStarted` state until the real worker is running.
+    - Allowed next source slice scope: queue worker/listener owner in
+      workflow-service scheduler code, focused queue-worker tests, scheduler
+      README updates if module ownership changes, and plan updates. Resource
+      observation worker code, public lifecycle contracts, generated DTOs,
+      diagnostics-ledger worker events, frontend/Tauri files, lockfiles, saved
+      workflows, and runtime adapter changes stay out of scope unless a later
+      validated slice explicitly assigns them.
+    - Verification expected for the next source slice: focused
+      workflow-service queue worker lifecycle tests, any affected existing
+      scheduler session execution tests, `cargo check -p
+      pantograph-workflow-service`, `cargo fmt -p
+      pantograph-workflow-service -- --check`, `git diff --check`, and
+      targeted no-fallback/no-legacy searches over touched files.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

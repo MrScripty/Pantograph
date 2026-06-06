@@ -648,7 +648,28 @@ durable task orchestration path.
   lifecycle helper. 2026-06-05 reservation-cleanup attachment update:
   terminal reservation-release cleanup events now drive the shared registry's
   `reservation_cleanup` component from the scheduler task orchestrator.
-  Remaining component attachments: resource observation and queue.
+  Remaining worker-system alignment: resource observation and queue are not
+  yet concrete backend workers, so the next source lane must implement real
+  workflow-service/composition-root-owned workers before lifecycle state can
+  be exposed publicly. Request-scoped queue/resource actions may remain as
+  command/query surfaces only; they must not continue to own queue
+  progression, resource polling, retry/defer loops, shutdown, or lifecycle
+  policy after the workers exist.
+  - Queue worker sequence: add a bounded backend-owned queue worker/listener
+    with explicit startup, wake, shutdown, and lifecycle registry updates;
+    then move queue progression out of request-scoped session execution paths
+    so enqueue/cancel/reprioritize APIs signal or query the worker instead of
+    owning the business loop.
+  - Resource observation sequence: add a bounded backend-owned resource
+    observation worker with explicit observation sources, stale/missing fact
+    diagnostics, shutdown, and lifecycle registry updates; then make
+    scheduler admission consume owned resource snapshots and typed
+    diagnostics instead of doing request-scoped resource refresh as business
+    policy.
+  - Public diagnostics gate: add `SchedulerLifecycleOwnerSnapshot` query and
+    diagnostics-ledger worker lifecycle events only after both workers have
+    real owners, ordering semantics, shutdown behavior, and replay/recovery
+    treatment validated in focused tests.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

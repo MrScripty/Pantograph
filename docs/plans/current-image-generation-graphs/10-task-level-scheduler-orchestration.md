@@ -822,8 +822,37 @@ Option 3 thin implementation sequence:
      explicit `NotStarted`. Dispatch-started and candidate-selection
      lifecycle events do not mark cleanup as running. No reservation policy,
      public snapshot, ledger event, projection default, Tauri/frontend policy,
-     or legacy runtime path was added. Remaining component attachment work
-     covers resource observation and queue.
+     or legacy runtime path was added. Remaining resource observation and
+     queue lifecycle work now requires concrete backend worker owners before
+     component state can be attached.
+   - 2026-06-05 worker system alignment re-plan: resource observation and
+     queue cannot be completed as simple lifecycle attachments because the
+     current scheduler paths do not yet have concrete long-running backend
+     owners for `resource_observation_loop` or `queue_worker`. The selected
+     path is to complete those worker systems rather than rename the
+     components or report request-scoped actions as workers. Request-scoped
+     APIs remain valid only as command/query surfaces; queue progression,
+     resource polling, lifecycle transitions, shutdown, retry/defer loops, and
+     worker diagnostics must be workflow-service/composition-root owned. Thin
+     source slices:
+     1. Add the queue worker/listener owner with bounded wake/shutdown
+        mechanics, lifecycle registry updates, and tests proving no public
+        snapshot or ledger event is emitted yet.
+     2. Move queue progression business behavior out of request-scoped
+        session paths so enqueue/cancel/reprioritize requests signal/query the
+        backend worker and fail closed with typed diagnostics when the worker
+        is unavailable.
+     3. Add the resource observation worker owner with bounded refresh/wake,
+        observation-source contracts, stale/missing fact diagnostics,
+        lifecycle registry updates, and shutdown tests.
+     4. Move scheduler resource-fit consumption to owned observation snapshots
+        and typed diagnostics; do not refresh or infer resource facts inside
+        request handlers, Tauri, frontend projections, runtime adapters, or
+        graph values.
+     5. Add public `SchedulerLifecycleOwnerSnapshot` query and
+        diagnostics-ledger worker lifecycle events only after queue/resource
+        worker ordering, shutdown, and replay/recovery semantics are
+        validated.
 
 Option 3 standards gates:
 
