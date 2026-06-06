@@ -26876,6 +26876,41 @@ Worker rules:
       delegates the existing blocking `WorkflowService` behavior without
       changing dispatch, then migrate the runtime branch through the
       facade-owned runtime owner.
+  - 2026-06-06 composition-root facade session-run delegation slice:
+    - Smallest vertical slice: add the production composition-root facade
+      `run_workflow_execution_session` method and delegate to existing
+      `WorkflowService` blocking session execution without changing runtime
+      dispatch behavior.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/05-execution-management.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      and
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+    - No-fallback/no-legacy confirmation: the facade method only routes
+      callers into existing backend-owned `WorkflowService` behavior. It does
+      not add request-scoped runtime owners, new fallback execution, direct
+      oneshots, compatibility DTOs, runtime dispatch changes, completion
+      signaling, terminal mutation changes, public lifecycle snapshots,
+      diagnostics-ledger events, or frontend/Tauri policy.
+    - Focused test added:
+      `session_execution_runtime_delegates_session_run_to_workflow_service`
+      proves facade session-run calls reach existing `WorkflowService`
+      validation before host execution.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+      - `git diff --check`
+    - Verification deviation resolved: the first focused test compile failed
+      because the test-only `WorkflowHost` omitted the required
+      `run_workflow` method. The test host now implements that method as a
+      fail-closed path that would error if the invalid-request delegation test
+      accidentally reached host execution.
+    - Remaining follow-up: migrate the runtime branch entry to construct its
+      runtime-branch context through the facade-owned runtime owner before
+      moving worker-owned branch completion behind that context.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

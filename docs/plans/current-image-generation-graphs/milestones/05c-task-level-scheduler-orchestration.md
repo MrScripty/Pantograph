@@ -897,6 +897,20 @@ durable task orchestration path.
     moved in this slice. Next Option 2 slice: add the facade session-execution
     method that delegates existing blocking behavior before runtime branch
     migration.
+  - 2026-06-06 composition-root session execution delegation slice:
+    `WorkflowSessionExecutionRuntime::run_workflow_execution_session` now
+    delegates to the existing blocking `WorkflowService` session-run method,
+    with focused invalid-request coverage proving the facade reaches service
+    validation before host execution. Verified with
+    `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service session_execution_runtime --lib`,
+    and `git diff --check`. No runtime dispatch, readiness continuation,
+    reservation lifecycle, terminal mutation, completion signaling, public
+    lifecycle snapshots, diagnostics-ledger events, frontend/Tauri policy,
+    durable claiming, direct-execution oneshots, compatibility DTOs, or
+    fallback execution moved in this slice. Next Option 2 slice: migrate the
+    runtime branch entry to construct its context through the facade-owned
+    runtime owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

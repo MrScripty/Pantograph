@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
-use super::WorkflowService;
+use super::{
+    WorkflowExecutionSessionRunRequest, WorkflowHost, WorkflowRunResponse, WorkflowService,
+    WorkflowServiceError,
+};
 
 /// Composition-root entrypoint for production workflow session execution.
 #[must_use]
@@ -28,6 +31,16 @@ impl WorkflowSessionExecutionRuntime {
         Arc::clone(&self.service)
     }
 
+    pub async fn run_workflow_execution_session<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowExecutionSessionRunRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.service
+            .run_workflow_execution_session(host, request)
+            .await
+    }
+
     pub(super) fn task_execution_runtime_owner(&self) -> &WorkflowTaskExecutionRuntimeOwner {
         &self.task_execution_runtime_owner
     }
@@ -40,7 +53,28 @@ mod tests {
         WorkflowTaskExecutionWorkerRuntimeBranchCommand,
         WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
     };
-    use crate::workflow::WorkflowOutputTarget;
+    use crate::workflow::{
+        WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
+    };
+    use async_trait::async_trait;
+
+    struct DelegatingHost;
+
+    #[async_trait]
+    impl WorkflowHost for DelegatingHost {
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Err(WorkflowServiceError::Internal(
+                "delegation test host should not execute workflow".to_string(),
+            ))
+        }
+    }
 
     #[test]
     fn session_execution_runtime_owns_shared_service_and_runtime_owner() {
@@ -76,5 +110,31 @@ mod tests {
 
         assert!(Arc::ptr_eq(&runtime.service(), &context.service()));
         assert_eq!(context.command(), &command);
+    }
+
+    #[tokio::test]
+    async fn session_execution_runtime_delegates_session_run_to_workflow_service() {
+        let runtime = WorkflowSessionExecutionRuntime::new(WorkflowService::new());
+
+        let error = runtime
+            .run_workflow_execution_session(
+                &DelegatingHost,
+                WorkflowExecutionSessionRunRequest {
+                    session_id: " ".to_string(),
+                    workflow_semantic_version: "1.0.0".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect_err("empty session id should be rejected by WorkflowService");
+
+        let WorkflowServiceError::InvalidRequest(message) = error else {
+            panic!("expected invalid request error");
+        };
+        assert!(message.contains("session_id must be non-empty"));
     }
 }

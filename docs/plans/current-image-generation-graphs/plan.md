@@ -1,5 +1,16 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 composition-root session execution delegation update:
+`WorkflowSessionExecutionRuntime` now exposes
+`run_workflow_execution_session` and delegates to the existing
+`WorkflowService` blocking session-run behavior. This changes the production
+entrypoint shape only; runtime dispatch, readiness continuation, reservation
+lifecycle, terminal mutation, completion signaling, lifecycle snapshots,
+diagnostics-ledger events, frontend/Tauri policy, durable claiming, and
+fallback execution remain unmoved. Next Option 2 slice: migrate the runtime
+branch entry to construct its worker-owned runtime-branch context through the
+facade-owned runtime owner.
+
 2026-06-06 composition-root session execution facade update:
 workflow-service now exposes `WorkflowSessionExecutionRuntime`, a production
 composition-root entrypoint that owns both a shared `Arc<WorkflowService>` and

@@ -1133,6 +1133,18 @@ Option 3 thin implementation sequence:
      `cargo test -p pantograph-workflow-service session_execution_runtime --lib`.
      Next slice: add the facade session-execution method that delegates
      existing blocking behavior before runtime branch migration.
+   - 2026-06-06 composition-root session execution delegation slice:
+     `WorkflowSessionExecutionRuntime::run_workflow_execution_session` now
+     delegates to the existing `WorkflowService` blocking session-run
+     behavior. The slice changes only the production entrypoint shape; runtime
+     dispatch, readiness continuation, reservation lifecycle, terminal
+     mutation, completion signaling, lifecycle snapshots, diagnostics-ledger
+     events, frontend/Tauri policy, durable claiming, and fallback execution
+     remain unmoved. Verified with
+     `cargo fmt -p pantograph-workflow-service`,
+     `cargo test -p pantograph-workflow-service session_execution_runtime --lib`,
+     and `git diff --check`. Next slice: migrate the runtime branch entry to
+     construct its context through the facade-owned runtime owner.
 
 Worker-system standards gates:
 
