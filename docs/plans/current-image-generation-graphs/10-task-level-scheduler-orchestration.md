@@ -893,6 +893,14 @@ Option 3 thin implementation sequence:
      response flow, but the active-run state write is now worker-owned.
      Remaining progression ownership is non-runtime/runtime execution,
      timeout handling, terminal mutation, and completion signaling.
+   - 2026-06-05 queue non-runtime progression owner slice: moved the
+     non-runtime-only execution branch behind an internal queue-worker helper.
+     That helper owns started-event recording, scheduler non-runtime
+     progression, timeout handling, terminal mutation, terminal diagnostics,
+     and IO artifact event recording for non-runtime runs. Remaining
+     progression ownership is the runtime dispatch-boundary branch,
+     dependency-readiness deferral handling, terminal mutation, and completion
+     signaling.
 
 Option 3 standards gates:
 

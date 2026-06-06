@@ -698,6 +698,13 @@ durable task orchestration path.
     longer writes active-run task state directly. Remaining queue work:
     non-runtime/runtime progression, timeout handling, terminal mutation, and
     completion signaling still need to move behind the worker owner.
+  - 2026-06-05 queue non-runtime progression owner update: non-runtime-only
+    progression now runs through an internal queue-worker helper that owns
+    started-event recording, scheduler non-runtime progression, timeout
+    handling, terminal mutation, terminal diagnostics, and IO artifact event
+    recording for that branch. Remaining queue work: runtime dispatch-boundary
+    progression, dependency-readiness deferral handling, terminal mutation,
+    and completion signaling still need to move behind the worker owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

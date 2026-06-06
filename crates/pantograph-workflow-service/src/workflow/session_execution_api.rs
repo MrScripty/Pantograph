@@ -8,10 +8,10 @@ use crate::graph::{
     WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{
-    unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
-    WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
-    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueTaskStateCommand,
-    WorkflowSchedulerQueueWorker,
+    unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun,
+    WorkflowSchedulerBootstrapRecoveryAction, WorkflowSchedulerBootstrapRecoverySnapshot,
+    WorkflowSchedulerBootstrapRecoveryTask, WorkflowSchedulerQueueAdmissionCommand,
+    WorkflowSchedulerQueueTaskStateCommand, WorkflowSchedulerQueueWorker,
 };
 use crate::technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
@@ -88,6 +88,78 @@ fn resumed_run_started_at(dequeued_at_ms: u64) -> std::time::Instant {
     std::time::Instant::now()
         .checked_sub(Duration::from_millis(elapsed_ms))
         .unwrap_or_else(std::time::Instant::now)
+}
+
+impl WorkflowSchedulerQueueWorker {
+    async fn run_non_runtime_to_completion<H: WorkflowHost>(
+        service: &WorkflowService,
+        host: &H,
+        session: &WorkflowExecutionSessionSummary,
+        run_snapshot: Option<&WorkflowRunSnapshotRecord>,
+        session_id: &str,
+        workflow_run_id: &str,
+        queued_run: &WorkflowExecutionSessionDequeuedRun,
+        summary: &WorkflowSchedulerTaskRunSummary,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        service.record_run_started_event_if_configured(session, run_snapshot, queued_run)?;
+        let run_started_at = std::time::Instant::now();
+        let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
+        let queued_workflow_inputs = queued_run.queued.inputs.clone();
+        let runner = WorkflowSchedulerSessionRunner::new(service);
+        let run_future = runner.run_non_runtime_only(
+            host,
+            session_id,
+            workflow_run_id,
+            &queued_run.workflow_id,
+            &queued_run.queued.inputs,
+            queued_run.queued.output_targets.as_deref(),
+            summary,
+            run_started_at,
+        );
+        let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
+            match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
+                Ok(result) => result,
+                Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
+                    "workflow run exceeded timeout_ms {}",
+                    timeout_ms
+                ))),
+            }
+        } else {
+            run_future.await
+        };
+        let finish_state = {
+            let mut store = service.session_store_guard()?;
+            store.finish_run(session_id, workflow_run_id)?
+        };
+        if let Err(record_error) = service.record_run_terminal_event_if_configured(
+            session,
+            run_snapshot,
+            workflow_run_id,
+            Some(&queued_workflow_semantic_version),
+            &run_result,
+        ) {
+            if let Err(error) = run_result {
+                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                    workflow_run_id: Some(workflow_run_id.to_string()),
+                    diagnostic_event_id: None,
+                    diagnostics_unavailable: Some(record_error.message().to_string()),
+                }));
+            }
+            return Err(record_error);
+        }
+        if let Ok(response) = run_result.as_ref() {
+            service.record_workflow_io_artifact_events_if_configured(
+                session,
+                run_snapshot,
+                workflow_run_id,
+                &queued_workflow_semantic_version,
+                &queued_workflow_inputs,
+                &response.outputs,
+            )?;
+        }
+        debug_assert!(!finish_state.unload_runtime);
+        run_result
+    }
 }
 
 impl WorkflowService {
@@ -324,7 +396,6 @@ impl WorkflowService {
         )
         .await?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
-        let queued_workflow_inputs = queued_run.queued.inputs.clone();
         if let Err(error) = WorkflowSchedulerQueueWorker::initialize_admitted_task_state(
             WorkflowSchedulerQueueTaskStateCommand::new(
                 self.session_store.clone(),
@@ -347,66 +418,17 @@ impl WorkflowService {
         }
 
         if scheduler_task_run_summary.is_non_runtime_only() {
-            self.record_run_started_event_if_configured(
+            return WorkflowSchedulerQueueWorker::run_non_runtime_to_completion(
+                self,
+                host,
                 &session,
                 run_snapshot.as_ref(),
-                &queued_run,
-            )?;
-            let run_started_at = std::time::Instant::now();
-            let runner = WorkflowSchedulerSessionRunner::new(self);
-            let run_future = runner.run_non_runtime_only(
-                host,
                 &session_id,
                 &workflow_run_id,
-                &queued_run.workflow_id,
-                &queued_run.queued.inputs,
-                queued_run.queued.output_targets.as_deref(),
+                &queued_run,
                 &scheduler_task_run_summary,
-                run_started_at,
-            );
-            let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
-                match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
-                    Ok(result) => result,
-                    Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
-                        "workflow run exceeded timeout_ms {}",
-                        timeout_ms
-                    ))),
-                }
-            } else {
-                run_future.await
-            };
-            let finish_state = {
-                let mut store = self.session_store_guard()?;
-                store.finish_run(&session_id, &workflow_run_id)?
-            };
-            if let Err(record_error) = self.record_run_terminal_event_if_configured(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                Some(&queued_workflow_semantic_version),
-                &run_result,
-            ) {
-                if let Err(error) = run_result {
-                    return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                        workflow_run_id: Some(workflow_run_id),
-                        diagnostic_event_id: None,
-                        diagnostics_unavailable: Some(record_error.message().to_string()),
-                    }));
-                }
-                return Err(record_error);
-            }
-            if let Ok(response) = run_result.as_ref() {
-                self.record_workflow_io_artifact_events_if_configured(
-                    &session,
-                    run_snapshot.as_ref(),
-                    &workflow_run_id,
-                    &queued_workflow_semantic_version,
-                    &queued_workflow_inputs,
-                    &response.outputs,
-                )?;
-            }
-            debug_assert!(!finish_state.unload_runtime);
-            return run_result;
+            )
+            .await;
         }
 
         if scheduler_task_run_summary.has_runtime_inference() {

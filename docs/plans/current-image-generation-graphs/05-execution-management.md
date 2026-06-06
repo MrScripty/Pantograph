@@ -25914,6 +25914,12 @@ Worker rules:
         session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner --lib`
       - `cargo fmt -p pantograph-workflow-service -- --check`
       - `cargo check -p pantograph-workflow-service`
+      - `git diff --check`
+      - targeted search confirmed the non-runtime runner, finish mutation,
+        terminal event recording, and IO artifact recording are now under the
+        queue-worker helper; remaining request-path matches are runtime,
+        resume, or unhandled-class paths outside this slice.
+      - `cargo check -p pantograph-workflow-service`
       - targeted search confirmed `begin_queued_run` is absent from
         `workflow/session_execution_api.rs` and only remains in the
         queue-worker owner/test setup for this slice.
@@ -25959,6 +25965,34 @@ Worker rules:
     - Remaining follow-up: non-runtime/runtime progression, timeout handling,
       terminal mutation, and completion signaling still run from the blocking
       session execution path and must move behind the worker owner next.
+  - 2026-06-05 queue non-runtime progression owner source slice:
+    - Smallest vertical slice: move the non-runtime-only execution branch from
+      direct request ownership into an internal queue-worker helper while
+      preserving the existing blocking public response shape.
+    - Allowed files: `crates/pantograph-workflow-service/src/workflow/
+      session_execution_api.rs` and the current image-generation plan docs.
+      Public contracts, generated DTOs, lockfiles, saved workflows,
+      frontend/Tauri files, diagnostics-ledger worker events, durable replay,
+      resource observation code, runtime dispatch behavior, and legacy runtime
+      launch paths remained out of scope.
+    - No-fallback/no-legacy confirmation: non-runtime started-event recording,
+      scheduler progression, timeout handling, finish mutation, terminal
+      diagnostics, and IO artifact recording now go through
+      `WorkflowSchedulerQueueWorker::run_non_runtime_to_completion`. The
+      request path only routes to the worker-owned helper and does not keep a
+      parallel non-runtime execution branch or call legacy whole-run host
+      execution.
+    - Tests/verification completed:
+      - `cargo test -p pantograph-workflow-service scheduler::queue_worker::tests --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_lifecycle_create_run_close --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+    - Remaining follow-up: runtime dispatch-boundary progression,
+      dependency-readiness deferral handling, terminal mutation, and
+      completion signaling still run from the blocking session execution path
+      and must move behind the worker owner next.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

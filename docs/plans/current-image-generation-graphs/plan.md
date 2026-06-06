@@ -62,6 +62,17 @@ longer writes active-run scheduler task state directly. Remaining queue
 progression work: move non-runtime/runtime progression, timeout handling,
 terminal mutation, and completion signaling behind the queue worker owner.
 
+2026-06-05 queue non-runtime progression owner update: non-runtime-only
+session execution now delegates started-event recording, scheduler
+non-runtime progression, timeout handling, terminal mutation, terminal
+diagnostics recording, and IO artifact event recording through an internal
+`WorkflowSchedulerQueueWorker::run_non_runtime_to_completion` helper. This
+preserves the blocking public response shape while removing the non-runtime
+execution branch from direct request ownership. Remaining queue progression
+work: move runtime dispatch-boundary progression, dependency-readiness deferral
+handling, terminal mutation, and completion signaling behind the queue worker
+owner.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
