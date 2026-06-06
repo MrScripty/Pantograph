@@ -26953,6 +26953,22 @@ Worker rules:
     - Remaining follow-up: move runtime branch completion behind the worker
       command path so the facade-owned runtime owner enqueues and awaits
       worker-owned branch completion instead of only constructing the context.
+  - 2026-06-06 worker-owned runtime branch completion re-plan trigger:
+    - Stop before moving runtime branch completion behind the
+      task-execution worker command path. The current
+      `WorkflowTaskExecutionWorker` owns bounded queue/lifecycle mechanics but
+      is spawned with scheduler lifecycle only; it does not own
+      `Arc<WorkflowService>`, runtime-branch execution context, or a completion
+      responder.
+    - Required next plan decision: choose how the worker receives backend
+      execution context and returns completion while preserving the
+      composition-root owner, backend-owned business logic, sync-core/async
+      shell, and no-fallback rules.
+    - Forbidden shortcuts: do not add a fake oneshot around the existing direct
+      helper call, do not keep runtime dispatch/completion request-scoped
+      behind a worker-shaped command, do not move policy into Tauri/frontend,
+      do not add compatibility DTOs, and do not introduce durable claiming
+      before the immediate worker-owned inference path is complete.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

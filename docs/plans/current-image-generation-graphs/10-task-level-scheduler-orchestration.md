@@ -1157,6 +1157,14 @@ Option 3 thin implementation sequence:
      `cargo test -p pantograph-workflow-service session_execution_runtime --lib`,
      and `cargo test -p pantograph-workflow-service runtime_owner_ --lib`.
      Next slice: move runtime branch completion behind the worker command path.
+   - 2026-06-06 worker-owned runtime branch completion re-plan trigger: stop
+     before moving completion behind the task-execution worker command path.
+     The current worker owns bounded queue/lifecycle mechanics only and does
+     not own `Arc<WorkflowService>`, runtime-branch execution context, or a
+     completion responder. Next decision must choose the worker
+     execution/completion contract without adding fake direct-execution
+     oneshots, request-scoped runtime dispatch/completion, frontend/Tauri
+     policy, compatibility DTOs, or premature durable claiming.
 
 Worker-system standards gates:
 

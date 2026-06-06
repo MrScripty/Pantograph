@@ -1,5 +1,16 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 worker-owned runtime branch completion re-plan trigger: stop
+before moving runtime branch completion behind the task-execution worker
+command path. The current worker owns bounded queue/lifecycle mechanics only:
+`WorkflowTaskExecutionWorker::spawn` receives scheduler lifecycle state but
+does not own `Arc<WorkflowService>` or a runtime-branch execution context, and
+`ExecuteRuntimeBranch` carries only serializable run identifiers with no
+completion responder. Implementing worker-owned completion now requires
+choosing the worker execution/completion contract. Do not add a fake oneshot
+around the existing direct helper call, do not move business logic back into
+request handlers, and do not make Tauri/frontend own runtime branch policy.
+
 2026-06-06 runtime branch context entry update: runtime-containing session
 runs now require the `WorkflowSessionExecutionRuntime` composition-root
 entrypoint to supply a `WorkflowTaskExecutionRuntimeOwner`; direct

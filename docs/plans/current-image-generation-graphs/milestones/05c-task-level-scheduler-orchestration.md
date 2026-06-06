@@ -930,6 +930,15 @@ durable task orchestration path.
     compatibility DTO, request-scoped runtime owner, or fallback execution was
     added. Next Option 2 slice: move runtime branch completion behind the
     worker command path.
+  - 2026-06-06 worker-owned runtime branch completion re-plan trigger: stop
+    before moving completion behind `ExecuteRuntimeBranch`. The current worker
+    is a bounded lifecycle/queue owner spawned with scheduler lifecycle only;
+    it does not own backend workflow service context or a completion responder.
+    The next decision must choose how worker-owned branch execution receives
+    `Arc<WorkflowService>`/runtime context and returns terminal/deferred/failed
+    completion without fake direct-execution oneshots, request-scoped runtime
+    dispatch/completion, frontend/Tauri policy, compatibility DTOs, or
+    premature durable claiming.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
