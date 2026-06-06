@@ -26911,6 +26911,48 @@ Worker rules:
     - Remaining follow-up: migrate the runtime branch entry to construct its
       runtime-branch context through the facade-owned runtime owner before
       moving worker-owned branch completion behind that context.
+  - 2026-06-06 runtime branch context entry slice:
+    - Smallest vertical slice: make runtime-containing session runs enter the
+      runtime branch through a `WorkflowTaskExecutionRuntimeBranchContext`
+      constructed by the facade-owned `WorkflowTaskExecutionRuntimeOwner`.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/05-execution-management.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      and
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+    - No-fallback/no-legacy confirmation: direct `WorkflowService`
+      runtime-containing session runs now fail closed with typed
+      `CapabilityViolation` diagnostics before admission if no composition-root
+      runtime owner is supplied. The old direct
+      `WorkflowTaskExecutionOwner::run_until_runtime_dispatch_boundary`
+      entrypoint was removed after the context-owned branch was added. No
+      request-scoped runtime owner, fallback execution, direct oneshot,
+      compatibility DTO, public lifecycle snapshot, diagnostics-ledger worker
+      event, frontend/Tauri policy, or durable claiming was added.
+    - Focused tests updated/verified:
+      `workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch`
+      now enters through `WorkflowSessionExecutionRuntime` and still proves the
+      canonical runtime path reaches dependency-readiness deferral without
+      legacy whole-run host launch.
+      `session_execution_runtime_*` and `runtime_owner_*` coverage continues
+      to prove facade-owned runtime-owner context construction.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`
+      - `cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+      - `cargo test -p pantograph-workflow-service runtime_owner_ --lib`
+    - Verification deviation resolved: the readiness-deferral runtime test
+      initially failed with the new direct-service `CapabilityViolation`
+      because it still called `WorkflowService` directly. The test now uses
+      the composition-root facade and the same shared service for inspection.
+    - Remaining follow-up: move runtime branch completion behind the worker
+      command path so the facade-owned runtime owner enqueues and awaits
+      worker-owned branch completion instead of only constructing the context.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

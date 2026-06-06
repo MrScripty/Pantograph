@@ -1,5 +1,17 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime branch context entry update: runtime-containing session
+runs now require the `WorkflowSessionExecutionRuntime` composition-root
+entrypoint to supply a `WorkflowTaskExecutionRuntimeOwner`; direct
+`WorkflowService` runtime runs fail closed with typed `CapabilityViolation`
+diagnostics before admission instead of preserving request-scoped runtime
+execution. The runtime branch now constructs a
+`WorkflowTaskExecutionRuntimeBranchContext` through the facade-owned runtime
+owner and routes dispatch-boundary execution through that context. This does
+not yet enqueue/await worker-owned branch completion; that remains the next
+Option 2 slice. One runtime readiness-deferral test now enters through the
+facade to prove the canonical path still reaches dependency-readiness deferral.
+
 2026-06-06 composition-root session execution delegation update:
 `WorkflowSessionExecutionRuntime` now exposes
 `run_workflow_execution_session` and delegates to the existing

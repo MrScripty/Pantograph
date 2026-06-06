@@ -911,6 +911,25 @@ durable task orchestration path.
     fallback execution moved in this slice. Next Option 2 slice: migrate the
     runtime branch entry to construct its context through the facade-owned
     runtime owner.
+  - 2026-06-06 runtime branch context entry slice: runtime-containing session
+    execution now requires `WorkflowSessionExecutionRuntime` to supply the
+    facade-owned runtime owner; direct `WorkflowService` runtime runs fail
+    closed with typed `CapabilityViolation` diagnostics before admission. The
+    runtime branch constructs `WorkflowTaskExecutionRuntimeBranchContext`
+    through that owner, and the old direct
+    `WorkflowTaskExecutionOwner::run_until_runtime_dispatch_boundary`
+    entrypoint was removed. The migrated readiness-deferral runtime test now
+    uses the composition-root facade and still proves the canonical runtime
+    path reaches dependency-readiness deferral. Verified with
+    `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`,
+    `cargo test -p pantograph-workflow-service session_execution_runtime --lib`,
+    and `cargo test -p pantograph-workflow-service runtime_owner_ --lib`.
+    No worker-owned completion, public lifecycle snapshot, diagnostics-ledger
+    worker event, frontend/Tauri policy, durable claiming, direct oneshot,
+    compatibility DTO, request-scoped runtime owner, or fallback execution was
+    added. Next Option 2 slice: move runtime branch completion behind the
+    worker command path.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

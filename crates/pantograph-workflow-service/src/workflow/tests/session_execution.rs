@@ -427,10 +427,13 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
 ) {
     let host = RuntimeInferenceSessionHost::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
-    let service = WorkflowService::with_ephemeral_attribution_store()
-        .expect("service")
-        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone()),
+    );
+    let service = runtime.service();
     let workflow_id = "wf-runtime-dispatch-boundary";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -456,7 +459,7 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
         .expect("create session");
     let session_id = created.session_id.clone();
 
-    let error = service
+    let error = runtime
         .run_workflow_execution_session(
             &host,
             WorkflowExecutionSessionRunRequest {

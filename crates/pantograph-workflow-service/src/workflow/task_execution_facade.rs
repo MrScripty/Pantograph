@@ -37,7 +37,11 @@ impl WorkflowSessionExecutionRuntime {
         request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         self.service
-            .run_workflow_execution_session(host, request)
+            .run_workflow_execution_session_with_runtime_owner(
+                host,
+                request,
+                Some(self.task_execution_runtime_owner()),
+            )
             .await
     }
 

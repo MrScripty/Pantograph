@@ -1145,6 +1145,18 @@ Option 3 thin implementation sequence:
      `cargo test -p pantograph-workflow-service session_execution_runtime --lib`,
      and `git diff --check`. Next slice: migrate the runtime branch entry to
      construct its context through the facade-owned runtime owner.
+   - 2026-06-06 runtime branch context entry slice: runtime-containing
+     session runs now require `WorkflowSessionExecutionRuntime` to supply the
+     facade-owned runtime owner, and direct `WorkflowService` runtime runs fail
+     closed with typed `CapabilityViolation` diagnostics before admission. The
+     runtime branch constructs `WorkflowTaskExecutionRuntimeBranchContext`
+     through that owner and the old direct owner entrypoint was removed. This
+     does not yet enqueue/await worker-owned branch completion. Verified with
+     `cargo fmt -p pantograph-workflow-service`,
+     `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`,
+     `cargo test -p pantograph-workflow-service session_execution_runtime --lib`,
+     and `cargo test -p pantograph-workflow-service runtime_owner_ --lib`.
+     Next slice: move runtime branch completion behind the worker command path.
 
 Worker-system standards gates:
 

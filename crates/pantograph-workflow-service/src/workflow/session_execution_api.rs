@@ -39,6 +39,11 @@ use super::diagnostic_errors::{
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
 use super::task_execution_owner::WorkflowTaskExecutionOwner;
+use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
+use super::task_execution_worker::{
+    WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+};
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms,
     validate_workflow_graph_submit_readiness, validate_workflow_id,
@@ -193,6 +198,16 @@ impl WorkflowService {
         host: &H,
         request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.run_workflow_execution_session_with_runtime_owner(host, request, None)
+            .await
+    }
+
+    pub(super) async fn run_workflow_execution_session_with_runtime_owner<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowExecutionSessionRunRequest,
+        task_execution_runtime_owner: Option<&WorkflowTaskExecutionRuntimeOwner>,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim().to_string();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -315,6 +330,23 @@ impl WorkflowService {
                 "scheduler task run summary failed before admission: {error}"
             ))
         })?;
+        if scheduler_task_run_summary.has_runtime_inference()
+            && task_execution_runtime_owner.is_none()
+        {
+            if let Ok(mut store) = self.session_store.lock() {
+                let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
+            }
+            return Err(self.record_scheduler_admission_failure_error(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                Some(&request.workflow_semantic_version),
+                WorkflowServiceError::CapabilityViolation(
+                    "runtime inference session execution requires WorkflowSessionExecutionRuntime composition-root entrypoint"
+                        .to_string(),
+                ),
+            )?);
+        }
         if let Err(error) = WorkflowTaskExecutionOwner::ensure_task_execution_available(self) {
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
@@ -373,13 +405,27 @@ impl WorkflowService {
         }
 
         if scheduler_task_run_summary.has_runtime_inference() {
-            return WorkflowTaskExecutionOwner::run_until_runtime_dispatch_boundary(
-                self,
+            let task_execution_runtime_owner = task_execution_runtime_owner.ok_or_else(|| {
+                WorkflowServiceError::CapabilityViolation(
+                    "runtime inference session execution requires WorkflowSessionExecutionRuntime composition-root entrypoint"
+                        .to_string(),
+                )
+            })?;
+            let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+                session_id: session_id.clone(),
+                workflow_run_id: workflow_run_id.clone(),
+                workflow_id: queued_run.workflow_id.clone(),
+                output_targets: queued_run.queued.output_targets.clone(),
+                timeout_ms: queued_run.queued.timeout_ms,
+                start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+            };
+            let runtime_branch_context =
+                task_execution_runtime_owner.runtime_branch_context(command);
+            return WorkflowTaskExecutionOwner::run_runtime_branch_until_dispatch_boundary(
+                &runtime_branch_context,
                 host,
                 &session,
                 run_snapshot.as_ref(),
-                &session_id,
-                &workflow_run_id,
                 &queued_run,
                 &scheduler_task_run_summary,
             )
