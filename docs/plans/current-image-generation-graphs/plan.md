@@ -185,10 +185,13 @@ fallback execution, queue-worker branch progression, fake completion channels,
 public lifecycle snapshots, diagnostics-ledger worker events, node-engine
 whole-run launch, planned-inference launch, graph-path inference, or
 frontend/Tauri policy. Remaining Option 2 work: register and complete real
-task lifecycle handles from non-runtime, runtime dispatch-boundary, and
-unhandled-class branch completion, then continue the resource observation
-worker before exposing public lifecycle snapshots or worker lifecycle ledger
-events.
+task lifecycle handles for any branch that is moved behind a future async
+worker loop, then continue the resource observation worker before exposing
+public lifecycle snapshots or worker lifecycle ledger events. Discovery:
+normal non-runtime, runtime dispatch-boundary, and unhandled-class terminal
+paths already route through orchestrator start/terminal methods that track and
+release task lifecycle handles; the remaining known timeout gap is runtime
+dispatch timeout cleanup.
 
 2026-06-05 task execution timeout cleanup update: non-runtime session
 execution timeouts now ask the scheduler task orchestrator to cancel any

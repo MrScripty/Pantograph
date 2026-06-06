@@ -26282,14 +26282,16 @@ Worker rules:
       - Targeted source search for task lifecycle availability, queue-worker
         branch progression, fallback/compatibility, node-engine, and
         planned-inference terms.
-    - Remaining follow-up: register and complete real lifecycle handles from
-      non-runtime, runtime dispatch-boundary, and unhandled-class branch
-      completion through the existing task lifecycle manager. If execution
-      ownership later moves behind an asynchronous worker loop, the same gate
-      must also be enforced after admission before terminal mutation so
-      shutdown cannot strand admitted work. Resource observation ownership and
-      public lifecycle snapshots remain blocked until queue, task execution,
-      and resource observation all have real lifecycle semantics.
+    - Discovery: normal non-runtime, runtime dispatch-boundary, and
+      unhandled-class terminal paths already route through orchestrator
+      start/terminal methods that track and release task lifecycle handles
+      through the existing lifecycle manager. Remaining follow-up: if
+      execution ownership later moves behind an asynchronous worker loop, the
+      same gate and handle registration/completion must be enforced after
+      admission before terminal mutation so shutdown cannot strand admitted
+      work. Resource observation ownership and public lifecycle snapshots
+      remain blocked until queue, task execution, and resource observation all
+      have real lifecycle semantics.
   - 2026-06-05 task execution timeout cleanup source slice:
     - Smallest vertical slice: when non-runtime session execution exceeds
       `timeout_ms`, cancel running scheduler tasks for that workflow run

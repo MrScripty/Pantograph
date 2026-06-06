@@ -754,10 +754,12 @@ durable task orchestration path.
     scheduler task orchestrator before queue admission. Shutting down or shut
     down state now rejects new execution with typed `CapabilityViolation`
     diagnostics, cancels the queued item, and does not call the legacy
-    whole-run host path. Remaining Option 2 work is to register and complete
-    real task lifecycle handles from non-runtime, runtime dispatch-boundary,
-    and unhandled-class branch completion before public lifecycle snapshots or
-    diagnostics-ledger worker lifecycle events.
+    whole-run host path. Discovery: current normal non-runtime, runtime
+    dispatch-boundary, and unhandled-class terminal paths already track and
+    release real task lifecycle handles through orchestrator start/terminal
+    methods. Remaining Option 2 work is to preserve that ownership if the
+    branches move behind a future async worker loop before public lifecycle
+    snapshots or diagnostics-ledger worker lifecycle events.
   - 2026-06-05 task execution timeout cleanup: non-runtime `timeout_ms`
     handling now terminally cancels running scheduler task attempts through
     the orchestrator and releases lifecycle handles before returning typed

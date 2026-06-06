@@ -922,9 +922,10 @@ Option 3 thin implementation sequence:
      shut down lifecycle state cancels the queued item and returns typed
      `CapabilityViolation` diagnostics without routing through request-owned
      fallback execution or queue-worker branch progression. Remaining task
-     lifecycle work is registering and completing real task lifecycle handles
-     from non-runtime, runtime dispatch-boundary, and unhandled-class branch
-     completion.
+     lifecycle work is preserving that handle registration/completion if the
+     branches move behind a future async worker loop. Discovery: the current
+     normal branch start/terminal paths already track and release real task
+     lifecycle handles through the orchestrator.
    - 2026-06-05 task execution timeout cleanup slice: non-runtime
      `timeout_ms` handling now cancels running task-state attempts through the
      scheduler task orchestrator and releases matching lifecycle handles
@@ -985,9 +986,11 @@ Option 3 thin implementation sequence:
      first Option 2 integration slice by routing task-execution availability
      through the existing lifecycle manager before queue admission. Shutdown
      now fails closed with typed diagnostics and no legacy execution path.
-     Remaining follow-up: register/complete real lifecycle handles from
-     branch completion before public lifecycle snapshots or worker lifecycle
-     ledger events.
+     Discovery: current normal branch completion already releases real task
+     lifecycle handles through orchestrator terminal methods. Remaining
+     follow-up: preserve that ownership if branches move behind a future async
+     worker loop before public lifecycle snapshots or worker lifecycle ledger
+     events.
    - 2026-06-05 task execution timeout cleanup: non-runtime session timeout
      now terminally cancels running scheduler task attempts through the
      orchestrator and releases lifecycle handles, so task lifecycle shutdown
