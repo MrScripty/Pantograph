@@ -26547,6 +26547,30 @@ Worker rules:
     - Deviations/discovered issues: none.
     - Remaining follow-up: migrate one request execution branch to enqueue and
       await worker-owned completion using the service-owned worker.
+  - 2026-06-06 task-execution worker branch-migration re-plan trigger:
+    - Discovery: the next planned branch migration needs a real worker-owned
+      completion path. Adding a oneshot around the current direct
+      `WorkflowTaskExecutionOwner` call would preserve request-owned
+      execution through a fake completion channel, which violates the
+      no-fallback/no-legacy rule and the worker plan. The worker loop also
+      cannot directly own `Arc<WorkflowService>` while `WorkflowService` owns
+      the worker without creating a self-referential ownership cycle.
+    - Required decision before further source work: choose the execution
+      context shape for worker-owned branch execution.
+    - Options to evaluate:
+      1. Extract a small backend execution context that contains only the
+         dependencies the worker needs for the first migrated branch, keeping
+         request API translation outside the worker.
+      2. Move task-execution worker ownership out of `WorkflowService` into a
+         composition-root owner that can hold both the service handle and the
+         worker without a self-reference.
+      3. Narrow the first migrated branch to a command whose dependencies are
+         explicitly passed into the worker without carrying request-owned
+         policy or preserving direct-call completion.
+    - Stop condition: do not migrate a branch until this ownership shape is
+      chosen and recorded. Do not add request-scoped workers, fake completion
+      channels, public lifecycle snapshots, diagnostics-ledger worker events,
+      or compatibility shims to work around the ownership issue.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -296,6 +296,20 @@ path was added. Verification: `cargo fmt -p pantograph-workflow-service` and
 Next Option 4 slice: migrate one request execution branch to enqueue and await
 worker-owned completion using the service-owned worker.
 
+2026-06-06 task-execution worker branch-migration re-plan trigger: stop
+before migrating a request execution branch. The service-owned worker shell is
+valid, but a real worker-owned completion path cannot be created by adding a
+oneshot around the current direct request call; that would be the fake
+completion-channel shim the plan forbids. The worker loop also cannot simply
+own `Arc<WorkflowService>` while `WorkflowService` owns the worker without
+introducing a self-referential ownership cycle. The next plan decision must
+choose the worker execution context shape before source work continues:
+extract a small non-self-referential backend execution context that the worker
+owns, move the worker owner outside `WorkflowService` into the composition
+root, or narrow the first migration to a worker-owned command whose required
+dependencies are explicitly passed without capturing request-owned policy.
+Do not migrate a branch until this is decided.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
