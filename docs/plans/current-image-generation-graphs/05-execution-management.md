@@ -26642,6 +26642,37 @@ Worker rules:
     - Remaining follow-up: expose typed worker unavailable/shutdown
       diagnostics from the composition-root owner to `WorkflowService`
       without public lifecycle snapshots or diagnostics-ledger worker events.
+  - 2026-06-06 task-execution runtime owner diagnostic source slice:
+    - Smallest vertical slice: make the composition-root owner expose typed
+      worker unavailable/shutdown diagnostics for future request-facade
+      enqueue paths.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and the
+      current image-generation plan docs. Request/session branch migration,
+      runtime dispatch movement, task completion signaling, reservation
+      policy changes, public DTOs, generated files, lockfiles, saved
+      workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, and legacy launch paths remained out
+      of scope.
+    - Implementation: replaced the runtime owner's optional worker handle
+      with explicit `NotStarted`, `Running`, and `Shutdown` states. Added an
+      internal enqueue method that returns typed
+      `WorkflowTaskExecutionWorkerOutcome::WorkerUnavailable` diagnostics with
+      `WorkerUnavailable` before startup and `ShutdownRequested` after
+      shutdown.
+    - No-fallback/no-legacy confirmation: the owner still does not execute,
+      complete, retry, fallback-run, wrap direct request execution in a
+      oneshot, create request-scoped workers, route through node-engine
+      whole-run launch, planned-inference launch, graph-path inference,
+      frontend/Tauri policy, public lifecycle snapshots, diagnostics-ledger
+      worker events, or compatibility DTOs.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service runtime_owner_ --lib`
+    - Remaining follow-up: migrate one request execution branch to enqueue
+      through the composition-root owner and await real worker-owned
+      completion.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

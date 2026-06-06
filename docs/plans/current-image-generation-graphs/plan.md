@@ -346,6 +346,22 @@ unavailable/shutdown diagnostics from the composition-root owner to
 `WorkflowService` without public lifecycle snapshots or diagnostics-ledger
 worker events.
 
+2026-06-06 task-execution runtime owner diagnostic slice: completed the next
+Option 2 source slice by replacing the runtime owner's optional worker handle
+with explicit `NotStarted`, `Running`, and `Shutdown` lifecycle states and by
+adding typed enqueue diagnostics for not-started and shut-down workers. The
+owner now returns `WorkerUnavailable` outcomes with `WorkerUnavailable` or
+`ShutdownRequested` diagnostic codes instead of forcing future
+`WorkflowService` request-facade code to infer lifecycle state from a missing
+handle. Runtime dispatch behavior and request execution behavior remain
+unchanged; no task branch has been migrated yet. Verification:
+`cargo fmt -p pantograph-workflow-service` and
+`cargo test -p pantograph-workflow-service runtime_owner_ --lib`. Next Option
+2 slice: migrate one request branch to enqueue through the composition-root
+owner and await real worker-owned completion without a direct-execution
+oneshot, request-scoped worker, public lifecycle snapshot, diagnostics-ledger
+worker event, or compatibility DTO.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

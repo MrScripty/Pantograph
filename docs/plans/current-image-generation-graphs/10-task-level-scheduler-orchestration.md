@@ -1063,6 +1063,15 @@ Option 3 thin implementation sequence:
      runtime dispatch behavior did not change. Next slice: expose typed
      worker unavailable/shutdown diagnostics from the owner to
      `WorkflowService`.
+   - 2026-06-06 task-execution runtime owner diagnostic slice: replaced the
+     runtime owner's optional worker handle with explicit not-started,
+     running, and shutdown states. Future request-facade enqueue paths can now
+     receive typed `WorkerUnavailable` outcomes for not-started workers and
+     typed `ShutdownRequested` diagnostics after shutdown without public
+     lifecycle snapshots or diagnostics-ledger worker events. Request
+     execution and runtime dispatch behavior did not change. Next slice:
+     migrate one request branch to enqueue through the composition-root owner
+     and await real worker-owned completion.
 
 Worker-system standards gates:
 
