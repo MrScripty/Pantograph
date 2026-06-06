@@ -705,6 +705,13 @@ durable task orchestration path.
     recording for that branch. Remaining queue work: runtime dispatch-boundary
     progression, dependency-readiness deferral handling, terminal mutation,
     and completion signaling still need to move behind the worker owner.
+  - 2026-06-05 queue runtime progression owner update: runtime-containing
+    progression now runs through an internal queue-worker helper that owns
+    started-event recording, runtime dispatch-boundary progression, timeout
+    handling, dependency-readiness pending deferral, failure finish mutation,
+    and terminal diagnostics for that branch. Remaining queue work: move the
+    unhandled scheduler class fail-closed branch and final completion
+    signaling semantics behind the worker owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

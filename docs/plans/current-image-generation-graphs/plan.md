@@ -73,6 +73,17 @@ work: move runtime dispatch-boundary progression, dependency-readiness deferral
 handling, terminal mutation, and completion signaling behind the queue worker
 owner.
 
+2026-06-05 queue runtime progression owner update: runtime-containing session
+execution now delegates started-event recording, runtime dispatch-boundary
+progression, timeout handling, dependency-readiness pending deferral,
+failure finish mutation, and terminal diagnostics through an internal
+`WorkflowSchedulerQueueWorker::run_until_runtime_dispatch_boundary` helper.
+This preserves the blocking public response shape while removing the runtime
+execution branch from direct request ownership. Remaining queue progression
+work: move the unhandled scheduler class fail-closed branch and final
+completion signaling semantics behind the queue worker owner, then continue
+to the resource observation worker slice.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

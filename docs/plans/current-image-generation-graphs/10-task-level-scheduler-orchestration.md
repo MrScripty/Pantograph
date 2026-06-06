@@ -901,6 +901,13 @@ Option 3 thin implementation sequence:
      progression ownership is the runtime dispatch-boundary branch,
      dependency-readiness deferral handling, terminal mutation, and completion
      signaling.
+   - 2026-06-05 queue runtime progression owner slice: moved the
+     runtime-containing dispatch-boundary branch behind an internal
+     queue-worker helper. That helper owns started-event recording, runtime
+     dispatch-boundary progression, timeout handling, dependency-readiness
+     pending deferral, failure finish mutation, and terminal diagnostics for
+     runtime runs. Remaining progression ownership is the unhandled scheduler
+     class fail-closed branch and final completion signaling semantics.
 
 Option 3 standards gates:
 

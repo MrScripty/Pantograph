@@ -25993,6 +25993,37 @@ Worker rules:
       dependency-readiness deferral handling, terminal mutation, and
       completion signaling still run from the blocking session execution path
       and must move behind the worker owner next.
+  - 2026-06-05 queue runtime progression owner source slice:
+    - Smallest vertical slice: move the runtime-containing dispatch-boundary
+      execution branch from direct request ownership into an internal
+      queue-worker helper while preserving the existing blocking public
+      response shape.
+    - Allowed files: `crates/pantograph-workflow-service/src/workflow/
+      session_execution_api.rs` and the current image-generation plan docs.
+      Public contracts, generated DTOs, lockfiles, saved workflows,
+      frontend/Tauri files, diagnostics-ledger worker events, durable replay,
+      resource observation code, and legacy runtime launch paths remained out
+      of scope.
+    - No-fallback/no-legacy confirmation: runtime started-event recording,
+      runtime dispatch-boundary progression, timeout handling,
+      dependency-readiness pending deferral, failure finish mutation, and
+      terminal diagnostics now go through
+      `WorkflowSchedulerQueueWorker::run_until_runtime_dispatch_boundary`.
+      The request path only routes to the worker-owned helper and does not
+      keep a parallel runtime execution branch or call legacy whole-run host
+      execution.
+    - Tests/verification completed:
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+    - Remaining follow-up: the unhandled scheduler class fail-closed branch
+      and final completion signaling semantics still need to move behind the
+      worker owner before the queue progression migration is complete.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
