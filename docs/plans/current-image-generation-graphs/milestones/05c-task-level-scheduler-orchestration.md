@@ -645,8 +645,10 @@ durable task orchestration path.
   2026-06-05 retry-loop attachment update: the session scheduler runner's
   existing deferred runtime dependency-readiness retry sweep now drives the
   shared registry's `retry_loop` component through a scheduler-owned retry
-  lifecycle helper. Remaining component attachments: resource observation,
-  queue, and reservation cleanup.
+  lifecycle helper. 2026-06-05 reservation-cleanup attachment update:
+  terminal reservation-release cleanup events now drive the shared registry's
+  `reservation_cleanup` component from the scheduler task orchestrator.
+  Remaining component attachments: resource observation and queue.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

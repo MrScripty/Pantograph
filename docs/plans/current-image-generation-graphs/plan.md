@@ -93,6 +93,18 @@ returns to explicit `NotStarted`. This does not add retry scheduling policy,
 replay/bootstrap behavior, diagnostics-ledger worker events, public lifecycle
 queries, Tauri/frontend policy, or legacy runtime launch behavior.
 
+2026-06-05 reservation-cleanup lifecycle attachment update: the scheduler task
+orchestrator now updates the shared scheduler lifecycle registry's
+`reservation_cleanup` component from real terminal reservation-release cleanup
+paths. Runtime-host completion, runtime-host failure/rejection, and
+workflow-cancel release events mark cleanup `Running` only while the
+reservation lifecycle port applies the cleanup event, then return it to
+explicit `NotStarted`. Dispatch-started and candidate-selection lifecycle
+events remain outside cleanup state. This does not add reservation policy,
+public lifecycle queries, diagnostics-ledger worker events,
+projection-inferred state, Tauri/frontend policy, or legacy runtime launch
+behavior.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a

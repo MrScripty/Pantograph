@@ -186,6 +186,13 @@ owner. The existing workflow-service retry sweep marks `retry_loop` `Running`
 only while it re-enters deferred or retryable runtime dependency-readiness
 tasks, then returns it to explicit `NotStarted`. This does not add retry
 scheduling policy, replay, public lifecycle queries, or ledger worker events.
+Reservation release cleanup now attaches to the shared lifecycle registry from
+the orchestrator's real terminal reservation-release paths. Runtime-host
+completion, runtime-host failure/rejection, and workflow-cancel release
+events mark `reservation_cleanup` `Running` only while the reservation
+lifecycle port applies the cleanup event, then return it to explicit
+`NotStarted`. Dispatch-started and candidate-selection lifecycle events do not
+mark cleanup as running.
 The task lifecycle manager is the workflow-service owner for task handle and
 shutdown state. It is synchronous and does not spawn work, retry, replay,
 write diagnostics-ledger facts, dispatch runtime-host work, or change

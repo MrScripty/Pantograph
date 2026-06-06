@@ -25649,6 +25649,55 @@ Worker rules:
     - Remaining follow-up: attach resource observation, queue, and reservation
       cleanup component states from their real owners before adding public
       lifecycle queries or diagnostics-ledger worker lifecycle events.
+  - 2026-06-05 Milestone 5c reservation-cleanup lifecycle attachment slice:
+    - Smallest vertical slice: attach the shared scheduler lifecycle
+      registry's `reservation_cleanup` component to real terminal
+      reservation-release cleanup paths in the scheduler task orchestrator.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: runtime-host completion,
+      runtime-host failure/rejection, and workflow-cancel release cleanup
+      events mark `reservation_cleanup` `Running` only while the reservation
+      lifecycle port applies the cleanup event, then restore explicit
+      `NotStarted`. Dispatch-started and candidate-selection lifecycle events
+      remain outside cleanup state. No reservation policy, public lifecycle
+      query, diagnostics-ledger worker lifecycle event, projection-inferred
+      component state, Tauri/frontend policy, graph-path/node-engine/
+      planned-inference runtime fallback, or compatibility shim was added.
+    - Implementation notes: the scheduler task orchestrator now wraps terminal
+      reservation-release event application in a cleanup lifecycle helper. The
+      existing reservation lifecycle port and event validation remain the
+      authority for reservation side effects; lifecycle state only records the
+      cleanup boundary.
+    - Tests added: the existing successful runtime dispatch workflow test now
+      configures its reservation lifecycle port to observe the shared
+      lifecycle registry. It asserts `DispatchStarted` sees
+      `reservation_cleanup` still `NotStarted`, `RuntimeHostCompleted` sees it
+      `Running`, and the final registry state returns to `NotStarted`.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched scheduler/workflow
+        files
+    - Search deviations: targeted search matched existing scheduler README
+      standards/legacy/no-fallback boundary text, existing workflow execution
+      tests that prove legacy whole-run paths stay blocked, existing
+      compatibility-report fixture fields, and existing non-runtime
+      node-engine diagnostics in `task_orchestrator.rs`. The reservation
+      cleanup source/test changes did not introduce fallback or legacy launch
+      behavior.
+    - Remaining follow-up: attach resource observation and queue component
+      states from their real owners before adding public lifecycle queries or
+      diagnostics-ledger worker lifecycle events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

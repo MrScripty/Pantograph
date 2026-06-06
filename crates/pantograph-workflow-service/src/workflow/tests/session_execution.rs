@@ -41,6 +41,10 @@ use pantograph_scheduler::{
 
 use super::*;
 use crate::scheduler::WorkflowDependencyReadinessLifecycle;
+use crate::scheduler::{
+    WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+    WorkflowSchedulerLifecycleComponentState,
+};
 use crate::workflow::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
     WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
@@ -717,6 +721,11 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         ))
         .with_runtime_host_execution_port(runtime_host_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    reservation_lifecycle_port.observe_reservation_cleanup_lifecycle(
+        service
+            .scheduler_task_orchestrator
+            .scheduler_lifecycle_handle(),
+    );
     let workflow_id = "wf-runtime-selected-dispatch";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -826,6 +835,15 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     assert!(lifecycle_events
         .iter()
         .all(|event| event.reservation_lease_id.as_str() == "reservation.runtime_session_test"));
+    assert_eq!(
+        service
+            .scheduler_task_orchestrator
+            .scheduler_lifecycle_handle()
+            .component(WorkflowSchedulerLifecycleComponentKind::ReservationCleanup)
+            .expect("reservation cleanup lifecycle component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::NotStarted
+    );
     assert_eq!(
         source_refresher.model_refs(),
         vec!["image/example/tiny-diffusion"]
@@ -4252,6 +4270,7 @@ impl RuntimeInferenceSessionHost {
 #[derive(Default)]
 struct RecordingReservationLifecyclePort {
     events: Mutex<Vec<ReservationLifecycleEvent>>,
+    reservation_cleanup_lifecycle: Mutex<Option<WorkflowSchedulerLifecycleComponentRegistryHandle>>,
 }
 
 impl RecordingReservationLifecyclePort {
@@ -4261,6 +4280,16 @@ impl RecordingReservationLifecyclePort {
             .expect("reservation lifecycle event lock")
             .clone()
     }
+
+    fn observe_reservation_cleanup_lifecycle(
+        &self,
+        scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    ) {
+        *self
+            .reservation_cleanup_lifecycle
+            .lock()
+            .expect("reservation cleanup lifecycle lock") = Some(scheduler_lifecycle);
+    }
 }
 
 #[async_trait::async_trait]
@@ -4269,6 +4298,7 @@ impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
         &self,
         event: ReservationLifecycleEvent,
     ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+        self.assert_reservation_cleanup_lifecycle(&event);
         self.events
             .lock()
             .expect("reservation lifecycle event lock")
@@ -4280,6 +4310,35 @@ impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
             state: ReservationLifecycleApplicationState::Applied,
             diagnostics: Vec::new(),
         })
+    }
+}
+
+impl RecordingReservationLifecyclePort {
+    fn assert_reservation_cleanup_lifecycle(&self, event: &ReservationLifecycleEvent) {
+        let Some(scheduler_lifecycle) = self
+            .reservation_cleanup_lifecycle
+            .lock()
+            .expect("reservation cleanup lifecycle lock")
+            .clone()
+        else {
+            return;
+        };
+        let expected_state = match event.outcome {
+            ReservationLifecycleOutcome::RuntimeHostCompleted
+            | ReservationLifecycleOutcome::RuntimeHostFailed
+            | ReservationLifecycleOutcome::RuntimeHostDispatchRejected
+            | ReservationLifecycleOutcome::WorkflowCancelled => {
+                WorkflowSchedulerLifecycleComponentState::Running
+            }
+            _ => WorkflowSchedulerLifecycleComponentState::NotStarted,
+        };
+        assert_eq!(
+            scheduler_lifecycle
+                .component(WorkflowSchedulerLifecycleComponentKind::ReservationCleanup)
+                .expect("reservation cleanup lifecycle component")
+                .state,
+            expected_state
+        );
     }
 }
 

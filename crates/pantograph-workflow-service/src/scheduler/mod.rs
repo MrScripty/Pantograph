@@ -35,6 +35,11 @@ pub use contracts::{
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
 };
+#[cfg(test)]
+pub(crate) use lifecycle::{
+    WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+    WorkflowSchedulerLifecycleComponentState,
+};
 pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
 pub(crate) use readiness_lifecycle::{

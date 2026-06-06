@@ -48,7 +48,8 @@ use crate::workflow::{
 
 use super::{
     lifecycle::{
-        WorkflowSchedulerLifecycleComponentRegistryHandle, WorkflowSchedulerLifecycleOwnerId,
+        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+        WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
     },
     task_lifecycle::{
         WorkflowSchedulerTaskLifecycleManager, WorkflowSchedulerTaskLifecycleOwnerId,
@@ -563,7 +564,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             return Ok(());
         };
         let _ = self
-            .apply_reservation_lifecycle_event(runtime_host_terminal_lifecycle_event(
+            .apply_reservation_cleanup_lifecycle_event(runtime_host_terminal_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
                 release_intent.candidate_id.clone(),
@@ -583,7 +584,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             return Ok(());
         };
         let _ = self
-            .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+            .apply_reservation_cleanup_lifecycle_event(reservation_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
                 release_intent.candidate_id.clone(),
@@ -608,7 +609,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             return Ok(());
         };
         let _ = self
-            .apply_reservation_lifecycle_event(reservation_lifecycle_event(
+            .apply_reservation_cleanup_lifecycle_event(reservation_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
                 release_intent.candidate_id.clone(),
@@ -647,6 +648,37 @@ impl WorkflowSchedulerTaskOrchestrator {
                 .await?;
         }
         Ok(())
+    }
+
+    async fn apply_reservation_cleanup_lifecycle_event(
+        &self,
+        event: ReservationLifecycleEvent,
+    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    {
+        self.mark_reservation_cleanup_lifecycle(WorkflowSchedulerLifecycleComponentState::Running)?;
+        let result = self.apply_reservation_lifecycle_event(event).await;
+        let reset_result = self.mark_reservation_cleanup_lifecycle(
+            WorkflowSchedulerLifecycleComponentState::NotStarted,
+        );
+        match (result, reset_result) {
+            (Ok(application), Ok(())) => Ok(application),
+            (Err(error), Ok(())) => Err(error),
+            (Ok(_application), Err(error)) => Err(error),
+            (Err(error), Err(_reset_error)) => Err(error),
+        }
+    }
+
+    fn mark_reservation_cleanup_lifecycle(
+        &self,
+        state: WorkflowSchedulerLifecycleComponentState,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        self.scheduler_lifecycle
+            .update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::ReservationCleanup,
+                state,
+            )
+            .map(|_record| ())
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 
     async fn apply_reservation_lifecycle_event(

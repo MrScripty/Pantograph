@@ -813,6 +813,17 @@ Option 3 thin implementation sequence:
      ledger event, projection default, Tauri/frontend policy, or legacy
      runtime path was added. Remaining component attachment work covers
      resource observation, queue, and reservation cleanup.
+   - 2026-06-05 reservation-cleanup lifecycle attachment slice: the scheduler
+     task orchestrator now drives the shared registry's
+     `reservation_cleanup` component from real terminal reservation-release
+     cleanup paths. Runtime-host completion, runtime-host failure/rejection,
+     and workflow-cancel release events mark cleanup `Running` only while the
+     reservation lifecycle port applies the cleanup event, then return it to
+     explicit `NotStarted`. Dispatch-started and candidate-selection
+     lifecycle events do not mark cleanup as running. No reservation policy,
+     public snapshot, ledger event, projection default, Tauri/frontend policy,
+     or legacy runtime path was added. Remaining component attachment work
+     covers resource observation and queue.
 
 Option 3 standards gates:
 
