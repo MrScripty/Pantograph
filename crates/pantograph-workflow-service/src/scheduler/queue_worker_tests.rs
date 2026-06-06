@@ -2,13 +2,22 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::WorkflowSchedulerQueueAdmissionCommand;
+use super::WorkflowSchedulerQueueTaskStateCommand;
 use super::WorkflowSchedulerQueueWorker;
 use crate::scheduler::lifecycle::{
     WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
     WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
 };
 use crate::scheduler::WorkflowExecutionSessionStore;
-use crate::workflow::WorkflowExecutionSessionRunRequest;
+use crate::workflow::{
+    WorkflowExecutionSessionRunRequest, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph,
+};
+use pantograph_scheduler::{
+    SchedulerNodeId, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateKind,
+    SchedulerTaskStateRecord, SchedulerTaskStateTransitionId, SchedulerWorkflowId,
+    SchedulerWorkflowRunId, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+};
 
 #[tokio::test]
 async fn queue_worker_marks_running_until_shutdown() {
@@ -209,11 +218,108 @@ async fn queue_worker_admission_waits_until_active_run_finishes() {
     assert_eq!(queued_run.queued.workflow_run_id, second_run_id);
 }
 
+#[tokio::test]
+async fn queue_worker_initializes_admitted_task_state() {
+    let session_store = Arc::new(Mutex::new(WorkflowExecutionSessionStore::new(2, 2)));
+    let (session_id, workflow_run_id) = {
+        let mut store = session_store.lock().expect("session store lock");
+        let session_id = store
+            .create_session(
+                "wf-queue-worker".to_string(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                false,
+            )
+            .expect("create session");
+        let workflow_run_id = store
+            .enqueue_run(&session_id, &empty_run_request(&session_id))
+            .expect("enqueue run");
+        store
+            .begin_queued_run(&session_id, &workflow_run_id)
+            .expect("begin queued run")
+            .expect("admitted run");
+        (session_id, workflow_run_id)
+    };
+    let task_graph = scheduler_task_graph(&workflow_run_id);
+    let records = vec![scheduler_record(&workflow_run_id, "task-text-input")];
+
+    WorkflowSchedulerQueueWorker::initialize_admitted_task_state(
+        WorkflowSchedulerQueueTaskStateCommand::new(
+            session_store.clone(),
+            session_id.clone(),
+            workflow_run_id.clone(),
+            task_graph,
+            records,
+        ),
+    )
+    .expect("initialize admitted task state");
+
+    let (_, stored_records) = {
+        let store = session_store.lock().expect("session store lock");
+        store
+            .active_run_scheduler_task_state(&session_id, &workflow_run_id)
+            .expect("active task state")
+            .expect("task state should be stored")
+    };
+    assert_eq!(stored_records.len(), 1);
+    assert_eq!(stored_records[0].task_id.as_str(), "task-text-input");
+    assert_eq!(
+        stored_records[0].state.kind(),
+        SchedulerTaskStateKind::AwaitingInputs
+    );
+}
+
 fn scheduler_lifecycle() -> WorkflowSchedulerLifecycleComponentRegistryHandle {
     WorkflowSchedulerLifecycleComponentRegistryHandle::new(
         WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.queue-worker.test")
             .expect("scheduler lifecycle owner id"),
     )
+}
+
+fn scheduler_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {
+    let workflow_id = SchedulerWorkflowId::parse("wf-queue-worker").expect("workflow id");
+    let workflow_run_id = SchedulerWorkflowRunId::parse(workflow_run_id).expect("workflow run id");
+    let node_id = SchedulerNodeId::parse("task-text-input").expect("node id");
+    let task_id = SchedulerTaskId::parse("task-text-input").expect("task id");
+    WorkflowSchedulerTaskGraph {
+        schema_version: crate::workflow::WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        workflow_id: workflow_id.clone(),
+        workflow_run_id: workflow_run_id.clone(),
+        tasks: vec![WorkflowSchedulerTask {
+            workflow_id,
+            workflow_run_id,
+            node_id,
+            task_id,
+            node_type: "source.input.text".to_string(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: None,
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            diagnostics: Vec::new(),
+        }],
+    }
+}
+
+fn scheduler_record(workflow_run_id: &str, task_id: &str) -> SchedulerTaskStateRecord {
+    SchedulerTaskStateRecord {
+        contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        workflow_id: SchedulerWorkflowId::parse("wf-queue-worker").expect("workflow id"),
+        workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("workflow run id"),
+        node_id: SchedulerNodeId::parse(task_id).expect("node id"),
+        task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+        state: SchedulerTaskState::AwaitingInputs {
+            diagnostics: Vec::new(),
+        },
+        state_version: 1,
+        last_transition_id: SchedulerTaskStateTransitionId::parse("initial:task-text-input")
+            .expect("transition id"),
+    }
 }
 
 fn empty_run_request(session_id: &str) -> WorkflowExecutionSessionRunRequest {

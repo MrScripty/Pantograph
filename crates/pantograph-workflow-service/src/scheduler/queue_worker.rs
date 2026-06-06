@@ -8,7 +8,8 @@ use crate::scheduler::lifecycle::{
     WorkflowSchedulerLifecycleComponentState,
 };
 use crate::scheduler::{WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionStore};
-use crate::workflow::WorkflowServiceError;
+use crate::workflow::{WorkflowSchedulerTaskGraph, WorkflowServiceError};
+use pantograph_scheduler::SchedulerTaskStateRecord;
 
 use super::store::WORKFLOW_SESSION_QUEUE_POLL_MS;
 
@@ -94,6 +95,22 @@ impl WorkflowSchedulerQueueWorker {
         }
     }
 
+    pub(crate) fn initialize_admitted_task_state(
+        command: WorkflowSchedulerQueueTaskStateCommand,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut store = command.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal(
+                "workflow execution session store lock poisoned".to_string(),
+            )
+        })?;
+        store.set_active_run_scheduler_task_state(
+            &command.session_id,
+            &command.workflow_run_id,
+            command.task_graph,
+            command.records,
+        )
+    }
+
     pub(crate) async fn shutdown(&self) -> Result<(), WorkflowServiceError> {
         self.mark_shutting_down_if_running()?;
         let _ = self.shutdown_tx.send(true);
@@ -154,6 +171,33 @@ impl WorkflowSchedulerQueueAdmissionCommand {
             session_store,
             session_id: session_id.into(),
             workflow_run_id: workflow_run_id.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowSchedulerQueueTaskStateCommand {
+    session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
+    session_id: String,
+    workflow_run_id: String,
+    task_graph: WorkflowSchedulerTaskGraph,
+    records: Vec<SchedulerTaskStateRecord>,
+}
+
+impl WorkflowSchedulerQueueTaskStateCommand {
+    pub(crate) fn new(
+        session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
+        session_id: impl Into<String>,
+        workflow_run_id: impl Into<String>,
+        task_graph: WorkflowSchedulerTaskGraph,
+        records: Vec<SchedulerTaskStateRecord>,
+    ) -> Self {
+        Self {
+            session_store,
+            session_id: session_id.into(),
+            workflow_run_id: workflow_run_id.into(),
+            task_graph,
+            records,
         }
     }
 }

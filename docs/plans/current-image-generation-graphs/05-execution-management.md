@@ -25935,6 +25935,30 @@ Worker rules:
       terminal mutation, and completion signaling still run from the blocking
       session execution path and must move behind the worker owner next,
       followed by full crate checks and affected session execution tests.
+  - 2026-06-05 queue task-state owner source slice:
+    - Smallest vertical slice: move the admitted-run active scheduler
+      task-state write from the request path into the queue worker owner
+      module while preserving the existing blocking public response shape.
+    - Allowed files: `crates/pantograph-workflow-service/src/scheduler/
+      queue_worker.rs`, `queue_worker_tests.rs`, `scheduler/mod.rs`,
+      `workflow/session_execution_api.rs`, and the current image-generation
+      plan docs. Public contracts, generated DTOs, lockfiles, saved
+      workflows, frontend/Tauri files, diagnostics-ledger worker events,
+      durable replay, resource observation code, and legacy runtime launch
+      paths remained out of scope.
+    - No-fallback/no-legacy confirmation: `run_workflow_execution_session`
+      no longer calls a request-owned `set_scheduler_task_state_for_admitted_run`
+      helper. Active-run task-state initialization now goes through
+      `WorkflowSchedulerQueueWorker::initialize_admitted_task_state` with an
+      internal `WorkflowSchedulerQueueTaskStateCommand`. The request path still
+      computes the task graph and initial records before admission only because
+      the current blocking response path needs the task summary for routing;
+      that is not a fallback execution branch.
+    - Tests/verification completed:
+      - `cargo test -p pantograph-workflow-service scheduler::queue_worker::tests --lib`
+    - Remaining follow-up: non-runtime/runtime progression, timeout handling,
+      terminal mutation, and completion signaling still run from the blocking
+      session execution path and must move behind the worker owner next.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

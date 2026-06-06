@@ -44,7 +44,8 @@ pub(crate) use lifecycle::{
 pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
 pub(crate) use queue_worker::{
-    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueWorker,
+    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueTaskStateCommand,
+    WorkflowSchedulerQueueWorker,
 };
 pub(crate) use readiness_lifecycle::{
     WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,

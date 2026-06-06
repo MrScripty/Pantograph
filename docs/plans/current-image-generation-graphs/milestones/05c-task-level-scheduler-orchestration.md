@@ -691,6 +691,13 @@ durable task orchestration path.
     work: move scheduler task-state setup, non-runtime/runtime progression,
     timeout handling, terminal mutation, and completion signaling behind the
     worker owner, then remove any remaining request-owned execution loop.
+  - 2026-06-05 queue task-state owner update: active-run scheduler task-state
+    initialization now goes through an internal queue-worker task-state
+    command. The blocking request path still computes the task graph and
+    initial records before admission for summary/routing decisions, but it no
+    longer writes active-run task state directly. Remaining queue work:
+    non-runtime/runtime progression, timeout handling, terminal mutation, and
+    completion signaling still need to move behind the worker owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

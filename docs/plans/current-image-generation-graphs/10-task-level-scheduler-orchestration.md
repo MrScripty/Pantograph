@@ -886,6 +886,13 @@ Option 3 thin implementation sequence:
      non-runtime/runtime progression, timeout handling, terminal mutation, and
      completion signaling must move behind the queue worker without restoring
      request-owned fallback execution.
+   - 2026-06-05 queue task-state owner slice: moved active-run scheduler
+     task-state initialization out of the request-path helper and into an
+     internal queue-worker task-state command. The request path still computes
+     the graph and initial records before admission for the current blocking
+     response flow, but the active-run state write is now worker-owned.
+     Remaining progression ownership is non-runtime/runtime execution,
+     timeout handling, terminal mutation, and completion signaling.
 
 Option 3 standards gates:
 

@@ -53,6 +53,15 @@ mutation, timeout handling, or completion signaling behind the worker; those
 remain the next Option 1 source slice and must be removed from the
 request-scoped execution path without adding fallback branches.
 
+2026-06-05 queue task-state owner update: admitted-run scheduler task-state
+initialization now goes through the queue worker owner module via an internal
+`WorkflowSchedulerQueueTaskStateCommand`. `run_workflow_execution_session`
+still computes the task graph and initial records before admission because
+that summary is needed for the existing blocking response path, but it no
+longer writes active-run scheduler task state directly. Remaining queue
+progression work: move non-runtime/runtime progression, timeout handling,
+terminal mutation, and completion signaling behind the queue worker owner.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

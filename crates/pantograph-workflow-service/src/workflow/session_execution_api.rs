@@ -10,7 +10,8 @@ use crate::graph::{
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
     WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
-    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueWorker,
+    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueTaskStateCommand,
+    WorkflowSchedulerQueueWorker,
 };
 use crate::technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
@@ -324,11 +325,14 @@ impl WorkflowService {
         .await?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
-        if let Err(error) = self.set_scheduler_task_state_for_admitted_run(
-            scheduler_task_graph.clone(),
-            initial_scheduler_task_records,
-            &session_id,
-            &workflow_run_id,
+        if let Err(error) = WorkflowSchedulerQueueWorker::initialize_admitted_task_state(
+            WorkflowSchedulerQueueTaskStateCommand::new(
+                self.session_store.clone(),
+                session_id.clone(),
+                workflow_run_id.clone(),
+                scheduler_task_graph.clone(),
+                initial_scheduler_task_records,
+            ),
         ) {
             self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             let terminal_result = Err(error);
@@ -794,17 +798,6 @@ impl WorkflowService {
             ));
         }
         Ok(task_graph)
-    }
-
-    fn set_scheduler_task_state_for_admitted_run(
-        &self,
-        task_graph: WorkflowSchedulerTaskGraph,
-        records: Vec<pantograph_scheduler::SchedulerTaskStateRecord>,
-        session_id: &str,
-        workflow_run_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
-        let mut store = self.session_store_guard()?;
-        store.set_active_run_scheduler_task_state(session_id, workflow_run_id, task_graph, records)
     }
 
     fn fail_unhandled_scheduler_session_classes(
