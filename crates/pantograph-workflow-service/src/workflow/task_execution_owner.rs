@@ -13,6 +13,14 @@ use super::{
 pub(super) struct WorkflowTaskExecutionOwner;
 
 impl WorkflowTaskExecutionOwner {
+    pub(super) fn ensure_task_execution_available(
+        service: &WorkflowService,
+    ) -> Result<(), WorkflowServiceError> {
+        service
+            .scheduler_task_orchestrator
+            .ensure_task_execution_available()
+    }
+
     pub(super) async fn run_non_runtime_to_completion<H: WorkflowHost>(
         service: &WorkflowService,
         host: &H,

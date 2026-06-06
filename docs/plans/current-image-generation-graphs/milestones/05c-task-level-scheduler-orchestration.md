@@ -748,6 +748,16 @@ durable task orchestration path.
     Do not add fake oneshot wrappers, a second lifecycle state machine, public
     lifecycle snapshots, diagnostics-ledger worker lifecycle events, or a new
     async task-execution worker before this existing owner is integrated.
+  - 2026-06-05 task execution lifecycle availability gate: completed the
+    lifecycle shutdown gate slice by having `WorkflowTaskExecutionOwner`
+    consult the existing `WorkflowSchedulerTaskLifecycleManager` through the
+    scheduler task orchestrator before queue admission. Shutting down or shut
+    down state now rejects new execution with typed `CapabilityViolation`
+    diagnostics, cancels the queued item, and does not call the legacy
+    whole-run host path. Remaining Option 2 work is to register and complete
+    real task lifecycle handles from non-runtime, runtime dispatch-boundary,
+    and unhandled-class branch completion before public lifecycle snapshots or
+    diagnostics-ledger worker lifecycle events.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

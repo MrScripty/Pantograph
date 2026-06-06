@@ -26244,6 +26244,52 @@ Worker rules:
       completion, queue-worker execution ownership, node-engine whole-run
       launch, planned-inference launch, graph-path inference, frontend/Tauri
       policy, compatibility DTOs, or alternate successful execution routes.
+  - 2026-06-05 task execution lifecycle availability gate source slice:
+    - Smallest vertical slice: thread the existing
+      `WorkflowSchedulerTaskLifecycleManager` into
+      `WorkflowTaskExecutionOwner` through the scheduler task orchestrator as
+      an availability gate before queue admission.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and the current image-generation plan docs. Public contracts, generated
+      DTOs, lockfiles, saved workflows, frontend/Tauri files, runtime
+      adapters, diagnostics-ledger worker lifecycle events, resource
+      observation code, fake completion channels, and legacy runtime launch
+      paths remained out of scope.
+    - No-fallback/no-legacy confirmation:
+      `WorkflowTaskExecutionOwner::ensure_task_execution_available` now
+      consults the orchestrator-owned lifecycle manager and
+      `run_workflow_execution_session` rejects new runs before queue admission
+      when the task lifecycle manager is not `Running`. The queued item is
+      cancelled and the caller receives typed `CapabilityViolation`
+      diagnostics. The slice did not add request-owned fallback execution,
+      queue-worker branch progression ownership, node-engine whole-run launch,
+      planned-inference launch, graph-path inference, frontend/Tauri policy,
+      compatibility DTOs, public lifecycle snapshots, or diagnostics-ledger
+      worker events.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner --lib`
+      - `git diff --check`
+      - Targeted source search for task lifecycle availability, queue-worker
+        branch progression, fallback/compatibility, node-engine, and
+        planned-inference terms.
+    - Remaining follow-up: register and complete real lifecycle handles from
+      non-runtime, runtime dispatch-boundary, and unhandled-class branch
+      completion through the existing task lifecycle manager. If execution
+      ownership later moves behind an asynchronous worker loop, the same gate
+      must also be enforced after admission before terminal mutation so
+      shutdown cannot strand admitted work. Resource observation ownership and
+      public lifecycle snapshots remain blocked until queue, task execution,
+      and resource observation all have real lifecycle semantics.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

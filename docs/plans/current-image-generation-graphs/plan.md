@@ -174,6 +174,22 @@ async task-execution worker or durable event stream until this existing owner
 is integrated; those remain future batching/replay work after the blocking
 inference path and resource observation worker are complete.
 
+2026-06-05 task execution lifecycle availability gate update:
+`WorkflowTaskExecutionOwner` now checks the existing
+`WorkflowSchedulerTaskLifecycleManager` through the scheduler task orchestrator
+before queue admission. If the task lifecycle owner is shutting down or shut
+down, new execution fails closed with typed `CapabilityViolation` diagnostics
+and the queued item is cancelled instead of admitting work that cannot be
+owned by the backend lifecycle manager. The slice does not add request-owned
+fallback execution, queue-worker branch progression, fake completion channels,
+public lifecycle snapshots, diagnostics-ledger worker events, node-engine
+whole-run launch, planned-inference launch, graph-path inference, or
+frontend/Tauri policy. Remaining Option 2 work: register and complete real
+task lifecycle handles from non-runtime, runtime dispatch-boundary, and
+unhandled-class branch completion, then continue the resource observation
+worker before exposing public lifecycle snapshots or worker lifecycle ledger
+events.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

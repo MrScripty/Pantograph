@@ -315,6 +315,18 @@ impl WorkflowService {
                 "scheduler task run summary failed before admission: {error}"
             ))
         })?;
+        if let Err(error) = WorkflowTaskExecutionOwner::ensure_task_execution_available(self) {
+            if let Ok(mut store) = self.session_store.lock() {
+                let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
+            }
+            return Err(self.record_scheduler_admission_failure_error(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                Some(&request.workflow_semantic_version),
+                error,
+            )?);
+        }
 
         let queued_run = WorkflowSchedulerQueueWorker::admit_queued_run(
             WorkflowSchedulerQueueAdmissionCommand::new(

@@ -916,6 +916,15 @@ Option 3 thin implementation sequence:
      New async task-execution workers and durable event streams are deferred
      until after the blocking inference path, lifecycle owner integration, and
      resource observation worker are validated.
+   - 2026-06-05 task execution lifecycle availability gate slice: new
+     execution now checks the existing task lifecycle manager through
+     `WorkflowTaskExecutionOwner` before queue admission. Shutting down or
+     shut down lifecycle state cancels the queued item and returns typed
+     `CapabilityViolation` diagnostics without routing through request-owned
+     fallback execution or queue-worker branch progression. Remaining task
+     lifecycle work is registering and completing real task lifecycle handles
+     from non-runtime, runtime dispatch-boundary, and unhandled-class branch
+     completion.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
@@ -966,6 +975,13 @@ Option 3 thin implementation sequence:
      path for the task execution owner. Reuse the existing
      `WorkflowSchedulerTaskLifecycleManager`; do not create a new lifecycle
      state machine or direct-call completion channel.
+   - 2026-06-05 task execution lifecycle availability gate: completed the
+     first Option 2 integration slice by routing task-execution availability
+     through the existing lifecycle manager before queue admission. Shutdown
+     now fails closed with typed diagnostics and no legacy execution path.
+     Remaining follow-up: register/complete real lifecycle handles from
+     branch completion before public lifecycle snapshots or worker lifecycle
+     ledger events.
 
 Worker-system standards gates:
 

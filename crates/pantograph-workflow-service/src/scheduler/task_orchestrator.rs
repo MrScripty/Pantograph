@@ -213,6 +213,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         Ok(self.task_lifecycle_manager()?.active_task_handle_count())
     }
 
+    pub(crate) fn ensure_task_execution_available(&self) -> Result<(), WorkflowServiceError> {
+        let shutdown_state = self
+            .task_lifecycle_manager()
+            .map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "scheduler task lifecycle availability check failed: {error}"
+                ))
+            })?
+            .shutdown_state();
+        if shutdown_state == WorkflowSchedulerTaskLifecycleShutdownState::Running {
+            return Ok(());
+        }
+
+        Err(WorkflowServiceError::CapabilityViolation(format!(
+            "task execution owner is unavailable: workflow-service task lifecycle owner is {shutdown_state:?}"
+        )))
+    }
+
     fn track_task_lifecycle_handle(
         &self,
         task_id: &SchedulerTaskId,

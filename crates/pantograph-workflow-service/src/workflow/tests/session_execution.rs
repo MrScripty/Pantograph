@@ -291,6 +291,76 @@ async fn workflow_execution_session_timeout_applies_to_scheduler_task_runner() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::with_max_sessions(2);
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: Some("generic-run".to_string()),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    service
+        .workflow_shutdown_scheduler_task_lifecycle(
+            std::time::Duration::ZERO,
+            std::time::Duration::ZERO,
+        )
+        .await
+        .expect("shutdown scheduler task lifecycle");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id.clone(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "input".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "output".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("task lifecycle shutdown should reject new execution");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(
+        error
+            .message()
+            .contains("task execution owner is unavailable"),
+        "unexpected error: {error}"
+    );
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id: created.session_id,
+        })
+        .await
+        .expect("list queue after lifecycle rejection");
+    assert!(queue.items.is_empty());
+    assert!(
+        host.recorded_run_options
+            .lock()
+            .expect("run options lock")
+            .is_empty(),
+        "task lifecycle rejection must not route through the legacy whole-run host path"
+    );
+}
+
+#[tokio::test]
 async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launch() {
     let host = RuntimeInferenceSessionHost::new();
     let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
