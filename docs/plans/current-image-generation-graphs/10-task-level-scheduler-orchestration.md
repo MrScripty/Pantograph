@@ -839,9 +839,15 @@ Option 3 thin implementation sequence:
         mechanics, lifecycle registry updates, and tests proving no public
         snapshot or ledger event is emitted yet.
      2. Move queue progression business behavior out of request-scoped
-        session paths so enqueue/cancel/reprioritize requests signal/query the
-        backend worker and fail closed with typed diagnostics when the worker
-        is unavailable.
+        session paths using Option 1, worker-owned completion while
+        preserving the existing blocking `run_workflow_execution_session`
+        response shape. The request path may validate, enqueue, and await a
+        worker-owned completion receiver, but the worker must own
+        `begin_queued_run`, scheduler task-state setup, non-runtime/runtime
+        progression, terminal mutation, completion signaling, lifecycle
+        state, and shutdown. Enqueue/cancel/reprioritize/push-front/status/
+        inspection APIs remain command/query surfaces only and must fail
+        closed with typed diagnostics when the worker is unavailable.
      3. Add the resource observation worker owner with bounded refresh/wake,
         observation-source contracts, stale/missing fact diagnostics,
         lifecycle registry updates, and shutdown tests.
@@ -862,6 +868,15 @@ Option 3 thin implementation sequence:
      resources, expose public snapshots, emit diagnostics-ledger worker
      lifecycle events, or restore legacy runtime launch behavior. Remaining
      queue work is the queue progression migration slice.
+   - 2026-06-05 queue progression API re-plan: selected Option 1 for the next
+     queue slice. Keep current blocking `run_workflow_execution_session`
+     callers compatible by waiting on a worker-owned completion channel rather
+     than changing the public API to enqueue-only. Rejected enqueue-only public
+     API migration and full durable event-driven queue for this slice because
+     they require broader caller, contract, generated DTO, frontend/Tauri, and
+     replay coordination. The next source slice must not preserve the current
+     request-owned queue polling/admission/execution loop as a compatibility
+     branch.
 
 Option 3 standards gates:
 

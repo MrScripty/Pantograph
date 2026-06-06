@@ -25725,12 +25725,17 @@ Worker rules:
          This slice must not add public snapshots, ledger worker events,
          retry/defer policy, replay/bootstrap, resource observation, or
          legacy runtime launch behavior.
-      2. Queue progression migration: move queue progression business
-         behavior out of request-scoped session execution paths. Enqueue,
-         cancel, reprioritize, and query APIs may remain request scoped, but
-         they must signal/query the worker and return typed diagnostics if the
-         worker is unavailable or cannot make progress. Do not preserve a
-         parallel request-owned progression path.
+      2. Queue progression migration: use Option 1, worker-owned completion
+         while preserving the existing blocking `run_workflow_execution_session`
+         response shape. Request code may validate, enqueue, and await a
+         worker-owned completion receiver, but the worker must own
+         `begin_queued_run`, scheduler task-state setup, non-runtime/runtime
+         progression, terminal mutation, completion signaling, lifecycle
+         state, and shutdown. Enqueue, cancel, reprioritize, push-front,
+         status, and inspection APIs may remain request scoped, but they must
+         signal/query the worker and return typed diagnostics if the worker is
+         unavailable or cannot make progress. Do not preserve a parallel
+         request-owned progression path.
       3. Resource observation worker owner: add a workflow-service/
          composition-root-owned observation loop with bounded refresh or wake
          mechanics, observation-source contracts, stale/missing fact
@@ -25810,10 +25815,78 @@ Worker rules:
       names prohibited legacy/fallback/public-diagnostics behavior; the new
       source does not introduce those paths.
     - Remaining follow-up: migrate queue progression business behavior out of
-      request-scoped session execution paths so enqueue, cancel, reprioritize,
-      push-front, and query APIs signal or query the queue worker and return
-      typed diagnostics when the worker is unavailable or unable to make
-      progress. Resource observation worker ownership remains a later slice.
+      request-scoped session execution paths using the Option 1 worker-owned
+      completion strategy recorded below. Resource observation worker
+      ownership remains a later slice.
+  - 2026-06-05 Milestone 5c queue progression API re-plan:
+    - Decision: use Option 1 for the next source slice: preserve the existing
+      blocking `run_workflow_execution_session -> WorkflowRunResponse` API
+      shape while moving queue progression ownership to the queue worker. The
+      request path may validate the request, enqueue the run, and await a
+      worker-owned completion channel/receiver, but it must no longer poll
+      `begin_queued_run`, perform admission, set scheduler task state, run
+      non-runtime/runtime progression, perform terminal mutation, or own
+      timeout/shutdown behavior as queue business policy.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection and single-owner rules by separating request
+      command/query handling from lifecycle/business-loop ownership. It also
+      follows the architecture and Rust async standards because the queue
+      worker owns the long-running loop, tracked task handle, wake signal,
+      shutdown signal, completion signaling, and lifecycle diagnostics while
+      request code only waits on an owned result.
+    - Selected implementation sequence:
+      1. Introduce a worker-owned queue command/completion contract internal
+         to workflow-service. It must carry the validated session/run context
+         needed by the worker and return a typed result or typed diagnostic
+         through a bounded, owned completion sender/receiver. Do not add
+         public contracts, generated DTOs, frontend/Tauri paths, or durable
+         event storage in this slice.
+      2. Move `begin_queued_run`, scheduler task-state setup, started/terminal
+         event sequencing, non-runtime/runtime progression invocation,
+         timeout handling, terminal mutation, and completion signaling into
+         the queue worker owner or a worker-owned helper. The existing
+         request API awaits the completion receiver.
+      3. Change enqueue/cancel/reprioritize/push-front/status/inspection
+         request APIs to remain command/query surfaces. Where they need worker
+         coordination, they must signal/query the queue worker and return
+         typed diagnostics when the worker is unavailable, shutting down, or
+         unable to make progress.
+      4. Remove the request-owned polling/admission/execution loop. Do not
+         leave it as a compatibility branch or fallback path.
+      5. After this migration is validated, continue to the resource
+         observation worker owner slice. Public lifecycle snapshots,
+         diagnostics-ledger worker events, enqueue-only API redesign, and
+         full durable event-driven queue remain out of scope until explicitly
+         re-planned.
+    - Rejected next-slice options:
+      - Enqueue-only public API plus query/subscribe: architecturally clean,
+        but it requires caller inventory plus public contract/generated DTO/
+        frontend/Tauri coordination and is too broad for the next thin slice.
+      - Full durable event-driven queue: strongest final architecture, but it
+        combines queue ownership with replay/recovery, diagnostics
+        persistence, public read models, and migration policy. Keep it as a
+        later staged evolution after worker-owned completion is in place.
+    - No-fallback/no-legacy confirmation: the next source slice must not keep
+      the current request-scoped `begin_queued_run` polling/admission/
+      execution loop as a fallback. If the worker is unavailable or shutting
+      down, return typed diagnostics instead of executing through the request
+      path, node-engine whole-run launch, graph paths, planned-inference
+      launch, frontend/Tauri policy, or compatibility DTOs.
+    - Allowed next source slice scope: workflow-service scheduler queue worker
+      internals, session execution API internals needed to submit and await
+      worker-owned completion, focused workflow-service tests, scheduler
+      README updates if ownership text changes, and plan updates. Public
+      contracts, generated DTOs, lockfiles, saved workflows, frontend/Tauri
+      files, diagnostics-ledger worker lifecycle events, durable replay, and
+      resource observation worker code stay out of scope unless a later
+      validated slice explicitly assigns them.
+    - Verification expected for the next source slice: focused
+      workflow-service queue worker progression tests, affected
+      `run_workflow_execution_session` tests, worker shutdown/unavailable
+      diagnostics tests, `cargo check -p pantograph-workflow-service`,
+      `cargo fmt -p pantograph-workflow-service -- --check`, `git diff
+      --check`, and targeted no-fallback/no-legacy searches over touched
+      source files.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

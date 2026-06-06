@@ -658,8 +658,10 @@ durable task orchestration path.
   - Queue worker sequence: add a bounded backend-owned queue worker/listener
     with explicit startup, wake, shutdown, and lifecycle registry updates;
     then move queue progression out of request-scoped session execution paths
-    so enqueue/cancel/reprioritize APIs signal or query the worker instead of
-    owning the business loop.
+    with Option 1, worker-owned completion while preserving the existing
+    blocking `run_workflow_execution_session` response shape. The request path
+    may validate, enqueue, and await a worker-owned completion receiver, but
+    it must not poll/admit/execute queue work itself.
   - Resource observation sequence: add a bounded backend-owned resource
     observation worker with explicit observation sources, stale/missing fact
     diagnostics, shutdown, and lifecycle registry updates; then make
@@ -675,9 +677,13 @@ durable task orchestration path.
     mechanics and lifecycle registry updates. It intentionally does not move
     queue progression yet or expose public worker diagnostics. Remaining
     queue work: migrate queue progression out of request-scoped session
-    execution paths so enqueue/cancel/reprioritize/query APIs only
-    signal/query the worker and return typed diagnostics when the worker is
-    unavailable or unable to progress.
+    execution paths using Option 1. `run_workflow_execution_session` remains
+    blocking for now by waiting on worker-owned completion. Enqueue, cancel,
+    reprioritize, push-front, status, and inspection APIs remain command/query
+    surfaces that signal/query the worker and return typed diagnostics when
+    the worker is unavailable or unable to progress. Enqueue-only public API
+    migration and a full durable event-driven queue are deferred until their
+    caller/contract/generated/frontend/replay scope is explicitly planned.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

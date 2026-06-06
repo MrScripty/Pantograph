@@ -29,6 +29,20 @@ migrate queue progression business behavior out of request-scoped session
 execution paths so request APIs signal/query the worker instead of owning the
 business loop.
 
+2026-06-05 queue progression API re-plan decision: use Option 1,
+worker-owned completion while preserving the existing blocking
+`run_workflow_execution_session` response shape. The request path may still
+validate, enqueue, and await `WorkflowRunResponse`, but it must await a
+worker-owned completion channel/receiver rather than polling/admitting/
+executing queue work itself. The queue worker must own `begin_queued_run`,
+scheduler task-state setup, non-runtime/runtime progression, terminal
+mutation, completion signaling, lifecycle state, and shutdown. Enqueue,
+cancel, reprioritize, push-front, status, and inspection APIs remain
+request-scoped command/query surfaces only. Rejected for the next slice:
+enqueue-only public API migration and full durable event-driven queue, because
+both require broader caller/contract/generated/frontend coordination than the
+next thin worker migration slice allows.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
