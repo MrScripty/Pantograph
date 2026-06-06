@@ -310,6 +310,22 @@ root, or narrow the first migration to a worker-owned command whose required
 dependencies are explicitly passed without capturing request-owned policy.
 Do not migrate a branch until this is decided.
 
+2026-06-06 task-execution worker ownership decision: use Option 2. Move
+task-execution worker ownership out of `WorkflowService` and into a
+composition-root backend runtime owner that can hold the workflow service,
+task-execution worker, runtime host/registry, resource ledger, and lifecycle
+shutdown ordering without self-reference. The composition root must keep
+runtime-host and runtime-registry instances long-lived and shared across
+workflow runs so model/runtime reuse remains possible; do not create a new
+inference runtime per workflow run. Next source sequence: introduce the
+composition-root owner as an internal backend lifecycle object, move the
+service-owned worker handle into that owner, expose typed worker
+unavailable/shutdown diagnostics to `WorkflowService`, then migrate one
+request branch to enqueue and await worker-owned completion through that
+owner. Do not proceed by wrapping direct request execution in a oneshot,
+passing request policy through worker commands, or adding compatibility
+fallbacks.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

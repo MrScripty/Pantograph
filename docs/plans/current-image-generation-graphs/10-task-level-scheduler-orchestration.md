@@ -1047,6 +1047,15 @@ Option 3 thin implementation sequence:
      The shell is not wired into request execution and does not execute,
      complete, retry, or fallback-run task attempts. Next slice: wire one
      request path branch to enqueue and await worker-owned completion.
+   - 2026-06-06 task-execution worker ownership decision: use Option 2.
+     Move task-execution worker ownership out of `WorkflowService` into an
+     internal composition-root backend runtime owner that owns worker
+     lifecycle beside the workflow service and shared runtime services. The
+     composition root must preserve long-lived runtime-host/runtime-registry
+     reuse across workflow runs. Next slices: introduce the owner, move the
+     worker handle out of `WorkflowService`, expose typed worker unavailable
+     diagnostics to the request facade, then migrate one branch to real
+     worker-owned completion.
 
 Worker-system standards gates:
 

@@ -26571,6 +26571,39 @@ Worker rules:
       chosen and recorded. Do not add request-scoped workers, fake completion
       channels, public lifecycle snapshots, diagnostics-ledger worker events,
       or compatibility shims to work around the ownership issue.
+  - 2026-06-06 task-execution worker ownership decision:
+    - Decision: use Option 2. Move task-execution worker ownership out of
+      `WorkflowService` and into a composition-root backend runtime owner that
+      can hold both the workflow service and worker without self-reference.
+    - Standards alignment: this follows simplicity/complection by separating
+      public request API translation from background worker lifecycle. It
+      follows Rust async lifecycle standards because the composition root owns
+      worker startup, shutdown, cancellation propagation, and join/abort
+      ordering for spawned services. It keeps business logic backend-owned
+      because Tauri/frontend/request wrappers do not own runtime dispatch,
+      task-state mutation, reservation policy, or worker shutdown.
+    - Runtime reuse requirement: the composition-root owner must keep
+      runtime-host, runtime-registry, resource ledger, and reservation owners
+      long-lived and shared across workflow runs. Do not instantiate a fresh
+      inference runtime per workflow run as part of this ownership change.
+    - Updated next thin-slice sequence:
+      1. Introduce an internal composition-root backend runtime owner that can
+         hold the workflow service plus the task-execution worker lifecycle.
+      2. Move the current service-owned task-execution worker handle into that
+         owner and keep `WorkflowService` as request facade/API translation.
+      3. Expose typed worker unavailable/shutdown diagnostics from the owner
+         to `WorkflowService` without public lifecycle snapshots or
+         diagnostics-ledger worker events.
+      4. Migrate one execution branch to enqueue and await real worker-owned
+         completion through the composition-root owner.
+      5. Continue with runtime dispatch, timeout/cancellation, reservation
+         release/reconcile, lifecycle handle completion, and later batching
+         slices after the first migrated branch is validated.
+    - No-fallback/no-legacy confirmation: do not use a oneshot around direct
+      request execution, request-scoped worker construction, command-carried
+      request policy, node-engine whole-run launch, planned-inference launch,
+      graph-path inference, frontend/Tauri policy, compatibility DTOs, public
+      lifecycle snapshots, or diagnostics-ledger worker events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

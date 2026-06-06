@@ -816,6 +816,14 @@ durable task orchestration path.
     Next Option 4 slice: wire one request path branch to enqueue and await
     worker-owned completion without moving runtime dispatch policy into
     request code.
+  - 2026-06-06 task-execution worker ownership decision: use Option 2. The
+    next worker slices must move task-execution worker ownership out of
+    `WorkflowService` and into an internal composition-root backend runtime
+    owner that can own worker lifecycle beside shared workflow-service and
+    runtime-host/runtime-registry services. Preserve runtime reuse across
+    workflow runs; do not create a new inference runtime per workflow run.
+    After the composition-root owner exists, migrate one execution branch to
+    enqueue and await real worker-owned completion through that owner.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
