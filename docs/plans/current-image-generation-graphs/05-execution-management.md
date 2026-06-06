@@ -25767,6 +25767,53 @@ Worker rules:
       pantograph-workflow-service`, `cargo fmt -p
       pantograph-workflow-service -- --check`, `git diff --check`, and
       targeted no-fallback/no-legacy searches over touched files.
+  - 2026-06-05 Milestone 5c queue worker owner slice:
+    - Smallest vertical slice: add the workflow-service scheduler
+      `queue_worker` owner with bounded wake/shutdown mechanics and lifecycle
+      registry updates before migrating queue progression business behavior.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/queue_worker.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/queue_worker_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the worker owns only wake,
+      shutdown, and coarse `queue_worker` lifecycle state. It does not move
+      queue progression, add public lifecycle queries, emit diagnostics-ledger
+      worker lifecycle events, add retry/defer policy, observe resources,
+      mutate graph values, infer frontend/Tauri state, or restore graph-path,
+      node-engine, planned-inference, model-path, or legacy runtime launch
+      behavior.
+    - Implementation notes: added `WorkflowSchedulerQueueWorker`, which marks
+      the shared lifecycle registry `Running` when spawned, observes explicit
+      wake signals through a Tokio notification, moves to `ShuttingDown`
+      during shutdown, and records `Shutdown` after the worker task exits.
+      Spawning requires an active Tokio runtime or an explicit runtime handle.
+      Production composition-root wiring and queue progression migration are
+      intentionally deferred to the next queue slice.
+    - Tests added: focused queue-worker tests prove running/shutdown lifecycle
+      state, wake observation without public projection, idempotent shutdown,
+      and typed failure when spawning without a Tokio runtime.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service scheduler::queue_worker::tests --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched queue-worker source
+        files
+    - Search deviations: source-only search over the new queue-worker module,
+      tests, and scheduler module entrypoint returned no matches. Broader
+      touched-doc searches matched existing plan/README boundary text that
+      names prohibited legacy/fallback/public-diagnostics behavior; the new
+      source does not introduce those paths.
+    - Remaining follow-up: migrate queue progression business behavior out of
+      request-scoped session execution paths so enqueue, cancel, reprioritize,
+      push-front, and query APIs signal or query the queue worker and return
+      typed diagnostics when the worker is unavailable or unable to make
+      progress. Resource observation worker ownership remains a later slice.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

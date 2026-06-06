@@ -853,6 +853,15 @@ Option 3 thin implementation sequence:
         diagnostics-ledger worker lifecycle events only after queue/resource
         worker ordering, shutdown, and replay/recovery semantics are
         validated.
+   - 2026-06-05 queue worker owner slice: added the first backend-owned queue
+     worker owner in workflow-service scheduler code. The worker marks
+     `queue_worker` `Running` when spawned, observes bounded wake signals,
+     moves through `ShuttingDown`, and records `Shutdown` after the worker
+     task exits. This slice does not move queue progression out of
+     request-scoped execution paths, add retry/defer policy, observe
+     resources, expose public snapshots, emit diagnostics-ledger worker
+     lifecycle events, or restore legacy runtime launch behavior. Remaining
+     queue work is the queue progression migration slice.
 
 Option 3 standards gates:
 

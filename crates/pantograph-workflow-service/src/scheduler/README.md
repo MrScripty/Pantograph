@@ -14,6 +14,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `lifecycle.rs` | Workflow-service scheduler lifecycle component registry that owns required component presence and explicit coarse state before public snapshots or ledger events are exposed. |
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
+| `queue_worker.rs` | Workflow-service queue worker owner for bounded wake/shutdown mechanics and queue-worker lifecycle state before queue progression migrates behind the worker. |
 | `readiness_lifecycle.rs` | Workflow-service lifecycle owner that builds typed dependency-readiness requests for admitted runtime tasks, calls a readiness provider, and applies scheduler readiness admission without owning dependency policy. |
 | `retry_lifecycle.rs` | Workflow-service lifecycle owner for coarse retry-loop component state around existing retry sweeps, without owning retry scheduling policy or replay. |
 | `task_lifecycle.rs` | Workflow-service task lifecycle owner skeleton for active task handles, shutdown state, and typed lifecycle diagnostics before durable lease, cancellation, retry, replay, and ledger slices are wired. |
@@ -156,9 +157,17 @@ facts; later slices must attach real owners to these registry records before
 exposing them outside workflow-service.
 The registry is available through a cloneable workflow-service handle so
 component owners can share one lifecycle state core without depending on the
-task lifecycle manager as an unrelated owner. Runtime-host dispatch currently
-uses that handle first; future dependency-readiness, resource observation,
-retry, queue, and reservation cleanup owners must use the same pattern.
+task lifecycle manager as an unrelated owner. Runtime-host dispatch,
+dependency-readiness, retry, reservation cleanup, and the queue worker owner
+use that handle; future resource observation ownership must use the same
+pattern.
+The queue worker owner now provides the first concrete backend-owned
+`queue_worker` lifecycle path. It owns bounded wake and shutdown mechanics and
+marks the shared registry `Running` while the worker task is alive, then
+`ShuttingDown`/`Shutdown` during shutdown. Queue progression still remains in
+the existing request-scoped execution path until the next migration slice; the
+worker owner does not expose public snapshots, emit ledger events, schedule
+retries, observe resources, or re-enable legacy runtime launch behavior.
 The task lifecycle manager now owns the first concrete component attachment:
 runtime-host dispatch state changes from explicit `NotStarted` to `Running`
 only when a runtime task supervisor abort handle is tracked. Non-runtime task

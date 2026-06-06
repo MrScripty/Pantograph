@@ -18,6 +18,17 @@ observation worker in thin slices, then attach their real lifecycle state,
 then add public lifecycle snapshots/ledger worker events only after ordering,
 shutdown, and replay semantics are validated.
 
+2026-06-05 queue worker owner update: workflow-service scheduler code now has
+the first concrete backend-owned `queue_worker` owner. The worker owns bounded
+wake and shutdown mechanics and drives the shared scheduler lifecycle
+registry from explicit `Running` to `ShuttingDown`/`Shutdown`; it does not
+move queue progression yet, expose public lifecycle snapshots, emit
+diagnostics-ledger worker events, add retry/defer policy, observe resources,
+or restore legacy runtime launch paths. The next worker-system slice must
+migrate queue progression business behavior out of request-scoped session
+execution paths so request APIs signal/query the worker instead of owning the
+business loop.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

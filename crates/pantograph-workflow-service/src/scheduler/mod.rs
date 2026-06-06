@@ -1,6 +1,7 @@
 mod contracts;
 mod lifecycle;
 mod policy;
+mod queue_worker;
 mod readiness_lifecycle;
 mod retry_lifecycle;
 mod store;

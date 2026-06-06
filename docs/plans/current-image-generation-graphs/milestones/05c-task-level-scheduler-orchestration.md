@@ -670,6 +670,14 @@ durable task orchestration path.
     diagnostics-ledger worker lifecycle events only after both workers have
     real owners, ordering semantics, shutdown behavior, and replay/recovery
     treatment validated in focused tests.
+  - 2026-06-05 queue worker owner update: the first queue worker owner slice
+    added a workflow-service scheduler worker with bounded wake/shutdown
+    mechanics and lifecycle registry updates. It intentionally does not move
+    queue progression yet or expose public worker diagnostics. Remaining
+    queue work: migrate queue progression out of request-scoped session
+    execution paths so enqueue/cancel/reprioritize/query APIs only
+    signal/query the worker and return typed diagnostics when the worker is
+    unavailable or unable to progress.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
