@@ -26791,6 +26791,27 @@ Worker rules:
     - Remaining follow-up: migrate one runtime request branch to construct
       this context through the composition-root owner and enqueue/await
       worker-owned completion.
+  - 2026-06-06 composition-root entrypoint re-plan trigger:
+    - Trigger: stop before migrating a runtime request branch. The current
+      production session execution entrypoint admits runs through
+      `&WorkflowService` directly; no production entrypoint owns both the
+      `WorkflowService` and `WorkflowTaskExecutionRuntimeOwner`.
+    - Standards conflict: constructing a runtime owner or worker inside the
+      request branch would create request-scoped worker/runtime ownership.
+      Bypassing the selected composition-root owner would leave the new
+      lifecycle owner unused. Keeping runtime dispatch and completion in the
+      request runner behind a worker-shaped command would preserve the
+      request-scoped execution path the worker plan forbids.
+    - Required next plan decision: choose the production session-execution
+      entrypoint shape that routes run admission through the composition-root
+      owner while keeping `WorkflowService` as request facade/API translation
+      and preserving long-lived runtime-host/runtime-registry reuse across
+      workflow runs.
+    - Forbidden shortcuts: do not instantiate request-scoped runtime owners or
+      workers, bypass the composition-root owner, keep runtime dispatch or
+      terminal mutation request-scoped behind a worker-shaped command, add
+      direct-execution oneshots, add public lifecycle snapshots, add
+      diagnostics-ledger worker events, or add compatibility DTOs.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

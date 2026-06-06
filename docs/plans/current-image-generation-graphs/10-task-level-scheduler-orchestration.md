@@ -1105,6 +1105,13 @@ Option 3 thin implementation sequence:
      request-scoped workers or per-run runtimes. Runtime dispatch and request
      execution did not move. Next slice: migrate one runtime request branch to
      construct the context and enqueue/await worker-owned completion.
+   - 2026-06-06 composition-root entrypoint re-plan trigger: stop before
+     branch migration because production session execution still enters
+     through `&WorkflowService` directly. There is no production entrypoint
+     that owns both `WorkflowService` and `WorkflowTaskExecutionRuntimeOwner`,
+     so migrating now would require request-scoped owner construction,
+     bypassing the selected composition-root owner, or preserving
+     request-scoped dispatch behind a worker-shaped command.
 
 Worker-system standards gates:
 

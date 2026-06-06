@@ -870,6 +870,11 @@ durable task orchestration path.
     `cargo test -p pantograph-workflow-service runtime_owner_ --lib`.
     Next Option 2 slice: migrate one runtime request branch to construct the
     context and enqueue/await worker-owned completion.
+  - 2026-06-06 composition-root entrypoint re-plan trigger: stop before branch
+    migration because production session execution still enters through
+    `&WorkflowService` directly and no production entrypoint owns both
+    `WorkflowService` and `WorkflowTaskExecutionRuntimeOwner`. Next decision
+    must choose that entrypoint shape before request branch migration.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

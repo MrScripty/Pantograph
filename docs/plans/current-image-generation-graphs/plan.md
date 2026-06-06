@@ -432,6 +432,21 @@ direct-execution oneshots. Verification:
 2 slice: migrate one runtime request branch to construct this context through
 the composition-root owner and enqueue/await worker-owned completion.
 
+2026-06-06 composition-root entrypoint re-plan trigger: stop before migrating a
+runtime request branch. The composition-root owner now has the worker,
+lifecycle state, typed diagnostics, runtime-branch command contract, and
+runtime-branch context, but the session execution request facade still admits
+runs through `&WorkflowService` directly. There is no production entrypoint that
+owns both the `WorkflowService` and `WorkflowTaskExecutionRuntimeOwner`, so a
+branch migration from the current request code would either instantiate a
+request-scoped owner/worker, bypass the selected composition-root owner, or keep
+runtime dispatch and completion request-scoped behind a worker-shaped command.
+All three violate the selected Option 2 ownership and no-fallback/no-legacy
+rules. The next plan decision must choose how production session execution is
+entered through the composition-root owner while keeping `WorkflowService` as
+request facade/API translation and preserving long-lived runtime-host and
+runtime-registry reuse across workflow runs.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
