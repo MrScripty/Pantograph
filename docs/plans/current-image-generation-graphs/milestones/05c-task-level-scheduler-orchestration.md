@@ -100,8 +100,9 @@ durable task orchestration path.
   orchestrator, provides a runtime-host execution-port configuration hook,
   and initializes active-run scheduler task state after queue admission. The
   dedicated task progression path now has an internal task-execution owner
-  boundary for non-runtime admitted-run progression. Runtime progression,
-  unhandled-class fail-closed progression, dispatch lifecycle, ledger writes,
+  boundary for non-runtime admitted-run progression and runtime
+  dispatch-boundary progression. Unhandled-class fail-closed progression,
+  dispatch lifecycle, ledger writes,
   cancellation, retry/defer, bounded workers, panic handling, and legacy
   output-demand removal remain open.
 - [ ] Add a narrow node-engine single-task execution adapter for non-runtime

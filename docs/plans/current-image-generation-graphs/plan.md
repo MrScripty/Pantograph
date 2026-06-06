@@ -132,6 +132,17 @@ dispatch-boundary progression and unhandled-class fail-closed progression out
 of queue-worker helpers, then add real backend-owned completion signaling and
 typed execution-unavailable/shutdown diagnostics.
 
+2026-06-05 task execution owner runtime-boundary update: runtime-containing
+admitted runs now route runtime dispatch-boundary progression through
+`WorkflowTaskExecutionOwner` instead of `WorkflowSchedulerQueueWorker`. The
+task execution owner now owns both non-runtime-only progression and
+runtime-dispatch-boundary progression, including timeout handling,
+dependency-readiness pending deferral, failure finish mutation, and terminal
+diagnostics for runtime-containing runs. Remaining Option 4 task-execution
+owner work: move the unhandled-class fail-closed branch out of the queue
+worker helper, then add real backend-owned completion signaling and typed
+execution-unavailable/shutdown diagnostics.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

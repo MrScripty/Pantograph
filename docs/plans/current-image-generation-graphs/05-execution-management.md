@@ -26136,6 +26136,34 @@ Worker rules:
       execution owner next. Backend-owned completion signaling and typed
       execution-unavailable/shutdown diagnostics remain open after the branch
       movement is complete.
+  - 2026-06-05 task execution owner runtime-boundary source slice:
+    - Smallest vertical slice: move the runtime-containing admitted-run
+      dispatch-boundary progression branch out of
+      `WorkflowSchedulerQueueWorker` and into `WorkflowTaskExecutionOwner`.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      and the current image-generation plan docs. Public contracts, generated
+      DTOs, lockfiles, saved workflows, frontend/Tauri files, runtime adapters,
+      diagnostics-ledger worker lifecycle events, resource observation code,
+      and legacy runtime launch paths remained out of scope.
+    - No-fallback/no-legacy confirmation: runtime started-event recording,
+      runtime dispatch-boundary progression, timeout handling,
+      dependency-readiness pending deferral, failure finish mutation, and
+      terminal diagnostics now go through
+      `WorkflowTaskExecutionOwner::run_until_runtime_dispatch_boundary`. The
+      slice removed the old queue-worker runtime helper and did not add
+      request-owned fallback execution, node-engine whole-run launch,
+      planned-inference launch, graph-path inference, Tauri/frontend policy,
+      compatibility DTOs, or public lifecycle snapshots.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo check -p pantograph-workflow-service`
+    - Remaining follow-up: the unhandled-class fail-closed progression branch
+      still lives as an interim `WorkflowSchedulerQueueWorker` helper and must
+      move into the task execution owner next. Backend-owned completion
+      signaling and typed execution-unavailable/shutdown diagnostics remain
+      open after the branch movement is complete.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

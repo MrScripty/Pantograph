@@ -885,7 +885,16 @@ Option 3 thin implementation sequence:
      toward queue lifecycle/admission/handoff and starts the Option 4 split.
      Runtime dispatch-boundary progression, unhandled-class fail-closed
      progression, completion signaling, and typed execution-unavailable/
-     shutdown diagnostics remain open task-execution owner work.
+     shutdown diagnostics remained open task-execution owner work at this
+     point.
+   - 2026-06-05 task execution owner runtime-boundary slice: moved the
+     runtime-containing admitted-run dispatch-boundary progression branch out
+     of `WorkflowSchedulerQueueWorker` and into `WorkflowTaskExecutionOwner`.
+     The task execution owner now handles timeout behavior,
+     dependency-readiness pending deferral, failure finish mutation, and
+     terminal diagnostics for runtime-containing runs. Remaining immediate
+     Option 4 work is the unhandled-class fail-closed branch, then real
+     completion signaling and typed execution-unavailable/shutdown diagnostics.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
