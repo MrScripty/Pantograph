@@ -247,6 +247,17 @@ compatibility-shim execution paths. Verification:
 Next Option 4 slice: make runtime supervisor ownership drainable and
 lifecycle-owned before moving runtime dispatch execution behind the worker.
 
+2026-06-06 runtime supervisor drainability slice: completed the second
+Option 4 source slice by making `WorkflowSchedulerStartedRuntimeTaskSupervisor`
+explicitly expose an abort handle, abort command, and `abort_and_join` drain
+method. Runtime dispatch still runs through the existing scheduler
+orchestrator/runtime-host path; the change only makes supervisor cleanup a
+first-class lifecycle operation for the future worker. Verification:
+`cargo fmt -p pantograph-workflow-service` and
+`cargo test -p pantograph-workflow-service runtime_task_supervisor_ --lib`.
+Next Option 4 slice: introduce the bounded backend task-execution worker loop
+startup/shutdown shell without moving runtime dispatch behavior yet.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

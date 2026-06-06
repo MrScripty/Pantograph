@@ -1034,6 +1034,12 @@ Option 3 thin implementation sequence:
      adding a worker loop, fake completion channel, public DTO, fallback
      execution, or legacy launch path. Next slice: make runtime supervisor
      ownership drainable and lifecycle-owned with tracked handles.
+   - 2026-06-06 runtime supervisor drainability slice: added explicit
+     abort-handle access, abort, and `abort_and_join` drain behavior to the
+     runtime task supervisor wrapper, with focused tests for expected
+     cancellation and externally aborted joins. Runtime dispatch ownership and
+     reservation policy did not move in this slice. Next slice: add the
+     bounded backend task-execution worker startup/shutdown shell.
 
 Worker-system standards gates:
 

@@ -799,6 +799,13 @@ durable task orchestration path.
     Next Option 4 slice: make runtime supervisor ownership drainable and
     lifecycle-owned before moving runtime dispatch execution behind the
     worker.
+  - 2026-06-06 runtime supervisor drainability slice: completed explicit
+    abort-handle access, abort, and `abort_and_join` drain behavior on the
+    runtime task supervisor wrapper. Verified with
+    `cargo fmt -p pantograph-workflow-service` and
+    `cargo test -p pantograph-workflow-service runtime_task_supervisor_ --lib`.
+    Next Option 4 slice: add the bounded backend task-execution worker
+    startup/shutdown shell without moving runtime dispatch behavior yet.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

@@ -39,13 +39,60 @@ use crate::workflow::{
 };
 
 use super::super::WorkflowExecutionSessionStore;
-use super::{WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError};
+use super::{
+    WorkflowSchedulerStartedRuntimeTaskSupervisor, WorkflowSchedulerTaskOrchestrator,
+    WorkflowSchedulerTaskOrchestratorError,
+};
 
 #[derive(Default)]
 struct RecordingRuntimeHostPort {
     requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
     cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
     response: Mutex<Option<RuntimeHostExecutionResponse>>,
+}
+
+#[tokio::test]
+async fn runtime_task_supervisor_abort_and_join_drains_cancelled_task() {
+    let join_handle = tokio::spawn(async {
+        std::future::pending::<
+            Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError>,
+        >()
+        .await
+    });
+    let supervisor = WorkflowSchedulerStartedRuntimeTaskSupervisor { join_handle };
+
+    supervisor
+        .abort_and_join()
+        .await
+        .expect("abort drain should treat cancellation as expected");
+}
+
+#[tokio::test]
+async fn runtime_task_supervisor_join_reports_external_abort_as_cancelled() {
+    let join_handle = tokio::spawn(async {
+        std::future::pending::<
+            Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError>,
+        >()
+        .await
+    });
+    let supervisor = WorkflowSchedulerStartedRuntimeTaskSupervisor { join_handle };
+    supervisor.abort_handle().abort();
+
+    let error = supervisor
+        .join()
+        .await
+        .expect_err("external abort should be reported");
+
+    assert!(matches!(
+        error,
+        WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled { .. }
+    ));
+    assert!(
+        error
+            .to_string()
+            .contains("runtime dispatch task was cancelled before completion"),
+        "unexpected error: {error}"
+    );
 }
 
 impl RecordingRuntimeHostPort {

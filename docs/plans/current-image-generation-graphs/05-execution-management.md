@@ -26446,6 +26446,33 @@ Worker rules:
     - Remaining follow-up: the next Option 4 source slice must make runtime
       supervisor ownership drainable and lifecycle-owned with tracked handles
       before moving runtime dispatch execution behind the worker.
+  - 2026-06-06 runtime supervisor drainability source slice:
+    - Smallest vertical slice: make the existing runtime task supervisor
+      wrapper expose explicit abort-handle access, abort, and abort-and-drain
+      behavior without changing runtime dispatch ownership.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+      and the current image-generation plan docs. Worker-loop startup,
+      request/session API changes, runtime dispatch movement, reservation
+      policy changes, public DTOs, generated files, lockfiles, saved
+      workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, and legacy launch paths remained out
+      of scope.
+    - No-fallback/no-legacy confirmation: the supervisor remains tied to the
+      canonical scheduler orchestrator/runtime-host dispatch path. The slice
+      adds drainable lifecycle operations only; it does not add fallback
+      completion, request-owned cleanup policy, node-engine whole-run launch,
+      planned-inference launch, graph-path inference, frontend/Tauri policy,
+      compatibility DTOs, or fake worker behavior.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service runtime_task_supervisor_ --lib`
+    - Deviations/discovered issues: none.
+    - Remaining follow-up: the next Option 4 source slice should add the
+      bounded backend worker startup/shutdown shell and keep task execution
+      behavior unchanged until the worker owns admission of execution
+      commands.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

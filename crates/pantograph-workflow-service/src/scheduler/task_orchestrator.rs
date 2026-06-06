@@ -109,20 +109,30 @@ pub(crate) struct WorkflowSchedulerStartedRuntimeTaskSupervisor {
 }
 
 impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
+    pub(crate) fn abort_handle(&self) -> tokio::task::AbortHandle {
+        self.join_handle.abort_handle()
+    }
+
+    pub(crate) fn abort(&self) {
+        self.join_handle.abort();
+    }
+
     pub(crate) async fn join(
         self,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
-        self.join_handle.await.map_err(|error| {
-            if error.is_cancelled() {
-                WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled {
-                    message: runtime_task_supervisor_join_error_message(error),
-                }
-            } else {
-                WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorJoin {
-                    message: runtime_task_supervisor_join_error_message(error),
-                }
-            }
-        })?
+        self.join_handle
+            .await
+            .map_err(runtime_task_supervisor_join_error)?
+    }
+
+    pub(crate) async fn abort_and_join(self) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        self.abort();
+        match self.join_handle.await {
+            Ok(Ok(_result)) => Ok(()),
+            Ok(Err(error)) => Err(error),
+            Err(error) if error.is_cancelled() => Ok(()),
+            Err(error) => Err(runtime_task_supervisor_join_error(error)),
+        }
     }
 }
 
@@ -1999,6 +2009,20 @@ fn runtime_task_supervisor_join_error_message(error: tokio::task::JoinError) -> 
         "runtime dispatch task was cancelled before completion".to_string()
     } else {
         format!("runtime dispatch task join failed: {error}")
+    }
+}
+
+fn runtime_task_supervisor_join_error(
+    error: tokio::task::JoinError,
+) -> WorkflowSchedulerTaskOrchestratorError {
+    if error.is_cancelled() {
+        WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled {
+            message: runtime_task_supervisor_join_error_message(error),
+        }
+    } else {
+        WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorJoin {
+            message: runtime_task_supervisor_join_error_message(error),
+        }
     }
 }
 
