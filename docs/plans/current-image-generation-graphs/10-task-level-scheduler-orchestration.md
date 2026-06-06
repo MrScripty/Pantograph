@@ -1112,6 +1112,15 @@ Option 3 thin implementation sequence:
      so migrating now would require request-scoped owner construction,
      bypassing the selected composition-root owner, or preserving
      request-scoped dispatch behind a worker-shaped command.
+   - 2026-06-06 composition-root entrypoint decision: use the production
+     composition-root facade path. Add a production entrypoint type that owns
+     both `Arc<WorkflowService>` and `WorkflowTaskExecutionRuntimeOwner`;
+     production session execution must enter through that type before runtime
+     branch migration. `WorkflowService` remains request facade/API
+     translation and backend service holder, while worker lifecycle ownership
+     stays in the composition-root facade. Next slice: add that facade with
+     construction and service accessors, then delegate existing session
+     execution through it before moving runtime branch completion.
 
 Worker-system standards gates:
 

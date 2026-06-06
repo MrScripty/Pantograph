@@ -447,6 +447,22 @@ entered through the composition-root owner while keeping `WorkflowService` as
 request facade/API translation and preserving long-lived runtime-host and
 runtime-registry reuse across workflow runs.
 
+2026-06-06 composition-root entrypoint decision: use the production
+composition-root facade path. Add a production entrypoint type that owns both
+`Arc<WorkflowService>` and `WorkflowTaskExecutionRuntimeOwner`; production
+session execution must enter through that type before runtime branch migration.
+`WorkflowService` remains the request facade/API translation and backend
+service holder, but it must not own the background worker or create
+request-scoped workers/runtimes. Immediate thin-slice sequence: add the
+composition-root facade with construction and service accessors; expose a
+session-execution method on that facade that delegates to existing
+`WorkflowService` behavior without changing runtime dispatch; migrate the
+runtime branch entry to construct the runtime-branch context through the
+facade-owned runtime owner; then move worker-owned branch completion behind
+that context. This preserves long-lived runtime-host/runtime-registry reuse
+across workflow runs and keeps Option 3 durable task claiming deferred until
+the Option 2 worker-owned inference path is complete and validated.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

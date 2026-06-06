@@ -26812,6 +26812,38 @@ Worker rules:
       terminal mutation request-scoped behind a worker-shaped command, add
       direct-execution oneshots, add public lifecycle snapshots, add
       diagnostics-ledger worker events, or add compatibility DTOs.
+  - 2026-06-06 composition-root entrypoint decision:
+    - Decision: use the production composition-root facade path. Add a
+      production entrypoint type that owns both `Arc<WorkflowService>` and
+      `WorkflowTaskExecutionRuntimeOwner`; production session execution must
+      enter through that type before runtime branch migration.
+    - Standards alignment: follows Rust async runtime-boundary standards by
+      keeping background worker lifecycle in a composition-root owner. Follows
+      plan standards by making the next implementation milestone the thinnest
+      useful vertical slice and by re-planning immediately at the trigger.
+      Keeps business logic backend-owned because Tauri/frontend/request
+      wrappers do not own runtime dispatch, task-state mutation, reservation
+      policy, or worker shutdown.
+    - Ownership shape: `WorkflowService` remains the request facade/API
+      translation and backend service holder. The composition-root facade owns
+      the runtime owner and routes production session execution through it. Do
+      not put worker ownership back inside `WorkflowService`.
+    - Immediate thin-slice sequence:
+      1. Add the production composition-root facade with construction and
+         service accessors.
+      2. Expose a session-execution method on that facade that delegates to
+         existing `WorkflowService` behavior without changing runtime dispatch.
+      3. Migrate the runtime branch entry to construct the runtime-branch
+         context through the facade-owned runtime owner.
+      4. Move worker-owned branch completion behind that context.
+    - Later target: keep Option 3 durable task-event-loop claiming deferred
+      until the Option 2 worker-owned inference path is complete and validated.
+    - No-fallback/no-legacy confirmation: do not instantiate request-scoped
+      runtime owners or workers, bypass the composition-root owner, keep
+      runtime dispatch or terminal mutation request-scoped behind a
+      worker-shaped command, add direct-execution oneshots, add public
+      lifecycle snapshots, add diagnostics-ledger worker events, add frontend
+      policy, or add compatibility DTOs.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

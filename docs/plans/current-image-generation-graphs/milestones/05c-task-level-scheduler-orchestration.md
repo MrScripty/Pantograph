@@ -875,6 +875,14 @@ durable task orchestration path.
     `&WorkflowService` directly and no production entrypoint owns both
     `WorkflowService` and `WorkflowTaskExecutionRuntimeOwner`. Next decision
     must choose that entrypoint shape before request branch migration.
+  - 2026-06-06 composition-root entrypoint decision: use the production
+    composition-root facade path. Add a production entrypoint type that owns
+    both `Arc<WorkflowService>` and `WorkflowTaskExecutionRuntimeOwner`.
+    `WorkflowService` remains request facade/API translation and backend
+    service holder; worker lifecycle ownership stays in the composition-root
+    facade. Next Option 2 slice: add the facade with construction and service
+    accessors, then delegate existing session execution through it before
+    moving runtime branch completion.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
