@@ -219,6 +219,22 @@ is recorded as the later durable worker/replay evolution after this immediate
 cleanup is validated; do not implement the full event-driven task execution
 worker in the next slice.
 
+2026-06-06 runtime task-execution worker re-plan decision: supersede the
+immediate Option 3 cleanup-command path and use Option 4 as the active next
+implementation path. Build a backend-owned task-execution worker/event loop
+that owns admitted task progression, runtime supervisor handles,
+timeout/cancellation, reservation release/reconcile, lifecycle handle
+completion, and typed diagnostics. This aligns terminology with the intended
+worker architecture and gives the scheduler a task-level execution boundary
+that can later batch related work across simultaneous workflow runs. The
+request/session wrapper may only validate, enqueue, await the worker-owned
+completion, and translate typed worker outcomes; it must not own runtime
+supervisor lifecycle, task-state mutation, reservation policy, retry,
+fallback completion, legacy execution, or worker shutdown. Option 3 remains
+recorded as historical context only; do not implement the standalone runtime
+timeout cleanup command before the worker path unless a new re-plan explicitly
+restores it.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

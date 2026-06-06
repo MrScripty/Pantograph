@@ -941,6 +941,15 @@ Option 3 thin implementation sequence:
      backend command and return typed `RuntimeTimeout`. Option 4, the durable
      task-execution worker/event loop, remains the later replay/batching
      evolution after this cleanup command is validated.
+   - 2026-06-06 runtime task-execution worker re-plan: Option 4 supersedes
+     the immediate Option 3 cleanup-command slice. The next source path is a
+     backend-owned task-execution worker/event loop that owns admitted task
+     progression, tracked runtime supervisor handles, timeout/cancellation,
+     terminal task mutation, reservation release/reconcile, lifecycle handle
+     release, and typed diagnostics. The request/session wrapper may only
+     validate, enqueue, await typed worker completion, and map outcomes. Do
+     not implement the standalone Option 3 cleanup command first unless a new
+     re-plan explicitly restores it.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
@@ -1011,6 +1020,13 @@ Option 3 thin implementation sequence:
      mutation, reservation release/reconcile, or lifecycle handle cleanup in
      the request wrapper. Record the full durable worker/event-loop path as
      the later Option 4 evolution.
+   - 2026-06-06 runtime task-execution worker re-plan: use Option 4 next.
+     Supersede the standalone Option 3 timeout-cleanup command and finish the
+     real task-execution worker boundary first. Required slices are internal
+     worker commands/outcomes, drainable lifecycle-owned supervisor handles,
+     bounded worker startup/shutdown, runtime dispatch execution behind the
+     worker, worker-owned timeout/cancel/reconcile/handle release, request
+     API enqueue/await adaptation, and focused worker lifecycle tests.
 
 Worker-system standards gates:
 

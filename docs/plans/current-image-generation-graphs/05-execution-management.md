@@ -26370,6 +26370,56 @@ Worker rules:
       progression, node-engine whole-run launch, planned-inference launch,
       graph-path inference, frontend/Tauri policy, compatibility DTOs, public
       lifecycle snapshots, or diagnostics-ledger worker events.
+  - 2026-06-06 runtime task-execution worker Option 4 re-plan:
+    - Decision: supersede Option 3 as the next source path. Build the
+      backend-owned task-execution worker/event loop now, rather than adding a
+      standalone timeout cleanup command that would immediately become an
+      interim owner.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection rule by separating queue admission,
+      task-execution worker lifecycle, scheduler task-state mutation,
+      runtime supervisor lifecycle, reservation accounting, and request API
+      translation. It follows the single-owner rule because the worker owns
+      admitted task progression and cleanup. It follows Rust async lifecycle
+      standards because spawned runtime work must have tracked, drainable
+      handles owned by the lifecycle manager, and shutdown must cancel and
+      await or abort work instead of relying on dropped futures.
+    - Why the re-plan is required: the existing code uses worker vocabulary
+      while the request/session path still directly drives parts of admitted
+      task execution. Keeping Option 3 as the next slice would add a second
+      short-lived cleanup owner. The standards-aligned path is to finish the
+      intended worker boundary first and place timeout cleanup inside that
+      owner.
+    - Next thin-slice sequence:
+      1. Define internal task-execution worker commands, outcomes, and
+         diagnostics that are not public DTOs and do not encode fallback or
+         legacy launch paths.
+      2. Make supervisor ownership drainable by ensuring runtime dispatch
+         work has lifecycle-owned `JoinHandle`, `JoinSet`, `TaskTracker`, or
+         equivalent tracked handles rather than request-scoped handles.
+      3. Add a bounded backend worker loop with explicit startup, shutdown,
+         queue-closed, and worker-unavailable diagnostics.
+      4. Move runtime dispatch-boundary execution into the worker while
+         preserving scheduler-owned task-state transitions and the existing
+         no-fallback runtime-host path.
+      5. Move timeout, cancellation, reservation release/reconcile, and task
+         lifecycle handle completion into the worker-owned terminal path.
+      6. Adapt `WorkflowTaskExecutionOwner` and session execution so requests
+         validate, enqueue, await typed worker completion, and return typed
+         diagnostics without owning execution policy.
+      7. Add focused tests for worker admission, normal runtime completion,
+         timeout cleanup, shutdown rejection, lifecycle handle release,
+         reservation reconciliation, and absence of legacy whole-run or
+         planned-inference launch.
+    - No-fallback/no-legacy confirmation: do not preserve the current
+      request-owned execution shape through compatibility shims; do not add
+      fake completion channels around direct calls; do not route through
+      node-engine whole-run launch, planned-inference launch, graph-path
+      inference, frontend/Tauri policy, compatibility DTOs, public lifecycle
+      snapshots, or diagnostics-ledger worker events in these slices.
+    - Later follow-up after the working worker path is validated: add durable
+      replay, retry/defer policy, event-ledger worker lifecycle facts, and
+      task-level batching/co-scheduling across simultaneous workflow runs.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

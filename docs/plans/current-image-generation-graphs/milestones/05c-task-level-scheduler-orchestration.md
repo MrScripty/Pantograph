@@ -776,6 +776,20 @@ durable task orchestration path.
     `RuntimeTimeout`. Option 4, the full durable task-execution worker/event
     loop, is the later replay/batching evolution after the immediate timeout
     cleanup command is validated.
+  - 2026-06-06 runtime task-execution worker re-plan: supersede Option 3 and
+    select Option 4 as the next implementation path. The task-execution worker
+    must become the backend owner of admitted task progression, runtime
+    supervisor handles, timeout/cancellation, terminal scheduler task
+    mutation, reservation release/reconcile, lifecycle handle release, and
+    typed diagnostics. The request/session path may only validate, enqueue,
+    await typed worker completion, and map outcomes. Implement the worker path
+    in thin slices: internal worker commands/outcomes, drainable
+    lifecycle-owned supervisor handles, bounded worker startup/shutdown,
+    runtime dispatch execution behind the worker, worker-owned timeout cleanup,
+    request API adaptation, and focused tests. Later durable replay,
+    retry/defer policy, event-ledger worker lifecycle facts, and task-level
+    batching/co-scheduling remain follow-ups after the worker path is
+    validated.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
