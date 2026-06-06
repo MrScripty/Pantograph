@@ -22,7 +22,13 @@ use crate::workflow::{
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowServiceError,
 };
 
+#[cfg(test)]
+use super::lifecycle::WorkflowSchedulerLifecycleComponentRecord;
 use super::{
+    lifecycle::{
+        WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+        WorkflowSchedulerLifecycleComponentState,
+    },
     WorkflowExecutionSessionStore, WorkflowSchedulerTaskOrchestrator,
     WorkflowSchedulerTaskOrchestratorError,
 };
@@ -104,11 +110,33 @@ where
 #[must_use]
 pub(crate) struct WorkflowDependencyReadinessLifecycle {
     orchestrator: WorkflowSchedulerTaskOrchestrator,
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
 }
 
 impl WorkflowDependencyReadinessLifecycle {
     pub(crate) fn new(orchestrator: WorkflowSchedulerTaskOrchestrator) -> Self {
-        Self { orchestrator }
+        let scheduler_lifecycle = orchestrator.scheduler_lifecycle_handle();
+        Self::new_with_scheduler_lifecycle(orchestrator, scheduler_lifecycle)
+    }
+
+    pub(crate) fn new_with_scheduler_lifecycle(
+        orchestrator: WorkflowSchedulerTaskOrchestrator,
+        scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    ) -> Self {
+        Self {
+            orchestrator,
+            scheduler_lifecycle,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dependency_readiness_lifecycle_component(
+        &self,
+    ) -> Result<WorkflowSchedulerLifecycleComponentRecord, WorkflowDependencyReadinessLifecycleError>
+    {
+        self.scheduler_lifecycle
+            .component(WorkflowSchedulerLifecycleComponentKind::DependencyReadinessAction)
+            .map_err(WorkflowDependencyReadinessLifecycleError::WorkflowService)
     }
 
     pub(crate) fn readiness_request_for_active_runtime_task(
@@ -149,9 +177,13 @@ impl WorkflowDependencyReadinessLifecycle {
     where
         P: WorkflowDependencyReadinessProvider + ?Sized,
     {
-        let preflight_result = provider
-            .resolve_dependency_readiness(request)
-            .map_err(WorkflowDependencyReadinessLifecycleError::Provider)?;
+        self.mark_dependency_readiness_action(WorkflowSchedulerLifecycleComponentState::Running)?;
+        let preflight_result = provider.resolve_dependency_readiness(request);
+        self.mark_dependency_readiness_action(
+            WorkflowSchedulerLifecycleComponentState::NotStarted,
+        )?;
+        let preflight_result =
+            preflight_result.map_err(WorkflowDependencyReadinessLifecycleError::Provider)?;
         preflight_result
             .map(|preflight_result| {
                 dependency_readiness_proof_from_preflight_result(request, preflight_result)
@@ -170,9 +202,12 @@ impl WorkflowDependencyReadinessLifecycle {
     where
         P: WorkflowDependencyReadinessProvider + ?Sized,
     {
-        provider
-            .resolve_dependency_requirements_seed(request)
-            .map_err(WorkflowDependencyReadinessLifecycleError::Provider)
+        self.mark_dependency_readiness_action(WorkflowSchedulerLifecycleComponentState::Running)?;
+        let seed_result = provider.resolve_dependency_requirements_seed(request);
+        self.mark_dependency_readiness_action(
+            WorkflowSchedulerLifecycleComponentState::NotStarted,
+        )?;
+        seed_result.map_err(WorkflowDependencyReadinessLifecycleError::Provider)
     }
 
     pub(crate) fn admit_active_runtime_task(
@@ -225,6 +260,19 @@ impl WorkflowDependencyReadinessLifecycle {
             policy,
             readiness_proof,
         )
+    }
+
+    fn mark_dependency_readiness_action(
+        &self,
+        state: WorkflowSchedulerLifecycleComponentState,
+    ) -> Result<(), WorkflowDependencyReadinessLifecycleError> {
+        self.scheduler_lifecycle
+            .update_component_state(
+                WorkflowSchedulerLifecycleComponentKind::DependencyReadinessAction,
+                state,
+            )
+            .map(|_record| ())
+            .map_err(WorkflowDependencyReadinessLifecycleError::WorkflowService)
     }
 }
 

@@ -47,6 +47,9 @@ use crate::workflow::{
 };
 
 use super::{
+    lifecycle::{
+        WorkflowSchedulerLifecycleComponentRegistryHandle, WorkflowSchedulerLifecycleOwnerId,
+    },
     task_lifecycle::{
         WorkflowSchedulerTaskLifecycleManager, WorkflowSchedulerTaskLifecycleOwnerId,
         WorkflowSchedulerTaskLifecycleShutdownState,
@@ -65,6 +68,7 @@ use super::{
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
     task_lifecycle: Arc<Mutex<WorkflowSchedulerTaskLifecycleManager>>,
 }
 
@@ -161,13 +165,21 @@ impl StartedRuntimeTaskExecution {
 
 impl WorkflowSchedulerTaskOrchestrator {
     pub(crate) fn new(runtime_host_dispatcher: SchedulerRuntimeHostDispatcher) -> Self {
+        let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistryHandle::new(
+            WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.scheduler")
+                .expect("default scheduler lifecycle owner id"),
+        );
         Self {
             runtime_host_dispatcher,
             reservation_lifecycle_port: Arc::new(UnavailableReservationLifecyclePort),
-            task_lifecycle: Arc::new(Mutex::new(WorkflowSchedulerTaskLifecycleManager::new(
-                WorkflowSchedulerTaskLifecycleOwnerId::parse("workflow-service.scheduler-task")
-                    .expect("default scheduler task lifecycle owner id"),
-            ))),
+            scheduler_lifecycle: scheduler_lifecycle.clone(),
+            task_lifecycle: Arc::new(Mutex::new(
+                WorkflowSchedulerTaskLifecycleManager::new_with_scheduler_lifecycle(
+                    WorkflowSchedulerTaskLifecycleOwnerId::parse("workflow-service.scheduler-task")
+                        .expect("default scheduler task lifecycle owner id"),
+                    scheduler_lifecycle,
+                ),
+            )),
         }
     }
 
@@ -185,6 +197,12 @@ impl WorkflowSchedulerTaskOrchestrator {
     ) -> Self {
         self.reservation_lifecycle_port = port;
         self
+    }
+
+    pub(crate) fn scheduler_lifecycle_handle(
+        &self,
+    ) -> WorkflowSchedulerLifecycleComponentRegistryHandle {
+        self.scheduler_lifecycle.clone()
     }
 
     #[cfg(test)]

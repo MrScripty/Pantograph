@@ -25559,6 +25559,50 @@ Worker rules:
       retry, queue, and reservation cleanup state from their real owners using
       the shared registry handle before adding any public lifecycle query or
       diagnostics-ledger worker lifecycle event.
+  - 2026-06-05 Milestone 5c dependency-readiness lifecycle attachment slice:
+    - Smallest vertical slice: attach the shared scheduler lifecycle
+      registry's `dependency_readiness_action` component to real
+      workflow-service dependency-readiness provider calls.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: requirements-seed and
+      readiness-proof provider calls mark `dependency_readiness_action`
+      `Running` only while the provider boundary is executing, then restore
+      explicit `NotStarted`. No public lifecycle query, diagnostics-ledger
+      worker lifecycle event, projection-inferred component state,
+      Tauri/frontend policy, graph-path/node-engine/planned-inference runtime
+      fallback, or compatibility shim was added.
+    - Implementation notes: the scheduler task orchestrator now owns the
+      shared lifecycle registry handle used by both task lifecycle and
+      dependency-readiness lifecycle owners. Dependency readiness uses that
+      handle for seed resolution and proof resolution provider calls; scheduler
+      admission remains unchanged and no provider policy moved into the
+      registry.
+    - Tests added: readiness lifecycle tests now assert the shared registry
+      reports `Running` from inside readiness-proof provider calls and
+      requirements-seed provider calls, then returns to `NotStarted` after the
+      calls complete.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service scheduler::readiness_lifecycle::tests --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched scheduler files
+    - Search deviations: targeted search matched existing scheduler README
+      standards/legacy/no-fallback boundary text and existing non-runtime
+      node-engine diagnostics in `task_orchestrator.rs`; touched readiness
+      source/tests did not introduce fallback or legacy launch behavior.
+    - Remaining follow-up: attach resource observation, retry, queue, and
+      reservation cleanup component states from their real owners before
+      adding public lifecycle queries or diagnostics-ledger worker lifecycle
+      events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

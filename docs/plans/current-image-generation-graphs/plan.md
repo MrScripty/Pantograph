@@ -75,6 +75,15 @@ component-ownership complection risk discovered after the runtime-host
 dispatch attachment slice without adding public snapshots, diagnostics-ledger
 events, inferred component state, or fallback runtime behavior.
 
+2026-06-05 dependency-readiness lifecycle attachment update: the
+workflow-service dependency-readiness lifecycle now updates the shared
+scheduler lifecycle registry's `dependency_readiness_action` component from
+real provider activity. Requirements-seed and readiness-proof provider calls
+mark the component `Running` only while the provider boundary is executing,
+then return it to explicit `NotStarted`. This does not add public lifecycle
+queries, diagnostics-ledger worker events, projection-inferred component
+state, Tauri/frontend policy, or legacy runtime launch behavior.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a

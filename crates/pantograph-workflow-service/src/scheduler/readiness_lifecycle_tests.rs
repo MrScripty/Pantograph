@@ -34,6 +34,10 @@ use super::{
     WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessProvider,
     WorkflowDependencyReadinessProviderError,
 };
+use crate::scheduler::lifecycle::{
+    WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
+    WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
+};
 use crate::scheduler::WorkflowSchedulerTaskOrchestrator;
 
 #[test]
@@ -213,6 +217,112 @@ fn readiness_lifecycle_uses_dependency_environment_service_provider() {
     }));
 }
 
+#[test]
+fn readiness_lifecycle_marks_dependency_readiness_action_during_provider_call() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistryHandle::new(
+        WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.readiness-lifecycle.test")
+            .expect("scheduler lifecycle owner id"),
+    );
+    let lifecycle = WorkflowDependencyReadinessLifecycle::new_with_scheduler_lifecycle(
+        orchestrator.clone(),
+        scheduler_lifecycle.clone(),
+    );
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = initialized_store(&orchestrator, &task_graph);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let provider = LifecycleAssertingReadinessProvider::new(
+        Some(ready_preflight_result(&task_intent)),
+        scheduler_lifecycle.clone(),
+    );
+
+    let record = lifecycle
+        .resolve_and_admit_active_runtime_task(
+            &mut store,
+            &provider,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+        )
+        .expect("ready provider result should admit runtime task");
+
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::Ready);
+    assert_eq!(
+        scheduler_lifecycle
+            .component(WorkflowSchedulerLifecycleComponentKind::DependencyReadinessAction)
+            .expect("dependency readiness component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::NotStarted
+    );
+    assert!(provider.called());
+    assert_eq!(
+        lifecycle
+            .dependency_readiness_lifecycle_component()
+            .expect("dependency readiness lifecycle component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::NotStarted
+    );
+}
+
+#[test]
+fn readiness_lifecycle_marks_dependency_readiness_action_during_seed_provider_call() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let scheduler_lifecycle = WorkflowSchedulerLifecycleComponentRegistryHandle::new(
+        WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.readiness-seed.test")
+            .expect("scheduler lifecycle owner id"),
+    );
+    let lifecycle = WorkflowDependencyReadinessLifecycle::new_with_scheduler_lifecycle(
+        orchestrator.clone(),
+        scheduler_lifecycle.clone(),
+    );
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let task_graph = task_graph(vec![task_from_intent(task_intent.clone())]);
+    let mut store = initialized_store(&orchestrator, &task_graph);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .expect("initialize active run task state");
+    let request = lifecycle
+        .readiness_request_for_active_runtime_task(
+            &store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+        )
+        .expect("readiness request");
+    let provider = SeedLifecycleAssertingReadinessProvider::new(scheduler_lifecycle.clone());
+
+    let seed_result = lifecycle
+        .resolve_dependency_requirements_seed(&provider, &request)
+        .expect("seed provider should resolve");
+
+    assert!(seed_result.is_none());
+    assert!(provider.called());
+    assert_eq!(
+        scheduler_lifecycle
+            .component(WorkflowSchedulerLifecycleComponentKind::DependencyReadinessAction)
+            .expect("dependency readiness component")
+            .state,
+        WorkflowSchedulerLifecycleComponentState::NotStarted
+    );
+}
+
 #[derive(Default)]
 struct RecordingRuntimeHostPort;
 
@@ -257,6 +367,91 @@ impl WorkflowDependencyReadinessProvider for RecordingReadinessProvider {
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
         *self.last_request.lock().expect("provider request lock") = Some(request.clone());
         Ok(self.result.lock().expect("provider result lock").clone())
+    }
+}
+
+struct LifecycleAssertingReadinessProvider {
+    result: Mutex<Option<DependencyPreflightResult>>,
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    called: Mutex<bool>,
+}
+
+impl LifecycleAssertingReadinessProvider {
+    fn new(
+        result: Option<DependencyPreflightResult>,
+        scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    ) -> Self {
+        Self {
+            result: Mutex::new(result),
+            scheduler_lifecycle,
+            called: Mutex::new(false),
+        }
+    }
+
+    fn called(&self) -> bool {
+        *self.called.lock().expect("called lock")
+    }
+}
+
+impl WorkflowDependencyReadinessProvider for LifecycleAssertingReadinessProvider {
+    fn resolve_dependency_readiness(
+        &self,
+        _request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
+        *self.called.lock().expect("called lock") = true;
+        assert_eq!(
+            self.scheduler_lifecycle
+                .component(WorkflowSchedulerLifecycleComponentKind::DependencyReadinessAction)
+                .expect("dependency readiness component")
+                .state,
+            WorkflowSchedulerLifecycleComponentState::Running
+        );
+        Ok(self.result.lock().expect("provider result lock").clone())
+    }
+}
+
+struct SeedLifecycleAssertingReadinessProvider {
+    scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    called: Mutex<bool>,
+}
+
+impl SeedLifecycleAssertingReadinessProvider {
+    fn new(scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle) -> Self {
+        Self {
+            scheduler_lifecycle,
+            called: Mutex::new(false),
+        }
+    }
+
+    fn called(&self) -> bool {
+        *self.called.lock().expect("called lock")
+    }
+}
+
+impl WorkflowDependencyReadinessProvider for SeedLifecycleAssertingReadinessProvider {
+    fn resolve_dependency_requirements_seed(
+        &self,
+        _request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<
+        Option<pantograph_dependency_planning::ValidatedDependencyEnvironmentResult>,
+        WorkflowDependencyReadinessProviderError,
+    > {
+        *self.called.lock().expect("called lock") = true;
+        assert_eq!(
+            self.scheduler_lifecycle
+                .component(WorkflowSchedulerLifecycleComponentKind::DependencyReadinessAction)
+                .expect("dependency readiness component")
+                .state,
+            WorkflowSchedulerLifecycleComponentState::Running
+        );
+        Ok(None)
+    }
+
+    fn resolve_dependency_readiness(
+        &self,
+        _request: &ValidatedDependencyReadinessRequestEnvelope,
+    ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
+        panic!("seed lifecycle provider should not resolve readiness proof")
     }
 }
 

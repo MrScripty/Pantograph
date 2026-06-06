@@ -795,6 +795,15 @@ Option 3 thin implementation sequence:
      an unrelated registry container. The slice is preparatory only: no public
      snapshot, ledger event, inferred component state, or fallback runtime path
      was added.
+   - 2026-06-05 dependency-readiness lifecycle attachment slice: the
+     dependency-readiness lifecycle now updates the shared registry's
+     `dependency_readiness_action` component from real provider calls.
+     Requirements-seed and readiness-proof provider boundaries mark the
+     component `Running` only while executing and return it to explicit
+     `NotStarted` after the call. No public snapshot, ledger event, projection
+     default, Tauri/frontend policy, or legacy runtime path was added.
+     Remaining component attachment work covers resource observation, retry,
+     queue, and reservation cleanup.
 
 Option 3 standards gates:
 

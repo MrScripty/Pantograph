@@ -175,6 +175,11 @@ currently owns no background tasks; if future provider I/O becomes
 asynchronous, spawned work, cancellation, retries, shutdown, and tracing must
 be owned by this module rather than by Tauri, frontend code, node-engine, or
 runtime adapters.
+Dependency-readiness provider calls now also attach to the shared scheduler
+lifecycle registry. Requirements-seed and readiness-proof provider calls mark
+the `dependency_readiness_action` component `Running` only while the provider
+boundary is executing, then return it to explicit `NotStarted`. This does not
+emit ledger worker lifecycle events or expose a public lifecycle query.
 The task lifecycle manager is the workflow-service owner for task handle and
 shutdown state. It is synchronous and does not spawn work, retry, replay,
 write diagnostics-ledger facts, dispatch runtime-host work, or change

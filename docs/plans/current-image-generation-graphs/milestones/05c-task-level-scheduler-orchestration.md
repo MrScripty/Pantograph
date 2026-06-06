@@ -639,7 +639,11 @@ durable task orchestration path.
   2026-06-05 shared registry handle update: the scheduler lifecycle registry
   now has a cloneable workflow-service owner handle so remaining component
   owners can share one lifecycle core without depending on task lifecycle
-  ownership.
+  ownership. 2026-06-05 dependency-readiness attachment update: requirements
+  seed and readiness-proof provider calls now drive the shared registry's
+  `dependency_readiness_action` component from real provider activity.
+  Remaining component attachments: resource observation, retry, queue, and
+  reservation cleanup.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
