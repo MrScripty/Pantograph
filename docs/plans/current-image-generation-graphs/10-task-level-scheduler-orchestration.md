@@ -903,6 +903,19 @@ Option 3 thin implementation sequence:
      completion signaling and typed task-execution unavailable/shutdown
      diagnostics, followed by the resource observation worker before public
      lifecycle snapshots or diagnostics-ledger worker lifecycle events.
+   - 2026-06-05 task execution completion ownership re-plan: selected Option
+     2. `WorkflowTaskExecutionOwner` must reuse the existing
+     `WorkflowSchedulerTaskLifecycleManager` as the canonical
+     task-execution lifecycle/completion owner. This avoids a second state
+     machine, preserves the standards' simplicity/complection split, and keeps
+     lifecycle state in the existing synchronous core while async execution
+     remains an application-layer shell. The next source slices must thread
+     that lifecycle owner into task execution, gate execution on shutdown,
+     map lifecycle failures to typed execution unavailable/shutdown
+     diagnostics, and complete real lifecycle handles from branch execution.
+     New async task-execution workers and durable event streams are deferred
+     until after the blocking inference path, lifecycle owner integration, and
+     resource observation worker are validated.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
@@ -949,6 +962,10 @@ Option 3 thin implementation sequence:
      interim migration state and must move to the task execution owner before
      public worker diagnostics. Fake oneshot completion wrappers around direct
      helper calls are rejected as standards-noncompliant ceremony.
+   - 2026-06-05 completion owner refinement: Option 2 is the implementation
+     path for the task execution owner. Reuse the existing
+     `WorkflowSchedulerTaskLifecycleManager`; do not create a new lifecycle
+     state machine or direct-call completion channel.
 
 Worker-system standards gates:
 

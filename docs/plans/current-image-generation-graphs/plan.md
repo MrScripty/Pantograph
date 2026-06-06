@@ -154,6 +154,26 @@ work: add real backend-owned completion signaling and typed task-execution
 unavailable/shutdown diagnostics, then continue the resource observation
 worker before public lifecycle snapshots or diagnostics-ledger worker events.
 
+2026-06-05 task execution completion ownership re-plan decision: use Option
+2, reusing the existing workflow-service `WorkflowSchedulerTaskLifecycleManager`
+as the canonical task-execution lifecycle/completion owner. `WorkflowTaskExecutionOwner`
+must consume or wrap that real lifecycle manager instead of inventing a second
+execution state machine, adding fake oneshot wrappers around direct helper
+calls, or making request handlers own task completion policy. This matches the
+coding standards' simplicity/complection rule because queue lifecycle,
+task-execution lifecycle, and resource observation remain separate concerns;
+it also matches the single-owner and sync-core/async-shell rules because
+task handle state, shutdown, cancellation, stale completion rejection, and
+typed lifecycle diagnostics stay in the existing synchronous lifecycle core
+while async execution remains an application-layer shell. The next source
+slices must thread the existing task lifecycle manager into
+`WorkflowTaskExecutionOwner`, gate execution when it is shutting down, map
+lifecycle errors to typed task-execution unavailable/shutdown diagnostics, and
+complete lifecycle handles from real branch completion. Do not build a new
+async task-execution worker or durable event stream until this existing owner
+is integrated; those remain future batching/replay work after the blocking
+inference path and resource observation worker are complete.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

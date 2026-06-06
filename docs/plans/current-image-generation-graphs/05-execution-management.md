@@ -26199,6 +26199,51 @@ Worker rules:
     - Remaining follow-up: add real backend-owned completion signaling and
       typed task-execution unavailable/shutdown diagnostics before public
       lifecycle snapshots or diagnostics-ledger worker lifecycle events.
+  - 2026-06-05 task execution completion ownership Option 2 re-plan:
+    - Decision: use Option 2. `WorkflowTaskExecutionOwner` must consume or
+      wrap the existing workflow-service
+      `WorkflowSchedulerTaskLifecycleManager` as the canonical
+      task-execution lifecycle/completion owner.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection guidance by keeping queue lifecycle,
+      task-execution lifecycle, and resource observation separate. It follows
+      the single-owner lifecycle rule by keeping task handle state, shutdown,
+      cancellation, stale completion rejection, and lifecycle diagnostics in
+      the existing task lifecycle manager rather than creating a second state
+      machine. It follows the Rust sync-core/async-shell rule by preserving the
+      lifecycle manager as the synchronous state core and using
+      `WorkflowTaskExecutionOwner` as the async/application-layer shell.
+    - Rejected alternatives:
+      - Minimal diagnostics gate only: too shallow as the final answer because
+        it does not make completion backend-owned.
+      - New async task-execution worker now: deferred because it creates a
+        larger queue/worker/lifecycle surface before the existing task
+        lifecycle owner is integrated and before batching is required by the
+        next validated slice.
+      - Durable event-driven task execution now: deferred until blocking
+        inference completion, task lifecycle integration, resource observation
+        ownership, and replay semantics are validated.
+      - Fake completion channels around direct helper calls: rejected as
+        standards-noncompliant ceremony because they would not add real
+        lifecycle ownership.
+    - Next thin-slice sequence:
+      1. Thread the existing task lifecycle manager into
+         `WorkflowTaskExecutionOwner` through workflow-service owned
+         composition, without public DTO/generated/lockfile/frontend/Tauri
+         changes.
+      2. Gate task execution when the lifecycle owner is shutting down and map
+         lifecycle errors to typed task-execution unavailable/shutdown
+         diagnostics.
+      3. Register/complete real task lifecycle handles from branch execution
+         completion for non-runtime, runtime dispatch-boundary, and
+         unhandled-class fail-closed paths without fake oneshot wrappers.
+      4. Only after this owner integration is validated, continue to the
+         resource observation worker before public lifecycle snapshots or
+         diagnostics-ledger worker lifecycle events.
+    - No-fallback/no-legacy confirmation: do not restore request-owned
+      completion, queue-worker execution ownership, node-engine whole-run
+      launch, planned-inference launch, graph-path inference, frontend/Tauri
+      policy, compatibility DTOs, or alternate successful execution routes.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

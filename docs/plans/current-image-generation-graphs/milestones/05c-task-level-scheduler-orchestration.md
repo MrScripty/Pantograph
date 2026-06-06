@@ -738,6 +738,16 @@ durable task orchestration path.
     calls, and do not expose public lifecycle snapshots or diagnostics-ledger
     worker lifecycle events until queue, task execution, and resource
     observation owners have real lifecycle semantics.
+  - 2026-06-05 task execution completion ownership refinement: use Option 2
+    for the task execution owner implementation. `WorkflowTaskExecutionOwner`
+    must consume or wrap the existing `WorkflowSchedulerTaskLifecycleManager`
+    as the canonical lifecycle/completion owner. The next slices must thread
+    that manager into task execution, gate execution when it is shutting down,
+    emit typed execution unavailable/shutdown diagnostics from lifecycle
+    errors, and complete real task lifecycle handles from branch completion.
+    Do not add fake oneshot wrappers, a second lifecycle state machine, public
+    lifecycle snapshots, diagnostics-ledger worker lifecycle events, or a new
+    async task-execution worker before this existing owner is integrated.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
