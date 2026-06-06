@@ -767,6 +767,15 @@ durable task orchestration path.
     lifecycle shutdown can complete after timeout cleanup. Runtime dispatch
     timeout cleanup remains open and must include supervisor cancellation plus
     reservation release/reconcile semantics.
+  - 2026-06-06 runtime dispatch timeout cleanup re-plan: selected Option 3 for
+    the next implementation path. Add a focused scheduler task orchestrator
+    command that owns runtime cancellation request, tracked supervisor
+    abort/drain, terminal scheduler task mutation, reservation
+    release/reconcile, lifecycle handle release, and typed cleanup
+    diagnostics before `WorkflowTaskExecutionOwner` returns typed
+    `RuntimeTimeout`. Option 4, the full durable task-execution worker/event
+    loop, is the later replay/batching evolution after the immediate timeout
+    cleanup command is validated.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

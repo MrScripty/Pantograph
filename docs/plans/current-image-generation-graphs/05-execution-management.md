@@ -26325,6 +26325,51 @@ Worker rules:
       semantics before the same timeout cleanup can be applied to in-flight
       runtime-host work. Do not release runtime task lifecycle handles while
       leaving an un-aborted supervisor or unreconciled reservation running.
+  - 2026-06-06 runtime dispatch timeout cleanup Option 3 re-plan:
+    - Decision: use Option 3 as the next implementation path. Add a focused
+      `WorkflowSchedulerTaskOrchestrator` command that owns runtime dispatch
+      timeout cleanup for in-flight runtime tasks.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection rule by keeping request timeout translation
+      separate from supervisor lifecycle, scheduler task-state mutation,
+      reservation release/reconcile, lifecycle handle release, and diagnostic
+      mapping. It follows the single-owner rule because the orchestrator owns
+      the stateful cleanup sequence. It follows Rust async cancellation safety
+      by avoiding dropped-future cleanup as the primary mechanism and by
+      making the multi-step cleanup explicit and compensating.
+    - Rejected alternatives:
+      - Defer runtime timeout cleanup by blocking runtime timeout usage:
+        safe, but leaves the runtime path incomplete after non-runtime timeout
+        cleanup is already handled.
+      - Patch cleanup directly in `WorkflowTaskExecutionOwner`: rejected
+        because it complects request timeout handling with runtime supervisor
+        lifecycle, scheduler task-state persistence, reservation policy, and
+        lifecycle handle cleanup.
+      - Implement the full durable task-execution worker/event loop now:
+        rejected for the next slice because it combines timeout cleanup with
+        worker ownership, replay, batching, retry/defer, and durable event
+        semantics. Record it as the later Option 4 evolution after the
+        immediate cleanup command is validated.
+    - Next thin-slice sequence:
+      1. Add an orchestrator-owned runtime timeout cleanup command that accepts
+         the active started runtime task facts, selected dispatch facts, and
+         timeout reason.
+      2. Have the command request runtime cancellation, abort/drain the tracked
+         supervisor with bounded timeout, terminally mutate the matching
+         scheduler task attempt, apply reservation release/reconcile, release
+         the task lifecycle handle, and return typed cleanup diagnostics.
+      3. Change `WorkflowTaskExecutionOwner` timeout handling to invoke only
+         that command before returning typed `RuntimeTimeout`.
+      4. Add focused tests proving timeout does not strand active lifecycle
+         handles, does not leave unreconciled reservations for the timed-out
+         runtime task, and does not call legacy whole-run or planned-inference
+         launch paths.
+    - No-fallback/no-legacy confirmation: do not release runtime lifecycle
+      handles without aborting/reconciling the supervisor and reservation; do
+      not add request-owned runtime cleanup policy, queue-worker branch
+      progression, node-engine whole-run launch, planned-inference launch,
+      graph-path inference, frontend/Tauri policy, compatibility DTOs, public
+      lifecycle snapshots, or diagnostics-ledger worker events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -932,6 +932,15 @@ Option 3 thin implementation sequence:
      before returning typed `RuntimeTimeout`. Runtime dispatch timeout cleanup
      remains a separate supervisor-cancellation and reservation-reconcile
      slice.
+   - 2026-06-06 runtime dispatch timeout cleanup re-plan: selected Option 3.
+     The next source slice must add an orchestrator-owned command for runtime
+     dispatch timeout cleanup. The command owns cancellation request,
+     supervisor abort/drain, terminal task mutation, reservation
+     release/reconcile, lifecycle handle release, and typed cleanup
+     diagnostics. The request/task-execution wrapper may only invoke this
+     backend command and return typed `RuntimeTimeout`. Option 4, the durable
+     task-execution worker/event loop, remains the later replay/batching
+     evolution after this cleanup command is validated.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
@@ -996,6 +1005,12 @@ Option 3 thin implementation sequence:
      orchestrator and releases lifecycle handles, so task lifecycle shutdown
      is not blocked by a dropped timed-out task future. Runtime supervisor
      timeout cleanup remains open.
+   - 2026-06-06 runtime dispatch timeout cleanup re-plan: use Option 3 next.
+     Keep runtime timeout cleanup in the scheduler task orchestrator as one
+     stateful backend command; do not put supervisor abort, terminal task
+     mutation, reservation release/reconcile, or lifecycle handle cleanup in
+     the request wrapper. Record the full durable worker/event-loop path as
+     the later Option 4 evolution.
 
 Worker-system standards gates:
 

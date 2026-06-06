@@ -205,6 +205,20 @@ needs explicit supervisor cancellation and reservation release semantics; do
 not solve that by dropping task handles without aborting/reconciling the
 runtime supervisor.
 
+2026-06-06 runtime dispatch timeout cleanup re-plan decision: use Option 3 as
+the immediate implementation path. Add an orchestrator-owned runtime timeout
+cancellation command that owns the whole cleanup sequence for in-flight
+runtime dispatch: request runtime cancellation, abort/drain the tracked
+supervisor with bounded timeout, terminally mutate the matching scheduler task
+attempt, apply reservation release/reconcile, release the task lifecycle
+handle, and return typed cleanup diagnostics. The request/task-execution
+wrapper may only translate timeout into this backend command and return typed
+`RuntimeTimeout`; it must not own supervisor lifecycle, task-state mutation,
+reservation policy, retry, fallback completion, or legacy execution. Option 4
+is recorded as the later durable worker/replay evolution after this immediate
+cleanup is validated; do not implement the full event-driven task execution
+worker in the next slice.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
