@@ -101,7 +101,8 @@ durable task orchestration path.
   and initializes active-run scheduler task state after queue admission. The
   dedicated task progression path now has an internal task-execution owner
   boundary for non-runtime admitted-run progression and runtime
-  dispatch-boundary progression. Unhandled-class fail-closed progression,
+  dispatch-boundary progression, and unhandled-class fail-closed progression.
+  Completion signaling, typed task-execution unavailable/shutdown diagnostics,
   dispatch lifecycle, ledger writes,
   cancellation, retry/defer, bounded workers, panic handling, and legacy
   output-demand removal remain open.

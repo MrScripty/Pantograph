@@ -895,6 +895,14 @@ Option 3 thin implementation sequence:
      terminal diagnostics for runtime-containing runs. Remaining immediate
      Option 4 work is the unhandled-class fail-closed branch, then real
      completion signaling and typed execution-unavailable/shutdown diagnostics.
+   - 2026-06-05 task execution owner unhandled-branch slice: moved the
+     unhandled scheduler class fail-closed branch out of
+     `WorkflowSchedulerQueueWorker` and into `WorkflowTaskExecutionOwner`.
+     All admitted-run branch progression helpers have now moved out of the
+     queue worker. Remaining immediate Option 4 work is real backend-owned
+     completion signaling and typed task-execution unavailable/shutdown
+     diagnostics, followed by the resource observation worker before public
+     lifecycle snapshots or diagnostics-ledger worker lifecycle events.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker

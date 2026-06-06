@@ -143,6 +143,17 @@ owner work: move the unhandled-class fail-closed branch out of the queue
 worker helper, then add real backend-owned completion signaling and typed
 execution-unavailable/shutdown diagnostics.
 
+2026-06-05 task execution owner unhandled-branch update: unhandled scheduler
+class fail-closed progression now routes through `WorkflowTaskExecutionOwner`
+instead of `WorkflowSchedulerQueueWorker`. All admitted-run branch progression
+helpers have now moved out of the queue worker into the task execution owner.
+Queue worker ownership is queue lifecycle, wake/shutdown, admission, and
+handoff; task execution owner ownership is branch progression, timeout
+handling, terminal mutation, and terminal diagnostics. Remaining Option 4
+work: add real backend-owned completion signaling and typed task-execution
+unavailable/shutdown diagnostics, then continue the resource observation
+worker before public lifecycle snapshots or diagnostics-ledger worker events.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

@@ -26143,6 +26143,7 @@ Worker rules:
     - Allowed files:
       `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
       `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
       and the current image-generation plan docs. Public contracts, generated
       DTOs, lockfiles, saved workflows, frontend/Tauri files, runtime adapters,
       diagnostics-ledger worker lifecycle events, resource observation code,
@@ -26164,6 +26165,40 @@ Worker rules:
       move into the task execution owner next. Backend-owned completion
       signaling and typed execution-unavailable/shutdown diagnostics remain
       open after the branch movement is complete.
+  - 2026-06-05 task execution owner unhandled-branch source slice:
+    - Smallest vertical slice: move the unhandled scheduler class fail-closed
+      progression branch out of `WorkflowSchedulerQueueWorker` and into
+      `WorkflowTaskExecutionOwner`.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      and the current image-generation plan docs. Public contracts, generated
+      DTOs, lockfiles, saved workflows, frontend/Tauri files, runtime adapters,
+      diagnostics-ledger worker lifecycle events, resource observation code,
+      and legacy runtime launch paths remained out of scope.
+    - No-fallback/no-legacy confirmation: unhandled-class started-event
+      recording, scheduler task fail-closed transitions, failure finish
+      mutation, and terminal diagnostics now go through
+      `WorkflowTaskExecutionOwner::fail_unhandled_scheduler_classes_to_completion`.
+      All admitted-run branch progression helpers are now out of the queue
+      worker. The slice did not add request-owned fallback execution,
+      node-engine whole-run launch, planned-inference launch, graph-path
+      inference, Tauri/frontend policy, compatibility DTOs, or public
+      lifecycle snapshots.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_runtime_run_fails_closed_before_legacy_launch --lib`
+    - Discovered issue fixed in slice: the focused fail-closed runtime test
+      still expected `CapabilityViolation` for missing saved runtime
+      executable validation snapshots, but the canonical current path rejects
+      that request before admission as `InvalidRequest` while still preventing
+      legacy launch attempts. The assertion now matches that typed diagnostic
+      class without weakening the no-legacy check.
+    - Remaining follow-up: add real backend-owned completion signaling and
+      typed task-execution unavailable/shutdown diagnostics before public
+      lifecycle snapshots or diagnostics-ledger worker lifecycle events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

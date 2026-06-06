@@ -8,10 +8,10 @@ use crate::graph::{
     WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{
-    unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun,
-    WorkflowSchedulerBootstrapRecoveryAction, WorkflowSchedulerBootstrapRecoverySnapshot,
-    WorkflowSchedulerBootstrapRecoveryTask, WorkflowSchedulerQueueAdmissionCommand,
-    WorkflowSchedulerQueueTaskStateCommand, WorkflowSchedulerQueueWorker,
+    unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
+    WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
+    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueTaskStateCommand,
+    WorkflowSchedulerQueueWorker,
 };
 use crate::technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
@@ -89,41 +89,6 @@ fn resumed_run_started_at(dequeued_at_ms: u64) -> std::time::Instant {
     std::time::Instant::now()
         .checked_sub(Duration::from_millis(elapsed_ms))
         .unwrap_or_else(std::time::Instant::now)
-}
-
-impl WorkflowSchedulerQueueWorker {
-    fn fail_unhandled_scheduler_classes_to_completion(
-        service: &WorkflowService,
-        session: &WorkflowExecutionSessionSummary,
-        run_snapshot: Option<&WorkflowRunSnapshotRecord>,
-        session_id: &str,
-        workflow_run_id: &str,
-        queued_run: &WorkflowExecutionSessionDequeuedRun,
-        summary: &WorkflowSchedulerTaskRunSummary,
-    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        service.record_run_started_event_if_configured(session, run_snapshot, queued_run)?;
-        let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
-        let run_result =
-            service.fail_unhandled_scheduler_session_classes(session_id, workflow_run_id, summary);
-        service.finish_failed_workflow_run_after_admission(session_id, workflow_run_id)?;
-        if let Err(record_error) = service.record_run_terminal_event_if_configured(
-            session,
-            run_snapshot,
-            workflow_run_id,
-            Some(&queued_workflow_semantic_version),
-            &run_result,
-        ) {
-            if let Err(error) = run_result {
-                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                    workflow_run_id: Some(workflow_run_id.to_string()),
-                    diagnostic_event_id: None,
-                    diagnostics_unavailable: Some(record_error.message().to_string()),
-                }));
-            }
-            return Err(record_error);
-        }
-        run_result
-    }
 }
 
 impl WorkflowService {
@@ -409,7 +374,7 @@ impl WorkflowService {
             .await;
         }
 
-        WorkflowSchedulerQueueWorker::fail_unhandled_scheduler_classes_to_completion(
+        WorkflowTaskExecutionOwner::fail_unhandled_scheduler_classes_to_completion(
             self,
             &session,
             run_snapshot.as_ref(),
@@ -730,7 +695,7 @@ impl WorkflowService {
         Ok(task_graph)
     }
 
-    fn fail_unhandled_scheduler_session_classes(
+    pub(super) fn fail_unhandled_scheduler_session_classes(
         &self,
         session_id: &str,
         workflow_run_id: &str,

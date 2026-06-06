@@ -327,7 +327,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
         .await
         .expect_err("runtime-containing scheduler run should fail closed");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
     assert!(
         error
             .message()
