@@ -1072,6 +1072,14 @@ Option 3 thin implementation sequence:
      execution and runtime dispatch behavior did not change. Next slice:
      migrate one request branch to enqueue through the composition-root owner
      and await real worker-owned completion.
+   - 2026-06-06 branch migration re-plan trigger: stop before migrating a
+     request branch. The current runtime branch still owns dispatch
+     selection, reservation binding, runtime supervisor spawn/join, terminal
+     task mutation, scheduler attempt lifecycle events, reservation
+     release/reconcile, and output projection in request-scoped runner code.
+     A standards-compliant migration needs a worker-owned execution command
+     shape; queueing a marker while preserving request-scoped execution or
+     wrapping direct execution in a oneshot is forbidden.
 
 Worker-system standards gates:
 

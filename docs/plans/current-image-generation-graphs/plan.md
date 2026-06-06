@@ -362,6 +362,20 @@ owner and await real worker-owned completion without a direct-execution
 oneshot, request-scoped worker, public lifecycle snapshot, diagnostics-ledger
 worker event, or compatibility DTO.
 
+2026-06-06 branch migration re-plan trigger: stop before migrating a request
+execution branch. Reading the current runtime branch showed that the request
+path still owns the full task-attempt sequence: readiness refresh, candidate
+collection, dispatch selection, ready-to-start transition, reservation
+binding, runtime supervisor spawn/join, terminal task mutation, attempt
+lifecycle events, reservation release/reconcile, and final output projection.
+A standards-compliant worker migration cannot be made by queueing a marker
+while leaving that sequence request-scoped, and it cannot add a fake completion
+channel around the current direct request execution. The next plan decision
+must choose the worker-owned execution command shape that moves this
+task-attempt sequence behind the composition-root owner while keeping
+`WorkflowService` as request facade and keeping runtime-host/runtime-registry
+instances long-lived and reusable across workflow runs.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

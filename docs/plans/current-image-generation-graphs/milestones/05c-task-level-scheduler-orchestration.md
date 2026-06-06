@@ -840,6 +840,13 @@ durable task orchestration path.
     `cargo test -p pantograph-workflow-service runtime_owner_ --lib`.
     Next Option 2 slice: migrate one request branch through the
     composition-root owner and await real worker-owned completion.
+  - 2026-06-06 branch migration re-plan trigger: stop before branch migration
+    because the current runtime branch still owns dispatch selection,
+    reservation binding, runtime supervisor spawn/join, terminal mutation,
+    attempt lifecycle events, reservation release/reconcile, and output
+    projection in request-scoped runner code. Next decision must choose the
+    worker-owned execution command shape; do not queue a marker around
+    request-scoped execution or add a direct-execution oneshot shim.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

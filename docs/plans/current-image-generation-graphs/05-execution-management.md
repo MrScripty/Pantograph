@@ -26673,6 +26673,29 @@ Worker rules:
     - Remaining follow-up: migrate one request execution branch to enqueue
       through the composition-root owner and await real worker-owned
       completion.
+  - 2026-06-06 branch migration re-plan trigger:
+    - Trigger: stop before migrating a request execution branch. The current
+      runtime branch still owns readiness refresh, candidate collection,
+      dispatch selection, ready-to-start transition, reservation binding,
+      runtime supervisor spawn/join, terminal task mutation, scheduler attempt
+      lifecycle events, reservation release/reconcile, and output projection
+      in request-scoped runner code.
+    - Standards conflict: queueing only a task marker while the request runner
+      still performs those steps would preserve request-scoped execution under
+      worker terminology. Adding a oneshot completion channel around the
+      current direct request execution would be the fake completion shim the
+      no-fallback/no-legacy rule forbids.
+    - Required next plan decision: choose the worker-owned execution command
+      shape that moves the task-attempt sequence behind the composition-root
+      owner while keeping `WorkflowService` as request facade and preserving
+      long-lived reusable runtime-host/runtime-registry instances across
+      workflow runs.
+    - Forbidden shortcuts: do not start a branch migration by keeping runtime
+      dispatch, terminal mutation, reservation lifecycle, or task lifecycle
+      ownership in the request wrapper behind a queue marker; do not create
+      request-scoped workers; do not add public lifecycle snapshots,
+      diagnostics-ledger worker events, compatibility DTOs, or legacy launch
+      paths.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
