@@ -925,6 +925,12 @@ Option 3 thin implementation sequence:
      lifecycle work is registering and completing real task lifecycle handles
      from non-runtime, runtime dispatch-boundary, and unhandled-class branch
      completion.
+   - 2026-06-05 task execution timeout cleanup slice: non-runtime
+     `timeout_ms` handling now cancels running task-state attempts through the
+     scheduler task orchestrator and releases matching lifecycle handles
+     before returning typed `RuntimeTimeout`. Runtime dispatch timeout cleanup
+     remains a separate supervisor-cancellation and reservation-reconcile
+     slice.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
@@ -982,6 +988,11 @@ Option 3 thin implementation sequence:
      Remaining follow-up: register/complete real lifecycle handles from
      branch completion before public lifecycle snapshots or worker lifecycle
      ledger events.
+   - 2026-06-05 task execution timeout cleanup: non-runtime session timeout
+     now terminally cancels running scheduler task attempts through the
+     orchestrator and releases lifecycle handles, so task lifecycle shutdown
+     is not blocked by a dropped timed-out task future. Runtime supervisor
+     timeout cleanup remains open.
 
 Worker-system standards gates:
 

@@ -49,10 +49,26 @@ impl WorkflowTaskExecutionOwner {
         let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
             match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
                 Ok(result) => result,
-                Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
-                    "workflow run exceeded timeout_ms {}",
-                    timeout_ms
-                ))),
+                Err(_) => {
+                    let message = format!("workflow run exceeded timeout_ms {}", timeout_ms);
+                    {
+                        let mut store = service.session_store_guard()?;
+                        service
+                            .scheduler_task_orchestrator
+                            .cancel_running_tasks_for_workflow_timeout(
+                                &mut store,
+                                session_id,
+                                workflow_run_id,
+                                &message,
+                            )
+                            .map_err(|error| {
+                                WorkflowServiceError::RuntimeTimeout(format!(
+                                    "{message}; scheduler task timeout cleanup failed: {error}"
+                                ))
+                            })?;
+                    }
+                    Err(WorkflowServiceError::RuntimeTimeout(message))
+                }
             }
         } else {
             run_future.await

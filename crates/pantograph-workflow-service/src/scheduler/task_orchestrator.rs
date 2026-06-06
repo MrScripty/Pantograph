@@ -1183,6 +1183,63 @@ impl WorkflowSchedulerTaskOrchestrator {
         Ok(mutation)
     }
 
+    pub(crate) fn cancel_running_tasks_for_workflow_timeout(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        reason: &str,
+    ) -> Result<usize, WorkflowSchedulerTaskOrchestratorError> {
+        let (_task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let running_records = records
+            .into_iter()
+            .filter(|record| record.state.kind() == SchedulerTaskStateKind::Running)
+            .collect::<Vec<_>>();
+        let mut cancelled = 0;
+        for record in running_records {
+            let attempt_id = store
+                .active_run_scheduler_task_attempt_id(
+                    session_id,
+                    workflow_run_id,
+                    record.task_id.as_str(),
+                )
+                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+            let transition = terminal_failure_transition_from_running(
+                &record,
+                SchedulerTaskStateDiagnostic {
+                    severity: SchedulerTaskStateDiagnosticSeverity::Error,
+                    code: SchedulerTaskStateDiagnosticCode::TerminalFailure,
+                    message: reason.to_string(),
+                    hint: Some(
+                        "The task was cancelled because the workflow execution timeout elapsed."
+                            .to_string(),
+                    ),
+                },
+            )?;
+            store
+                .cancel_active_run_scheduler_task_attempt(
+                    session_id,
+                    workflow_run_id,
+                    &attempt_id,
+                    transition,
+                )
+                .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+            self.release_task_lifecycle_handle(&record.task_id, &attempt_id)?;
+            cancelled += 1;
+        }
+        Ok(cancelled)
+    }
+
     pub(crate) fn advance_awaiting_non_runtime_task_inputs(
         &self,
         store: &mut WorkflowExecutionSessionStore,

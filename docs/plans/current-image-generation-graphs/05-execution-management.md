@@ -26290,6 +26290,39 @@ Worker rules:
       shutdown cannot strand admitted work. Resource observation ownership and
       public lifecycle snapshots remain blocked until queue, task execution,
       and resource observation all have real lifecycle semantics.
+  - 2026-06-05 task execution timeout cleanup source slice:
+    - Smallest vertical slice: when non-runtime session execution exceeds
+      `timeout_ms`, cancel running scheduler tasks for that workflow run
+      through the scheduler task orchestrator and release their lifecycle
+      handles through the existing task lifecycle manager.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      and the current image-generation plan docs. Public contracts, generated
+      DTOs, lockfiles, saved workflows, frontend/Tauri files, runtime
+      adapters, diagnostics-ledger worker lifecycle events, resource
+      observation code, queue-worker branch progression, fake completion
+      channels, and legacy runtime launch paths remained out of scope.
+    - No-fallback/no-legacy confirmation:
+      `WorkflowTaskExecutionOwner` still returns typed `RuntimeTimeout`, but
+      timeout cleanup now calls
+      `WorkflowSchedulerTaskOrchestrator::cancel_running_tasks_for_workflow_timeout`
+      so active task-state records transition terminally and matching task
+      lifecycle handles are released. The request path does not execute,
+      complete, retry, or fallback-run tasks itself and does not route through
+      node-engine whole-run launch, planned-inference launch, graph-path
+      inference, frontend/Tauri policy, compatibility DTOs, public lifecycle
+      snapshots, or diagnostics-ledger worker events.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner --lib`
+    - Remaining follow-up: runtime dispatch timeout cleanup needs explicit
+      runtime supervisor cancellation plus reservation release/reconcile
+      semantics before the same timeout cleanup can be applied to in-flight
+      runtime-host work. Do not release runtime task lifecycle handles while
+      leaving an un-aborted supervisor or unreconciled reservation running.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

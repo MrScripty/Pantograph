@@ -288,6 +288,13 @@ async fn workflow_execution_session_timeout_applies_to_scheduler_task_runner() {
             .is_empty(),
         "timeout must not route through the legacy whole-run host path"
     );
+    service
+        .workflow_shutdown_scheduler_task_lifecycle(
+            std::time::Duration::ZERO,
+            std::time::Duration::ZERO,
+        )
+        .await
+        .expect("timeout cleanup should release task lifecycle handles");
 }
 
 #[tokio::test]

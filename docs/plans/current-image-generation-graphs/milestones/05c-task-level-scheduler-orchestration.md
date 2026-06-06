@@ -758,6 +758,13 @@ durable task orchestration path.
     real task lifecycle handles from non-runtime, runtime dispatch-boundary,
     and unhandled-class branch completion before public lifecycle snapshots or
     diagnostics-ledger worker lifecycle events.
+  - 2026-06-05 task execution timeout cleanup: non-runtime `timeout_ms`
+    handling now terminally cancels running scheduler task attempts through
+    the orchestrator and releases lifecycle handles before returning typed
+    `RuntimeTimeout`. The focused timeout test now proves scheduler task
+    lifecycle shutdown can complete after timeout cleanup. Runtime dispatch
+    timeout cleanup remains open and must include supervisor cancellation plus
+    reservation release/reconcile semantics.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

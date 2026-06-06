@@ -190,6 +190,18 @@ unhandled-class branch completion, then continue the resource observation
 worker before exposing public lifecycle snapshots or worker lifecycle ledger
 events.
 
+2026-06-05 task execution timeout cleanup update: non-runtime session
+execution timeouts now ask the scheduler task orchestrator to cancel any
+running tasks for the workflow run through active scheduler task state and to
+release their lifecycle handles through the existing task lifecycle manager.
+The public error remains typed `RuntimeTimeout`, and the cleanup does not add
+request-owned execution, fallback completion, fake channels, queue-worker
+branch progression, public lifecycle snapshots, or diagnostics-ledger worker
+events. Remaining timeout follow-up: runtime dispatch timeout cleanup still
+needs explicit supervisor cancellation and reservation release semantics; do
+not solve that by dropping task handles without aborting/reconciling the
+runtime supervisor.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has
