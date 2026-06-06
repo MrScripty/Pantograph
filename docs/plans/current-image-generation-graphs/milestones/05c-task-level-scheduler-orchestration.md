@@ -847,6 +847,15 @@ durable task orchestration path.
     projection in request-scoped runner code. Next decision must choose the
     worker-owned execution command shape; do not queue a marker around
     request-scoped execution or add a direct-execution oneshot shim.
+  - 2026-06-06 branch migration decision: use Option 2 now, with Option 3
+    recorded as the later target architecture. Immediate path: enqueue a
+    worker-owned runtime branch command through the composition-root owner so
+    the worker-owned branch owns readiness continuation, dispatch selection,
+    reservation lifecycle, runtime supervisor execution, terminal mutation,
+    attempt lifecycle events, and branch output projection. Later target:
+    after the worker-owned inference path is complete and validated, evolve to
+    durable task-event-loop claiming for independent task attempts, replay, and
+    batching across simultaneous workflow runs.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

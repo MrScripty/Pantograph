@@ -26696,6 +26696,39 @@ Worker rules:
       request-scoped workers; do not add public lifecycle snapshots,
       diagnostics-ledger worker events, compatibility DTOs, or legacy launch
       paths.
+  - 2026-06-06 branch migration decision:
+    - Decision: use Option 2 now, with Option 3 recorded as the later target
+      architecture. The immediate implementation path is a worker-owned
+      runtime run branch behind the composition-root owner.
+    - Option 2 immediate shape: after run admission, `WorkflowService` remains
+      the request facade and enqueues a runtime-branch command through the
+      composition-root owner. The worker-owned branch must own readiness
+      continuation, dispatch selection, reservation binding/release, runtime
+      supervisor spawn/join, terminal task mutation, scheduler attempt
+      lifecycle events, and branch output projection before returning a typed
+      run result.
+    - Immediate thin-slice sequence:
+      1. Define the worker-owned runtime branch command/result contract.
+      2. Extract the runtime branch execution context behind the
+         composition-root owner while preserving long-lived
+         runtime-host/runtime-registry reuse across workflow runs.
+      3. Migrate one runtime request branch to enqueue and await
+         worker-owned completion.
+      4. Add shutdown/cancellation behavior for the worker-owned branch.
+      5. Add focused tests for successful dispatch, dispatch failure,
+         timeout/cancel, and reservation release.
+    - Option 3 later target: after the Option 2 worker-owned inference path is
+      complete and validated, evolve to a durable task event-loop where
+      workers claim ready scheduler task attempts from durable task state,
+      execute independently across workflow runs, persist terminal/deferred
+      outcomes, support replay/recovery, and enable batching across
+      simultaneous runs.
+    - No-fallback/no-legacy confirmation: do not queue a marker around
+      request-scoped execution, add a direct-execution oneshot, create
+      request-scoped workers, move policy into frontend/Tauri, start durable
+      task claiming before the Option 2 path is complete, add public worker
+      lifecycle snapshots, add diagnostics-ledger worker events, or add
+      compatibility DTOs.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -376,6 +376,30 @@ task-attempt sequence behind the composition-root owner while keeping
 `WorkflowService` as request facade and keeping runtime-host/runtime-registry
 instances long-lived and reusable across workflow runs.
 
+2026-06-06 branch migration decision: use Option 2 now, with Option 3 recorded
+as the later target architecture. The immediate path is a worker-owned runtime
+run branch: after admission, the request facade enqueues a runtime-branch
+command through the composition-root owner and awaits a typed result, while the
+worker-owned branch owns readiness continuation, dispatch selection,
+reservation binding/release, runtime supervisor execution, terminal task
+mutation, attempt lifecycle events, and branch output projection. This
+preserves the no-fallback/no-legacy rule because execution ownership moves
+behind the worker boundary rather than queueing a marker around request-scoped
+execution or adding a direct-execution oneshot. Immediate thin-slice sequence:
+define the worker-owned runtime branch command/result contract; extract the
+runtime branch execution context behind the composition-root owner; migrate one
+runtime request branch to enqueue and await worker-owned completion; add
+shutdown/cancellation behavior; then cover successful dispatch, dispatch
+failure, timeout/cancel, and reservation release with focused tests. Later
+Option 3: after the worker-owned inference path is complete and validated,
+evolve to the durable task event-loop architecture where workers claim ready
+scheduler task attempts from durable task state, execute independently across
+workflow runs, persist terminal/deferred outcomes, support replay/recovery, and
+enable batching across simultaneous runs. Do not start durable task claiming,
+public worker lifecycle snapshots, diagnostics-ledger worker events, frontend
+policy, or compatibility DTOs before the Option 2 worker-owned inference path
+is complete.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

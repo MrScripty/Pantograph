@@ -1080,6 +1080,16 @@ Option 3 thin implementation sequence:
      A standards-compliant migration needs a worker-owned execution command
      shape; queueing a marker while preserving request-scoped execution or
      wrapping direct execution in a oneshot is forbidden.
+   - 2026-06-06 branch migration decision: use Option 2 now and record Option
+     3 as the later target architecture. Immediate path: `WorkflowService`
+     admits the run as request facade, then enqueues a worker-owned runtime
+     branch command through the composition-root owner. The worker-owned branch
+     owns readiness continuation, dispatch selection, reservation
+     binding/release, runtime supervisor execution, terminal mutation,
+     attempt lifecycle events, and branch output projection. Later Option 3:
+     after the worker-owned inference path is complete, evolve to durable
+     task-event-loop claiming so workers execute ready task attempts
+     independently across workflow runs and enable batching/replay.
 
 Worker-system standards gates:
 
