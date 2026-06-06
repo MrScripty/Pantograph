@@ -26024,6 +26024,32 @@ Worker rules:
     - Remaining follow-up: the unhandled scheduler class fail-closed branch
       and final completion signaling semantics still need to move behind the
       worker owner before the queue progression migration is complete.
+  - 2026-06-05 queue unhandled-class owner source slice:
+    - Smallest vertical slice: move the unhandled scheduler class fail-closed
+      branch from direct request ownership into an internal queue-worker
+      helper while preserving the existing blocking public response shape.
+    - Allowed files: `crates/pantograph-workflow-service/src/workflow/
+      session_execution_api.rs` and the current image-generation plan docs.
+      Public contracts, generated DTOs, lockfiles, saved workflows,
+      frontend/Tauri files, diagnostics-ledger worker events, durable replay,
+      resource observation code, and legacy runtime launch paths remained out
+      of scope.
+    - No-fallback/no-legacy confirmation: unhandled-class started-event
+      recording, scheduler task fail-closed transitions, failure finish
+      mutation, and terminal diagnostics now go through
+      `WorkflowSchedulerQueueWorker::fail_unhandled_scheduler_classes_to_completion`.
+      The request path now routes every admitted branch through
+      queue-worker-owned helpers after admission and task-state initialization
+      and does not keep parallel branch execution.
+    - Tests/verification completed:
+      - `cargo test -p pantograph-workflow-service scheduler::queue_worker::tests --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_lifecycle_create_run_close --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+    - Remaining follow-up: add explicit worker completion signaling/channel
+      semantics and worker-unavailable diagnostics before public lifecycle
+      snapshots or diagnostics-ledger worker lifecycle events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

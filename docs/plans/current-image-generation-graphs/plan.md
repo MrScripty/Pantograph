@@ -84,6 +84,17 @@ work: move the unhandled scheduler class fail-closed branch and final
 completion signaling semantics behind the queue worker owner, then continue
 to the resource observation worker slice.
 
+2026-06-05 queue unhandled-class owner update: the unhandled scheduler class
+fail-closed branch now delegates started-event recording, scheduler task
+fail-closed transitions, failure finish mutation, and terminal diagnostics
+through an internal
+`WorkflowSchedulerQueueWorker::fail_unhandled_scheduler_classes_to_completion`
+helper. The blocking request path now routes all admitted run branches through
+queue-worker-owned helpers after admission and task-state initialization.
+Remaining queue-worker follow-up: introduce explicit worker completion
+signaling/channel semantics and worker-unavailable diagnostics before public
+lifecycle snapshots or diagnostics-ledger worker lifecycle events.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

@@ -221,6 +221,39 @@ impl WorkflowSchedulerQueueWorker {
         }
         run_result
     }
+
+    fn fail_unhandled_scheduler_classes_to_completion(
+        service: &WorkflowService,
+        session: &WorkflowExecutionSessionSummary,
+        run_snapshot: Option<&WorkflowRunSnapshotRecord>,
+        session_id: &str,
+        workflow_run_id: &str,
+        queued_run: &WorkflowExecutionSessionDequeuedRun,
+        summary: &WorkflowSchedulerTaskRunSummary,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        service.record_run_started_event_if_configured(session, run_snapshot, queued_run)?;
+        let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
+        let run_result =
+            service.fail_unhandled_scheduler_session_classes(session_id, workflow_run_id, summary);
+        service.finish_failed_workflow_run_after_admission(session_id, workflow_run_id)?;
+        if let Err(record_error) = service.record_run_terminal_event_if_configured(
+            session,
+            run_snapshot,
+            workflow_run_id,
+            Some(&queued_workflow_semantic_version),
+            &run_result,
+        ) {
+            if let Err(error) = run_result {
+                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                    workflow_run_id: Some(workflow_run_id.to_string()),
+                    diagnostic_event_id: None,
+                    diagnostics_unavailable: Some(record_error.message().to_string()),
+                }));
+            }
+            return Err(record_error);
+        }
+        run_result
+    }
 }
 
 impl WorkflowService {
@@ -506,30 +539,15 @@ impl WorkflowService {
             .await;
         }
 
-        self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
-        let run_result = self.fail_unhandled_scheduler_session_classes(
-            &session_id,
-            &workflow_run_id,
-            &scheduler_task_run_summary,
-        );
-        self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
-        if let Err(record_error) = self.record_run_terminal_event_if_configured(
+        WorkflowSchedulerQueueWorker::fail_unhandled_scheduler_classes_to_completion(
+            self,
             &session,
             run_snapshot.as_ref(),
+            &session_id,
             &workflow_run_id,
-            Some(&queued_workflow_semantic_version),
-            &run_result,
-        ) {
-            if let Err(error) = run_result {
-                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                    workflow_run_id: Some(workflow_run_id),
-                    diagnostic_event_id: None,
-                    diagnostics_unavailable: Some(record_error.message().to_string()),
-                }));
-            }
-            return Err(record_error);
-        }
-        run_result
+            &queued_run,
+            &scheduler_task_run_summary,
+        )
     }
 
     pub async fn resume_workflow_execution_session_runtime_dependency_readiness<H: WorkflowHost>(

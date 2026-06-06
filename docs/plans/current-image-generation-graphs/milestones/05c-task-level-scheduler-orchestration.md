@@ -712,6 +712,15 @@ durable task orchestration path.
     and terminal diagnostics for that branch. Remaining queue work: move the
     unhandled scheduler class fail-closed branch and final completion
     signaling semantics behind the worker owner.
+  - 2026-06-05 queue unhandled-class owner update: unhandled scheduler class
+    fail-closed progression now runs through an internal queue-worker helper
+    that owns started-event recording, task fail-closed transitions, failure
+    finish mutation, and terminal diagnostics for that branch. All admitted
+    run branches now route through queue-worker-owned helpers after admission
+    and task-state initialization. Remaining queue-worker follow-up: explicit
+    worker completion signaling/channel semantics and worker-unavailable
+    diagnostics before public lifecycle snapshots or diagnostics-ledger worker
+    lifecycle events.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

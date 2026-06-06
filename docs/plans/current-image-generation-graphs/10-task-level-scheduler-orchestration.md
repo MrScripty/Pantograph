@@ -908,6 +908,13 @@ Option 3 thin implementation sequence:
      pending deferral, failure finish mutation, and terminal diagnostics for
      runtime runs. Remaining progression ownership is the unhandled scheduler
      class fail-closed branch and final completion signaling semantics.
+   - 2026-06-05 queue unhandled-class owner slice: moved the unhandled
+     scheduler class fail-closed branch behind an internal queue-worker
+     helper. All admitted run branches now route through queue-worker-owned
+     helpers after admission and task-state initialization. Remaining queue
+     worker work is explicit completion signaling/channel semantics and
+     worker-unavailable diagnostics before public lifecycle snapshots or
+     diagnostics-ledger worker lifecycle events.
 
 Option 3 standards gates:
 
