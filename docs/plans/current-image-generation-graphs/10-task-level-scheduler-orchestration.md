@@ -1097,6 +1097,14 @@ Option 3 thin implementation sequence:
      request execution, durable task claiming, public worker snapshots, or
      diagnostics-ledger worker events. Next slice: extract the runtime branch
      execution context behind the composition-root owner.
+   - 2026-06-06 runtime branch execution context slice: added an internal
+     runtime-branch context built by the composition-root owner from the
+     worker-owned runtime-branch command. The context carries the shared
+     `Arc<WorkflowService>` plus command so the future migrated branch can use
+     long-lived backend workflow/scheduler/runtime services without
+     request-scoped workers or per-run runtimes. Runtime dispatch and request
+     execution did not move. Next slice: migrate one runtime request branch to
+     construct the context and enqueue/await worker-owned completion.
 
 Worker-system standards gates:
 

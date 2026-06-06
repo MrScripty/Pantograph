@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::task_execution_worker::{
     WorkflowTaskExecutionWorker, WorkflowTaskExecutionWorkerCommand,
     WorkflowTaskExecutionWorkerDiagnostic, WorkflowTaskExecutionWorkerDiagnosticCode,
-    WorkflowTaskExecutionWorkerOutcome,
+    WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
 };
 use super::{WorkflowService, WorkflowServiceError};
 
@@ -18,6 +18,12 @@ enum WorkflowTaskExecutionRuntimeWorkerState {
     Shutdown,
 }
 
+#[must_use]
+pub(super) struct WorkflowTaskExecutionRuntimeBranchContext {
+    service: Arc<WorkflowService>,
+    command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+}
+
 impl WorkflowTaskExecutionRuntimeOwner {
     pub(super) fn new(service: Arc<WorkflowService>) -> Self {
         Self {
@@ -30,6 +36,16 @@ impl WorkflowTaskExecutionRuntimeOwner {
 
     pub(super) fn service(&self) -> Arc<WorkflowService> {
         Arc::clone(&self.service)
+    }
+
+    pub(super) fn runtime_branch_context(
+        &self,
+        command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    ) -> WorkflowTaskExecutionRuntimeBranchContext {
+        WorkflowTaskExecutionRuntimeBranchContext {
+            service: Arc::clone(&self.service),
+            command,
+        }
     }
 
     pub(super) async fn ensure_task_execution_worker_started(
@@ -93,6 +109,16 @@ impl WorkflowTaskExecutionRuntimeOwner {
     }
 }
 
+impl WorkflowTaskExecutionRuntimeBranchContext {
+    pub(super) fn service(&self) -> Arc<WorkflowService> {
+        Arc::clone(&self.service)
+    }
+
+    pub(super) fn command(&self) -> &WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+        &self.command
+    }
+}
+
 fn worker_unavailable_outcome(
     code: WorkflowTaskExecutionWorkerDiagnosticCode,
     message: impl Into<String>,
@@ -109,7 +135,11 @@ mod tests {
     use crate::scheduler::{
         WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentState,
     };
-    use crate::workflow::WorkflowSchedulerTaskExecutionClass;
+    use crate::workflow::task_execution_worker::{
+        WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+    };
+    use crate::workflow::{WorkflowOutputTarget, WorkflowSchedulerTaskExecutionClass};
 
     #[tokio::test]
     async fn runtime_owner_holds_service_and_worker_without_service_self_reference() {
@@ -206,6 +236,28 @@ mod tests {
             WorkflowTaskExecutionWorkerDiagnosticCode::ShutdownRequested
         );
         assert!(diagnostic.message.contains("shut down"));
+    }
+
+    #[test]
+    fn runtime_owner_builds_runtime_branch_context_from_command() {
+        let service = Arc::new(WorkflowService::new());
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(service);
+        let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id: "session-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
+            workflow_id: "workflow-1".to_string(),
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "image-output".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            timeout_ms: Some(500),
+            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+        };
+
+        let context = owner.runtime_branch_context(command.clone());
+
+        assert!(Arc::ptr_eq(&context.service(), &owner.service()));
+        assert_eq!(context.command(), &command);
     }
 
     fn task_attempt_command() -> WorkflowTaskExecutionWorkerCommand {

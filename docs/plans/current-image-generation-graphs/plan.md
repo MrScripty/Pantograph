@@ -416,6 +416,22 @@ Option 2 slice: extract the runtime branch execution context behind the
 composition-root owner while preserving long-lived runtime-host/runtime-registry
 reuse across workflow runs.
 
+2026-06-06 runtime branch execution context slice: completed the next Option 2
+implementation slice by adding an internal runtime-branch execution context to
+`task_execution_runtime`. The composition-root owner now builds a context from
+the worker-owned runtime-branch command and carries the shared
+`Arc<WorkflowService>` into that context, preserving access to long-lived
+backend workflow, scheduler, runtime-host, and runtime-registry services
+without creating request-scoped workers or per-run runtime instances. This slice
+does not move runtime dispatch, task mutation, reservation lifecycle, output
+projection, durable task claiming, public worker lifecycle snapshots,
+diagnostics-ledger worker events, frontend policy, compatibility DTOs, or
+direct-execution oneshots. Verification:
+`cargo fmt -p pantograph-workflow-service` and
+`cargo test -p pantograph-workflow-service runtime_owner_ --lib`. Next Option
+2 slice: migrate one runtime request branch to construct this context through
+the composition-root owner and enqueue/await worker-owned completion.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

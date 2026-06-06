@@ -26759,6 +26759,38 @@ Worker rules:
     - Remaining follow-up: extract the runtime branch execution context behind
       the composition-root owner while preserving long-lived
       runtime-host/runtime-registry reuse across workflow runs.
+  - 2026-06-06 runtime branch execution context source slice:
+    - Smallest vertical slice: add the internal runtime-branch execution
+      context behind the composition-root owner so the next request migration
+      can use long-lived backend services without request-scoped worker or
+      runtime construction.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and the
+      current image-generation plan docs. Request/session branch migration,
+      runtime dispatch movement, task completion signaling, reservation
+      policy changes, public DTOs, generated files, lockfiles, saved
+      workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, durable task claiming, and legacy
+      launch paths remained out of scope.
+    - Implementation: added `WorkflowTaskExecutionRuntimeBranchContext` built
+      by the composition-root owner from a worker-owned runtime-branch command.
+      The context carries the shared `Arc<WorkflowService>` plus the command,
+      preserving access to long-lived workflow/scheduler/runtime services
+      without creating a per-run runtime owner.
+    - No-fallback/no-legacy confirmation: the context does not execute,
+      complete, retry, fallback-run, wrap direct request execution in a
+      oneshot, create request-scoped workers, instantiate per-run runtimes,
+      route through node-engine whole-run launch, planned-inference launch,
+      graph-path inference, frontend/Tauri policy, public lifecycle snapshots,
+      diagnostics-ledger worker events, durable task claiming, or
+      compatibility DTOs.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service runtime_owner_ --lib`
+    - Remaining follow-up: migrate one runtime request branch to construct
+      this context through the composition-root owner and enqueue/await
+      worker-owned completion.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -863,6 +863,13 @@ durable task orchestration path.
     `cargo test -p pantograph-workflow-service task_execution_worker --lib`.
     Next Option 2 slice: extract runtime branch execution context behind the
     composition-root owner.
+  - 2026-06-06 runtime branch execution context slice: added the
+    composition-root-owned runtime branch context carrying shared
+    `Arc<WorkflowService>` plus the runtime-branch command. Verified with
+    `cargo fmt -p pantograph-workflow-service` and
+    `cargo test -p pantograph-workflow-service runtime_owner_ --lib`.
+    Next Option 2 slice: migrate one runtime request branch to construct the
+    context and enqueue/await worker-owned completion.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
