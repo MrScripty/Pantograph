@@ -118,6 +118,20 @@ diagnostics-ledger worker lifecycle events until the queue worker,
 task-execution owner, and resource-observation owner all have real lifecycle
 semantics.
 
+2026-06-05 task execution owner boundary update: workflow-service now has an
+internal `WorkflowTaskExecutionOwner` module and the non-runtime-only admitted
+run branch routes through that task execution owner instead of
+`WorkflowSchedulerQueueWorker`. This is the first Option 4 source slice: queue
+worker ownership is narrowed toward queue lifecycle/admission/handoff, while
+non-runtime scheduler progression, timeout handling, finish mutation, terminal
+diagnostics, and IO artifact events are owned by the task execution owner. The
+slice does not add public DTOs, public lifecycle snapshots, diagnostics-ledger
+worker lifecycle events, request-owned fallback execution, or legacy runtime
+launch behavior. Remaining Option 4 task-execution owner work: move runtime
+dispatch-boundary progression and unhandled-class fail-closed progression out
+of queue-worker helpers, then add real backend-owned completion signaling and
+typed execution-unavailable/shutdown diagnostics.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

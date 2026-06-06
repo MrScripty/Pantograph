@@ -26100,6 +26100,42 @@ Worker rules:
       execution, node-engine whole-run launch, planned-inference launch, graph
       path inference, Tauri/frontend policy, compatibility DTOs, or a
       request-local execution branch while splitting the owners.
+  - 2026-06-05 task execution owner boundary source slice:
+    - Smallest vertical slice: introduce the internal workflow-service task
+      execution owner boundary and move only the non-runtime admitted-run
+      progression branch out of `WorkflowSchedulerQueueWorker`.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      and the current image-generation plan docs. Public contracts, generated
+      DTOs, lockfiles, saved workflows, frontend/Tauri files, runtime adapters,
+      diagnostics-ledger worker lifecycle events, resource observation code,
+      and legacy runtime launch paths remained out of scope.
+    - No-fallback/no-legacy confirmation: `run_workflow_execution_session`
+      still preserves the blocking response shape, but the non-runtime branch
+      now calls `WorkflowTaskExecutionOwner::run_non_runtime_to_completion`.
+      The slice removed the old queue-worker non-runtime helper and did not
+      add request-owned fallback execution, node-engine whole-run launch,
+      planned-inference launch, graph-path inference, Tauri/frontend policy,
+      compatibility DTOs, or public lifecycle snapshots.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_lifecycle_create_run_close --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner --lib`
+      - targeted source/plan search for
+        `run_non_runtime_to_completion`, `WorkflowTaskExecutionOwner`,
+        `WorkflowSchedulerQueueWorker::run_non_runtime_to_completion`,
+        fallback/compatibility/node-engine/planned-inference terms.
+    - Remaining follow-up: runtime dispatch-boundary progression and
+      unhandled-class fail-closed progression still live as interim
+      `WorkflowSchedulerQueueWorker` helpers and must move into the task
+      execution owner next. Backend-owned completion signaling and typed
+      execution-unavailable/shutdown diagnostics remain open after the branch
+      movement is complete.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

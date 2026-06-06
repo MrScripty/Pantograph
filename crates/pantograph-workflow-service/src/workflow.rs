@@ -60,6 +60,7 @@ mod session_runtime;
 mod session_scheduler_runner;
 mod task_binding_resolution;
 mod task_execution_classification;
+mod task_execution_owner;
 mod task_graph;
 mod task_graph_contracts;
 mod task_result_contracts;

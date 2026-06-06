@@ -878,6 +878,14 @@ Option 3 thin implementation sequence:
      branch. This is now historical for the completed queue admission/
      progression helper migration; the Option 4 queue/task execution ownership
      re-plan below supersedes it for execution/completion ownership.
+   - 2026-06-05 task execution owner boundary slice: introduced the internal
+     workflow-service `WorkflowTaskExecutionOwner` module and moved the
+     non-runtime admitted-run progression branch out of
+     `WorkflowSchedulerQueueWorker`. This narrows queue-worker ownership
+     toward queue lifecycle/admission/handoff and starts the Option 4 split.
+     Runtime dispatch-boundary progression, unhandled-class fail-closed
+     progression, completion signaling, and typed execution-unavailable/
+     shutdown diagnostics remain open task-execution owner work.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
