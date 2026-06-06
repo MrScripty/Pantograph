@@ -25603,6 +25603,52 @@ Worker rules:
       reservation cleanup component states from their real owners before
       adding public lifecycle queries or diagnostics-ledger worker lifecycle
       events.
+  - 2026-06-05 Milestone 5c retry-loop lifecycle attachment slice:
+    - Smallest vertical slice: attach the shared scheduler lifecycle
+      registry's `retry_loop` component to the existing workflow-service
+      deferred runtime dependency-readiness retry sweep.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/scheduler/retry_lifecycle.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/retry_lifecycle_tests.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`,
+      and this plan file.
+    - No-fallback/no-legacy confirmation: the slice marks `retry_loop`
+      `Running` only while the existing retry sweep re-enters deferred or
+      retryable runtime dependency-readiness tasks, then restores explicit
+      `NotStarted`. No retry scheduling policy, replay/bootstrap behavior,
+      diagnostics-ledger worker lifecycle event, public lifecycle query,
+      projection-inferred component state, Tauri/frontend policy,
+      graph-path/node-engine/planned-inference runtime fallback, or
+      compatibility shim was added.
+    - Implementation notes: added a focused scheduler retry lifecycle helper
+      that owns only coarse retry-loop component state around a provided retry
+      action. The session scheduler runner now wraps its existing
+      `retry_deferred_runtime_dependency_readiness` sweep with that helper.
+      Retry decision semantics, retryable state transitions, dependency
+      readiness admission, and queue behavior remain unchanged.
+    - Tests added: retry lifecycle unit tests assert the shared registry
+      reports `Running` inside the retry action and returns to `NotStarted`
+      after both success and primary action error paths.
+    - Verification passed:
+      - `cargo test -p pantograph-workflow-service scheduler::retry_lifecycle::tests --lib`
+      - `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`
+      - `cargo check -p pantograph-workflow-service`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `git diff --check`
+      - targeted no-fallback/no-legacy search over touched scheduler/workflow
+        files
+    - Search deviations: targeted search matched existing scheduler README
+      standards/legacy/no-fallback boundary text. The new retry lifecycle
+      source/tests and the session runner change did not introduce fallback or
+      legacy launch behavior.
+    - Remaining follow-up: attach resource observation, queue, and reservation
+      cleanup component states from their real owners before adding public
+      lifecycle queries or diagnostics-ledger worker lifecycle events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

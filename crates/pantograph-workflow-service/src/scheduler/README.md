@@ -15,6 +15,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `readiness_lifecycle.rs` | Workflow-service lifecycle owner that builds typed dependency-readiness requests for admitted runtime tasks, calls a readiness provider, and applies scheduler readiness admission without owning dependency policy. |
+| `retry_lifecycle.rs` | Workflow-service lifecycle owner for coarse retry-loop component state around existing retry sweeps, without owning retry scheduling policy or replay. |
 | `task_lifecycle.rs` | Workflow-service task lifecycle owner skeleton for active task handles, shutdown state, and typed lifecycle diagnostics before durable lease, cancellation, retry, replay, and ledger slices are wired. |
 | `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 | `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, active-run scheduler task-state transition storage, and active-run finish transitions. |
@@ -180,6 +181,11 @@ lifecycle registry. Requirements-seed and readiness-proof provider calls mark
 the `dependency_readiness_action` component `Running` only while the provider
 boundary is executing, then return it to explicit `NotStarted`. This does not
 emit ledger worker lifecycle events or expose a public lifecycle query.
+Retry sweeps now attach to the same registry through the retry lifecycle
+owner. The existing workflow-service retry sweep marks `retry_loop` `Running`
+only while it re-enters deferred or retryable runtime dependency-readiness
+tasks, then returns it to explicit `NotStarted`. This does not add retry
+scheduling policy, replay, public lifecycle queries, or ledger worker events.
 The task lifecycle manager is the workflow-service owner for task handle and
 shutdown state. It is synchronous and does not spawn work, retry, replay,
 write diagnostics-ledger facts, dispatch runtime-host work, or change

@@ -804,6 +804,15 @@ Option 3 thin implementation sequence:
      default, Tauri/frontend policy, or legacy runtime path was added.
      Remaining component attachment work covers resource observation, retry,
      queue, and reservation cleanup.
+   - 2026-06-05 retry-loop lifecycle attachment slice: the session scheduler
+     runner now wraps the existing deferred runtime dependency-readiness retry
+     sweep in a scheduler-owned retry lifecycle helper. The shared registry's
+     `retry_loop` component is `Running` only while the retry sweep executes
+     and returns to explicit `NotStarted` after success or action error. No
+     retry scheduling policy, replay/bootstrap behavior, public snapshot,
+     ledger event, projection default, Tauri/frontend policy, or legacy
+     runtime path was added. Remaining component attachment work covers
+     resource observation, queue, and reservation cleanup.
 
 Option 3 standards gates:
 

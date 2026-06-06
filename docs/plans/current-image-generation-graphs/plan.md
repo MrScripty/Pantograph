@@ -84,6 +84,15 @@ then return it to explicit `NotStarted`. This does not add public lifecycle
 queries, diagnostics-ledger worker events, projection-inferred component
 state, Tauri/frontend policy, or legacy runtime launch behavior.
 
+2026-06-05 retry-loop lifecycle attachment update: the workflow-service
+session scheduler runner now wraps its existing deferred runtime
+dependency-readiness retry sweep in a scheduler-owned retry lifecycle helper.
+The shared registry's `retry_loop` component is `Running` only while the retry
+sweep re-enters deferred or retryable runtime dependency-readiness tasks, then
+returns to explicit `NotStarted`. This does not add retry scheduling policy,
+replay/bootstrap behavior, diagnostics-ledger worker events, public lifecycle
+queries, Tauri/frontend policy, or legacy runtime launch behavior.
+
 2026-06-05 verification gate note: broad `npm run lint:full` currently fails
 on an unrelated existing `svelte/prefer-writable-derived` issue in
 `src/components/nodes/workflow/PumaLibNode.svelte`. Until that is fixed in a

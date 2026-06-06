@@ -642,8 +642,11 @@ durable task orchestration path.
   ownership. 2026-06-05 dependency-readiness attachment update: requirements
   seed and readiness-proof provider calls now drive the shared registry's
   `dependency_readiness_action` component from real provider activity.
-  Remaining component attachments: resource observation, retry, queue, and
-  reservation cleanup.
+  2026-06-05 retry-loop attachment update: the session scheduler runner's
+  existing deferred runtime dependency-readiness retry sweep now drives the
+  shared registry's `retry_loop` component through a scheduler-owned retry
+  lifecycle helper. Remaining component attachments: resource observation,
+  queue, and reservation cleanup.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

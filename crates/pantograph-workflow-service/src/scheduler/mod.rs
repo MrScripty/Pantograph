@@ -2,6 +2,7 @@ mod contracts;
 mod lifecycle;
 mod policy;
 mod readiness_lifecycle;
+mod retry_lifecycle;
 mod store;
 mod store_admission;
 mod task_lifecycle;
@@ -40,6 +41,7 @@ pub(crate) use readiness_lifecycle::{
     WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
     WorkflowDependencyReadinessProvider,
 };
+pub(crate) use retry_lifecycle::WorkflowSchedulerRetryLifecycle;
 pub(crate) use store::{
     unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionPreflightCache,
     WorkflowExecutionSessionStore, WorkflowSchedulerBootstrapRecoveryAction,

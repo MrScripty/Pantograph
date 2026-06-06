@@ -22,7 +22,8 @@ use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 use crate::scheduler::task_orchestrator::SelectedRuntimeTaskDispatch;
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowDependencyReadinessLifecycle,
-    WorkflowDependencyReadinessLifecycleError, WorkflowSchedulerTaskTerminalMutation,
+    WorkflowDependencyReadinessLifecycleError, WorkflowSchedulerRetryLifecycle,
+    WorkflowSchedulerTaskTerminalMutation,
 };
 
 use super::io_contract::validate_workflow_io;
@@ -543,31 +544,38 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         session_id: &str,
         workflow_run_id: &str,
     ) -> Result<(), WorkflowServiceError> {
-        let runtime_task_ids =
-            runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
-                matches!(
-                    kind,
-                    SchedulerTaskStateKind::PausedDeferred
-                        | SchedulerTaskStateKind::RetryableFailed
-                )
-            })?;
-        for task_id in runtime_task_ids {
-            let mut store = self.service.session_store_guard()?;
+        let retry_lifecycle = WorkflowSchedulerRetryLifecycle::new(
             self.service
                 .scheduler_task_orchestrator
-                .retry_deferred_runtime_dependency_readiness(
-                    &mut store,
-                    session_id,
-                    workflow_run_id,
-                    &task_id,
-                )
-                .map_err(|error| {
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "scheduler dependency readiness retry failed: {error}"
-                    ))
+                .scheduler_lifecycle_handle(),
+        );
+        retry_lifecycle.run_retry_loop(|| {
+            let runtime_task_ids =
+                runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
+                    matches!(
+                        kind,
+                        SchedulerTaskStateKind::PausedDeferred
+                            | SchedulerTaskStateKind::RetryableFailed
+                    )
                 })?;
-        }
-        Ok(())
+            for task_id in runtime_task_ids {
+                let mut store = self.service.session_store_guard()?;
+                self.service
+                    .scheduler_task_orchestrator
+                    .retry_deferred_runtime_dependency_readiness(
+                        &mut store,
+                        session_id,
+                        workflow_run_id,
+                        &task_id,
+                    )
+                    .map_err(|error| {
+                        WorkflowServiceError::InvalidRequest(format!(
+                            "scheduler dependency readiness retry failed: {error}"
+                        ))
+                    })?;
+            }
+            Ok(())
+        })
     }
 
     fn defer_runtime_dependency_readiness(
