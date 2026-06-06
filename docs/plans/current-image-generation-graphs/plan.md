@@ -41,7 +41,10 @@ cancel, reprioritize, push-front, status, and inspection APIs remain
 request-scoped command/query surfaces only. Rejected for the next slice:
 enqueue-only public API migration and full durable event-driven queue, because
 both require broader caller/contract/generated/frontend coordination than the
-next thin worker migration slice allows.
+next thin worker migration slice allows. This decision is superseded for
+execution/completion ownership by the Option 4 queue/task execution ownership
+re-plan below; keep it as historical context for the completed queue
+admission migration slices.
 
 2026-06-05 queue admission owner update: workflow-service session execution
 now submits admission polling through the queue worker owner module instead
@@ -94,6 +97,26 @@ queue-worker-owned helpers after admission and task-state initialization.
 Remaining queue-worker follow-up: introduce explicit worker completion
 signaling/channel semantics and worker-unavailable diagnostics before public
 lifecycle snapshots or diagnostics-ledger worker lifecycle events.
+
+2026-06-05 queue/task execution ownership re-plan decision: use Option 4
+instead of turning `queue_worker` into the full workflow-run execution owner.
+The queue worker owns queue lifecycle, wake/shutdown, admission, and handoff.
+A separate backend task execution/scheduler owner must own admitted scheduler
+task progression across runs, including non-runtime execution, runtime
+dispatch-boundary progression, timeout handling, terminal mutation,
+completion signaling, and typed unavailable/shutdown diagnostics for
+execution. This better matches the coding standards' simplicity/complection
+and single-owner rules and keeps the future path open for batching related
+tasks from simultaneous workflow runs. The existing queue-worker progression
+helpers are accepted only as an interim migration state; the next source
+slices must define the task execution owner boundary, move branch progression
+helpers out of `queue_worker` into that owner, and make `run_workflow_execution_session`
+submit/await backend-owned task execution completion without preserving
+request-owned fallback execution. Do not add fake oneshot wrappers around
+direct helper calls, and do not expose public lifecycle snapshots or
+diagnostics-ledger worker lifecycle events until the queue worker,
+task-execution owner, and resource-observation owner all have real lifecycle
+semantics.
 
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy

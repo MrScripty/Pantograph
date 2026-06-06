@@ -838,16 +838,15 @@ Option 3 thin implementation sequence:
      1. Add the queue worker/listener owner with bounded wake/shutdown
         mechanics, lifecycle registry updates, and tests proving no public
         snapshot or ledger event is emitted yet.
-     2. Move queue progression business behavior out of request-scoped
-        session paths using Option 1, worker-owned completion while
-        preserving the existing blocking `run_workflow_execution_session`
-        response shape. The request path may validate, enqueue, and await a
-        worker-owned completion receiver, but the worker must own
-        `begin_queued_run`, scheduler task-state setup, non-runtime/runtime
-        progression, terminal mutation, completion signaling, lifecycle
-        state, and shutdown. Enqueue/cancel/reprioritize/push-front/status/
-        inspection APIs remain command/query surfaces only and must fail
-        closed with typed diagnostics when the worker is unavailable.
+     2. Split queue admission ownership from task execution ownership using
+        Option 4. The queue worker owns queue lifecycle, wake/shutdown,
+        admission, and handoff. A separate backend task execution/scheduler
+        owner owns admitted scheduler task progression across runs,
+        non-runtime/runtime execution, timeout handling, terminal mutation,
+        completion signaling, and execution-unavailable diagnostics. Existing
+        request APIs may remain blocking command/query surfaces, but they must
+        submit/await backend-owned execution completion and must not own queue
+        admission or task execution as fallback behavior.
      3. Add the resource observation worker owner with bounded refresh/wake,
         observation-source contracts, stale/missing fact diagnostics,
         lifecycle registry updates, and shutdown tests.
@@ -876,7 +875,9 @@ Option 3 thin implementation sequence:
      they require broader caller, contract, generated DTO, frontend/Tauri, and
      replay coordination. The next source slice must not preserve the current
      request-owned queue polling/admission/execution loop as a compatibility
-     branch.
+     branch. This is now historical for the completed queue admission/
+     progression helper migration; the Option 4 queue/task execution ownership
+     re-plan below supersedes it for execution/completion ownership.
    - 2026-06-05 queue admission owner slice: moved the bounded
      `begin_queued_run` admission polling loop out of
      `run_workflow_execution_session` and into an internal queue-worker
@@ -915,8 +916,16 @@ Option 3 thin implementation sequence:
      worker work is explicit completion signaling/channel semantics and
      worker-unavailable diagnostics before public lifecycle snapshots or
      diagnostics-ledger worker lifecycle events.
+   - 2026-06-05 queue/task execution ownership re-plan: selected Option 4
+     over making `queue_worker` the full run execution owner. Queue owns
+     lifecycle/admission/handoff; a separate backend task execution/scheduler
+     owner owns task progression across runs so future batching/co-scheduling
+     remains natural. The existing queue-worker progression helpers are an
+     interim migration state and must move to the task execution owner before
+     public worker diagnostics. Fake oneshot completion wrappers around direct
+     helper calls are rejected as standards-noncompliant ceremony.
 
-Option 3 standards gates:
+Worker-system standards gates:
 
 - Simplicity/complection: each slice owns one concern. Do not combine worker
   handles, retry policy, replay, and ledger persistence in the same source

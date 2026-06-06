@@ -25725,17 +25725,15 @@ Worker rules:
          This slice must not add public snapshots, ledger worker events,
          retry/defer policy, replay/bootstrap, resource observation, or
          legacy runtime launch behavior.
-      2. Queue progression migration: use Option 1, worker-owned completion
-         while preserving the existing blocking `run_workflow_execution_session`
-         response shape. Request code may validate, enqueue, and await a
-         worker-owned completion receiver, but the worker must own
-         `begin_queued_run`, scheduler task-state setup, non-runtime/runtime
-         progression, terminal mutation, completion signaling, lifecycle
-         state, and shutdown. Enqueue, cancel, reprioritize, push-front,
-         status, and inspection APIs may remain request scoped, but they must
-         signal/query the worker and return typed diagnostics if the worker is
-         unavailable or cannot make progress. Do not preserve a parallel
-         request-owned progression path.
+      2. Queue admission/task execution split: use Option 4. Queue worker owns
+         queue lifecycle, wake/shutdown, admission, and handoff. A separate
+         backend task execution/scheduler owner owns admitted scheduler task
+         progression across runs, non-runtime/runtime execution, timeout
+         handling, terminal mutation, completion signaling, and
+         execution-unavailable diagnostics. Request code may validate,
+         enqueue, and await the existing blocking response, but it must submit
+         to backend-owned queue/task execution owners and must not preserve a
+         parallel request-owned progression path.
       3. Resource observation worker owner: add a workflow-service/
          composition-root-owned observation loop with bounded refresh or wake
          mechanics, observation-source contracts, stale/missing fact
@@ -25887,6 +25885,11 @@ Worker rules:
       `cargo fmt -p pantograph-workflow-service -- --check`, `git diff
       --check`, and targeted no-fallback/no-legacy searches over touched
       source files.
+    - Supersession note: this Option 1 decision remains historical context
+      for the completed queue admission/progression helper migration. The
+      2026-06-05 Option 4 queue/task execution ownership re-plan below
+      supersedes it for execution/completion ownership and the remaining
+      implementation path.
   - 2026-06-05 queue admission owner source slice:
     - Smallest vertical slice: move admission polling for queued session runs
       from `run_workflow_execution_session` into the queue worker owner module
@@ -26050,6 +26053,53 @@ Worker rules:
     - Remaining follow-up: add explicit worker completion signaling/channel
       semantics and worker-unavailable diagnostics before public lifecycle
       snapshots or diagnostics-ledger worker lifecycle events.
+  - 2026-06-05 queue/task execution ownership Option 4 re-plan:
+    - Decision: use Option 4 instead of turning `queue_worker` into the full
+      workflow-run execution owner. The queue worker owns queue lifecycle,
+      wake/shutdown, admission, and handoff. A separate backend task
+      execution/scheduler owner must own admitted scheduler task progression
+      across runs, non-runtime execution, runtime dispatch-boundary
+      progression, timeout handling, terminal mutation, completion signaling,
+      and execution-unavailable diagnostics.
+    - Standards alignment: this follows the coding standards'
+      simplicity/complection rule by separating queue state from task
+      execution state, and it follows the single-owner/lifecycle rules by
+      making each long-running state machine have one backend owner. It also
+      preserves the future architecture for batching/co-scheduling related
+      scheduler tasks from simultaneous workflow runs because the scheduling
+      unit becomes the task execution owner rather than an opaque workflow-run
+      queue command.
+    - Rejected alternatives:
+      - Full queue-worker run ownership: matches earlier Option 1 wording, but
+        it makes queueing and execution one broad owner and makes cross-run
+        task batching harder to introduce without later churn.
+      - Fake oneshot completion wrappers around direct helper calls: rejected
+        because it adds channel mechanics without real lifecycle ownership,
+        violating the standards' simplicity/complection guidance.
+      - Enqueue-only public API or full durable event-driven queue now:
+        deferred because they require public contract/generated DTO/caller/
+        frontend/replay coordination outside the next thin source slice.
+    - Next thin-slice sequence:
+      1. Define an internal backend task execution owner boundary in
+         workflow-service with explicit lifecycle vocabulary, typed
+         unavailable/shutdown diagnostics, and no public contract/generated
+         DTO changes.
+      2. Move the existing queue-worker progression helpers into that task
+         execution owner while keeping `run_workflow_execution_session`
+         blocking by submitting/awaiting backend-owned completion.
+      3. Change queue worker branch ownership to queue lifecycle, admission,
+         and handoff only; it must not own non-runtime/runtime execution
+         details after the task execution owner exists.
+      4. Add worker-unavailable diagnostics for queue admission and task
+         execution separately.
+      5. Continue to the resource observation worker owner, then add public
+         lifecycle snapshots and diagnostics-ledger worker lifecycle events
+         only after queue, task execution, and resource observation owners all
+         have real lifecycle/shutdown semantics.
+    - No-fallback/no-legacy confirmation: do not restore request-owned
+      execution, node-engine whole-run launch, planned-inference launch, graph
+      path inference, Tauri/frontend policy, compatibility DTOs, or a
+      request-local execution branch while splitting the owners.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

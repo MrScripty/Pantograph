@@ -649,19 +649,20 @@ durable task orchestration path.
   terminal reservation-release cleanup events now drive the shared registry's
   `reservation_cleanup` component from the scheduler task orchestrator.
   Remaining worker-system alignment: queue has a concrete backend worker
-  owner but still needs execution progression and completion signaling moved
-  out of request-scoped paths; resource observation is not yet a concrete
-  backend worker. Request-scoped queue/resource actions may remain as
-  command/query surfaces only; they must not continue to own queue
-  progression, resource polling, retry/defer loops, shutdown, or lifecycle
-  policy after the workers exist.
+  owner, but task execution now needs a separate backend owner so queue
+  admission/handoff is not complected with cross-run scheduler task
+  progression. Resource observation is not yet a concrete backend worker.
+  Request-scoped queue/resource actions may remain as command/query surfaces
+  only; they must not continue to own queue progression, task execution,
+  resource polling, retry/defer loops, shutdown, or lifecycle policy after
+  the backend owners exist.
   - Queue worker sequence: add a bounded backend-owned queue worker/listener
     with explicit startup, wake, shutdown, and lifecycle registry updates;
-    then move queue progression out of request-scoped session execution paths
-    with Option 1, worker-owned completion while preserving the existing
-    blocking `run_workflow_execution_session` response shape. The request path
-    may validate, enqueue, and await a worker-owned completion receiver, but
-    it must not poll/admit/execute queue work itself.
+    then split queue admission/handoff from admitted task execution using
+    Option 4. The request path may validate, enqueue, and await a blocking
+    response, but queue admission must be queue-worker-owned and admitted task
+    execution must be owned by a separate backend task execution/scheduler
+    owner.
   - Resource observation sequence: add a bounded backend-owned resource
     observation worker with explicit observation sources, stale/missing fact
     diagnostics, shutdown, and lifecycle registry updates; then make
@@ -676,12 +677,12 @@ durable task orchestration path.
     added a workflow-service scheduler worker with bounded wake/shutdown
     mechanics and lifecycle registry updates. It intentionally does not move
     queue progression yet or expose public worker diagnostics. Remaining
-    queue work: migrate queue progression out of request-scoped session
-    execution paths using Option 1. `run_workflow_execution_session` remains
-    blocking for now by waiting on worker-owned completion. Enqueue, cancel,
-    reprioritize, push-front, status, and inspection APIs remain command/query
-    surfaces that signal/query the worker and return typed diagnostics when
-    the worker is unavailable or unable to progress. Enqueue-only public API
+    queue work: keep queue admission/handoff queue-worker-owned while moving
+    admitted task execution into the separate backend task execution owner
+    selected by the Option 4 re-plan. Enqueue, cancel, reprioritize,
+    push-front, status, and inspection APIs remain command/query surfaces that
+    signal/query the worker and return typed diagnostics when the worker is
+    unavailable or unable to progress. Enqueue-only public API
     migration and a full durable event-driven queue are deferred until their
     caller/contract/generated/frontend/replay scope is explicitly planned.
   - 2026-06-05 queue admission owner update: session execution now delegates
@@ -721,6 +722,18 @@ durable task orchestration path.
     worker completion signaling/channel semantics and worker-unavailable
     diagnostics before public lifecycle snapshots or diagnostics-ledger worker
     lifecycle events.
+  - 2026-06-05 queue/task execution ownership re-plan: use Option 4. The
+    queue worker must own queue lifecycle, wake/shutdown, admission, and
+    handoff. A separate backend task execution/scheduler owner must own
+    admitted scheduler task progression across runs, including non-runtime
+    execution, runtime dispatch-boundary progression, timeout handling,
+    terminal mutation, completion signaling, and execution-unavailable
+    diagnostics. The current queue-worker progression helpers are interim
+    migration state and must move into the task execution owner in upcoming
+    thin slices. Do not add fake completion channels around direct helper
+    calls, and do not expose public lifecycle snapshots or diagnostics-ledger
+    worker lifecycle events until queue, task execution, and resource
+    observation owners have real lifecycle semantics.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
