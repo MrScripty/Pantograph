@@ -6,7 +6,7 @@ use crate::scheduler::{
     WorkflowSchedulerLifecycleComponentState,
 };
 
-use super::{WorkflowSchedulerTaskExecutionClass, WorkflowService, WorkflowServiceError};
+use super::{WorkflowSchedulerTaskExecutionClass, WorkflowServiceError};
 
 const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
 
@@ -113,31 +113,6 @@ impl WorkflowTaskExecutionWorker {
                 WorkflowSchedulerLifecycleComponentState::Shutdown,
             )
             .map(|_record| ())
-    }
-}
-
-impl WorkflowService {
-    pub(super) async fn ensure_task_execution_worker_started(
-        &self,
-    ) -> Result<(), WorkflowServiceError> {
-        let mut worker = self.task_execution_worker.lock().await;
-        if worker.is_some() {
-            return Ok(());
-        }
-
-        let scheduler_lifecycle = self
-            .scheduler_task_orchestrator
-            .scheduler_lifecycle_handle();
-        *worker = Some(WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle)?);
-        Ok(())
-    }
-
-    pub async fn shutdown_task_execution_worker(&self) -> Result<(), WorkflowServiceError> {
-        let worker = self.task_execution_worker.lock().await.take();
-        if let Some(worker) = worker {
-            worker.shutdown().await?;
-        }
-        Ok(())
     }
 }
 
@@ -445,49 +420,6 @@ mod tests {
                 .to_string()
                 .contains("task execution worker requires an active Tokio runtime"),
             "unexpected error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    async fn workflow_service_starts_and_stops_task_execution_worker_once() {
-        let service = WorkflowService::new();
-
-        service
-            .ensure_task_execution_worker_started()
-            .await
-            .expect("start task execution worker");
-        service
-            .ensure_task_execution_worker_started()
-            .await
-            .expect("second start should reuse worker");
-
-        assert_eq!(
-            service
-                .scheduler_task_orchestrator
-                .scheduler_lifecycle_handle()
-                .component(WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker)
-                .expect("task execution worker component")
-                .state,
-            WorkflowSchedulerLifecycleComponentState::Running
-        );
-
-        service
-            .shutdown_task_execution_worker()
-            .await
-            .expect("shutdown task execution worker");
-        service
-            .shutdown_task_execution_worker()
-            .await
-            .expect("second shutdown should be idempotent");
-
-        assert_eq!(
-            service
-                .scheduler_task_orchestrator
-                .scheduler_lifecycle_handle()
-                .component(WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker)
-                .expect("task execution worker component")
-                .state,
-            WorkflowSchedulerLifecycleComponentState::Shutdown
         );
     }
 

@@ -62,6 +62,8 @@ mod task_binding_resolution;
 mod task_execution_classification;
 mod task_execution_owner;
 #[allow(dead_code)]
+mod task_execution_runtime;
+#[allow(dead_code)]
 mod task_execution_worker;
 mod task_graph;
 mod task_graph_contracts;
@@ -278,8 +280,6 @@ pub struct WorkflowService {
     runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     dependency_readiness_work_queue: Arc<DependencyReadinessWorkQueue>,
     dependency_requirements_registry: Arc<InMemoryDependencyRequirementsRegistry>,
-    task_execution_worker:
-        Arc<tokio::sync::Mutex<Option<task_execution_worker::WorkflowTaskExecutionWorker>>>,
 }
 
 #[cfg(test)]

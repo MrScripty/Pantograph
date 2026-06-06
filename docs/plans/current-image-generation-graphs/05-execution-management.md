@@ -26604,6 +26604,44 @@ Worker rules:
       request policy, node-engine whole-run launch, planned-inference launch,
       graph-path inference, frontend/Tauri policy, compatibility DTOs, public
       lifecycle snapshots, or diagnostics-ledger worker events.
+  - 2026-06-06 composition-root task-execution owner source slice:
+    - Smallest vertical slice: introduce the internal composition-root owner
+      for workflow service plus task-execution worker lifecycle and remove
+      worker ownership from `WorkflowService`.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and the
+      current image-generation plan docs. Request/session branch migration,
+      runtime dispatch movement, task completion signaling, reservation
+      policy changes, public DTOs, generated files, lockfiles, saved
+      workflows, frontend/Tauri files, public lifecycle snapshots,
+      diagnostics-ledger worker events, and legacy launch paths remained out
+      of scope.
+    - No-fallback/no-legacy confirmation: the composition-root owner only
+      owns service plus worker lifecycle. It does not execute task attempts,
+      complete task attempts, retry, fallback-run, wrap direct request
+      execution in a oneshot, create request-scoped workers, route through
+      node-engine whole-run launch, planned-inference launch, graph-path
+      inference, frontend/Tauri policy, or add compatibility DTOs.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+      - `cargo test -p pantograph-workflow-service runtime_owner_holds_service_and_worker_without_service_self_reference --lib`
+    - Deviations/discovered issues:
+      - Initial verification with the broad filter
+        `cargo test -p pantograph-workflow-service task_execution_ --lib`
+        also ran unrelated task-classification tests and failed on existing
+        `classifier_rejects_excluded_and_unknown_nodes` missing
+        `expand-settings` contract facts. The focused worker/runtime-owner
+        tests passed; record the classification panic as a separate follow-up.
+      - Removed an unnecessary `Debug` derive from the runtime owner because
+        `WorkflowService` intentionally does not implement `Debug`.
+    - Remaining follow-up: expose typed worker unavailable/shutdown
+      diagnostics from the composition-root owner to `WorkflowService`
+      without public lifecycle snapshots or diagnostics-ledger worker events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -326,6 +326,26 @@ owner. Do not proceed by wrapping direct request execution in a oneshot,
 passing request policy through worker commands, or adding compatibility
 fallbacks.
 
+2026-06-06 composition-root task-execution owner slice: completed the first
+Option 2 source slice by adding an internal `task_execution_runtime` owner
+that holds `Arc<WorkflowService>` plus the task-execution worker lifecycle
+without making `WorkflowService` self-referential. The task-execution worker
+handle was removed from `WorkflowService`, so worker lifecycle ownership now
+lives in the composition-root owner. Runtime dispatch behavior and request
+execution behavior remain unchanged; no task branch has been migrated yet.
+Verification: `cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`, and
+`cargo test -p pantograph-workflow-service runtime_owner_holds_service_and_worker_without_service_self_reference --lib`.
+Verification deviation: the broad filter
+`cargo test -p pantograph-workflow-service task_execution_ --lib` also ran
+unrelated task-classification tests and exposed an existing
+`classifier_rejects_excluded_and_unknown_nodes` panic on missing
+`expand-settings` contract facts; that is outside this slice and is recorded
+as a follow-up. Next Option 2 slice: expose typed worker
+unavailable/shutdown diagnostics from the composition-root owner to
+`WorkflowService` without public lifecycle snapshots or diagnostics-ledger
+worker events.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

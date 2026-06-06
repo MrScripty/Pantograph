@@ -824,6 +824,15 @@ durable task orchestration path.
     workflow runs; do not create a new inference runtime per workflow run.
     After the composition-root owner exists, migrate one execution branch to
     enqueue and await real worker-owned completion through that owner.
+  - 2026-06-06 composition-root task-execution owner slice: added the
+    internal owner and removed the worker handle from `WorkflowService`, so
+    worker lifecycle is no longer service-self-owned. Verified with
+    `cargo fmt -p pantograph-workflow-service`,
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+    and
+    `cargo test -p pantograph-workflow-service runtime_owner_holds_service_and_worker_without_service_self_reference --lib`.
+    Next Option 2 slice: expose typed worker unavailable/shutdown diagnostics
+    from the owner to `WorkflowService`.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

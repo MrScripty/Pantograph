@@ -42,6 +42,7 @@ public exports out of the service crate.
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `task_binding_resolution.rs` | Dependency-to-input binding resolution from materialized scheduler task results into validated scheduler-admissible task intents. |
 | `task_execution_classification.rs` | Single workflow-service boundary that maps immutable node type plus canonical node-contract facts into scheduler execution classes before orchestration or adapters choose a path. |
+| `task_execution_runtime.rs` | Internal composition-root runtime owner that holds the workflow service plus task-execution worker lifecycle without making `WorkflowService` self-referential. |
 | `task_graph.rs` | Path-free workflow topology projection into run-scoped scheduler task graph DTOs, including dependency edges, canonical scheduler identifiers, execution class, optional schedulable task intents, concrete typed source-input and non-runtime task templates for the current allowlist, and typed projection diagnostics. |
 | `task_execution_worker.rs` | Internal task-execution worker command, outcome, and diagnostic contracts for the backend-owned task-attempt execution loop. |
 | `task_graph_contracts.rs` | Public path-free scheduler task graph DTOs, execution-class enum, runtime dependency-readiness source DTO, concrete typed source-input and non-runtime task-template enums, and projection diagnostic enums re-exported through the workflow facade. |

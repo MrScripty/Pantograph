@@ -1056,6 +1056,13 @@ Option 3 thin implementation sequence:
      worker handle out of `WorkflowService`, expose typed worker unavailable
      diagnostics to the request facade, then migrate one branch to real
      worker-owned completion.
+   - 2026-06-06 composition-root task-execution owner slice: added the
+     internal `task_execution_runtime` owner that holds `Arc<WorkflowService>`
+     plus worker lifecycle without `WorkflowService` owning the worker. The
+     worker handle was removed from `WorkflowService`; request execution and
+     runtime dispatch behavior did not change. Next slice: expose typed
+     worker unavailable/shutdown diagnostics from the owner to
+     `WorkflowService`.
 
 Worker-system standards gates:
 
