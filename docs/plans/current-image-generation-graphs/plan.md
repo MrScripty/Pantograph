@@ -1,5 +1,18 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 composition-root session execution facade update:
+workflow-service now exposes `WorkflowSessionExecutionRuntime`, a production
+composition-root entrypoint that owns both a shared `Arc<WorkflowService>` and
+the `WorkflowTaskExecutionRuntimeOwner`. This slice only added construction,
+shared-service access, README ownership documentation, and focused tests that
+prove the facade-owned runtime owner uses the same backend service; it did not
+move runtime dispatch, request execution, completion signaling, lifecycle
+snapshots, diagnostics-ledger events, Tauri/frontend policy, durable claiming,
+or fallback execution. Next Option 2 slice: add a session-execution method on
+the facade that delegates the existing blocking behavior without changing
+dispatch, then migrate the runtime branch entry through the facade-owned
+runtime owner.
+
 2026-06-05 worker system alignment re-plan decision: complete the
 backend-owned worker systems for `queue_worker` and
 `resource_observation_loop` before exposing public worker lifecycle snapshots

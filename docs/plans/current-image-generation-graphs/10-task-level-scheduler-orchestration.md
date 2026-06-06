@@ -1121,6 +1121,18 @@ Option 3 thin implementation sequence:
      stays in the composition-root facade. Next slice: add that facade with
      construction and service accessors, then delegate existing session
      execution through it before moving runtime branch completion.
+   - 2026-06-06 composition-root session execution facade slice: added
+     `WorkflowSessionExecutionRuntime` as the production composition-root
+     entrypoint owning the shared `Arc<WorkflowService>` plus
+     `WorkflowTaskExecutionRuntimeOwner`. This slice added only construction,
+     service access, README ownership documentation, and focused tests. It did
+     not move runtime dispatch, request execution, terminal mutation,
+     completion signaling, lifecycle snapshots, diagnostics-ledger events,
+     frontend/Tauri policy, durable claiming, or fallback execution. Verified
+     with `cargo fmt -p pantograph-workflow-service` and
+     `cargo test -p pantograph-workflow-service session_execution_runtime --lib`.
+     Next slice: add the facade session-execution method that delegates
+     existing blocking behavior before runtime branch migration.
 
 Worker-system standards gates:
 

@@ -26844,6 +26844,38 @@ Worker rules:
       worker-shaped command, add direct-execution oneshots, add public
       lifecycle snapshots, add diagnostics-ledger worker events, add frontend
       policy, or add compatibility DTOs.
+  - 2026-06-06 composition-root facade construction/accessor slice:
+    - Smallest vertical slice: add the production session-execution
+      composition-root facade type with construction and service accessors
+      only.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`,
+      `docs/plans/current-image-generation-graphs/plan.md`,
+      `docs/plans/current-image-generation-graphs/05-execution-management.md`,
+      `docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`,
+      and
+      `docs/plans/current-image-generation-graphs/milestones/05c-task-level-scheduler-orchestration.md`.
+    - No-fallback/no-legacy confirmation: the new
+      `WorkflowSessionExecutionRuntime` owns the shared `Arc<WorkflowService>`
+      and `WorkflowTaskExecutionRuntimeOwner` without moving runtime dispatch,
+      request execution, completion signaling, terminal mutation, lifecycle
+      snapshots, diagnostics-ledger events, Tauri/frontend policy, durable
+      claiming, direct-execution oneshots, or compatibility DTOs.
+    - Focused tests added:
+      `session_execution_runtime_owns_shared_service_and_runtime_owner` proves
+      the facade-owned runtime owner uses the same backend workflow service.
+      `session_execution_runtime_builds_runtime_branch_context_from_owned_runtime_owner`
+      proves runtime-branch context construction can route through the
+      facade-owned runtime owner.
+    - Verification passed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+    - Remaining follow-up: add the facade session-execution method that
+      delegates the existing blocking `WorkflowService` behavior without
+      changing dispatch, then migrate the runtime branch through the
+      facade-owned runtime owner.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

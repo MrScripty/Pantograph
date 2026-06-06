@@ -60,6 +60,8 @@ mod session_runtime;
 mod session_scheduler_runner;
 mod task_binding_resolution;
 mod task_execution_classification;
+#[allow(dead_code)]
+mod task_execution_facade;
 mod task_execution_owner;
 #[allow(dead_code)]
 mod task_execution_runtime;
@@ -171,6 +173,7 @@ pub use self::task_binding_resolution::{
     WorkflowSchedulerTaskBindingDiagnosticCode, WorkflowSchedulerTaskBindingDiagnosticSeverity,
     WorkflowSchedulerTaskBindingResolution, WorkflowSchedulerTaskBindingResolutionStatus,
 };
+pub use self::task_execution_facade::WorkflowSessionExecutionRuntime;
 pub use self::task_graph::{
     workflow_scheduler_task_graph, workflow_scheduler_task_graph_with_inference_projections,
     WorkflowSchedulerBlockedInferenceTaskProjection,
