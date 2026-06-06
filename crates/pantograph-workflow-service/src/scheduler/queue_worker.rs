@@ -1,21 +1,22 @@
-// This worker owner lands before queue progression is migrated from the
-// request path into composition-root wiring.
 #![cfg_attr(not(test), allow(dead_code))]
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::scheduler::lifecycle::{
     WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
     WorkflowSchedulerLifecycleComponentState,
 };
+use crate::scheduler::{WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionStore};
 use crate::workflow::WorkflowServiceError;
+
+use super::store::WORKFLOW_SESSION_QUEUE_POLL_MS;
 
 /// Workflow-service owner for the scheduler queue worker lifecycle.
 ///
-/// This slice introduces only the bounded worker owner and wake/shutdown
-/// mechanics. Queue progression remains in the existing request path until the
-/// next migration slice moves that business loop behind this owner.
+/// The worker owns queue lifecycle state and the queue admission polling loop.
+/// Later slices move execution progression and completion signaling behind the
+/// same owner.
 #[derive(Debug)]
 pub(crate) struct WorkflowSchedulerQueueWorker {
     scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
@@ -71,6 +72,28 @@ impl WorkflowSchedulerQueueWorker {
         self.wake_notify.notify_one();
     }
 
+    pub(crate) async fn admit_queued_run(
+        command: WorkflowSchedulerQueueAdmissionCommand,
+    ) -> Result<WorkflowExecutionSessionDequeuedRun, WorkflowServiceError> {
+        loop {
+            let maybe_queued = {
+                let mut store = command.session_store.lock().map_err(|_| {
+                    WorkflowServiceError::Internal(
+                        "workflow execution session store lock poisoned".to_string(),
+                    )
+                })?;
+                store.begin_queued_run(&command.session_id, &command.workflow_run_id)?
+            };
+            if let Some(queued) = maybe_queued {
+                return Ok(queued);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(
+                WORKFLOW_SESSION_QUEUE_POLL_MS,
+            ))
+            .await;
+        }
+    }
+
     pub(crate) async fn shutdown(&self) -> Result<(), WorkflowServiceError> {
         self.mark_shutting_down_if_running()?;
         let _ = self.shutdown_tx.send(true);
@@ -111,6 +134,27 @@ impl WorkflowSchedulerQueueWorker {
                 WorkflowSchedulerLifecycleComponentState::Shutdown,
             )
             .map(|_record| ())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowSchedulerQueueAdmissionCommand {
+    session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
+    session_id: String,
+    workflow_run_id: String,
+}
+
+impl WorkflowSchedulerQueueAdmissionCommand {
+    pub(crate) fn new(
+        session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
+        session_id: impl Into<String>,
+        workflow_run_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            session_store,
+            session_id: session_id.into(),
+            workflow_run_id: workflow_run_id.into(),
+        }
     }
 }
 

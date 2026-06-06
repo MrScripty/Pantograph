@@ -43,6 +43,9 @@ pub(crate) use lifecycle::{
 };
 pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
+pub(crate) use queue_worker::{
+    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueWorker,
+};
 pub(crate) use readiness_lifecycle::{
     WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
     WorkflowDependencyReadinessProvider,
@@ -53,7 +56,7 @@ pub(crate) use store::{
     WorkflowExecutionSessionStore, WorkflowSchedulerBootstrapRecoveryAction,
     WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
     WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskAttemptReadFact,
-    WorkflowSchedulerTaskTerminalMutation, WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WorkflowSchedulerTaskTerminalMutation,
 };
 pub(crate) use task_orchestrator::{
     WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError,

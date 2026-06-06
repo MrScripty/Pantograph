@@ -43,6 +43,16 @@ enqueue-only public API migration and full durable event-driven queue, because
 both require broader caller/contract/generated/frontend coordination than the
 next thin worker migration slice allows.
 
+2026-06-05 queue admission owner update: workflow-service session execution
+now submits admission polling through the queue worker owner module instead
+of directly polling `begin_queued_run` in the request path. The slice added an
+internal `WorkflowSchedulerQueueAdmissionCommand` and focused queue-worker
+tests for immediate and blocked-then-unblocked admission. This does not yet
+move scheduler task-state setup, non-runtime/runtime progression, terminal
+mutation, timeout handling, or completion signaling behind the worker; those
+remain the next Option 1 source slice and must be removed from the
+request-scoped execution path without adding fallback branches.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

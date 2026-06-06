@@ -877,6 +877,15 @@ Option 3 thin implementation sequence:
      replay coordination. The next source slice must not preserve the current
      request-owned queue polling/admission/execution loop as a compatibility
      branch.
+   - 2026-06-05 queue admission owner slice: moved the bounded
+     `begin_queued_run` admission polling loop out of
+     `run_workflow_execution_session` and into an internal queue-worker
+     admission command. Focused queue-worker tests cover immediate admission
+     and waiting while another run is active. Remaining Option 1 queue work is
+     execution progression ownership: scheduler task-state setup,
+     non-runtime/runtime progression, timeout handling, terminal mutation, and
+     completion signaling must move behind the queue worker without restoring
+     request-owned fallback execution.
 
 Option 3 standards gates:
 

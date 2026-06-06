@@ -25887,6 +25887,54 @@ Worker rules:
       `cargo fmt -p pantograph-workflow-service -- --check`, `git diff
       --check`, and targeted no-fallback/no-legacy searches over touched
       source files.
+  - 2026-06-05 queue admission owner source slice:
+    - Smallest vertical slice: move admission polling for queued session runs
+      from `run_workflow_execution_session` into the queue worker owner module
+      while preserving the existing blocking public response shape.
+    - Allowed files: `crates/pantograph-workflow-service/src/scheduler/
+      queue_worker.rs`, `queue_worker_tests.rs`, `scheduler/mod.rs`,
+      `workflow/session_execution_api.rs`, and the current image-generation
+      plan docs. No public contracts, generated DTOs, lockfiles, saved
+      workflows, frontend/Tauri files, diagnostics-ledger worker events,
+      durable replay, resource observation code, or legacy runtime launch
+      paths were in scope.
+    - No-fallback/no-legacy confirmation: the request path no longer imports
+      the queue poll constant or directly loops on `begin_queued_run`.
+      Admission now goes through
+      `WorkflowSchedulerQueueWorker::admit_queued_run` with an internal
+      `WorkflowSchedulerQueueAdmissionCommand`.
+      The slice does not add compatibility branches, node-engine whole-run
+      launch, graph-path fallback, planned-inference launch, frontend/Tauri
+      policy, or compatibility DTOs.
+    - Tests/verification completed:
+      - `cargo test -p pantograph-workflow-service scheduler::queue_worker::tests --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_lifecycle_create_run_close --lib`
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution::workflow_execution_session_timeout_applies_to_scheduler_task_runner --lib`
+      - `cargo fmt -p pantograph-workflow-service -- --check`
+      - `cargo check -p pantograph-workflow-service`
+      - targeted search confirmed `begin_queued_run` is absent from
+        `workflow/session_execution_api.rs` and only remains in the
+        queue-worker owner/test setup for this slice.
+    - Verification deviations/discovered issues:
+      - `cargo test -p pantograph-workflow-service workflow::tests::
+        session_execution --lib` still has unrelated/stale failures across
+        runtime snapshot/materialization and legacy-host expectation cases.
+      - The individually rerun
+        `workflow_execution_session_initializes_scheduler_task_state_before_run_execution`
+        test still expects non-runtime session execution to reach
+        `WorkflowHost::run_workflow`, but the current canonical no-legacy path
+        returns from scheduler-owned task execution without calling the legacy
+        whole-run host path. This stale assertion should be updated in a
+        dedicated test-maintenance slice so it checks scheduler task-state
+        initialization without reintroducing legacy host execution.
+    - Remaining follow-up: this is the first source slice of Option 1, not the
+      full queue progression migration. Scheduler
+      task-state setup, non-runtime/runtime progression, timeout handling,
+      terminal mutation, and completion signaling still run from the blocking
+      session execution path and must move behind the worker owner next,
+      followed by full crate checks and affected session execution tests.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

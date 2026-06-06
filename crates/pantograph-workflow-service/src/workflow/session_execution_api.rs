@@ -10,7 +10,7 @@ use crate::graph::{
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
     WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
-    WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WorkflowSchedulerQueueAdmissionCommand, WorkflowSchedulerQueueWorker,
 };
 use crate::technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
@@ -314,16 +314,14 @@ impl WorkflowService {
             ))
         })?;
 
-        let queued_run = loop {
-            let maybe_queued = {
-                let mut store = self.session_store_guard()?;
-                store.begin_queued_run(&session_id, &workflow_run_id)?
-            };
-            if let Some(queued) = maybe_queued {
-                break queued;
-            }
-            tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
-        };
+        let queued_run = WorkflowSchedulerQueueWorker::admit_queued_run(
+            WorkflowSchedulerQueueAdmissionCommand::new(
+                self.session_store.clone(),
+                session_id.clone(),
+                workflow_run_id.clone(),
+            ),
+        )
+        .await?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
         if let Err(error) = self.set_scheduler_task_state_for_admitted_run(

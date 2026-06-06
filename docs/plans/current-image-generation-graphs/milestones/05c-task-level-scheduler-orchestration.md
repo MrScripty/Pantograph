@@ -648,10 +648,10 @@ durable task orchestration path.
   lifecycle helper. 2026-06-05 reservation-cleanup attachment update:
   terminal reservation-release cleanup events now drive the shared registry's
   `reservation_cleanup` component from the scheduler task orchestrator.
-  Remaining worker-system alignment: resource observation and queue are not
-  yet concrete backend workers, so the next source lane must implement real
-  workflow-service/composition-root-owned workers before lifecycle state can
-  be exposed publicly. Request-scoped queue/resource actions may remain as
+  Remaining worker-system alignment: queue has a concrete backend worker
+  owner but still needs execution progression and completion signaling moved
+  out of request-scoped paths; resource observation is not yet a concrete
+  backend worker. Request-scoped queue/resource actions may remain as
   command/query surfaces only; they must not continue to own queue
   progression, resource polling, retry/defer loops, shutdown, or lifecycle
   policy after the workers exist.
@@ -684,6 +684,13 @@ durable task orchestration path.
     the worker is unavailable or unable to progress. Enqueue-only public API
     migration and a full durable event-driven queue are deferred until their
     caller/contract/generated/frontend/replay scope is explicitly planned.
+  - 2026-06-05 queue admission owner update: session execution now delegates
+    admission polling to an internal queue-worker admission command instead
+    of directly polling `begin_queued_run`. Verified immediate and
+    blocked-then-unblocked admission in queue-worker tests. Remaining queue
+    work: move scheduler task-state setup, non-runtime/runtime progression,
+    timeout handling, terminal mutation, and completion signaling behind the
+    worker owner, then remove any remaining request-owned execution loop.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
