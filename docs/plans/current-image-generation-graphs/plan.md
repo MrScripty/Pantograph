@@ -235,6 +235,18 @@ recorded as historical context only; do not implement the standalone runtime
 timeout cleanup command before the worker path unless a new re-plan explicitly
 restores it.
 
+2026-06-06 task-execution worker contract slice: completed the first Option 4
+source slice by adding an internal `task_execution_worker` module with
+task-attempt-scoped worker commands, terminal/deferred/unavailable outcomes,
+shutdown reasons, and typed diagnostics. The contracts are not public DTOs,
+do not introduce a worker loop yet, and do not encode fallback, node-engine
+whole-run, planned-inference, graph-path inference, frontend/Tauri, or
+compatibility-shim execution paths. Verification:
+`cargo fmt -p pantograph-workflow-service` and
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`.
+Next Option 4 slice: make runtime supervisor ownership drainable and
+lifecycle-owned before moving runtime dispatch execution behind the worker.
+
 2026-06-05 active execution lane re-plan decision: use a short
 documentation-only reconciliation slice, then continue Milestone 5b legacy
 runtime deletion/replacement. The minimal production image inference path has

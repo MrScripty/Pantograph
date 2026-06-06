@@ -1027,6 +1027,13 @@ Option 3 thin implementation sequence:
      bounded worker startup/shutdown, runtime dispatch execution behind the
      worker, worker-owned timeout/cancel/reconcile/handle release, request
      API enqueue/await adaptation, and focused worker lifecycle tests.
+   - 2026-06-06 task-execution worker contract slice: added the internal
+     `task_execution_worker` contract module for task-attempt worker commands,
+     terminal/deferred/unavailable outcomes, shutdown reasons, and typed
+     diagnostics. This completes the first Option 4 source slice without
+     adding a worker loop, fake completion channel, public DTO, fallback
+     execution, or legacy launch path. Next slice: make runtime supervisor
+     ownership drainable and lifecycle-owned with tracked handles.
 
 Worker-system standards gates:
 

@@ -790,6 +790,15 @@ durable task orchestration path.
     retry/defer policy, event-ledger worker lifecycle facts, and task-level
     batching/co-scheduling remain follow-ups after the worker path is
     validated.
+  - 2026-06-06 task-execution worker contract slice: completed the internal
+    task-attempt worker contract vocabulary for commands, outcomes, shutdown
+    reasons, and diagnostics in `task_execution_worker.rs`; updated workflow
+    module registration and README ownership notes. Verified with
+    `cargo fmt -p pantograph-workflow-service` and
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`.
+    Next Option 4 slice: make runtime supervisor ownership drainable and
+    lifecycle-owned before moving runtime dispatch execution behind the
+    worker.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

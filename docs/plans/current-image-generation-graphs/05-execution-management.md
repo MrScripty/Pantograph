@@ -26420,6 +26420,32 @@ Worker rules:
     - Later follow-up after the working worker path is validated: add durable
       replay, retry/defer policy, event-ledger worker lifecycle facts, and
       task-level batching/co-scheduling across simultaneous workflow runs.
+  - 2026-06-06 task-execution worker contract source slice:
+    - Smallest vertical slice: define the internal worker command, outcome,
+      shutdown-reason, and diagnostic vocabulary at task-attempt granularity
+      before moving runtime execution or lifecycle ownership.
+    - Allowed files:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and the
+      current image-generation plan docs. Runtime adapters, public DTOs,
+      generated files, lockfiles, saved workflows, frontend/Tauri files,
+      runtime dispatch behavior, queue worker progression, diagnostics-ledger
+      worker events, public lifecycle snapshots, and legacy launch paths
+      remained out of scope.
+    - No-fallback/no-legacy confirmation: the new contracts are internal to
+      workflow-service and are task-attempt scoped. They do not add a worker
+      loop, compatibility shim, fake completion channel, request-owned
+      execution policy, node-engine whole-run launch, planned-inference
+      launch, graph-path inference, frontend/Tauri policy, or public
+      lifecycle surface.
+    - Tests/verification completed:
+      - `cargo fmt -p pantograph-workflow-service`
+      - `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+    - Deviations/discovered issues: none.
+    - Remaining follow-up: the next Option 4 source slice must make runtime
+      supervisor ownership drainable and lifecycle-owned with tracked handles
+      before moving runtime dispatch execution behind the worker.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
