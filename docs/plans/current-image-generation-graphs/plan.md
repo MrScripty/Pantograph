@@ -1132,6 +1132,56 @@ must choose one option and define the exact owner of missing backend,
 load-target, residency, memory, and runtime-instance/load-state facts before
 source implementation resumes.
 
+2026-06-07 durable runtime task-attempt fact persistence decision: use
+Option 3. `WorkflowRuntimeDispatchCandidateFact` is the workflow-service-owned
+source of selected runtime/resource evidence. Expand that contract so it owns
+the missing selected backend id, runtime family, resolved load target,
+runtime residency key, loaded-runtime memory estimate, and selected
+runtime-instance/load-state facts before projection into scheduler
+`SchedulerDispatchCandidate`. Scheduler remains responsible for ranking and
+selection mechanics, but it must not be the owner of rich runtime/resource
+evidence. Do not add a sidecar keyed by candidate id, because that would
+create drift risk between the sidecar and scheduler candidate projection.
+
+Option 3 step 2 implementation sequence:
+1. Extend `WorkflowRuntimeDispatchCandidateFact` and its validation tests with
+   the missing selected runtime/resource evidence fields. This is a
+   workflow-service contract slice only: no persistence, no scheduler DTO
+   changes, no runtime-host batch API, no grouped claims, no generated DTOs,
+   no lockfiles, and no saved workflow fixture edits.
+2. Add a pure projection from validated workflow-service candidate fact into
+   the existing scheduler `SchedulerDispatchCandidate`, preserving scheduler
+   selection behavior. Tests must prove the richer fields are validated before
+   projection and cannot be derived from runtime id strings, graph node shape,
+   `batching_key`, request DTOs, or trait settings.
+3. Add a pure projection from the selected validated workflow-service
+   candidate fact plus scheduler attempt identity into
+   `WorkflowRuntimeTaskAttemptFactRecord`. Tests must prove missing backend,
+   load-target, residency, memory, and runtime-instance facts return typed
+   diagnostics before persistence is possible.
+4. Persist task-attempt facts at the existing backend dispatch-selection
+   boundary only after the selected candidate can be traced back to one
+   validated workflow-service candidate fact. If scheduler selection returns a
+   selected candidate that cannot be matched exactly to a validated
+   workflow-service candidate fact, fail closed with a typed diagnostic.
+5. Continue to worker rehydration from durable task-attempt facts only after
+   persistence is validated; grouped claims and runtime-host coalescing remain
+   blocked until then.
+
+No-fallback/no-legacy confirmation for this decision: selected backend,
+load-target, residency, memory, and runtime-instance facts must come from the
+backend candidate provider contract, not from frontend/Tauri state, graph
+shape, request parameters, `batching_key`, runtime id parsing, trait settings,
+or partial estimate hints. Existing scheduler dispatch DTOs remain unchanged
+until a later explicit shared-contract re-plan requires otherwise.
+
+Next thin slice: implement sequence step 1 only in
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`
+and this plan. Stop before persistence or projection into task-attempt facts
+if the provider cannot supply the required fields without changing
+scheduler/runtime-registry/Pumas/generated/fixture contracts in the same
+slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
