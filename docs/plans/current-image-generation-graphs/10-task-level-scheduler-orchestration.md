@@ -1260,6 +1260,18 @@ Option 3 thin implementation sequence:
      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
      passed with 10 tests. Next slice: durable workflow-service repository
      boundary and enqueue/claim/complete/fail/defer/reclaim tests.
+   - 2026-06-06 durable runtime-branch task-event repository slice complete:
+     the runtime-branch task-event module now includes the workflow-service
+     repository boundary for enqueue, direct claim, next-due claim, complete,
+     defer, fail, lookup, duplicate-event rejection, no-due-event response,
+     stale-claim non-mutation, active-claim rejection, lease-expiry reclaim,
+     and terminal persistence. No runtime dispatch, admission wiring,
+     request-scoped completion, direct helper call, graph/frontend fact
+     synthesis, frontend/Tauri policy, compatibility DTO, or fake completion
+     was added. Verification:
+     `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+     passed with 17 tests. Next slice: persist claimable runtime-branch events
+     at admission through this repository boundary.
 
 Worker-system standards gates:
 

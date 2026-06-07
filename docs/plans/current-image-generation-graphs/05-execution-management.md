@@ -27166,6 +27166,27 @@ Worker rules:
       with enqueue, claim, complete, fail, defer, lease-expiry, duplicate-claim,
       stale-claim, and reclaim tests, then wire runtime branch admission to
       persist claimable events.
+  - 2026-06-06 durable runtime-branch task-event repository slice:
+    - Smallest useful vertical slice: add the workflow-service repository
+      boundary around the runtime-branch task-event claim state machine without
+      wiring admission, worker claiming, or runtime dispatch.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+      and plan docs.
+    - Implemented enqueue, direct claim, next-due claim, complete, defer, fail,
+      lookup, duplicate-event rejection, no-due-event response, stale-claim
+      non-mutation, active-claim rejection, lease-expiry reclaim, and terminal
+      persistence behavior.
+    - No-fallback/no-legacy confirmation: no runtime dispatch execution,
+      request-scoped completion, direct helper path, graph/frontend fact
+      synthesis, frontend/Tauri policy, compatibility DTO, or fake completion
+      was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`.
+      Result: passed, 17 tests.
+    - Remaining follow-up: wire runtime branch admission to persist claimable
+      events through the repository boundary, then make the task-execution
+      worker claim due events from the repository.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

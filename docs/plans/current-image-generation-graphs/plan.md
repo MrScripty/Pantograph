@@ -1,5 +1,23 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 durable runtime-branch task-event repository update: completed
+the second Option 3 source slice by adding the workflow-service repository
+boundary for durable runtime-branch task-event records. Smallest useful
+vertical slice: add enqueue, direct claim, next-due claim, complete, defer,
+fail, lookup, duplicate-event, no-due-event, stale-claim, active-claim,
+lease-expiry, and reclaim behavior around the existing pure claim state
+machine. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and plan docs. No-fallback/no-legacy confirmation: this repository boundary
+does not wire runtime dispatch, does not execute branches, does not preserve
+request-scoped completion, does not call the direct helper, does not synthesize
+facts from graph/frontend state, does not add frontend/Tauri policy, and does
+not add compatibility DTOs. Verification:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+passed with 17 tests. Remaining follow-up: wire runtime branch admission to
+persist claimable events through this repository boundary, then make the
+task-execution worker claim due events from the repository.
+
 2026-06-06 durable runtime-branch task-event contract update: completed the
 first Option 3 source slice by adding the workflow-service-owned
 `runtime_branch_task_event.rs` contract and pure state machine for durable
