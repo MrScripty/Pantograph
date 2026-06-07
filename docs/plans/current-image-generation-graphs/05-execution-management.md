@@ -27051,6 +27051,31 @@ Worker rules:
     - Remaining follow-up: add the real runtime-branch completion responder to
       `ExecuteRuntimeBranch` and have the facade enqueue/await it, then move
       runtime branch dispatch-boundary execution into the worker loop.
+  - 2026-06-06 runtime branch completion responder source slice:
+    - Smallest vertical slice: add a real typed completion responder to
+      `ExecuteRuntimeBranch`, then add runtime-owner and composition-root
+      facade methods that enqueue a runtime branch command and await the
+      worker-owned outcome.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and these
+      plan files.
+    - No-fallback/no-legacy confirmation: the responder is real, but the
+      worker still returns typed fail-closed `RuntimeBranchFailed` until
+      dispatch execution is moved into the worker loop. No direct runtime
+      branch execution, fake success completion, request-scoped runtime
+      dispatch/completion, frontend/Tauri policy, compatibility DTO, or
+      durable claiming was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+      `cargo test -p pantograph-workflow-service runtime_owner --lib`;
+      `cargo test -p pantograph-workflow-service session_execution_runtime --lib`.
+    - Remaining follow-up: move runtime branch dispatch-boundary execution
+      into the worker loop and map completed/deferred/failed paths to typed
+      worker outcomes, then route the runtime session path through that worker
+      completion boundary.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

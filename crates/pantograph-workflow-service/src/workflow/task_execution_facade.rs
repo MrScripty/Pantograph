@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
 use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
+use super::task_execution_worker::{
+    WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+};
 use super::{
     WorkflowExecutionSessionRunRequest, WorkflowHost, WorkflowRunResponse, WorkflowService,
     WorkflowServiceError,
@@ -66,6 +69,15 @@ impl WorkflowSessionExecutionRuntime {
 
     pub(super) fn task_execution_runtime_owner(&self) -> &WorkflowTaskExecutionRuntimeOwner {
         &self.task_execution_runtime_owner
+    }
+
+    pub(super) async fn enqueue_runtime_branch_and_wait(
+        &self,
+        command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    ) -> Result<WorkflowTaskExecutionWorkerOutcome, WorkflowServiceError> {
+        self.task_execution_runtime_owner
+            .enqueue_runtime_branch_and_wait(command)
+            .await
     }
 }
 
@@ -161,5 +173,40 @@ mod tests {
             panic!("expected invalid request error");
         };
         assert!(message.contains("session_id must be non-empty"));
+    }
+
+    #[tokio::test]
+    async fn session_execution_runtime_enqueues_and_awaits_runtime_branch_completion() {
+        let runtime =
+            WorkflowSessionExecutionRuntime::new(WorkflowService::new(), Arc::new(DelegatingHost));
+
+        let outcome = runtime
+            .enqueue_runtime_branch_and_wait(WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+                session_id: "session-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
+                workflow_id: "workflow-1".to_string(),
+                output_targets: None,
+                timeout_ms: Some(500),
+                start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+            })
+            .await
+            .expect("enqueue runtime branch");
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = outcome else {
+            panic!("expected fail-closed runtime branch outcome");
+        };
+        assert!(
+            outcome
+                .error_message
+                .contains("not yet available in the worker loop"),
+            "unexpected error message: {}",
+            outcome.error_message
+        );
+
+        runtime
+            .task_execution_runtime_owner()
+            .shutdown_task_execution_worker()
+            .await
+            .expect("shutdown task execution worker");
     }
 }

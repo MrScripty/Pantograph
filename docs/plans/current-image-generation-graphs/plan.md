@@ -1,5 +1,17 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime branch completion responder update:
+`ExecuteRuntimeBranch` now carries a real typed completion responder, and
+`WorkflowTaskExecutionRuntimeOwner` plus `WorkflowSessionExecutionRuntime`
+can enqueue a runtime branch command and await the worker-owned outcome. The
+worker currently returns a typed fail-closed `RuntimeBranchFailed` outcome
+because dispatch-boundary execution has not moved into the loop yet. This is
+not a fallback path: it does not execute runtime branches directly, synthesize
+successful completion, add request-scoped runtime dispatch, add frontend/Tauri
+policy, introduce compatibility DTOs, or add durable claiming. Next Option 2
+slice: move runtime branch dispatch-boundary execution into the worker loop
+and map completed/deferred/failed paths to typed worker outcomes.
+
 2026-06-06 task-execution worker runtime environment update:
 `WorkflowTaskExecutionRuntimeOwner` now builds a typed
 `WorkflowTaskExecutionWorkerRuntimeBranchEnvironment` from its shared

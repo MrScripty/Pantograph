@@ -4,6 +4,7 @@ use super::task_execution_worker::{
     WorkflowTaskExecutionWorker, WorkflowTaskExecutionWorkerCommand,
     WorkflowTaskExecutionWorkerDiagnostic, WorkflowTaskExecutionWorkerDiagnosticCode,
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
     WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
 };
 use super::{WorkflowService, WorkflowServiceError};
@@ -91,6 +92,33 @@ impl WorkflowTaskExecutionRuntimeOwner {
                 "task execution worker is shut down",
             )),
         }
+    }
+
+    pub(super) async fn enqueue_runtime_branch_and_wait(
+        &self,
+        command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    ) -> Result<WorkflowTaskExecutionWorkerOutcome, WorkflowServiceError> {
+        self.ensure_task_execution_worker_started().await?;
+        let (completion_responder, completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        match self
+            .try_enqueue_task_execution_command(
+                WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
+                    command,
+                    completion_responder,
+                ),
+            )
+            .await
+        {
+            Ok(()) => {}
+            Err(outcome) => return Ok(outcome),
+        }
+        Ok(completion_rx.await.unwrap_or_else(|_| {
+            worker_unavailable_outcome(
+                WorkflowTaskExecutionWorkerDiagnosticCode::QueueClosed,
+                "task execution worker dropped runtime branch completion responder",
+            )
+        }))
     }
 
     pub(super) async fn shutdown_task_execution_worker(&self) -> Result<(), WorkflowServiceError> {
@@ -252,6 +280,33 @@ mod tests {
         assert!(diagnostic.message.contains("shut down"));
     }
 
+    #[tokio::test]
+    async fn runtime_owner_enqueues_runtime_branch_and_awaits_worker_completion() {
+        let service = Arc::new(WorkflowService::new());
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(service);
+
+        let outcome = owner
+            .enqueue_runtime_branch_and_wait(runtime_branch_command())
+            .await
+            .expect("enqueue runtime branch");
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = outcome else {
+            panic!("expected fail-closed runtime branch outcome");
+        };
+        assert!(
+            outcome
+                .error_message
+                .contains("not yet available in the worker loop"),
+            "unexpected error message: {}",
+            outcome.error_message
+        );
+
+        owner
+            .shutdown_task_execution_worker()
+            .await
+            .expect("shutdown task execution worker");
+    }
+
     #[test]
     fn runtime_owner_builds_runtime_branch_context_from_command() {
         let service = Arc::new(WorkflowService::new());
@@ -282,5 +337,16 @@ mod tests {
             WorkflowSchedulerTaskExecutionClass::RuntimeInference,
             Some(500),
         )
+    }
+
+    fn runtime_branch_command() -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+        WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id: "session-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
+            workflow_id: "workflow-1".to_string(),
+            output_targets: None,
+            timeout_ms: Some(500),
+            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+        }
     }
 }

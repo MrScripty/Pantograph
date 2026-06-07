@@ -168,11 +168,11 @@ impl fmt::Debug for WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 #[must_use]
 pub(super) enum WorkflowTaskExecutionWorkerCommand {
     ExecuteTaskAttempt(WorkflowTaskExecutionWorkerTaskAttemptCommand),
-    ExecuteRuntimeBranch(WorkflowTaskExecutionWorkerRuntimeBranchCommand),
+    ExecuteRuntimeBranch(WorkflowTaskExecutionWorkerRuntimeBranchRequest),
     Shutdown(WorkflowTaskExecutionWorkerShutdownCommand),
 }
 
@@ -195,6 +195,19 @@ pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchCommand {
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(super) timeout_ms: Option<u64>,
     pub(super) start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+}
+
+#[derive(Debug)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchRequest {
+    pub(super) command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
+}
+
+#[derive(Debug)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder {
+    completion_tx: tokio::sync::oneshot::Sender<WorkflowTaskExecutionWorkerOutcome>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -337,25 +350,34 @@ impl WorkflowTaskExecutionWorkerCommand {
     }
 
     pub(super) fn execute_runtime_branch(
-        session_id: impl Into<String>,
-        workflow_run_id: impl Into<String>,
-        workflow_id: impl Into<String>,
-        output_targets: Option<Vec<WorkflowOutputTarget>>,
-        timeout_ms: Option<u64>,
-        start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+        command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
     ) -> Self {
-        Self::ExecuteRuntimeBranch(WorkflowTaskExecutionWorkerRuntimeBranchCommand {
-            session_id: session_id.into(),
-            workflow_run_id: workflow_run_id.into(),
-            workflow_id: workflow_id.into(),
-            output_targets,
-            timeout_ms,
-            start_reason,
+        Self::ExecuteRuntimeBranch(WorkflowTaskExecutionWorkerRuntimeBranchRequest {
+            command,
+            completion_responder,
         })
     }
 
     pub(super) const fn shutdown(reason: WorkflowTaskExecutionWorkerShutdownReason) -> Self {
         Self::Shutdown(WorkflowTaskExecutionWorkerShutdownCommand { reason })
+    }
+}
+
+impl WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder {
+    pub(super) fn channel() -> (
+        Self,
+        tokio::sync::oneshot::Receiver<WorkflowTaskExecutionWorkerOutcome>,
+    ) {
+        let (completion_tx, completion_rx) = tokio::sync::oneshot::channel();
+        (Self { completion_tx }, completion_rx)
+    }
+
+    pub(super) fn complete(
+        self,
+        outcome: WorkflowTaskExecutionWorkerOutcome,
+    ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+        self.completion_tx.send(outcome)
     }
 }
 
@@ -471,9 +493,19 @@ async fn task_execution_worker_loop(
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteTaskAttempt(_command)) => {
                         observed_task_attempt_commands.fetch_add(1, Ordering::SeqCst);
                     }
-                    Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(_command)) => {
+                    Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(request)) => {
                         let _service = runtime_branch_environment.service();
                         observed_runtime_branch_commands.fetch_add(1, Ordering::SeqCst);
+                        let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
+                            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchFailed,
+                            "runtime branch execution is not yet owned by the task-execution worker loop",
+                        );
+                        let outcome = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                            &request.command,
+                            "runtime branch execution is not yet available in the worker loop",
+                            vec![diagnostic],
+                        );
+                        let _ = request.completion_responder.complete(outcome);
                     }
                     Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
                         break;
@@ -626,23 +658,37 @@ mod tests {
         let scheduler_lifecycle = scheduler_lifecycle();
         let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle, runtime_environment())
             .expect("spawn task execution worker");
+        let (completion_responder, completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
 
         worker
-            .try_enqueue(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
                 runtime_branch_command(),
+                completion_responder,
             ))
             .expect("enqueue runtime branch command");
 
-        tokio::time::timeout(Duration::from_secs(1), async {
+        let outcome = tokio::time::timeout(Duration::from_secs(1), async {
             loop {
                 if worker.observed_runtime_branch_command_count() > 0 {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
+            completion_rx.await.expect("runtime branch completion")
         })
         .await
         .expect("worker should observe runtime branch command");
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = outcome else {
+            panic!("expected fail-closed runtime branch outcome");
+        };
+        assert!(
+            outcome
+                .error_message
+                .contains("not yet available in the worker loop"),
+            "unexpected error message: {}",
+            outcome.error_message
+        );
 
         worker
             .shutdown()
@@ -691,18 +737,25 @@ mod tests {
             node_id: "image-output".to_string(),
             port_id: "image".to_string(),
         }];
+        let branch_command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id: "session-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
+            workflow_id: "workflow-1".to_string(),
+            output_targets: Some(output_targets.clone()),
+            timeout_ms: Some(1_000),
+            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+        };
+        let (completion_responder, _completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
         let command = WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
-            "session-1",
-            "run-1",
-            "workflow-1",
-            Some(output_targets.clone()),
-            Some(1_000),
-            WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+            branch_command,
+            completion_responder,
         );
 
-        let WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(command) = command else {
+        let WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(request) = command else {
             panic!("expected runtime branch command");
         };
+        let command = request.command;
 
         assert_eq!(command.session_id, "session-1");
         assert_eq!(command.workflow_run_id, "run-1");

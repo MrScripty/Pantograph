@@ -979,6 +979,19 @@ durable task orchestration path.
     policy, compatibility DTO, durable claiming, or worker-loop dispatch move
     was added. Next source slice: add the real completion responder to
     `ExecuteRuntimeBranch` and have the facade enqueue/await it.
+  - 2026-06-06 runtime branch completion responder slice:
+    `ExecuteRuntimeBranch` now carries a typed completion responder, and
+    `WorkflowTaskExecutionRuntimeOwner` plus `WorkflowSessionExecutionRuntime`
+    can enqueue and await worker-owned runtime branch outcomes. The worker
+    returns typed fail-closed `RuntimeBranchFailed` until dispatch execution
+    moves into the loop. Verified with `cargo test -p
+    pantograph-workflow-service task_execution_worker --lib`, `cargo test -p
+    pantograph-workflow-service runtime_owner --lib`, and `cargo test -p
+    pantograph-workflow-service session_execution_runtime --lib`. No direct
+    branch execution, fake success completion, request-scoped dispatch,
+    frontend/Tauri policy, compatibility DTO, durable claiming, or legacy path
+    was added. Next source slice: move dispatch-boundary execution into the
+    worker loop and map completed/deferred/failed paths to typed outcomes.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03
