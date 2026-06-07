@@ -129,6 +129,27 @@ runtime-branch failures from worker-owned dispatch remain surfaced as
 `InternalError` with message `scheduler task ... final state was TerminalFailed`
 instead of the previous direct `WorkflowService` terminal-invalid surface.
 
+2026-06-07 runtime dispatch panic migration slice:
+smallest useful vertical slice: migrate
+`workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure`
+from direct `WorkflowService::run_workflow_execution_session` to
+`WorkflowSessionExecutionRuntime`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan. No-fallback/no-legacy confirmation: the test now enters through
+the composition-root runtime owner and does not add a request-scoped dispatch
+shim or restore direct runtime execution.
+
+Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure --lib`
+passed,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+passed,
+and `cargo fmt -p pantograph-workflow-service -- --check` passed.
+
+Behavioral note:
+runtime host dispatch panics now surface as `InternalError` while preserving the
+canonical supervisor diagnostic text `runtime task supervisor join failed`.
+
 Outstanding Option 2 migration work:
 - migrate the remaining runtime-containing tests that still call
   `WorkflowService::run_workflow_execution_session` for direct coverage that is
