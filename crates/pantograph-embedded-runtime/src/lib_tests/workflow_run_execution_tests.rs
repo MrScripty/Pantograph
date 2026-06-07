@@ -1445,7 +1445,7 @@ async fn workflow_run_execution_session_rejects_human_input_workflow_without_exe
 }
 
 #[tokio::test]
-async fn test_runtime_routes_onnx_audio_workflow_through_python_adapter() {
+async fn retired_onnx_audio_workflow_fails_closed_before_python_adapter() {
     let temp = TempDir::new().expect("temp dir");
     write_mock_onnx_audio_workflow(temp.path(), "runtime-onnx-audio");
 
@@ -1472,7 +1472,7 @@ async fn test_runtime_routes_onnx_audio_workflow_through_python_adapter() {
     .with_additional_runtime_capabilities(vec![onnx_python_sidecar_capability()])
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
-    let response = run_workflow_through_scheduler_with_override(
+    let error = run_workflow_through_scheduler_with_override(
         &runtime,
         "runtime-onnx-audio",
         vec![WorkflowPortBinding {
@@ -1492,35 +1492,15 @@ async fn test_runtime_routes_onnx_audio_workflow_through_python_adapter() {
         }),
     )
     .await
-    .expect("workflow run through scheduler");
-
-    assert_eq!(response.outputs.len(), 1);
-    assert_eq!(response.outputs[0].node_id, "audio-output-1");
-    assert_eq!(response.outputs[0].port_id, "audio");
-    assert_eq!(
-        response.outputs[0].value["artifact_role"],
-        serde_json::json!("workflow_output")
-    );
-    assert_eq!(
-        response.outputs[0].value["payload_kind"],
-        serde_json::json!("audio")
-    );
-    assert_eq!(
-        response.outputs[0].value["attribution"]["workflow_id"],
-        serde_json::json!("runtime-onnx-audio")
-    );
+    .expect_err("retired onnx workflow should fail stale graph validation");
+    assert_retired_onnx_graph_rejected(&error);
 
     let requests = python_runtime.requests.lock().expect("requests lock");
-    assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].node_type, "onnx-inference");
-    assert_eq!(
-        requests[0].inputs.get("prompt"),
-        Some(&serde_json::json!("a tiny painted robot"))
-    );
+    assert!(requests.is_empty());
 }
 
 #[tokio::test]
-async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input_ids() {
+async fn retired_onnx_audio_workflow_with_gui_style_input_ids_fails_closed() {
     let temp = TempDir::new().expect("temp dir");
     write_mock_onnx_audio_workflow_with_prompt_node(
         temp.path(),
@@ -1551,7 +1531,7 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
     .with_additional_runtime_capabilities(vec![onnx_python_sidecar_capability()])
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
-    let response = run_workflow_through_scheduler_with_override(
+    let error = run_workflow_through_scheduler_with_override(
         &runtime,
         "runtime-onnx-audio",
         vec![WorkflowPortBinding {
@@ -1571,19 +1551,15 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
         }),
     )
     .await
-    .expect("workflow run through scheduler");
+    .expect_err("retired onnx workflow should fail stale graph validation");
+    assert_retired_onnx_graph_rejected(&error);
 
-    assert_eq!(response.outputs.len(), 1);
     let requests = python_runtime.requests.lock().expect("requests lock");
-    assert_eq!(requests.len(), 1);
-    assert_eq!(
-        requests[0].inputs.get("prompt"),
-        Some(&serde_json::json!("a GUI style prompt node"))
-    );
+    assert!(requests.is_empty());
 }
 
 #[tokio::test]
-async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
+async fn retired_onnx_audio_workflow_does_not_reconcile_python_sidecar_runtime() {
     let temp = TempDir::new().expect("temp dir");
     write_mock_onnx_audio_workflow(temp.path(), "runtime-onnx-audio");
 
@@ -1610,7 +1586,7 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
     .with_additional_runtime_capabilities(vec![onnx_python_sidecar_capability()])
     .with_runtime_registry(runtime_registry.clone());
 
-    run_workflow_through_scheduler_with_override(
+    let error = run_workflow_through_scheduler_with_override(
         &runtime,
         "runtime-onnx-audio",
         vec![WorkflowPortBinding {
@@ -1630,16 +1606,36 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
         }),
     )
     .await
-    .expect("workflow run through scheduler");
+    .expect_err("retired onnx workflow should fail stale graph validation");
+    assert_retired_onnx_graph_rejected(&error);
 
     let snapshot = runtime_registry.snapshot();
-    let onnx = snapshot
+    assert!(snapshot
         .runtimes
         .iter()
-        .find(|runtime| runtime.runtime_id == "onnx-runtime")
-        .expect("python runtime should be observed");
-    assert_eq!(onnx.display_name, "ONNX Runtime (Python sidecar)");
-    assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
-    assert!(onnx.runtime_instance_id.is_none());
-    assert!(onnx.models.is_empty());
+        .all(|runtime| runtime.runtime_id != "onnx-runtime"));
+}
+
+fn assert_retired_onnx_graph_rejected(error: &WorkflowServiceError) {
+    let stale_error = match error {
+        WorkflowServiceError::WithDiagnostics { source, .. } => source.as_ref(),
+        other => other,
+    };
+    let diagnostics = match stale_error {
+        WorkflowServiceError::StaleWorkflowGraph {
+            message,
+            diagnostics,
+        } => {
+            assert!(
+                message.contains("onnx-inference"),
+                "stale graph message should identify retired onnx node type: {message}"
+            );
+            diagnostics
+        }
+        other => panic!("expected stale graph rejection, got {other:?}"),
+    };
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == pantograph_workflow_service::WorkflowGraphDiagnosticCode::UnknownNodeType
+            && diagnostic.node_type.as_deref() == Some("onnx-inference")
+    }));
 }

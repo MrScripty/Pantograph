@@ -551,6 +551,26 @@ runtime-host test still entering direct `WorkflowService` runtime execution,
 one run-detail/node-IO projection expectation, and one live-event expectation
 that still looks for legacy `TaskCompleted` node-engine events.
 
+2026-06-07 embedded retired ONNX fixture diagnostics slice:
+smallest useful vertical slice: migrate the three stale `onnx-inference`
+workflow-run tests from successful Python-sidecar execution expectations to the
+canonical stale-graph diagnostic path. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`
+and this plan. No-fallback/no-legacy confirmation: the slice does not restore
+the retired `onnx-inference` graph node, does not route the stale graph into the
+Python sidecar, and does not reconcile an `onnx-runtime` runtime-registry record
+from a retired graph fixture. The tests now assert `UnknownNodeType`
+diagnostics for the retired node type and no Python-sidecar calls.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime retired_onnx_audio_workflow --lib`
+passed with 3 tests. Broader verification
+`cargo test -p pantograph-embedded-runtime workflow_run_execution --lib` now
+has 6 passing tests and 3 remaining failures: one production embedded image
+runtime-host test still entering direct `WorkflowService` runtime execution,
+one run-detail/node-IO projection expectation, and one live-event expectation
+that still looks for legacy `TaskCompleted` node-engine events.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
