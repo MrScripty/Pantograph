@@ -315,6 +315,42 @@ impl WorkflowHost for RecordingRuntimeHost {
         Ok(self.capabilities.clone())
     }
 
+    async fn workflow_io(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        Ok(WorkflowIoResponse {
+            inputs: vec![WorkflowIoNode {
+                node_id: "text-input-1".to_string(),
+                node_type: "text-input".to_string(),
+                name: None,
+                description: None,
+                ports: vec![WorkflowIoPort {
+                    port_id: "text".to_string(),
+                    name: None,
+                    description: None,
+                    data_type: Some("string".to_string()),
+                    required: Some(true),
+                    multiple: Some(false),
+                }],
+            }],
+            outputs: vec![WorkflowIoNode {
+                node_id: "text-output-1".to_string(),
+                node_type: "text-output".to_string(),
+                name: None,
+                description: None,
+                ports: vec![WorkflowIoPort {
+                    port_id: "text".to_string(),
+                    name: None,
+                    description: None,
+                    data_type: Some("string".to_string()),
+                    required: Some(false),
+                    multiple: Some(false),
+                }],
+            }],
+        })
+    }
+
     async fn runtime_capabilities(
         &self,
     ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {

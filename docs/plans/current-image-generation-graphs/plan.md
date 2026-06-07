@@ -118,7 +118,7 @@ passed,
 passed, and `cargo fmt -p pantograph-workflow-service -- --check` passed after
 formatting. Broader verification
 `cargo test -p pantograph-workflow-service session_execution --lib` still fails
-with 14 remaining tests after the 2026-06-07 reservation-lifecycle slice, covering
+with 10 remaining tests after the 2026-06-07 source-input materialization slice, covering
 expected follow-on migration work: stale
 direct runtime entrypoints, tests that now require saved executable validation
 snapshots, legacy host-execution assumptions after scheduler task ownership,
@@ -202,6 +202,40 @@ worker-owned path as `InternalError` while preserving the diagnostic text
 `reservation lifecycle port is not configured`. Direct runtime fail-closed
 coverage remains direct and still rejects before legacy launch when executable
 validation snapshots are absent.
+
+2026-06-07 source-input materialization test slice:
+smallest useful vertical slice: update non-runtime session tests that still
+depended on legacy host-level execution shortcuts by binding external inputs to
+the canonical source node `text-input-1:text`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/fixtures/execution_hosts.rs`,
+and this plan. No-fallback/no-legacy confirmation: the slice does not restore
+request-scoped host execution; `RecordingRuntimeHost` now owns its in-memory
+workflow I/O contract explicitly, and one-shot non-runtime execution now asserts
+that session runtime loading is not invoked. The stale
+`workflow_execution_session_run_passes_logical_session_id_in_run_options` test
+was removed because it asserted legacy host `WorkflowRunOptions` propagation;
+the scheduler-owned path no longer calls `WorkflowHost::run_workflow` for this
+behavior, and the attribution snapshot store currently rejects non-runtime
+validation snapshots with no inference nodes.
+
+Verification:
+`cargo test -p pantograph-workflow-service one_shot_non_runtime_session_run_does_not_load_session_runtime --lib`
+passed,
+`cargo test -p pantograph-workflow-service workflow_execution_session_repeated_runs_create_distinct_backend_run_ids --lib`
+passed,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies --lib`
+passed,
+`cargo fmt -p pantograph-workflow-service -- --check` passed, and
+`cargo test -p pantograph-workflow-service session_execution --lib` now fails
+with 10 remaining tests.
+
+Discovered issue:
+workflow run snapshots are currently coupled to inference-only executable
+validation snapshots; a non-runtime graph cannot be represented by the current
+`WorkflowExecutableValidationSnapshotRecord` validator because it requires at
+least one inference node. Keep this as a follow-up for the snapshot/attribution
+test migration instead of adding an invalid placeholder snapshot.
 
 Outstanding Option 2 migration work:
 - migrate the remaining runtime-containing tests that still call

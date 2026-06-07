@@ -2529,7 +2529,7 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
                 session_id: created.session_id,
                 workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
-                    node_id: "text-output-1".to_string(),
+                    node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
                     value: serde_json::json!("retained text"),
                 }],
@@ -2640,58 +2640,6 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
 }
 
 #[tokio::test]
-async fn workflow_execution_session_run_passes_logical_session_id_in_run_options() {
-    let host = MockWorkflowHost::new(8, 1024);
-    let service = WorkflowService::with_max_sessions(2);
-
-    let created = service
-        .create_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionCreateRequest {
-                workflow_id: "wf-1".to_string(),
-                usage_profile: None,
-                keep_alive: true,
-            },
-        )
-        .await
-        .expect("create keep-alive session");
-
-    service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id.clone(),
-                workflow_semantic_version: "1.2.3".to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "text-output-1".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("hello session"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "text-output-1".to_string(),
-                    port_id: "text".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
-        .await
-        .expect("run keep-alive session");
-
-    let recorded = host
-        .recorded_run_options
-        .lock()
-        .expect("run options lock poisoned");
-    assert_eq!(recorded.len(), 1);
-    assert_eq!(
-        recorded[0].workflow_execution_session_id.as_deref(),
-        Some(created.session_id.as_str())
-    );
-    assert_eq!(recorded[0].timeout_ms, None);
-}
-
-#[tokio::test]
 async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_ids() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2);
@@ -2714,7 +2662,11 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("first run"),
+                }],
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
@@ -2733,7 +2685,11 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("second run"),
+                }],
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
@@ -3561,7 +3517,7 @@ async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
 }
 
 #[tokio::test]
-async fn one_shot_session_run_loads_runtime_with_ephemeral_retention_hint() {
+async fn one_shot_non_runtime_session_run_does_not_load_session_runtime() {
     let retention_hints = Arc::new(Mutex::new(Vec::new()));
     let host = RecordingRuntimeHost::new(retention_hints.clone());
     let service = WorkflowService::with_max_sessions(2);
@@ -3584,7 +3540,11 @@ async fn one_shot_session_run_loads_runtime_with_ephemeral_retention_hint() {
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
                 workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("one-shot runtime"),
+                }],
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
@@ -3598,7 +3558,7 @@ async fn one_shot_session_run_loads_runtime_with_ephemeral_retention_hint() {
         *retention_hints
             .lock()
             .expect("retention hints lock poisoned"),
-        vec![WorkflowExecutionSessionRetentionHint::Ephemeral]
+        Vec::<WorkflowExecutionSessionRetentionHint>::new()
     );
 }
 
