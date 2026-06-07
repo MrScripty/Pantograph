@@ -198,7 +198,7 @@ mod tests {
         assert!(
             outcome
                 .error_message
-                .contains("not yet available in the worker loop"),
+                .contains("not available for worker claim"),
             "unexpected error message: {}",
             outcome.error_message
         );

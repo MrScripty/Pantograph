@@ -1,5 +1,20 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime-branch worker claim verification fix: corrected stale
+runtime-owner/facade tests that still expected the pre-claim fail-closed
+message after the worker began returning typed durable-event claim diagnostics.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+and plan docs. No-fallback/no-legacy confirmation: the tests still assert
+failure when no durable runtime-branch event is claimable; no dispatch
+execution, direct helper call, compatibility DTO, or fake completion was
+added. Verification:
+`cargo test -p pantograph-workflow-service runtime_owner_ --lib` passed with
+5 tests, and
+`cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+passed with 4 tests.
+
 2026-06-06 runtime-branch worker event claim/defer update: completed the
 fourth Option 3 source slice by making the task-execution worker claim a due
 runtime-branch task event from the workflow-service repository by workflow run
