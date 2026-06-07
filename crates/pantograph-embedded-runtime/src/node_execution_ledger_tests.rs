@@ -1638,6 +1638,8 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
     )
     .expect("node output artifact should record");
 
+    refresh_node_io_artifact_projection(&service);
+
     let artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
@@ -1681,6 +1683,8 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
         })
         .expect("artifact body should be readable");
     assert_eq!(body.body, b"retained intermediate text");
+
+    refresh_node_status_projection(&service);
 
     let statuses = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -1743,6 +1747,8 @@ fn node_execution_workflow_sink_retains_final_response_not_raw_stream_chunks() {
     )
     .expect("stream chunk should not fail ledger recording");
 
+    refresh_node_io_artifact_projection(&service);
+
     let before_completion = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
@@ -1779,6 +1785,8 @@ fn node_execution_workflow_sink_retains_final_response_not_raw_stream_chunks() {
         },
     )
     .expect("final response should record");
+
+    refresh_node_io_artifact_projection(&service);
 
     let artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1879,6 +1887,8 @@ fn node_execution_workflow_sink_projects_descriptor_node_outputs_without_body_in
     )
     .expect("descriptor output should record");
 
+    refresh_node_io_artifact_projection(&service);
+
     let artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
@@ -1975,6 +1985,8 @@ fn node_execution_workflow_sink_records_oversized_inline_outputs_as_metadata_onl
     )
     .expect("oversized node output should record metadata");
 
+    refresh_node_io_artifact_projection(&service);
+
     let artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
@@ -2057,6 +2069,8 @@ fn node_execution_workflow_sink_records_resolved_inputs_as_retained_node_artifac
         },
     )
     .expect("node input artifact should record");
+
+    refresh_node_io_artifact_projection(&service);
 
     let artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -2153,6 +2167,8 @@ fn node_execution_workflow_sink_skips_connected_resolved_inputs() {
         },
     )
     .expect("node input artifact handling should not fail");
+
+    refresh_node_io_artifact_projection(&service);
 
     let input_artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -2552,6 +2568,20 @@ fn refresh_node_status_projection(service: &WorkflowService) {
             batch_size: 10,
         })
         .expect("node status projection refresh");
+
+    assert!(refresh.failed.is_empty());
+}
+
+fn refresh_node_io_artifact_projection(service: &WorkflowService) {
+    let refresh = service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::IoArtifact],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended,
+            batch_size: 10,
+        })
+        .expect("node I/O artifact projection refresh");
 
     assert!(refresh.failed.is_empty());
 }

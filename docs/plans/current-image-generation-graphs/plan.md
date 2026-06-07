@@ -2861,6 +2861,40 @@ targeted ESLint. Remaining follow-up: optional Diagnostics/Network page reuse
 of the same presenter rows can be scheduled separately if those operator views
 also need expanded attempt facts.
 
+2026-06-07 node-execution I/O artifact projection test refresh slice:
+completed. Smallest useful vertical slice: update the six
+`node_execution_workflow_sink_*` retained-artifact tests to refresh the
+canonical diagnostics I/O artifact projection before querying projection rows.
+Allowed files touched:
+`crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs` and
+this plan. No source projection change was needed.
+
+No-fallback/no-legacy confirmation: the tests still exercise
+`NodeExecutionWorkflowLedgerSink` recording `IoArtifactObserved` diagnostics
+and reading through the workflow-service I/O artifact projection. The slice
+does not restore request-scoped artifact rows, bypass diagnostics projection
+refresh, read artifact store manifests directly, add compatibility shims, or
+use graph/frontend/runtime fallback paths. The status assertion in the
+task-completion test now also refreshes the canonical node-status projection
+before querying it.
+
+Verification passed:
+`cargo test -p pantograph-embedded-runtime node_execution_workflow_sink --lib`,
+`cargo fmt -p pantograph-embedded-runtime -- --check`, and
+`cargo check -p pantograph-embedded-runtime`. Broader verification
+`cargo test -p pantograph-embedded-runtime --lib` now reports 402 passing and
+4 failing tests; the six node-execution ledger retained-artifact failures are
+removed.
+
+Discovered issues and follow-ups:
+- The broad embedded-runtime lib suite still warns that
+  `synthetic_kv_node_memory_snapshot` is unused after the checkpoint
+  migration. Cleanup remains deferred because it is a shared fixture cleanup,
+  not part of this node-ledger slice.
+- Remaining embedded-runtime broad failures are now the two retired
+  data-graph Python sidecar reconciliation expectations and the two
+  runtime-preflight restart classification expectations.
+
 ## Standards Rule
 
 The standards constraints in
