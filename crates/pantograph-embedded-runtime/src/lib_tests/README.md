@@ -44,8 +44,8 @@ fixtures and provide a safe first boundary.
 | `host_helper_tests.rs` | Unit tests for embedded workflow host helper contracts and workflow-facing runtime-registry error mapping. |
 | `runtime_lifecycle_capability_tests.rs` | Integration tests for hosted runtime construction, shutdown reconciliation, loaded-session shutdown state, and injected runtime capabilities. |
 | `runtime_preflight_tests.rs` | Integration tests for runtime unload-candidate selection and workflow runtime preflight availability after runtime-install state changes. |
-| `session_checkpoint_capacity_tests.rs` | Integration tests for keep-alive workflow-session checkpoint preservation across capacity rebalance and repeated unloads. |
-| `session_checkpoint_recovery_tests.rs` | Integration tests for keeping workflow-session checkpoints intact across failed restore, runtime-not-ready resume, and scheduler reclaim recovery. |
+| `session_checkpoint_capacity_tests.rs` | Integration tests for keep-alive runtime/model residency reservation release, reacquire, and disable behavior across capacity rebalance and repeated unloads. |
+| `session_checkpoint_recovery_tests.rs` | Integration tests for keep-alive runtime/model residency recovery after failed resume, runtime-not-ready resume, and scheduler reclaim without carrying workflow inputs or node memory. |
 | `session_execution_state_tests.rs` | Integration tests for keep-alive workflow-session runtime residency, per-run input ownership, graph-change handling, and inspection state. |
 | `session_runtime_lifecycle_tests.rs` | Integration tests for embedded workflow-session runtime reservation, warmup, preflight, unload, and non-keep-alive release behavior. |
 | `workflow_run_execution_tests.rs` | Integration tests for embedded scheduler session runs, cancellation, human-input validation, and Python sidecar runtime observation. |

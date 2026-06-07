@@ -7554,4 +7554,25 @@ Verification:
 verification passes, rerun `cargo test -p pantograph-embedded-runtime --lib`
 only to update the remaining-failure inventory.
 
+2026-06-07 keep-alive checkpoint capacity/recovery migration slice:
+completed. The six stale checkpoint tests now assert runtime/model residency
+facts and per-run input ownership instead of executor checkpoint snapshots,
+synthetic KV node-memory preservation, or omitted-input carry-forward. No
+embedded-runtime source projection was needed. Verification passed:
+`cargo test -p pantograph-embedded-runtime session_checkpoint_capacity --lib`,
+`cargo test -p pantograph-embedded-runtime session_checkpoint_recovery --lib`,
+`cargo check -p pantograph-embedded-runtime`, and
+`cargo fmt -p pantograph-embedded-runtime -- --check`. Broader verification
+`cargo test -p pantograph-embedded-runtime --lib` now reports 396 passing and
+10 failing tests; checkpoint capacity/recovery is no longer in the remaining
+failure inventory.
+
+Deferred follow-ups: remove the now-unused shared
+`synthetic_kv_node_memory_snapshot` test fixture/import in a later shared test
+harness cleanup slice, and normalize runtime-residency reservation lifecycle
+across capacity-managed paths during the durable task-attempt/runtime
+residency work. Remaining broad failures are node-execution ledger retained
+artifact expectations, retired data-graph Python sidecar reconciliation
+expectations, and runtime-preflight restart classification expectations.
+
 **Status:** In progress. First slice is the device/runtime contract gate.

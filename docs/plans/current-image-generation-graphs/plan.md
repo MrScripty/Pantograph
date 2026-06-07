@@ -773,6 +773,50 @@ inputs or node memory between runs, using graph/frontend paths to infer
 residency, moving durable process-restart replay into this narrow slice, or
 editing outside the allowed checkpoint/residency write set.
 
+2026-06-07 keep-alive checkpoint capacity/recovery test migration slice:
+completed. Smallest useful vertical slice: migrate the six stale
+embedded-runtime checkpoint capacity/recovery tests from executor checkpoint
+snapshots and node-memory carry-forward to runtime/model residency facts and
+per-run input ownership. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_capacity_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_recovery_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/README.md`, and this plan.
+No source projection was required.
+
+No-fallback/no-legacy confirmation: the migrated tests no longer read
+`EmbeddedRuntime.session_executions` for checkpoint state, no longer record or
+assert synthetic KV node-memory snapshots, no longer expect empty-input resume
+to replay prior workflow inputs, and no longer expect executor pointer
+identity as the reuse proof. The tests now assert fresh input on every
+successful run, typed missing-input or scheduler rejection diagnostics on
+invalid resumes, and runtime-registry reservation facts where the current
+capacity path exposes stable residency. Where capacity-managed paths may
+legitimately release or retain a single shared keep-alive reservation, the
+tests assert the bounded canonical shape instead of forcing owner churn.
+
+Verification passed:
+`cargo test -p pantograph-embedded-runtime session_checkpoint_capacity --lib`,
+`cargo test -p pantograph-embedded-runtime session_checkpoint_recovery --lib`,
+`cargo check -p pantograph-embedded-runtime`, and
+`cargo fmt -p pantograph-embedded-runtime -- --check`. Broader verification
+`cargo test -p pantograph-embedded-runtime --lib` now reports 396 passing and
+10 failing tests; the six keep-alive checkpoint failures are removed.
+
+Discovered issues and follow-ups:
+- The focused test runs now warn that the old shared
+  `synthetic_kv_node_memory_snapshot` fixture/import is unused after this
+  migration. Cleanup is deferred because it touches shared test harness files
+  outside the approved checkpoint slice.
+- Runtime-residency reservation lifecycle is not yet fully normalized across
+  capacity-managed paths: some paths release immediately and some retain a
+  shared keep-alive reservation. The tests intentionally assert only the
+  canonical bounded shape. Full lifecycle normalization remains part of the
+  later durable task-attempt/runtime residency work.
+- Remaining embedded-runtime broad failures are now the six
+  `node_execution_ledger::tests::node_execution_workflow_sink_*` retained
+  artifact expectations, two retired data-graph Python sidecar reconciliation
+  expectations, and two runtime-preflight restart classification expectations.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
