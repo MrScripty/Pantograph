@@ -1101,6 +1101,22 @@ durable task orchestration path.
     passed with 4 tests. Next slice: reconstruct execution facts from claimed
     durable events/backend run records and execute through this owned host
     boundary before durable terminal state and responder notification.
+  - 2026-06-07 runtime-branch worker dispatch re-plan decision: use the
+    backend rehydration bridge now, then promote to the full durable
+    task-attempt lifecycle after the complete inference path is working. The
+    worker must treat the claimed durable event as execution authority, then
+    read only workflow-service active-run/session records for remaining
+    execution context. The next slices are: change dispatch-unavailable
+    handling so dispatch-capable workers are not blocked by terminal
+    `Deferred` events; add the rehydration boundary for session/run/task
+    facts; move dispatch-boundary execution behind the worker using the owned
+    host boundary; persist durable completed/deferred/failed state before
+    responder notification; then follow with the full Option 3 durable
+    task-attempt lifecycle for running/dispatching, retry/defer/replay,
+    batching, duplicate-dispatch guard, and restart semantics. Do not use
+    in-memory execution envelopes, duplicate mutable run truth into events
+    prematurely, call the direct helper from the request path, add
+    frontend/Tauri policy, add compatibility DTOs, or fake completion.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

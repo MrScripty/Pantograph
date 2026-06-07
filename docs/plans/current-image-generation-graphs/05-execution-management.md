@@ -27271,6 +27271,38 @@ Worker rules:
     - Remaining follow-up: the worker must reconstruct execution facts from
       claimed durable records and execute dispatch through this owned host
       boundary before durable terminal state and responder notification.
+  - 2026-06-07 runtime-branch worker dispatch re-plan decision:
+    - Decision: use backend rehydration from existing workflow-service
+      active-run/session state as the immediate bridge, then promote to the
+      full durable task-attempt lifecycle after the complete inference path is
+      working.
+    - Required next slices:
+      1. Replace the current production dispatch-unavailable terminal deferral
+         with a typed non-terminal blocked/ready-for-dispatch handling path, or
+         otherwise ensure a dispatch-capable worker can claim the same durable
+         event without relying on a terminal `Deferred` event.
+      2. Add a backend-owned rehydration boundary that accepts a claimed
+         runtime-branch event and reads only workflow-service active-run/session
+         records for session summary, queued inputs, output targets,
+         timeout/dequeued timing, scheduler task graph/state, task-run summary,
+         and terminal diagnostic context.
+      3. Move runtime dispatch-boundary execution behind the worker using the
+         claimed event, rehydrated backend context, and owned host boundary.
+      4. Persist completed/deferred/failed durable event state before responder
+         notification.
+      5. After the complete inference path is proven, execute the follow-on
+         durable task-attempt lifecycle plan with explicit running/dispatching,
+         retry/defer/replay, batching, duplicate-dispatch, and restart
+         semantics.
+    - Standards alignment: business logic remains backend/workflow-service
+      owned, lifecycle remains composition-root/worker owned, state comes from
+      backend durable/session records, async dispatch stays in the worker shell,
+      and failures return typed diagnostics instead of fallback behavior.
+    - Rejected immediate paths: full in-memory execution envelopes in worker
+      commands, duplicating all mutable run facts into runtime-branch events
+      before the task-attempt lifecycle exists, request-scoped direct helper
+      dispatch, frontend/Tauri policy, compatibility DTOs, and fake
+      completion.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

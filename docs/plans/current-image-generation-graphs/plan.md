@@ -1,5 +1,48 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-07 runtime-branch worker dispatch re-plan decision: use the
+backend-rehydration bridge as the immediate source path, then promote to the
+full durable task-attempt lifecycle after the complete inference path is
+working. The worker already claims durable runtime-branch events and owns the
+composition-root host boundary, but dispatch still needs facts currently held
+by existing backend active-run/session state: session summary, queued inputs,
+output targets, timeout/dequeued timing, active scheduler task graph/state,
+task-run summary, and terminal diagnostic context. The next source slices must
+therefore make the claimed durable event the execution authority and rehydrate
+the remaining execution context from workflow-service active-run/session
+records, not from request parameters, frontend/Tauri state, graph path
+inference, or compatibility DTOs.
+
+Immediate Option 1 bridge sequence:
+1. Replace the current production `DispatchUnavailable` terminal deferral with
+   a typed non-terminal blocked/ready-for-dispatch handling path or otherwise
+   ensure a dispatch-capable worker can claim the same durable event without
+   relying on a terminal `Deferred` event.
+2. Add a workflow-service-owned rehydration boundary that accepts a claimed
+   runtime-branch event plus claim and reads only backend active-run/session
+   records to build the execution context needed by the worker.
+3. Move the existing runtime dispatch-boundary execution body behind the worker
+   using that rehydrated context and the owned host boundary; the request path
+   may only enqueue and await notification.
+4. Persist completed/deferred/failed durable event state before notifying the
+   in-memory responder, and keep missing/stale/expired facts as typed
+   diagnostics.
+5. Once this proves a complete inference path, execute the follow-on Option 3
+   lifecycle plan: promote runtime-branch events into the durable scheduler
+   task-attempt lifecycle with explicit non-terminal running/dispatching,
+   retry/defer/replay, batching, duplicate-dispatch guard, and restart
+   semantics.
+
+Rejected immediate paths: passing a full in-memory execution envelope in the
+worker command would preserve request-scoped execution ownership; duplicating
+all run facts into the runtime-branch event now would create a second mutable
+truth before the full task-attempt lifecycle is ready; moving dispatch by
+calling the direct helper from the request path would violate the no-fallback/
+no-legacy rule. This re-plan follows the standards by keeping business logic in
+backend workflow-service ownership, preserving composition-root lifecycle
+ownership, using typed diagnostics instead of fallback behavior, and keeping
+the next source work in validated thin vertical slices.
+
 2026-06-06 runtime-branch worker host-boundary update: completed the next
 Option 3 preparation slice by threading the composition-root owned
 `WorkflowHost` into `WorkflowTaskExecutionRuntimeOwner`,
