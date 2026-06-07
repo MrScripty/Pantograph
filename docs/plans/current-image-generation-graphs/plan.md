@@ -673,6 +673,24 @@ explicit no-fallback rules. Candidate next slices are:
    or whether the backend should still classify that condition as
    `RuntimeNotReady`.
 
+2026-06-07 broader embedded-runtime re-plan decision: execute Option 4 first,
+the Technical-Fit/Pumas fact classification slice, because a required-model
+package-fact projection failure can block later runtime scheduling and
+resource-admission decisions. This is an investigation and contract-alignment
+slice, not a license to add fallback behavior. The slice must reproduce the
+focused
+`required_model_package_facts_resolve_from_owner_selector_access` failure,
+classify it as either Pantograph fixture/setup drift after the pushed Pumas
+owner-selector changes or a real Pantograph owner-API projection regression,
+and then make the smallest correction in Pantograph's technical-fit boundary.
+It must not synthesize package facts from graph paths, selector summaries,
+read-only/local-client access, UI state, or legacy workflow metadata; owner
+selector access remains the only source for full package facts. If the failing
+test proves Pumas no longer exposes the required owner-API fact contract,
+stop and re-plan with a Pumas handoff instead of inventing a Pantograph shim.
+After this slice validates, re-plan the keep-alive checkpoint failures next so
+runtime/model residency can be settled without implicit input carry-forward.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,

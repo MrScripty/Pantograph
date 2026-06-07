@@ -218,6 +218,17 @@ preflight diagnostics, but they must not be treated as executable dispatch
 authority unless a future re-plan explicitly proves the summary contract is
 sufficient.
 
+2026-06-07 Pantograph re-plan update: the next Pantograph slice will classify
+the embedded-runtime technical-fit failure where owner selector access resolves
+zero required-model package facts. This slice must preserve the boundary above:
+if the failure is Pantograph fixture/setup drift, fix the Pantograph test setup
+to use the current canonical Pumas owner-API/index/package-facts path; if it is
+a Pantograph projection regression, fix the owner-API projection boundary; if
+Pumas no longer exposes the required full-fact contract through owner access,
+stop and hand the contract issue back to the Pumas plan. Pantograph must not
+replace missing owner facts with selector summaries, path scans, graph-visible
+package facts, or compatibility metadata.
+
 ## Implementation Architecture
 
 Pumas should implement this as a package-facts module split before adding new

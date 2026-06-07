@@ -7445,4 +7445,52 @@ Stop and re-plan before implementation when any remaining slice would require:
   variant/device facts, and rejects with bounded diagnostics when the CUDA
   variant is missing.
 
+2026-06-07 embedded-runtime Technical-Fit/Pumas fact re-plan decision:
+execute the focused owner-selector package-fact classification slice before
+the next embedded-runtime migration area. The immediate failure is
+`technical_fit::tests::required_model_package_facts_resolve_from_owner_selector_access`,
+which expects owner selector access to materialize one required-model package
+fact but currently observes zero during broad embedded-runtime verification.
+
+Smallest useful vertical slice:
+- Allowed write set: `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  focused embedded-runtime technical-fit test helpers in the same module if
+  needed, `docs/plans/current-image-generation-graphs/plan.md`,
+  `docs/plans/current-image-generation-graphs/07-pumas-library-image-generation-facts.md`,
+  and this milestone file.
+- Reproduce the focused failure with
+  `cargo test -p pantograph-embedded-runtime required_model_package_facts_resolve_from_owner_selector_access --lib`.
+- Inspect whether the failure is fixture/setup drift after the pushed Pumas
+  owner-selector updates, such as missing canonical owner-API indexing,
+  package-facts generation, selected-artifact setup, or cache refresh in the
+  test fixture.
+- If it is fixture drift, update only the Pantograph test setup to use the
+  canonical Pumas owner-API/index/package-facts path, then keep the assertion
+  that exactly one owner-sourced package fact is resolved.
+- If it is a Pantograph projection regression, fix the
+  `resolve_required_model_package_facts_from_selector_access` /
+  `resolve_required_model_package_facts_from_api` boundary so it consumes the
+  current Pumas owner-API full-fact contract without path inference or summary
+  promotion.
+- If Pumas no longer exposes a required owner-API full-fact contract,
+  stop and re-plan with a Pumas handoff; do not add a Pantograph
+  compatibility shim.
+
+No-fallback/no-legacy rule:
+full package facts for technical-fit may come only from explicit Pumas owner
+selector access. Read-only and local-client selector access must remain
+non-authoritative for full package facts. The slice must not synthesize facts
+from selector summaries, filesystem paths, graph node data, frontend/Tauri
+state, legacy workflow metadata, runtime loaders, or model family guesses.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime required_model_package_facts_resolve_from_owner_selector_access --lib`,
+`cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+`cargo check -p pantograph-embedded-runtime`, and
+`cargo fmt -p pantograph-embedded-runtime -- --check`. If those pass, rerun
+`cargo test -p pantograph-embedded-runtime --lib` only to confirm the remaining
+failure count and update the summary plan. The expected next re-plan area after
+this slice is keep-alive checkpoint capacity/recovery semantics without
+workflow input carry-forward.
+
 **Status:** In progress. First slice is the device/runtime contract gate.
