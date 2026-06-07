@@ -2171,20 +2171,24 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
 
 #[tokio::test]
 async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
-    let service = WorkflowService::with_ephemeral_attribution_store()
-        .expect("service")
-        .with_dependency_environment_provider(std::sync::Arc::new(
-            dependency_readiness_provider.clone(),
-        ))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
-        .with_runtime_dispatch_candidate_provider(Arc::new(
-            SingleCanonicalRuntimeDispatchCandidateProvider,
-        ))
-        .with_runtime_host_execution_port(runtime_host_port.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_dependency_environment_provider(std::sync::Arc::new(
+                dependency_readiness_provider.clone(),
+            ))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                SingleCanonicalRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone()),
+        Arc::clone(&host),
+    );
+    let service = runtime.service();
     let workflow_id = "wf-runtime-lifecycle-missing";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -2210,7 +2214,7 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -2219,30 +2223,27 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
         )
         .await
         .expect("create session");
-    let error = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "infer".to_string(),
-                    port_id: "image".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+    let error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "infer".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect_err("missing reservation lifecycle port must fail before runtime dispatch");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
     assert!(
         error
             .message()

@@ -178,6 +178,31 @@ test remains direct fail-closed coverage and correctly expects
 `cargo test -p pantograph-workflow-service workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown --lib`
 passed and `cargo fmt -p pantograph-workflow-service -- --check` passed.
 
+2026-06-07 reservation lifecycle missing-port migration slice:
+smallest useful vertical slice: migrate
+`workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing`
+from direct `WorkflowService::run_workflow_execution_session` to
+`WorkflowSessionExecutionRuntime`, while keeping the reservation lifecycle port
+intentionally absent. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan. No-fallback/no-legacy confirmation: the test now reaches the
+canonical runtime worker path and fails closed before runtime-host execution
+without restoring direct request-scoped runtime execution.
+
+Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing --lib`
+passed,
+`cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_fails_closed_before_legacy_launch --lib`
+passed,
+and `cargo fmt -p pantograph-workflow-service -- --check` passed.
+
+Behavioral note:
+missing reservation lifecycle configuration now surfaces through the
+worker-owned path as `InternalError` while preserving the diagnostic text
+`reservation lifecycle port is not configured`. Direct runtime fail-closed
+coverage remains direct and still rejects before legacy launch when executable
+validation snapshots are absent.
+
 Outstanding Option 2 migration work:
 - migrate the remaining runtime-containing tests that still call
   `WorkflowService::run_workflow_execution_session` for direct coverage that is
