@@ -632,6 +632,47 @@ with 9 tests,
 `cargo check` still report the existing unused
 `WorkflowSchedulerStartedRuntimeTaskSupervisor` method warning recorded above.
 
+2026-06-07 broader embedded-runtime verification re-plan trigger:
+after the focused `session_execution_state` and `workflow_run_execution`
+migrations passed, broader verification
+`cargo test -p pantograph-embedded-runtime --lib` failed with 389 passing tests
+and 17 failing tests. This is a re-plan trigger before additional source work
+because the failures span multiple ownership boundaries rather than one safe
+vertical slice:
+- Six `node_execution_ledger::tests::node_execution_workflow_sink_*` tests now
+  observe zero retained node artifacts where legacy node-engine event sink
+  behavior expected one artifact.
+- Two `data_graph_execution_tests` still expect successful retired
+  Python-sidecar ONNX/audio graph execution and runtime-registry reconciliation.
+- One `technical_fit` test expects owner selector package facts to materialize
+  one required-model fact but now observes zero.
+- Six keep-alive checkpoint capacity/recovery tests still expect
+  `EmbeddedRuntime.session_executions` executor/checkpoint state under
+  worker-owned session runs.
+- Two runtime-preflight restart tests now return `InvalidRequest` instead of
+  the stale expected `RuntimeNotReady` classification.
+
+Do not continue by fixing these as one batch. The next re-plan must choose
+which ownership area to migrate first, with non-overlapping write sets and
+explicit no-fallback rules. Candidate next slices are:
+1. Keep-alive checkpoint tests: decide whether checkpoint preservation remains
+   a supported runtime/model residency behavior without input carry-forward, or
+   whether the old executor checkpoint API is retired and tests should move to
+   runtime-registry/session-state facts.
+2. Node-execution ledger sink tests: decide whether retained node artifacts
+   should be produced by canonical worker/task result facts, or whether the
+   old node-engine event sink artifact expectations should be retired.
+3. Data-graph Python sidecar tests: align retired ONNX/audio graph fixtures
+   with stale-graph diagnostics or migrate them to a canonical supported
+   data-graph task path.
+4. Technical-fit Pumas facts: inspect whether this is a fixture/setup drift
+   after the pushed Pumas owner-selector changes or a real package-fact
+   projection regression.
+5. Runtime-preflight restart classification: decide whether `InvalidRequest`
+   is the canonical typed diagnostic for stale selected-runtime restart facts
+   or whether the backend should still classify that condition as
+   `RuntimeNotReady`.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
