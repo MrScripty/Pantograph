@@ -957,6 +957,39 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`, and
 `cargo fmt -p pantograph-workflow-service -- --check`.
 
+2026-06-07 runtime-branch batch eligibility fact-population re-plan trigger:
+stop before populating `batch_eligibility` during runtime-branch event
+admission/recovery. The current admission/recovery boundaries receive the
+scheduler task graph, output targets, and timeout. The task graph carries
+model reference, task type, runtime/device constraints, trait settings, and
+estimate hints, but it does not carry all canonical facts required by the
+batch eligibility contract: selected backend, resolved device/load target when
+policy is automatic, runtime residency key, reservation/resource-fit facts,
+and selected runtime instance/load state. Filling these fields from
+`batching_key`, graph node shape, request parameters, or partial scheduler
+intent would violate the no-fallback/no-legacy rule by inventing scheduling
+authority outside the backend planning/resource facts.
+
+Re-plan options:
+1. Thread selected technical-fit/resource facts into runtime-branch event
+   admission from the composition-root runtime owner. This preserves the
+   current event shape but requires a clear per-task mapping from selected
+   runtime/backend/device/resource facts to each runtime-branch task event.
+2. Promote the needed selected backend, resolved device/load target,
+   residency, and resource-fit facts into the scheduler task graph or a
+   sibling backend-owned task-planning snapshot before runtime-branch events
+   are persisted. This keeps admission deterministic and replayable, but
+   changes the shared planning contract and requires boundary tests.
+3. Defer batching fact population until the full durable scheduler
+   task-attempt lifecycle owns selected runtime/resource facts, then derive
+   runtime-branch batch eligibility from those canonical attempt facts. This
+   best matches the target architecture, but blocks Batching Option 2 grouped
+   claims until task-attempt fact promotion is done.
+
+Do not proceed to durable grouped claims until one option is selected and the
+plan identifies the owner of selected runtime/backend/device/residency/resource
+facts.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
