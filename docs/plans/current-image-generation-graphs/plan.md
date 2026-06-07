@@ -289,9 +289,31 @@ phase hints, sanitized terminal runtime failure classification,
 dependency-readiness resume planning, and shutdown supervisor observation under
 the worker-owned path.
 
+2026-06-07 direct runtime diagnostic cleanup slice:
+smallest useful vertical slice: remove stale `session_execution` tests that
+asserted direct request-scoped runtime load, run, unload, and sanitized terminal
+diagnostic behavior through `WorkflowService::run_workflow_execution_session`.
+Those paths are no longer canonical: direct workflow-service runtime execution
+must fail closed, while runtime-host dispatch and terminal failures are covered
+through `WorkflowSessionExecutionRuntime` and the task-execution worker. The
+unused direct-load/direct-run poisoned diagnostic fixtures were removed; the
+unload poisoned fixture remains because session capacity coverage still owns
+that legacy unload-capacity behavior. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/fixtures/execution_hosts.rs`,
+and this plan. No-fallback/no-legacy confirmation: this slice deletes stale
+direct-runtime expectations instead of adding compatibility shims, does not
+restore host-level runtime load/run/unload execution, and preserves direct
+runtime fail-closed coverage.
+
+Verification:
+`cargo fmt -p pantograph-workflow-service -- --check` passed, and
+`cargo test -p pantograph-workflow-service session_execution --lib` now runs 37
+filtered tests with 35 passing and 2 remaining failures:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`
+and `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
 Outstanding Option 2 migration work:
-- migrate or re-scope the remaining runtime diagnostic tests that still expect
-  direct request-scoped runtime load/run/unload failure surfaces,
 - keep explicit runtime fail-closed coverage on direct `WorkflowService`,
 - update dependency-readiness resume and shutdown supervisor coverage to the
   worker-owned path, and then proceed to adapter/call-site migration.

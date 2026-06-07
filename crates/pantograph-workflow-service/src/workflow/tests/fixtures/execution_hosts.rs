@@ -54,18 +54,8 @@ pub(in crate::workflow::tests) struct RecordingRuntimeHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
 }
 
-pub(in crate::workflow::tests) struct FailingRuntimeLoadHost {
-    pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
-    pub(in crate::workflow::tests) phase_hint: Option<WorkflowRuntimeDiagnosticPhaseHint>,
-}
-
 pub(in crate::workflow::tests) struct FailingRunSnapshotHost {
     pub(in crate::workflow::tests) inner: MockWorkflowHost,
-}
-
-pub(in crate::workflow::tests) struct FailingRunWithPoisonedDiagnosticsHost {
-    pub(in crate::workflow::tests) inner: MockWorkflowHost,
-    pub(in crate::workflow::tests) diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
 }
 
 pub(in crate::workflow::tests) struct FailingUnloadWithPoisonedDiagnosticsHost {
@@ -105,44 +95,11 @@ impl RecordingRuntimeHost {
     }
 }
 
-impl FailingRuntimeLoadHost {
-    pub(in crate::workflow::tests) fn new() -> Self {
-        Self {
-            capabilities: MockWorkflowHost::new(8, 1024).capabilities,
-            phase_hint: None,
-        }
-    }
-
-    pub(in crate::workflow::tests) fn with_phase_hint(
-        phase_hint: WorkflowRuntimeDiagnosticPhaseHint,
-    ) -> Self {
-        Self {
-            capabilities: MockWorkflowHost::new(8, 1024).capabilities,
-            phase_hint: Some(phase_hint),
-        }
-    }
-}
-
 impl FailingRunSnapshotHost {
     pub(in crate::workflow::tests) fn new() -> Self {
         Self {
             inner: MockWorkflowHost::new(8, 1024),
         }
-    }
-}
-
-impl FailingRunWithPoisonedDiagnosticsHost {
-    pub(in crate::workflow::tests) fn new(
-        diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
-    ) -> Self {
-        Self {
-            inner: MockWorkflowHost::new(8, 1024),
-            diagnostics_ledger,
-        }
-    }
-
-    fn poison_diagnostics_ledger(&self) {
-        poison_diagnostics_ledger(&self.diagnostics_ledger);
     }
 }
 
@@ -388,67 +345,6 @@ impl WorkflowHost for RecordingRuntimeHost {
 }
 
 #[async_trait]
-impl WorkflowHost for FailingRuntimeLoadHost {
-    async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
-        Ok(())
-    }
-
-    async fn workflow_graph_fingerprint(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<String, WorkflowServiceError> {
-        Ok("failing-runtime-load-graph".to_string())
-    }
-
-    async fn workflow_graph(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        Ok(mock_workflow_graph())
-    }
-
-    async fn workflow_capabilities(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
-        Ok(self.capabilities.clone())
-    }
-
-    async fn runtime_capabilities(
-        &self,
-    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
-        Ok(self.capabilities.runtime_capabilities.clone())
-    }
-
-    async fn load_session_runtime(
-        &self,
-        _session_id: &str,
-        _workflow_id: &str,
-        _usage_profile: Option<&str>,
-        _retention_hint: WorkflowExecutionSessionRetentionHint,
-    ) -> Result<(), WorkflowServiceError> {
-        let error = WorkflowServiceError::RuntimeNotReady(
-            "llama.cpp spawn failed\u{0000}\nmissing server".to_string(),
-        );
-        Err(match self.phase_hint {
-            Some(phase_hint) => error.with_runtime_diagnostic_phase(phase_hint),
-            None => error,
-        })
-    }
-
-    async fn run_workflow(
-        &self,
-        _workflow_id: &str,
-        _inputs: &[WorkflowPortBinding],
-        _output_targets: Option<&[WorkflowOutputTarget]>,
-        _run_options: WorkflowRunOptions,
-        _run_handle: WorkflowRunHandle,
-    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
-        unreachable!("runtime load failure prevents workflow execution")
-    }
-}
-
-#[async_trait]
 impl WorkflowHost for FailingRunSnapshotHost {
     async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
         self.inner.validate_workflow(workflow_id).await
@@ -506,54 +402,6 @@ impl WorkflowHost for FailingRunSnapshotHost {
         self.inner
             .run_workflow(workflow_id, inputs, output_targets, run_options, run_handle)
             .await
-    }
-}
-
-#[async_trait]
-impl WorkflowHost for FailingRunWithPoisonedDiagnosticsHost {
-    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
-        self.inner.validate_workflow(workflow_id).await
-    }
-
-    async fn workflow_graph_fingerprint(
-        &self,
-        workflow_id: &str,
-    ) -> Result<String, WorkflowServiceError> {
-        self.inner.workflow_graph_fingerprint(workflow_id).await
-    }
-
-    async fn workflow_graph(
-        &self,
-        workflow_id: &str,
-    ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        self.inner.workflow_graph(workflow_id).await
-    }
-
-    async fn workflow_capabilities(
-        &self,
-        workflow_id: &str,
-    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
-        self.inner.workflow_capabilities(workflow_id).await
-    }
-
-    async fn runtime_capabilities(
-        &self,
-    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
-        self.inner.runtime_capabilities().await
-    }
-
-    async fn run_workflow(
-        &self,
-        _workflow_id: &str,
-        _inputs: &[WorkflowPortBinding],
-        _output_targets: Option<&[WorkflowOutputTarget]>,
-        _run_options: WorkflowRunOptions,
-        _run_handle: WorkflowRunHandle,
-    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
-        self.poison_diagnostics_ledger();
-        Err(WorkflowServiceError::InvalidRequest(
-            "workflow execution failed".to_string(),
-        ))
     }
 }
 
