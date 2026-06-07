@@ -1025,6 +1025,19 @@ durable task orchestration path.
     the worker, execute/persist/notify, add restart/replay/batching and
     unavailable/shutdown tests, then remove or make unreachable the production
     direct runtime helper.
+  - 2026-06-06 durable runtime-branch task-event contract slice complete:
+    added `workflow/runtime_branch_task_event.rs` as the backend-owned durable
+    claim contract and pure state machine for runtime-branch task events. The
+    slice covers event/claim/lease identity, ready/claimed/completed/deferred/
+    failed states, attempt generation, lease expiry, queued input keys, output
+    targets, timeout, batching key, terminal timestamps, reclaim, and typed
+    invalid/duplicate/stale/expired/terminal diagnostics. It intentionally did
+    not add repository storage, runtime dispatch, direct helper calls,
+    request-scoped execution, frontend/Tauri policy, compatibility DTOs, graph
+    fact synthesis, or fake completion. Verification:
+    `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+    passed with 10 tests. Next slice: durable workflow-service repository
+    boundary and enqueue/claim/complete/fail/defer/reclaim tests.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

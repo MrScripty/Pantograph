@@ -1247,6 +1247,19 @@ Option 3 thin implementation sequence:
      repository tests, emit durable events on admission, claim in the worker,
      execute/persist/notify, add restart/replay/batching and shutdown tests,
      then remove or make unreachable the production direct runtime helper.
+   - 2026-06-06 durable runtime-branch task-event contract slice complete:
+     `workflow/runtime_branch_task_event.rs` now owns the durable runtime-
+     branch task-event claim contract and pure state machine. It defines
+     event/claim/lease identity, attempt generation, lease expiry, ready/
+     claimed/completed/deferred/failed states, queued input keys, output
+     targets, timeout policy, batching key, terminal timestamps, reclaim
+     behavior, and typed invalid/duplicate/stale/expired/terminal diagnostics.
+     No repository storage, runtime dispatch execution, request-scoped direct
+     helper path, frontend/Tauri policy, compatibility DTO, graph fact
+     synthesis, or fake completion was added. Verification:
+     `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+     passed with 10 tests. Next slice: durable workflow-service repository
+     boundary and enqueue/claim/complete/fail/defer/reclaim tests.
 
 Worker-system standards gates:
 

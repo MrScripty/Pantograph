@@ -27139,6 +27139,33 @@ Worker rules:
       runtime dispatch.
     - Verification for this plan-only decision slice: `git diff --check`
       passed.
+  - 2026-06-06 durable runtime-branch task-event contract slice:
+    - Smallest useful vertical slice: define the workflow-service-owned durable
+      runtime-branch task-event claim contract and pure state machine before
+      adding repository storage, admission wiring, worker claiming, or runtime
+      dispatch execution.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and plan
+      docs.
+    - Implemented stable event id, claim owner id, claim lease id, ready/
+      claimed/completed/deferred/failed states, attempt generation, lease
+      expiry, queued input keys, output targets, timeout policy, batching key,
+      terminal timestamps, reclaim behavior, and typed diagnostics for invalid
+      event, duplicate active claim, missing/stale/expired claim, terminal
+      event, and invalid transition.
+    - No-fallback/no-legacy confirmation: no runtime branch execution,
+      request-scoped dispatch, frontend/Tauri policy, graph/frontend fact
+      synthesis, compatibility DTO, direct helper call, durable repository, or
+      fake completion was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`.
+      Result: passed, 10 tests.
+    - Remaining follow-up: add the durable workflow-service repository boundary
+      with enqueue, claim, complete, fail, defer, lease-expiry, duplicate-claim,
+      stale-claim, and reclaim tests, then wire runtime branch admission to
+      persist claimable events.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
