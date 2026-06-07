@@ -118,7 +118,7 @@ passed,
 passed, and `cargo fmt -p pantograph-workflow-service -- --check` passed after
 formatting. Broader verification
 `cargo test -p pantograph-workflow-service session_execution --lib` still fails
-with 16 remaining tests after the 2026-06-07 dispatch-boundary slice, covering
+with 14 remaining tests after the 2026-06-07 reservation-lifecycle slice, covering
 expected follow-on migration work: stale
 direct runtime entrypoints, tests that now require saved executable validation
 snapshots, legacy host-execution assumptions after scheduler task ownership,
