@@ -1269,7 +1269,7 @@ async fn scheduler_run_retains_detail_and_terminal_output_projection() {
 }
 
 #[tokio::test]
-async fn scheduler_session_live_events_use_backend_workflow_run_id() {
+async fn scheduler_session_event_sink_omits_legacy_task_completed_events() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
 
@@ -1323,17 +1323,13 @@ async fn scheduler_session_live_events_use_backend_workflow_run_id() {
         )
         .await
         .expect("run session");
+    assert_ne!(response.workflow_run_id, session_id);
 
     let events = event_sink.events();
-    assert!(events.iter().any(|event| matches!(
-        event,
-        node_engine::WorkflowEvent::TaskCompleted { task_id, execution_id, .. }
-            if task_id == "text-output-1" && execution_id == &response.workflow_run_id
-    )));
     assert!(!events.iter().any(|event| matches!(
         event,
         node_engine::WorkflowEvent::TaskCompleted { execution_id, .. }
-            if execution_id == &session_id
+            if execution_id == &session_id || execution_id == &response.workflow_run_id
     )));
 }
 

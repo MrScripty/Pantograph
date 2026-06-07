@@ -612,6 +612,26 @@ passed with 1 test. Broader verification
 has 8 passing tests and 1 remaining failure: the live-event expectation still
 looks for legacy `TaskCompleted` node-engine events.
 
+2026-06-07 embedded live-event legacy removal test slice:
+smallest useful vertical slice: update the remaining live-event test so the
+worker-owned session path asserts the absence of legacy node-engine
+`TaskCompleted` events instead of requiring them. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`
+and this plan. No-fallback/no-legacy confirmation: the slice does not restore
+node-engine task-completed event emission as a compatibility shim; it preserves
+the backend workflow-run id/session-id distinction and verifies that neither id
+is emitted through the old node-engine event sink for task completion.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime scheduler_session_event_sink_omits_legacy_task_completed_events --lib`
+passed with 1 test,
+`cargo test -p pantograph-embedded-runtime workflow_run_execution --lib` passed
+with 9 tests,
+`cargo check -p pantograph-embedded-runtime` passed, and
+`cargo fmt -p pantograph-embedded-runtime -- --check` passed. `cargo test` and
+`cargo check` still report the existing unused
+`WorkflowSchedulerStartedRuntimeTaskSupervisor` method warning recorded above.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
