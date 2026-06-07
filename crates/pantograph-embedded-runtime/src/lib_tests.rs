@@ -59,10 +59,7 @@ mod session_runtime_lifecycle_tests;
 #[path = "lib_tests/workflow_run_execution_tests.rs"]
 mod workflow_run_execution_tests;
 
-use graph_fixtures::{
-    multi_python_runtime_data_graph, runtime_onnx_audio_data_graph,
-    synthetic_kv_node_memory_snapshot,
-};
+use graph_fixtures::{multi_python_runtime_data_graph, runtime_onnx_audio_data_graph};
 
 fn test_artifact_policy() -> ArtifactPolicy {
     ArtifactPolicy {

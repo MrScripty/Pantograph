@@ -2964,8 +2964,32 @@ Discovered issues and follow-ups:
   validation boundary.
 - Broader embedded-runtime verification now passes:
   `cargo test -p pantograph-embedded-runtime --lib` reports 406 passing tests.
-- The unused `synthetic_kv_node_memory_snapshot` warning remains the same
-  shared fixture cleanup follow-up from the checkpoint migration.
+- The unused `synthetic_kv_node_memory_snapshot` warning was cleaned up by
+  the 2026-06-07 shared embedded-runtime fixture cleanup slice.
+
+2026-06-07 shared embedded-runtime fixture cleanup slice: completed. Smallest
+useful vertical slice: remove the unused
+`synthetic_kv_node_memory_snapshot` import and fixture helper left behind after
+the keep-alive checkpoint migration replaced executor node-memory assertions
+with runtime/model residency facts. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/graph_fixtures.rs`, and this
+plan.
+
+No-fallback/no-legacy confirmation: this slice deletes dead test-harness code
+that represented the retired node-memory checkpoint shape. It does not restore
+executor snapshots, KV handle carry-forward, workflow input replay, or any
+legacy runtime execution path.
+
+Verification passed:
+`cargo test -p pantograph-embedded-runtime --lib`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo fmt -p pantograph-embedded-runtime -- --check`, and `git diff --check`
+for the slice files. The embedded-runtime lib suite reports 406 passing tests;
+the previous `synthetic_kv_node_memory_snapshot` warnings are gone. The
+workflow-service unused `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort
+helper warning remains owned by the worker cancellation/shutdown lifecycle
+cleanup.
 
 ## Standards Rule
 
