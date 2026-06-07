@@ -1093,6 +1093,45 @@ decision and persists these task-attempt facts. Stop and re-plan if that
 requires shared scheduler/runtime-registry/Pumas/generated/fixture contract
 changes in the same slice.
 
+2026-06-07 durable runtime task-attempt fact persistence re-plan trigger:
+stop before persisting task-attempt facts. Inspection found that
+workflow-service runtime dispatch selection is the closest backend boundary:
+`WorkflowRuntimeDispatchCandidateFact` and scheduler `SchedulerDispatchDecision`
+own selected runtime id, runtime variant, selected device ids, selected model
+ref, reservations, and resource-fit assessment. They do not own every fact
+required by the new task-attempt contract: selected backend id, runtime family,
+resolved load target, runtime residency key, loaded-runtime memory estimate,
+and selected runtime-instance/load-state facts. Persisting now would require
+synthesizing those values from runtime id strings, graph shape, provisional
+`batching_key`, request DTOs, trait settings, or partial scheduler estimates,
+which would violate the backend-owned source-of-truth and no-fallback rules.
+
+Re-plan options for Option 3 step 2:
+1. Extend the scheduler dispatch candidate/decision contract to carry the
+   missing selected backend, runtime family, load target, residency key,
+   loaded-runtime memory estimate, and runtime-instance/load-state facts. This
+   makes the selected dispatch boundary the durable source for task-attempt
+   persistence, but it changes a shared scheduler contract and needs serial
+   contract tests before workflow-service persistence.
+2. Add a workflow-service-owned selected runtime/resource fact sidecar beside
+   dispatch candidate collection, produced by the same backend provider that
+   owns canonical runtime/resource facts and keyed by candidate id. Scheduler
+   selection would still rank candidates, and workflow-service would persist
+   the sidecar for the selected candidate. This avoids changing scheduler DTOs
+   immediately, but requires a strict invariant that the sidecar and scheduler
+   candidate share identity and cannot diverge.
+3. Move selected backend/load-target/residency/memory fact production earlier
+   into the runtime dispatch candidate provider contract, then build both the
+   scheduler candidate and the runtime task-attempt fact from one validated
+   workflow-service candidate fact. This keeps policy/mechanism separated and
+   may be the simplest long-term workflow-service boundary, but it expands the
+   existing candidate fact contract and tests before any persistence slice.
+
+Do not continue by persisting partial task-attempt facts. The next plan update
+must choose one option and define the exact owner of missing backend,
+load-target, residency, memory, and runtime-instance/load-state facts before
+source implementation resumes.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
