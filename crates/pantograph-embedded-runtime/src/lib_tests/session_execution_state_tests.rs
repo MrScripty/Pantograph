@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs() {
+async fn keep_alive_session_requires_inputs_per_run_without_executor_carry_forward() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
 
@@ -9,6 +9,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
     install_fake_default_runtime(&app_data_dir);
 
+    let runtime_registry = Arc::new(RuntimeRegistry::new());
     let runtime = EmbeddedRuntime::with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
@@ -20,7 +21,8 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-    );
+    )
+    .with_runtime_registry(runtime_registry.clone());
 
     let created = runtime
         .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
@@ -53,26 +55,14 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
         .expect("run keep-alive session first time");
     assert_eq!(first_run.outputs[0].value, serde_json::json!("alpha"));
 
-    let first_executor = runtime
+    assert!(runtime
         .session_executions
         .handle(&session_id)
         .expect("session execution lookup should succeed")
-        .expect("keep-alive session executor should exist");
-    let first_snapshots = {
-        let executor = first_executor.lock().await;
-        executor
-            .workflow_execution_session_node_memory_snapshots(&session_id)
-            .await
-    };
-    assert_eq!(first_snapshots.len(), 2);
-    assert!(first_snapshots
-        .iter()
-        .any(|snapshot| snapshot.identity.node_id == "text-input-1"));
-    assert!(first_snapshots
-        .iter()
-        .any(|snapshot| snapshot.identity.node_id == "text-output-1"));
+        .is_none());
+    assert_keep_alive_runtime_residency(&runtime_registry, "runtime-text");
 
-    let second_run = runtime
+    let missing_input_error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             workflow_semantic_version: "0.1.0".to_string(),
@@ -86,15 +76,8 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
             priority: None,
         })
         .await
-        .expect("run keep-alive session with carried-forward inputs");
-    assert_eq!(second_run.outputs[0].value, serde_json::json!("alpha"));
-
-    let second_executor = runtime
-        .session_executions
-        .handle(&session_id)
-        .expect("session execution lookup should succeed")
-        .expect("keep-alive session executor should still exist");
-    assert!(Arc::ptr_eq(&first_executor, &second_executor));
+        .expect_err("omitted required input must not carry forward");
+    assert_missing_required_input_diagnostic(&missing_input_error);
 
     let third_run = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
@@ -116,13 +99,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
         .await
         .expect("run keep-alive session after updating one input");
     assert_eq!(third_run.outputs[0].value, serde_json::json!("beta"));
-
-    let third_executor = runtime
-        .session_executions
-        .handle(&session_id)
-        .expect("session execution lookup should succeed")
-        .expect("keep-alive session executor should still exist");
-    assert!(Arc::ptr_eq(&first_executor, &third_executor));
+    assert_keep_alive_runtime_residency(&runtime_registry, "runtime-text");
 
     runtime
         .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
@@ -138,7 +115,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
 }
 
 #[tokio::test]
-async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs() {
+async fn keep_alive_session_graph_change_requires_fresh_inputs() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
 
@@ -146,6 +123,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
     install_fake_default_runtime(&app_data_dir);
 
+    let runtime_registry = Arc::new(RuntimeRegistry::new());
     let runtime = EmbeddedRuntime::with_default_python_runtime(
         EmbeddedRuntimeConfig {
             app_data_dir,
@@ -157,7 +135,8 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-    );
+    )
+    .with_runtime_registry(runtime_registry.clone());
 
     let created = runtime
         .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
@@ -189,12 +168,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
         .await
         .expect("run before workflow edit");
     assert_eq!(first_run.outputs[0].value, serde_json::json!("alpha"));
-
-    let first_executor = runtime
-        .session_executions
-        .handle(&session_id)
-        .expect("session execution lookup should succeed")
-        .expect("keep-alive session executor should exist");
+    assert_keep_alive_runtime_residency(&runtime_registry, "runtime-text");
 
     rewrite_test_workflow_input_description(
         temp.path(),
@@ -202,7 +176,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
         "Prompt updated after session creation",
     );
 
-    let second_run = runtime
+    let missing_input_error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             workflow_semantic_version: "0.1.0".to_string(),
@@ -216,24 +190,50 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
             priority: None,
         })
         .await
-        .expect("run after workflow edit");
-    assert_eq!(second_run.outputs[0].value, serde_json::json!("alpha"));
+        .expect_err("graph change must not replay carried inputs");
+    assert_missing_required_input_diagnostic(&missing_input_error);
 
-    let second_executor = runtime
-        .session_executions
-        .handle(&session_id)
-        .expect("session execution lookup should succeed")
-        .expect("keep-alive session executor should still exist");
-    assert!(Arc::ptr_eq(&first_executor, &second_executor));
+    let second_run = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "text-input-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("beta"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
+        .await
+        .expect("run after workflow edit with fresh input");
+    assert_eq!(second_run.outputs[0].value, serde_json::json!("beta"));
+    assert_keep_alive_runtime_residency(&runtime_registry, "runtime-text");
+}
 
-    let snapshots = {
-        let executor = second_executor.lock().await;
-        executor
-            .workflow_execution_session_node_memory_snapshots(&session_id)
-            .await
+fn assert_keep_alive_runtime_residency(runtime_registry: &RuntimeRegistry, workflow_id: &str) {
+    let snapshot = runtime_registry.snapshot();
+    assert_eq!(snapshot.reservations.len(), 1);
+    assert_eq!(snapshot.reservations[0].workflow_id, workflow_id);
+    assert_eq!(
+        snapshot.reservations[0].retention_hint,
+        RuntimeRetentionHint::KeepAlive
+    );
+}
+
+fn assert_missing_required_input_diagnostic(error: &WorkflowServiceError) {
+    let message = match error {
+        WorkflowServiceError::InvalidRequest(message) => message,
+        WorkflowServiceError::Internal(message) => message,
+        other => panic!("expected typed missing-input diagnostic, got {other:?}"),
     };
-    assert_eq!(snapshots.len(), 2);
-    assert!(snapshots
-        .iter()
-        .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready));
+    assert!(
+        message.contains("text-input-1") || message.contains("input"),
+        "missing-input diagnostic should identify the omitted input, got: {message}"
+    );
 }

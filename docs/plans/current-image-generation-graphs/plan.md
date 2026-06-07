@@ -502,6 +502,34 @@ Do not restore the embedded node-engine executor as a compatibility shim, do
 not add backend input memory for omitted keep-alive inputs, and do not make the
 embedded adapter choose legacy execution for keep-alive runs.
 
+2026-06-07 embedded keep-alive per-run input test migration slice:
+completed the selected Option 3 test migration for
+`session_execution_state`. Smallest useful vertical slice: update the two stale
+keep-alive execution-state tests so they no longer assert
+`EmbeddedRuntime.session_executions` executor reuse or node-memory input
+carry-forward. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/session_execution_state_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/README.md`, and this plan.
+No-fallback/no-legacy confirmation: the tests now assert that keep-alive
+preserves canonical runtime residency facts through a keep-alive reservation,
+while every session run must provide its own source inputs; omitted required
+inputs return typed diagnostics from the worker-owned path instead of replaying
+old workflow data.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime session_execution_state --lib`
+passed with 2 tests,
+`cargo check -p pantograph-embedded-runtime` passed, and
+`cargo fmt -p pantograph-embedded-runtime -- --check` passed.
+
+Discovered follow-up:
+`cargo test` and `cargo check` still report existing unused
+`WorkflowSchedulerStartedRuntimeTaskSupervisor` methods
+`abort_handle`, `abort`, and `abort_and_join` in
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`. This
+warning is outside the embedded-runtime keep-alive test migration slice and is
+not fixed here.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
