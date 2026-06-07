@@ -229,6 +229,15 @@ stop and hand the contract issue back to the Pumas plan. Pantograph must not
 replace missing owner facts with selector summaries, path scans, graph-visible
 package facts, or compatibility metadata.
 
+2026-06-07 Pantograph slice result: the owner API contract was present. The
+failure was in Pantograph's embedded-runtime technical-fit projection and test
+fixture setup: Pumas full package facts now include
+`model_ref.model_ref_contract_version`, while the current inference DTO does
+not consume that marker directly. Pantograph now projects the owner facts by
+removing that additive marker before decoding and keeps the focused fixture on
+the current Pumas owner model-library metadata/index path. No Pumas handoff is
+needed for this failure.
+
 ## Implementation Architecture
 
 Pumas should implement this as a package-facts module split before adding new

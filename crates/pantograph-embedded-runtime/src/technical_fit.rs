@@ -1262,7 +1262,28 @@ async fn resolve_required_model_package_facts_from_api(
 fn decode_inference_package_facts<T: serde::Serialize>(
     facts: &T,
 ) -> Result<inference::ResolvedModelPackageFacts, serde_json::Error> {
-    serde_json::from_value(serde_json::to_value(facts)?)
+    let mut value = serde_json::to_value(facts)?;
+    strip_pumas_model_ref_contract_versions(&mut value);
+    serde_json::from_value(value)
+}
+
+fn strip_pumas_model_ref_contract_versions(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if map.contains_key("model_id") {
+                map.remove("model_ref_contract_version");
+            }
+            for child in map.values_mut() {
+                strip_pumas_model_ref_contract_versions(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                strip_pumas_model_ref_contract_versions(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn project_override(
@@ -2862,31 +2883,6 @@ mod tests {
     async fn required_model_package_facts_resolve_from_owner_selector_access() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let model_id = "llm/test/live-technical-fit-facts";
-        let model_dir = temp_dir
-            .path()
-            .join("shared-resources/models")
-            .join(model_id);
-        std::fs::create_dir_all(&model_dir).expect("model dir");
-        std::fs::write(
-            model_dir.join("config.json"),
-            r#"{"model_type":"llama","architectures":["LlamaForCausalLM"]}"#,
-        )
-        .expect("config");
-        std::fs::write(model_dir.join("model.safetensors"), b"test").expect("weights");
-        std::fs::write(
-            model_dir.join("metadata.json"),
-            serde_json::to_string_pretty(&serde_json::json!({
-                "model_id": model_id,
-                "family": "test",
-                "model_type": "llm",
-                "official_name": "Live Technical Fit Facts",
-                "cleaned_name": "live-technical-fit-facts",
-                "files": [{"name": "model.safetensors"}],
-                "runtime_engine_hints": ["transformers"]
-            }))
-            .expect("metadata json"),
-        )
-        .expect("metadata");
         let api = Arc::new(
             pumas_library::PumasApi::builder(temp_dir.path())
                 .with_hf_client(false)
@@ -2895,6 +2891,49 @@ mod tests {
                 .await
                 .expect("pumas api"),
         );
+        let model_library = api.model_library().clone();
+        let model_dir = model_library.build_model_path("llm", "test", "live-technical-fit-facts");
+        std::fs::create_dir_all(&model_dir).expect("model dir");
+        std::fs::write(
+            model_dir.join("config.json"),
+            r#"{"model_type":"llama","architectures":["LlamaForCausalLM"]}"#,
+        )
+        .expect("config");
+        std::fs::write(model_dir.join("model.safetensors"), b"test").expect("weights");
+        let metadata = pumas_library::models::ModelMetadata {
+            model_id: Some(model_id.to_string()),
+            family: Some("test".to_string()),
+            model_type: Some("llm".to_string()),
+            official_name: Some("Live Technical Fit Facts".to_string()),
+            cleaned_name: Some("live-technical-fit-facts".to_string()),
+            files: Some(vec![pumas_library::models::ModelFileInfo {
+                name: "model.safetensors".to_string(),
+                original_name: None,
+                size: None,
+                sha256: None,
+                blake3: None,
+            }]),
+            pipeline_tag: Some("text-generation".to_string()),
+            task_type_primary: Some("text_generation".to_string()),
+            input_modalities: Some(vec!["text".to_string()]),
+            output_modalities: Some(vec!["text".to_string()]),
+            recommended_backend: Some("transformers".to_string()),
+            runtime_engine_hints: Some(vec!["transformers".to_string()]),
+            ..Default::default()
+        };
+        model_library
+            .save_metadata(&model_dir, &metadata)
+            .await
+            .expect("save metadata");
+        api.rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let owner_facts = api
+            .resolve_model_package_facts(model_id)
+            .await
+            .expect("owner API should resolve package facts");
+        decode_inference_package_facts(&owner_facts)
+            .expect("owner package facts should match inference contract");
         let required_models = vec![model_id.to_string(), model_id.to_string(), " ".to_string()];
         let selector_access = PumasSelectorAccess::Owner(api);
 

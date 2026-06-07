@@ -7493,4 +7493,27 @@ failure count and update the summary plan. The expected next re-plan area after
 this slice is keep-alive checkpoint capacity/recovery semantics without
 workflow input carry-forward.
 
+2026-06-07 embedded-runtime Technical-Fit/Pumas fact slice: completed the
+focused owner-selector package-fact classification and correction. The owner
+Pumas API successfully resolved full package facts; Pantograph returned zero
+required-model facts because the technical-fit projection tried to decode the
+raw Pumas fact shape directly into the inference contract after Pumas added
+`model_ref.model_ref_contract_version`. The slice updates the technical-fit
+projection to remove that additive Pumas model-ref marker before decoding,
+matching the existing embedded-runtime full-fact projection boundary, and
+updates the focused owner-access test to create its fixture through the current
+Pumas owner model-library metadata/index path. No selector summaries,
+local-client/read-only full facts, filesystem path inference, graph-visible
+package facts, frontend/Tauri state, runtime loaders, model-family guesses, or
+legacy workflow metadata were introduced. Verification passed:
+`cargo test -p pantograph-embedded-runtime required_model_package_facts_resolve_from_owner_selector_access --lib`,
+`cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+`cargo check -p pantograph-embedded-runtime`, and
+`cargo fmt -p pantograph-embedded-runtime -- --check`. Broader verification
+`cargo test -p pantograph-embedded-runtime --lib` now reports 390 passing and
+16 failing tests. Remaining follow-up: re-plan keep-alive checkpoint
+capacity/recovery tests next, because they still assert the retired
+`EmbeddedRuntime.session_executions` executor/checkpoint path under
+worker-owned session runs.
+
 **Status:** In progress. First slice is the device/runtime contract gate.

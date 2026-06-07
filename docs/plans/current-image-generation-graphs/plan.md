@@ -691,6 +691,30 @@ stop and re-plan with a Pumas handoff instead of inventing a Pantograph shim.
 After this slice validates, re-plan the keep-alive checkpoint failures next so
 runtime/model residency can be settled without implicit input carry-forward.
 
+2026-06-07 Technical-Fit/Pumas owner fact slice: completed. Smallest useful
+vertical slice: classify and fix the embedded-runtime technical-fit failure
+where Pumas owner selector access resolved full package facts but Pantograph
+projected zero required-model facts. Classification: this was a Pantograph
+projection/test fixture drift after the current Pumas owner API added
+`model_ref.model_ref_contract_version` and expects fixtures to use the
+owner model-library metadata/index path. The fix keeps full package facts
+owner-sourced, strips the additive Pumas model-ref contract marker before
+decoding into the current inference contract, and updates the focused test to
+write metadata through `PumasApi::model_library().save_metadata` before index
+rebuild. No-fallback/no-legacy confirmation: no selector summary promotion,
+path scan, graph-visible package fact, UI/Tauri state, local-client/read-only
+full-fact access, or compatibility workflow metadata path was added.
+Verification passed:
+`cargo test -p pantograph-embedded-runtime required_model_package_facts_resolve_from_owner_selector_access --lib`,
+`cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+`cargo check -p pantograph-embedded-runtime`, and
+`cargo fmt -p pantograph-embedded-runtime -- --check`. Broader verification
+`cargo test -p pantograph-embedded-runtime --lib` now fails with 390 passing
+tests and 16 failing tests; the technical-fit failure is removed. Remaining
+re-plan area: keep-alive checkpoint capacity/recovery semantics without
+workflow input carry-forward, followed by node-execution ledger artifacts,
+retired data-graph fixtures, and runtime-preflight restart classification.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
