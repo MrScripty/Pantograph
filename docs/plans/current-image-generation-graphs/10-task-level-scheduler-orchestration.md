@@ -183,6 +183,16 @@ registry/candidate facts explicitly prove compatible residency; missing
 residency or missing estimate facts must block with typed diagnostics, not
 fall back to zero-resource execution.
 
+2026-06-07 runtime-branch bridge status: the first immediate bridge slice
+replaced dispatch-unavailable terminal deferral with a non-terminal durable
+claim release. Runtime-branch events claimed by a worker with no dispatch path
+are returned to `Ready` with claim cleared, while the waiting caller receives a
+typed in-memory `RuntimeBranchDeferred` notification. This keeps durable state
+claimable for the next dispatch-capable worker and avoids treating
+`Deferred` as a placeholder terminal state. The next source slice must add the
+workflow-service-owned rehydration boundary from a claimed event plus claim to
+active-run/session facts before dispatch execution moves into the worker.
+
 ## Task Definition And Task State Replan
 
 The current `pantograph-scheduler` queue contracts require a complete

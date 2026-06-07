@@ -1117,6 +1117,23 @@ durable task orchestration path.
     in-memory execution envelopes, duplicate mutable run truth into events
     prematurely, call the direct helper from the request path, add
     frontend/Tauri policy, add compatibility DTOs, or fake completion.
+  - 2026-06-07 runtime-branch dispatch-unavailable claim-release slice
+    complete: the runtime-branch task-event repository/state machine now
+    supports releasing a current active claim back to `Ready`, and the
+    task-execution worker uses that path when dispatch is unavailable. The
+    waiting caller still receives a typed `RuntimeBranchDeferred` notification
+    with `RuntimeBranchDispatchUnavailable`, but durable event state is not
+    terminal `Deferred`, so a dispatch-capable worker can reclaim the event.
+    This intentionally did not add runtime dispatch execution, direct helper
+    calls, request-scoped dispatch/completion, graph/frontend fact synthesis,
+    frontend/Tauri policy, compatibility DTOs, or fake completion.
+    Verification:
+    `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+    passed with 20 tests and
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+    passed with 15 tests. Next slice: add the backend-owned rehydration
+    boundary from claimed runtime-branch event plus claim to active-run/session
+    records, then move dispatch through the owned worker host boundary.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

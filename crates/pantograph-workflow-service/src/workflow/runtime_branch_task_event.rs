@@ -155,6 +155,13 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         deferred_at_ms: u64,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
+    fn release_claim(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        ready_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
+
     fn fail(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -334,6 +341,20 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         Ok(updated)
     }
 
+    fn release_claim(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        ready_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
+    {
+        let record = self.record(event_id)?;
+        let updated = record.release_claim(claim, ready_at_ms)?;
+        self.records
+            .insert(event_id.as_str().to_string(), updated.clone());
+        Ok(updated)
+    }
+
     fn get(
         &self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -499,6 +520,18 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         self.validate_active_claim(claim, failed_at_ms)?;
         self.state = WorkflowRuntimeBranchTaskEventState::Failed;
         self.failed_at_ms = Some(failed_at_ms);
+        Ok(self)
+    }
+
+    pub(super) fn release_claim(
+        mut self,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        ready_at_ms: u64,
+    ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
+        self.validate_active_claim(claim, ready_at_ms)?;
+        self.state = WorkflowRuntimeBranchTaskEventState::Ready;
+        self.claim = None;
+        self.ready_at_ms = ready_at_ms;
         Ok(self)
     }
 
@@ -787,6 +820,25 @@ mod tests {
     }
 
     #[test]
+    fn runtime_branch_task_event_releases_claim_back_to_ready() {
+        let claimed = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("ready event claims");
+
+        let released = claimed
+            .record
+            .release_claim(&claimed.claim, 120)
+            .expect("current claim releases");
+
+        assert_eq!(released.state, WorkflowRuntimeBranchTaskEventState::Ready);
+        assert!(released.claim.is_none());
+        assert_eq!(released.ready_at_ms, 120);
+        assert_eq!(released.deferred_at_ms, None);
+        assert_eq!(released.failed_at_ms, None);
+        assert_eq!(released.completed_at_ms, None);
+    }
+
+    #[test]
     fn runtime_branch_task_event_rejects_claim_after_terminal_state() {
         let claimed = ready_record()
             .claim(owner_id("worker.alpha"), 100, 50)
@@ -996,6 +1048,32 @@ mod tests {
             .fail(&failed_id, &failed_claim.claim, 220)
             .expect("event fails");
         assert_eq!(failed.state, WorkflowRuntimeBranchTaskEventState::Failed);
+    }
+
+    #[test]
+    fn runtime_branch_task_event_repository_releases_claimed_event_to_ready() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        let event_id = event_id("runtime-branch-task-event.test");
+        repository.enqueue(ready_record()).expect("event enqueues");
+        let claimed = repository
+            .claim_event(&event_id, owner_id("worker.alpha"), 100, 50)
+            .expect("event claims");
+
+        let released = repository
+            .release_claim(&event_id, &claimed.claim, 120)
+            .expect("event claim releases");
+
+        assert_eq!(released.state, WorkflowRuntimeBranchTaskEventState::Ready);
+        assert!(released.claim.is_none());
+        assert_eq!(
+            repository.get(&event_id).expect("stored event").state,
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+        let reclaimed = repository
+            .claim_next_due_for_workflow_run("run.test", owner_id("worker.beta"), 121, 50)
+            .expect("claim next succeeds")
+            .expect("released event is due");
+        assert_eq!(reclaimed.record.event_id, event_id);
     }
 
     fn ready_record() -> WorkflowRuntimeBranchTaskEventRecord {

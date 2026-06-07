@@ -27303,6 +27303,35 @@ Worker rules:
       before the task-attempt lifecycle exists, request-scoped direct helper
       dispatch, frontend/Tauri policy, compatibility DTOs, and fake
       completion.
+  - 2026-06-07 runtime-branch dispatch-unavailable claim-release slice:
+    - Smallest useful vertical slice: replace terminal
+      dispatch-unavailable deferral with a non-terminal claim-release path.
+      Add `release_claim` to the runtime-branch task-event repository/state
+      machine and have the task-execution worker release the claimed event
+      back to `Ready` when dispatch is unavailable.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      and plan docs.
+    - Implemented repository/state-machine release of current active claims,
+      worker use of that release path after a dispatch-unavailable claim, and
+      focused tests proving the event is reclaimable with no terminal
+      `Deferred` timestamp. The in-memory caller notification remains a typed
+      `RuntimeBranchDeferred` outcome with
+      `RuntimeBranchDispatchUnavailable`; it is not durable execution truth.
+    - No-fallback/no-legacy confirmation: no runtime dispatch execution,
+      direct helper call, request-scoped dispatch/completion, graph/frontend
+      fact synthesis, frontend/Tauri policy, compatibility DTO, or fake
+      success completion was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+      passed with 20 tests;
+      `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+      passed with 15 tests.
+    - Remaining follow-up: add the backend-owned rehydration boundary that
+      accepts a claimed runtime-branch event plus claim and reads only
+      workflow-service active-run/session records before dispatch moves behind
+      the worker.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

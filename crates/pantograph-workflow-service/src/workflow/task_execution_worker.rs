@@ -519,7 +519,7 @@ async fn task_execution_worker_loop(
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(request)) => {
                         let service = runtime_branch_environment.service();
                         observed_runtime_branch_commands.fetch_add(1, Ordering::SeqCst);
-                        let outcome = claim_and_defer_runtime_branch_event(
+                        let outcome = claim_and_release_runtime_branch_event(
                             service.as_ref(),
                             &request.command,
                         );
@@ -539,7 +539,7 @@ async fn task_execution_worker_loop(
     );
 }
 
-fn claim_and_defer_runtime_branch_event(
+fn claim_and_release_runtime_branch_event(
     service: &WorkflowService,
     command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
 ) -> WorkflowTaskExecutionWorkerOutcome {
@@ -566,13 +566,13 @@ fn claim_and_defer_runtime_branch_event(
         }
     };
 
-    let deferred = defer_claimed_runtime_branch_task_event(
+    let released = release_claimed_runtime_branch_task_event(
         service,
         &claimed.record.event_id,
         &claimed.claim,
         now_ms,
     );
-    match deferred {
+    match released {
         Ok(record) => {
             let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
                 WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
@@ -587,7 +587,7 @@ fn claim_and_defer_runtime_branch_event(
         }
         Err(diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
             command,
-            "runtime branch task event defer failed after claim",
+            "runtime branch task event claim release failed",
             vec![diagnostic],
         ),
     }
@@ -621,7 +621,7 @@ fn claim_runtime_branch_task_event_for_worker(
         .map_err(runtime_branch_event_diagnostic)
 }
 
-fn defer_claimed_runtime_branch_task_event(
+fn release_claimed_runtime_branch_task_event(
     service: &WorkflowService,
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
@@ -637,7 +637,7 @@ fn defer_claimed_runtime_branch_task_event(
             )
         })?;
     repository
-        .defer(event_id, claim, now_ms)
+        .release_claim(event_id, claim, now_ms)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -883,7 +883,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn task_execution_worker_claims_and_defers_runtime_branch_task_event() {
+    async fn task_execution_worker_releases_claim_when_dispatch_is_unavailable() {
         let scheduler_lifecycle = scheduler_lifecycle();
         let service = Arc::new(WorkflowService::new());
         let event_id =
@@ -955,11 +955,9 @@ mod tests {
             .expect("runtime branch task event repository")
             .get(&event_id)
             .expect("runtime branch task event");
-        assert_eq!(
-            persisted.state,
-            WorkflowRuntimeBranchTaskEventState::Deferred
-        );
-        assert!(persisted.deferred_at_ms.is_some());
+        assert_eq!(persisted.state, WorkflowRuntimeBranchTaskEventState::Ready);
+        assert!(persisted.claim.is_none());
+        assert!(persisted.deferred_at_ms.is_none());
 
         worker
             .shutdown()

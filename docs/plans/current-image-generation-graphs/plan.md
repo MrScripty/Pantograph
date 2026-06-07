@@ -14,10 +14,13 @@ records, not from request parameters, frontend/Tauri state, graph path
 inference, or compatibility DTOs.
 
 Immediate Option 1 bridge sequence:
-1. Replace the current production `DispatchUnavailable` terminal deferral with
+1. Completed 2026-06-07: replace the current production `DispatchUnavailable`
+   terminal deferral with
    a typed non-terminal blocked/ready-for-dispatch handling path or otherwise
    ensure a dispatch-capable worker can claim the same durable event without
-   relying on a terminal `Deferred` event.
+   relying on a terminal `Deferred` event. The worker now releases a claimed
+   runtime-branch task event back to `Ready` when dispatch is unavailable while
+   returning a typed in-memory deferred notification to the caller.
 2. Add a workflow-service-owned rehydration boundary that accepts a claimed
    runtime-branch event plus claim and reads only backend active-run/session
    records to build the execution context needed by the worker.
@@ -42,6 +45,30 @@ no-legacy rule. This re-plan follows the standards by keeping business logic in
 backend workflow-service ownership, preserving composition-root lifecycle
 ownership, using typed diagnostics instead of fallback behavior, and keeping
 the next source work in validated thin vertical slices.
+
+2026-06-07 runtime-branch dispatch-unavailable claim-release update:
+completed the first immediate bridge slice. Smallest useful vertical slice:
+add `release_claim` to the runtime-branch task-event repository/state machine
+and have the task-execution worker release a claimed event back to `Ready`
+when dispatch is unavailable. The worker still returns a typed
+`RuntimeBranchDeferred` notification with `RuntimeBranchDispatchUnavailable`
+for the waiting caller, but durable state is no longer terminal `Deferred`, so
+a later dispatch-capable worker can reclaim the same event. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and plan docs. No-fallback/no-legacy confirmation: this slice does not execute
+runtime branches, does not call the direct helper, does not add request-scoped
+dispatch/completion, does not synthesize graph/frontend facts, does not add
+frontend/Tauri policy, does not add compatibility DTOs, and does not fake
+successful completion. Verification:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+passed with 20 tests, and
+`cargo test -p pantograph-workflow-service task_execution_worker --lib` passed
+with 15 tests. Remaining follow-up: add the workflow-service-owned
+rehydration boundary that accepts a claimed event plus claim and reads only
+backend active-run/session records, then move dispatch-boundary execution
+behind the worker.
 
 2026-06-06 runtime-branch worker host-boundary update: completed the next
 Option 3 preparation slice by threading the composition-root owned
