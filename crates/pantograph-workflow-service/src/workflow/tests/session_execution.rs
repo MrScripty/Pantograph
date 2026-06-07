@@ -2323,15 +2323,16 @@ fn dependency_bindings(
         .collect()
 }
 
+#[derive(Clone)]
 struct SlowWorkflowIoHost {
-    inner: MockWorkflowHost,
+    inner: Arc<MockWorkflowHost>,
     workflow_io_delay: std::time::Duration,
 }
 
 impl SlowWorkflowIoHost {
     fn new(workflow_io_delay: std::time::Duration) -> Self {
         Self {
-            inner: MockWorkflowHost::new(8, 1024),
+            inner: Arc::new(MockWorkflowHost::new(8, 1024)),
             workflow_io_delay,
         }
     }
@@ -2413,7 +2414,7 @@ impl WorkflowHost for SlowWorkflowIoHost {
 
 #[tokio::test]
 async fn workflow_execution_session_initializes_scheduler_task_state_before_run_execution() {
-    let host = BlockingRunHost::new();
+    let host = SlowWorkflowIoHost::new(Duration::from_secs(30));
     let service = WorkflowService::with_max_sessions(2);
     let created = service
         .create_workflow_execution_session(
@@ -2454,24 +2455,19 @@ async fn workflow_execution_session_initializes_scheduler_task_state_before_run_
             .await
     });
 
-    if tokio::time::timeout(Duration::from_secs(5), host.wait_for_first_run_started())
-        .await
-        .is_err()
-    {
-        let run_result = tokio::time::timeout(Duration::from_secs(1), run)
-            .await
-            .expect("workflow run should return after host execution timeout")
-            .expect("workflow run task should join");
-        panic!("workflow run did not reach host execution: {run_result:?}");
-    }
-    let workflow_run_id = {
-        let store = service.session_store_guard().expect("session store");
-        store
-            .active_workflow_run_ids()
-            .into_iter()
-            .next()
-            .expect("active workflow run id")
-    };
+    let workflow_run_id = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(workflow_run_id) = {
+                let store = service.session_store_guard().expect("session store");
+                store.active_workflow_run_ids().into_iter().next()
+            } {
+                break workflow_run_id;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("scheduler run should become active before workflow I/O completes");
 
     let read_models = service
         .workflow_get_scheduler_task_state_read_models(
@@ -2493,12 +2489,8 @@ async fn workflow_execution_session_initializes_scheduler_task_state_before_run_
         .any(|task| task.node_id == "text-output-1"));
     assert!(read_models.tasks.iter().all(|task| task.model_id.is_none()));
 
-    host.release_first_run();
-    let response = run
-        .await
-        .expect("run task should join")
-        .expect("workflow run should finish");
-    assert_eq!(response.outputs.len(), 1);
+    run.abort();
+    let _ = run.await;
 }
 
 #[tokio::test]

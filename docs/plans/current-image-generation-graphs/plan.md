@@ -237,6 +237,30 @@ validation snapshots; a non-runtime graph cannot be represented by the current
 least one inference node. Keep this as a follow-up for the snapshot/attribution
 test migration instead of adding an invalid placeholder snapshot.
 
+2026-06-07 scheduler task-state initialization test slice:
+smallest useful vertical slice: migrate
+`workflow_execution_session_initializes_scheduler_task_state_before_run_execution`
+away from the legacy `WorkflowHost::run_workflow` synchronization point. The
+test now keeps the non-runtime scheduler run active with delayed workflow I/O,
+waits for the backend active-run record, and asserts the canonical scheduler
+task-state read models for source and output tasks before task execution can
+complete. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan. No-fallback/no-legacy confirmation: this slice does not restore
+host-level `run_workflow` execution, does not add a compatibility shim, and
+keeps task-state initialization verified at the scheduler-owned boundary.
+
+Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_initializes_scheduler_task_state_before_run_execution --lib`
+passed,
+`cargo fmt -p pantograph-workflow-service -- --check` passed, and
+`cargo test -p pantograph-workflow-service session_execution --lib` now fails
+with 9 remaining tests: runtime load/unload diagnostic classification and
+phase hints, snapshot/attribution requirements for tests without saved
+executable validation snapshots, sanitized terminal runtime failure
+classification, dependency-readiness resume planning, and shutdown supervisor
+observation under the worker-owned path.
+
 Outstanding Option 2 migration work:
 - migrate the remaining runtime-containing tests that still call
   `WorkflowService::run_workflow_execution_session` for direct coverage that is
