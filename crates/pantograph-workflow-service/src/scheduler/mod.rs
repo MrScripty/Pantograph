@@ -37,9 +37,10 @@ pub use contracts::{
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
 };
 #[cfg(test)]
+pub(crate) use lifecycle::WorkflowSchedulerLifecycleOwnerId;
 pub(crate) use lifecycle::{
     WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
-    WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
+    WorkflowSchedulerLifecycleComponentState,
 };
 pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
@@ -53,7 +54,8 @@ pub(crate) use readiness_lifecycle::{
 };
 pub(crate) use retry_lifecycle::WorkflowSchedulerRetryLifecycle;
 pub(crate) use store::{
-    unix_timestamp_ms, WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionPreflightCache,
+    unix_timestamp_ms, WorkflowExecutionSessionActiveRunContext,
+    WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSessionPreflightCache,
     WorkflowExecutionSessionStore, WorkflowSchedulerBootstrapRecoveryAction,
     WorkflowSchedulerBootstrapRecoverySnapshot, WorkflowSchedulerBootstrapRecoveryTask,
     WorkflowSchedulerTaskAttemptId, WorkflowSchedulerTaskAttemptReadFact,

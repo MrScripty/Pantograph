@@ -27332,6 +27332,46 @@ Worker rules:
       accepts a claimed runtime-branch event plus claim and reads only
       workflow-service active-run/session records before dispatch moves behind
       the worker.
+  - 2026-06-07 runtime-branch backend rehydration boundary slice:
+    - Smallest useful vertical slice: add a workflow-service-owned
+      rehydration boundary for a claimed runtime-branch task event plus claim,
+      then have the task-execution worker call it before reporting
+      dispatch-unavailable.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/scheduler/mod.rs`, and plan docs.
+    - Implemented typed rehydration diagnostics for mismatched claims, missing
+      active run/session state, missing scheduler task state, invalid task-run
+      summary, non-runtime task correlation, and backend correlation mismatch.
+      The boundary reads only backend store facts: session summary, active-run
+      context, scheduler task graph/state records, and task-run summary.
+    - Worker behavior: after claiming an event, the worker rehydrates backend
+      context before releasing the claim and returning typed
+      dispatch-unavailable. Rehydration failures return typed
+      `RuntimeBranchRehydrationFailed` diagnostics and attempt to release the
+      claim; no dispatch execution is performed.
+    - No-fallback/no-legacy confirmation: no runtime dispatch execution,
+      direct helper call, request-scoped execution envelope, graph/frontend
+      fact synthesis, frontend/Tauri policy, compatibility DTO, or fake
+      success completion was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`
+      passed with 3 tests;
+      `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+      passed with 15 tests;
+      `cargo check -p pantograph-workflow-service` passed with one existing
+      warning for unused `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort
+      helpers.
+    - Discovered issue: `WorkflowSchedulerStartedRuntimeTaskSupervisor`
+      exposes unused abort helpers in `scheduler/task_orchestrator.rs`. Defer
+      to the planned worker cancellation/shutdown lifecycle slice to either
+      wire those helpers into terminal cooperative cancellation or remove them.
+    - Remaining follow-up: move dispatch-boundary execution behind the worker
+      using the rehydrated backend context and owned host boundary, then
+      persist durable event terminal/deferred state before responder
+      notification.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

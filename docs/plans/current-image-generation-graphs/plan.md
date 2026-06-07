@@ -21,9 +21,10 @@ Immediate Option 1 bridge sequence:
    relying on a terminal `Deferred` event. The worker now releases a claimed
    runtime-branch task event back to `Ready` when dispatch is unavailable while
    returning a typed in-memory deferred notification to the caller.
-2. Add a workflow-service-owned rehydration boundary that accepts a claimed
-   runtime-branch event plus claim and reads only backend active-run/session
-   records to build the execution context needed by the worker.
+2. Completed 2026-06-07: add a workflow-service-owned rehydration boundary
+   that accepts a claimed runtime-branch event plus claim and reads only
+   backend active-run/session records to build the execution context needed by
+   the worker.
 3. Move the existing runtime dispatch-boundary execution body behind the worker
    using that rehydrated context and the owned host boundary; the request path
    may only enqueue and await notification.
@@ -69,6 +70,38 @@ with 15 tests. Remaining follow-up: add the workflow-service-owned
 rehydration boundary that accepts a claimed event plus claim and reads only
 backend active-run/session records, then move dispatch-boundary execution
 behind the worker.
+
+2026-06-07 runtime-branch backend rehydration boundary update: completed the
+second immediate bridge slice. Smallest useful vertical slice: add the
+workflow-service-owned `runtime_branch_rehydration` boundary that accepts a
+claimed runtime-branch task event plus current claim, validates the claim and
+runtime task correlation, and reads session summary, active-run context,
+scheduler task graph/state, and task-run summary only from backend
+active-run/session records. The task-execution worker now calls this boundary
+after claiming an event and before returning dispatch-unavailable; rehydration
+failure returns typed worker diagnostics and releases the claim instead of
+falling back. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-workflow-service/src/scheduler/mod.rs`, and plan docs.
+No-fallback/no-legacy confirmation: this slice does not execute runtime
+branches, does not move dispatch, does not call the direct helper, does not
+add request-scoped execution envelopes, does not synthesize graph/frontend
+facts, does not add frontend/Tauri policy, does not add compatibility DTOs,
+and does not fake successful completion. Verification:
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`
+passed with 3 tests,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib` passed
+with 15 tests, and `cargo check -p pantograph-workflow-service` passed with
+one existing warning for unused `WorkflowSchedulerStartedRuntimeTaskSupervisor`
+abort helpers in `scheduler/task_orchestrator.rs`. Discovered issue recorded:
+those unused supervisor abort helpers should be either wired into the planned
+worker cancellation/shutdown lifecycle or removed in a dedicated lifecycle
+cleanup slice. Remaining follow-up: move dispatch-boundary execution behind
+the worker using the rehydrated backend context and owned host boundary, then
+persist durable completed/deferred/failed event state before responder
+notification.
 
 2026-06-06 runtime-branch worker host-boundary update: completed the next
 Option 3 preparation slice by threading the composition-root owned

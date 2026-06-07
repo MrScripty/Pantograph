@@ -1134,6 +1134,29 @@ durable task orchestration path.
     passed with 15 tests. Next slice: add the backend-owned rehydration
     boundary from claimed runtime-branch event plus claim to active-run/session
     records, then move dispatch through the owned worker host boundary.
+  - 2026-06-07 runtime-branch backend rehydration boundary slice complete:
+    workflow-service now owns `runtime_branch_rehydration`, which accepts a
+    claimed runtime-branch task event plus current claim, validates the claim
+    and task correlation, and reads session summary, active-run context,
+    scheduler task graph/state records, and task-run summary from backend
+    active-run/session state. The task-execution worker calls this boundary
+    after claim and before dispatch-unavailable reporting. Missing or stale
+    backend facts return typed `RuntimeBranchRehydrationFailed` diagnostics and
+    release the claim instead of falling back. This intentionally did not add
+    runtime dispatch execution, direct helper calls, request-scoped execution
+    envelopes, graph/frontend fact synthesis, frontend/Tauri policy,
+    compatibility DTOs, or fake completion. Verification:
+    `cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`
+    passed with 3 tests,
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+    passed with 15 tests, and
+    `cargo check -p pantograph-workflow-service` passed with one existing
+    warning for unused `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort
+    helpers. Discovered issue: decide in the worker cancellation/shutdown
+    lifecycle slice whether those abort helpers are canonical supervisor API or
+    should be removed. Next slice: move dispatch-boundary execution behind the
+    worker using this rehydrated context and owned host boundary, then persist
+    durable completed/deferred/failed state before responder notification.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

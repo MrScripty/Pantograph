@@ -7,6 +7,10 @@ use crate::scheduler::{
     WorkflowSchedulerLifecycleComponentRegistryHandle, WorkflowSchedulerLifecycleComponentState,
 };
 
+use super::runtime_branch_rehydration::{
+    rehydrate_runtime_branch_execution_context, WorkflowRuntimeBranchRehydrationDiagnostic,
+    WorkflowRuntimeBranchRehydrationDiagnosticCode,
+};
 use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventClaimOutcome,
     WorkflowRuntimeBranchTaskEventClaimOwnerId, WorkflowRuntimeBranchTaskEventDiagnostic,
@@ -351,6 +355,7 @@ pub(super) enum WorkflowTaskExecutionWorkerDiagnosticCode {
     TaskLifecycleHandleReleaseFailed,
     RuntimeBranchEventUnavailable,
     RuntimeBranchEventClaimFailed,
+    RuntimeBranchRehydrationFailed,
     RuntimeBranchDispatchUnavailable,
     RuntimeBranchFailed,
 }
@@ -566,6 +571,30 @@ fn claim_and_release_runtime_branch_event(
         }
     };
 
+    let rehydrated = match rehydrate_runtime_branch_execution_context(
+        service,
+        &claimed.record,
+        &claimed.claim,
+    ) {
+        Ok(context) => context,
+        Err(diagnostic) => {
+            let mut diagnostics = vec![runtime_branch_rehydration_diagnostic(diagnostic)];
+            if let Err(release_diagnostic) = release_claimed_runtime_branch_task_event(
+                service,
+                &claimed.record.event_id,
+                &claimed.claim,
+                now_ms,
+            ) {
+                diagnostics.push(release_diagnostic);
+            }
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch execution context rehydration failed",
+                diagnostics,
+            );
+        }
+    };
+
     let released = release_claimed_runtime_branch_task_event(
         service,
         &claimed.record.event_id,
@@ -573,15 +602,15 @@ fn claim_and_release_runtime_branch_event(
         now_ms,
     );
     match released {
-        Ok(record) => {
+        Ok(_record) => {
             let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
                 WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-                "runtime branch dispatch execution has not moved into the task-execution worker loop yet",
+                rehydrated.dispatch_unavailable_message(),
             );
             WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
                 command,
                 WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::RuntimeDispatchUnavailable,
-                vec![record.scheduler_task_id],
+                vec![rehydrated.runtime_task_id],
                 vec![diagnostic],
             )
         }
@@ -591,6 +620,28 @@ fn claim_and_release_runtime_branch_event(
             vec![diagnostic],
         ),
     }
+}
+
+fn runtime_branch_rehydration_diagnostic(
+    diagnostic: WorkflowRuntimeBranchRehydrationDiagnostic,
+) -> WorkflowTaskExecutionWorkerDiagnostic {
+    let code = match diagnostic.code {
+        WorkflowRuntimeBranchRehydrationDiagnosticCode::ClaimMismatch
+        | WorkflowRuntimeBranchRehydrationDiagnosticCode::ActiveRunUnavailable
+        | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskStateUnavailable
+        | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskRunSummaryInvalid
+        | WorkflowRuntimeBranchRehydrationDiagnosticCode::RuntimeTaskUnavailable
+        | WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch => {
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchRehydrationFailed
+        }
+    };
+    WorkflowTaskExecutionWorkerDiagnostic::new(
+        code,
+        format!(
+            "runtime branch rehydration diagnostic ({:?}): {}",
+            diagnostic.code, diagnostic.message
+        ),
+    )
 }
 
 fn claim_runtime_branch_task_event_for_worker(
@@ -679,8 +730,14 @@ mod tests {
         WorkflowRuntimeBranchTaskEventRequest, WorkflowRuntimeBranchTaskEventState,
     };
     use crate::workflow::{
-        WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
-        WorkflowSchedulerTaskExecutionClass,
+        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowRunHandle,
+        WorkflowRunOptions, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+        WorkflowSchedulerTaskGraph, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    };
+    use pantograph_scheduler::{
+        SchedulerNodeId, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateRecord,
+        SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
     use std::time::Duration;
 
@@ -886,13 +943,14 @@ mod tests {
     async fn task_execution_worker_releases_claim_when_dispatch_is_unavailable() {
         let scheduler_lifecycle = scheduler_lifecycle();
         let service = Arc::new(WorkflowService::new());
+        let session_id = prepare_active_runtime_run(service.as_ref());
         let event_id =
             WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.run-1.image-task")
                 .expect("event id");
         let record =
             WorkflowRuntimeBranchTaskEventRecord::ready(WorkflowRuntimeBranchTaskEventRequest {
                 event_id: event_id.clone(),
-                session_id: "session-1".to_string(),
+                session_id: session_id.clone(),
                 workflow_id: "workflow-1".to_string(),
                 workflow_run_id: "run-1".to_string(),
                 scheduler_task_id: "image-task".to_string(),
@@ -921,10 +979,18 @@ mod tests {
         .expect("spawn task execution worker");
         let (completion_responder, completion_rx) =
             WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id,
+            workflow_run_id: "run-1".to_string(),
+            workflow_id: "workflow-1".to_string(),
+            output_targets: None,
+            timeout_ms: Some(500),
+            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched,
+        };
 
         worker
             .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
-                runtime_branch_command(),
+                command,
                 completion_responder,
             ))
             .expect("enqueue runtime branch command");
@@ -942,12 +1008,24 @@ mod tests {
             WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::RuntimeDispatchUnavailable
         );
         assert_eq!(outcome.deferred_task_ids, vec!["image-task"]);
+        assert_eq!(outcome.diagnostics.len(), 1);
         assert_eq!(
-            outcome.diagnostics,
-            vec![WorkflowTaskExecutionWorkerDiagnostic::new(
-                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-                "runtime branch dispatch execution has not moved into the task-execution worker loop yet",
-            )]
+            outcome.diagnostics[0].code,
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable
+        );
+        assert!(
+            outcome.diagnostics[0]
+                .message
+                .contains("rehydrated session"),
+            "unexpected diagnostic: {}",
+            outcome.diagnostics[0].message
+        );
+        assert!(
+            outcome.diagnostics[0]
+                .message
+                .contains("1 runtime inference tasks"),
+            "unexpected diagnostic: {}",
+            outcome.diagnostics[0].message
         );
         let persisted = service
             .runtime_branch_task_event_repository
@@ -963,6 +1041,88 @@ mod tests {
             .shutdown()
             .await
             .expect("shutdown task execution worker");
+    }
+
+    fn prepare_active_runtime_run(service: &WorkflowService) -> String {
+        let mut store = service.session_store_guard().expect("session store");
+        let session_id = store
+            .create_session(
+                "workflow-1".to_string(),
+                None,
+                None,
+                vec!["pytorch".to_string()],
+                vec!["stable-diffusion-xl".to_string()],
+                true,
+            )
+            .expect("create session");
+        let run_request = WorkflowExecutionSessionRunRequest {
+            session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
+            inputs: Vec::new(),
+            output_targets: None,
+            override_selection: None,
+            timeout_ms: Some(500),
+            priority: None,
+        };
+        let workflow_run_id = store
+            .enqueue_run_with_id(&session_id, &run_request, "run-1".to_string())
+            .expect("enqueue run");
+        store
+            .begin_queued_run(&session_id, &workflow_run_id)
+            .expect("begin queued run")
+            .expect("dequeued run");
+        store
+            .set_active_run_scheduler_task_state(
+                &session_id,
+                &workflow_run_id,
+                runtime_task_graph(),
+                vec![runtime_task_record()],
+            )
+            .expect("set runtime task state");
+        session_id
+    }
+
+    fn runtime_task_graph() -> WorkflowSchedulerTaskGraph {
+        let workflow_id = SchedulerWorkflowId::parse("workflow-1").expect("workflow id");
+        let workflow_run_id = SchedulerWorkflowRunId::parse("run-1").expect("workflow run id");
+        let task_id = SchedulerTaskId::parse("image-task").expect("task id");
+        WorkflowSchedulerTaskGraph {
+            schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+            workflow_id: workflow_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
+            tasks: vec![WorkflowSchedulerTask {
+                workflow_id,
+                workflow_run_id,
+                node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+                task_id,
+                node_type: "llm-inference".to_string(),
+                execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+                dependency_task_ids: Vec::new(),
+                input_bindings: Vec::new(),
+                schedulable_intent: None,
+                schedulable_intent_template: None,
+                non_runtime_task_template: None,
+                source_input_task_template: None,
+                inference_descriptor_fingerprint: None,
+                diagnostics: Vec::new(),
+            }],
+        }
+    }
+
+    fn runtime_task_record() -> SchedulerTaskStateRecord {
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow-1").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse("run-1").expect("workflow run id"),
+            node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+            task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+            state: SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            },
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse("transition.initial")
+                .expect("transition id"),
+        }
     }
 
     fn scheduler_lifecycle() -> WorkflowSchedulerLifecycleComponentRegistryHandle {

@@ -193,6 +193,17 @@ claimable for the next dispatch-capable worker and avoids treating
 workflow-service-owned rehydration boundary from a claimed event plus claim to
 active-run/session facts before dispatch execution moves into the worker.
 
+2026-06-07 runtime-branch rehydration status: the backend rehydration boundary
+now exists in workflow-service and is consumed by the task-execution worker
+after durable event claim. It accepts only the claimed runtime-branch event and
+claim, then reads session summary, active-run context, scheduler task
+graph/state, and task-run summary from backend active-run/session records. The
+worker still does not execute dispatch; it releases the claim and returns typed
+dispatch-unavailable after successful rehydration, or typed rehydration
+failure after releasing the claim when backend facts are missing or stale. The
+next source slice is the worker-owned dispatch move using this rehydrated
+context and the composition-root host boundary.
+
 ## Task Definition And Task State Replan
 
 The current `pantograph-scheduler` queue contracts require a complete

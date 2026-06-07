@@ -47,6 +47,7 @@ mod local_network_api;
 mod media_capability_contracts;
 mod non_runtime_task_adapter;
 mod preflight_api;
+mod runtime_branch_rehydration;
 #[allow(dead_code)]
 mod runtime_branch_task_event;
 mod runtime_dispatch_selection;
