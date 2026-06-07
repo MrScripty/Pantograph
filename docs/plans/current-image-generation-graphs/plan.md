@@ -1182,6 +1182,50 @@ if the provider cannot supply the required fields without changing
 scheduler/runtime-registry/Pumas/generated/fixture contracts in the same
 slice.
 
+2026-06-07 runtime dispatch candidate evidence re-plan trigger: stop before
+extending `WorkflowRuntimeDispatchCandidateFact` in source. Inspection found
+that the embedded resource-backed candidate provider can supply selected
+backend key, selected model ref, selected runtime id, selected device id,
+reservations, resource fit, runtime registry status, and optional runtime
+instance id from existing backend-owned facts. It does not yet have
+first-class canonical fields for runtime family, resolved load target,
+runtime residency key, loaded-runtime memory estimate, or runtime load-state
+semantics that are independent of runtime id parsing, graph/request shape,
+`batching_key`, trait settings, or partial scheduler estimate hints. Adding
+mandatory workflow-service contract fields now would either break the
+embedded provider or force it to synthesize facts, violating the
+backend-owned source-of-truth and no-fallback rules.
+
+Re-plan options:
+1. Extend runtime-registry registration/snapshot/capability projection with
+   canonical runtime family and load-state facts, and extend the runtime
+   resource fact source with selected load target, residency key, and
+   loaded-runtime memory estimate facts. This keeps the workflow-service
+   candidate contract strict and makes the embedded provider able to satisfy
+   it from backend-owned facts. It requires serial contract work in
+   runtime-registry and embedded-runtime before the workflow-service contract
+   slice resumes.
+2. Add an embedded-runtime-owned runtime dispatch evidence projection layer
+   that consumes the existing runtime-registry snapshot, Pumas logical size
+   facts, resource reservations, and runtime observation ledger facts, then
+   emits one validated evidence object per candidate. This avoids changing
+   scheduler DTOs and keeps derivation policy out of workflow-service, but it
+   still needs explicit typed diagnostics for every missing canonical field
+   and must not infer runtime family/load target/residency from arbitrary
+   strings.
+3. Defer task-attempt fact persistence until the worker/runtime lifecycle
+   model lands, then make durable worker/runtime instance records the source
+   of runtime family, load target, residency key, memory estimate, and
+   load-state facts. This aligns with the final worker architecture, but it
+   blocks the current task-attempt persistence path and leaves grouped claims
+   and runtime-host coalescing blocked longer.
+
+Do not implement `WorkflowRuntimeDispatchCandidateFact` rich evidence fields
+until one option is selected and the chosen source owns every required fact
+with fail-closed diagnostics. The next plan update must choose the
+intermediate owner for runtime family, load target, residency key,
+loaded-runtime memory estimate, and load-state facts.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
