@@ -2991,6 +2991,27 @@ workflow-service unused `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort
 helper warning remains owned by the worker cancellation/shutdown lifecycle
 cleanup.
 
+2026-06-07 workflow-service supervisor test-helper cleanup slice: completed.
+Smallest useful vertical slice: mark the unused
+`WorkflowSchedulerStartedRuntimeTaskSupervisor` abort helpers as test-only,
+because they are exercised by scheduler orchestrator tests but are not part of
+the production library surface. Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: this slice does not alter scheduler task
+execution, worker cancellation, supervisor tracking, runtime dispatch,
+request-scoped execution, or any lifecycle state transition. It only removes a
+production dead-code warning for helpers whose current owner is focused test
+coverage.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service task_orchestrator --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
+for the slice files.
+
 ## Standards Rule
 
 The standards constraints in

@@ -109,10 +109,12 @@ pub(crate) struct WorkflowSchedulerStartedRuntimeTaskSupervisor {
 }
 
 impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
+    #[cfg(test)]
     pub(crate) fn abort_handle(&self) -> tokio::task::AbortHandle {
         self.join_handle.abort_handle()
     }
 
+    #[cfg(test)]
     pub(crate) fn abort(&self) {
         self.join_handle.abort();
     }
@@ -125,6 +127,7 @@ impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
             .map_err(runtime_task_supervisor_join_error)?
     }
 
+    #[cfg(test)]
     pub(crate) async fn abort_and_join(self) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
         self.abort();
         match self.join_handle.await {
