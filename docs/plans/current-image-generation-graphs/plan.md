@@ -1055,6 +1055,44 @@ Re-plan triggers for Option 3:
   use compatibility shims, or treat old graph/backend/runtime/device/frontend
   execution methods as fallback.
 
+2026-06-07 durable runtime task-attempt fact contract slice: completed
+Option 3 implementation sequence step 1. Smallest useful vertical slice:
+define an internal workflow-service runtime task-attempt fact contract and
+pure validation boundary without changing execution, persistence, dispatch,
+group claiming, runtime-host APIs, frontend/Tauri policy, generated DTOs,
+lockfiles, saved workflow fixtures, or bridge cleanup. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_task_attempt_fact.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`, and this plan.
+
+The contract records the selected model/artifact, runtime id/variant, backend,
+runtime family, resolved device/load target, residency key,
+loaded-runtime memory estimate, resource-fit facts, reservation facts,
+operation/context shape, cancellation mode, timeout policy, workflow run,
+scheduler task, task-attempt identity, generation, and recorded timestamp.
+Validation fails closed with typed diagnostics for missing selected facts,
+invalid attempt identity, zero memory estimate, non-fit resource state without
+diagnostics, invalid reservation facts, and invalid timeout policy.
+
+No-fallback/no-legacy confirmation: this slice does not populate
+`batch_eligibility`, does not synthesize selected facts from graph shape,
+`batching_key`, request parameters, frontend/Tauri state, worker command
+envelopes, or partial scheduler intent, and does not preserve or reintroduce
+request-scoped runtime execution. The new module is internal and marked
+dead-code allowed because later slices must attach it only at the backend
+boundary that owns selected dispatch/resource facts.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_task_attempt_fact --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch --lib`,
+`cargo check -p pantograph-workflow-service`, and
+`cargo fmt -p pantograph-workflow-service -- --check`.
+
+Remaining follow-up: implement Option 3 sequence step 2 by locating or
+creating the stable backend boundary that owns the selected dispatch/resource
+decision and persists these task-attempt facts. Stop and re-plan if that
+requires shared scheduler/runtime-registry/Pumas/generated/fixture contract
+changes in the same slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

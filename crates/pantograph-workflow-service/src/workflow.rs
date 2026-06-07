@@ -54,6 +54,8 @@ mod runtime_dispatch_selection;
 mod runtime_host_task_input_mapping;
 mod runtime_host_task_result_mapping;
 mod runtime_preflight;
+#[allow(dead_code)]
+mod runtime_task_attempt_fact;
 mod service_config;
 mod session_execution_api;
 mod session_io_artifacts;
