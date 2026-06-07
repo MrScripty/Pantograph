@@ -928,6 +928,35 @@ sequence must start with eligibility boundary tests, then repository grouped
 claim/replay tests, then worker fan-out tests and the existing
 runtime-branch/workflow-service checks.
 
+2026-06-07 runtime-branch batch eligibility contract slice: completed
+Batching Option 1. Smallest useful vertical slice: add a
+workflow-service-owned runtime-branch batch eligibility profile to durable
+runtime-branch task-event requests/records, plus a pure compatibility boundary
+that compares canonical facts and returns typed incompatibility diagnostics.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not execute runtime work,
+does not claim grouped events, does not add a runtime-host batch API, does not
+use frontend/Tauri state, does not infer compatibility from graph paths, and
+does not treat the provisional `batching_key` as sufficient compatibility
+authority. Missing eligibility profiles fail closed through typed diagnostics.
+Production admission/recovery records currently persist `batch_eligibility:
+None` because the canonical model/artifact/backend/device/runtime residency
+and memory facts are not yet wired into this boundary; the next batching slice
+must populate those facts from backend-owned planning/resource facts before
+durable grouped claiming can proceed.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch --lib`,
+`cargo check -p pantograph-workflow-service`, and
+`cargo fmt -p pantograph-workflow-service -- --check`.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

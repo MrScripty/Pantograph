@@ -32,6 +32,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRequest {
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(super) timeout_ms: Option<u64>,
     pub(super) batching_key: Option<String>,
+    pub(super) batch_eligibility: Option<WorkflowRuntimeBranchBatchEligibilityProfile>,
     pub(super) ready_at_ms: u64,
 }
 
@@ -50,6 +51,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRecord {
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(super) timeout_ms: Option<u64>,
     pub(super) batching_key: Option<String>,
+    pub(super) batch_eligibility: Option<WorkflowRuntimeBranchBatchEligibilityProfile>,
     pub(super) state: WorkflowRuntimeBranchTaskEventState,
     pub(super) claim: Option<WorkflowRuntimeBranchTaskEventClaim>,
     pub(super) ready_at_ms: u64,
@@ -68,6 +70,43 @@ pub(super) struct WorkflowRuntimeBranchTaskEventClaim {
     pub(super) attempt_generation: u64,
     pub(super) claimed_at_ms: u64,
     pub(super) lease_expires_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeBranchBatchEligibilityProfile {
+    pub(super) model_artifact_id: String,
+    pub(super) runtime_family: String,
+    pub(super) backend_id: String,
+    pub(super) device_load_target: String,
+    pub(super) runtime_residency_key: String,
+    pub(super) estimated_loaded_runtime_bytes: u64,
+    pub(super) context_shape_key: String,
+    pub(super) operation_type: String,
+    pub(super) cancellation_mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeBranchBatchEligibilityDiagnostic {
+    pub(super) code: WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
+    pub(super) message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub(super) enum WorkflowRuntimeBranchBatchEligibilityDiagnosticCode {
+    MissingEligibilityProfile,
+    ModelArtifactMismatch,
+    RuntimeFamilyMismatch,
+    BackendMismatch,
+    DeviceLoadTargetMismatch,
+    RuntimeResidencyMismatch,
+    MemoryEstimateMismatch,
+    ContextShapeMismatch,
+    OperationTypeMismatch,
+    CancellationModeMismatch,
+    TimeoutMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -523,6 +562,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             output_targets: request.output_targets,
             timeout_ms: request.timeout_ms,
             batching_key: request.batching_key,
+            batch_eligibility: request.batch_eligibility,
             state: WorkflowRuntimeBranchTaskEventState::Ready,
             claim: None,
             ready_at_ms: request.ready_at_ms,
@@ -614,6 +654,43 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             record: self,
             claim,
         })
+    }
+
+    pub(super) fn ensure_batch_compatible_with(
+        &self,
+        other: &Self,
+    ) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
+        let left = self.batch_eligibility.as_ref().ok_or_else(|| {
+            WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingEligibilityProfile,
+                format!(
+                    "runtime branch task event '{}' is missing batch eligibility profile",
+                    self.event_id.as_str()
+                ),
+            )
+        })?;
+        let right = other.batch_eligibility.as_ref().ok_or_else(|| {
+            WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingEligibilityProfile,
+                format!(
+                    "runtime branch task event '{}' is missing batch eligibility profile",
+                    other.event_id.as_str()
+                ),
+            )
+        })?;
+
+        left.ensure_compatible_with(right)?;
+        if self.timeout_ms != other.timeout_ms {
+            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch,
+                format!(
+                    "runtime branch task events '{}' and '{}' have incompatible timeout policies",
+                    self.event_id.as_str(),
+                    other.event_id.as_str()
+                ),
+            ));
+        }
+        Ok(())
     }
 
     pub(super) fn mark_dispatching(
@@ -791,8 +868,83 @@ impl WorkflowRuntimeBranchTaskEventRecord {
     }
 }
 
+impl WorkflowRuntimeBranchBatchEligibilityProfile {
+    fn ensure_compatible_with(
+        &self,
+        other: &Self,
+    ) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
+        ensure_batch_field_matches(
+            "model artifact",
+            &self.model_artifact_id,
+            &other.model_artifact_id,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ModelArtifactMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "runtime family",
+            &self.runtime_family,
+            &other.runtime_family,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeFamilyMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "backend",
+            &self.backend_id,
+            &other.backend_id,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::BackendMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "device load target",
+            &self.device_load_target,
+            &other.device_load_target,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::DeviceLoadTargetMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "runtime residency",
+            &self.runtime_residency_key,
+            &other.runtime_residency_key,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeResidencyMismatch,
+        )?;
+        if self.estimated_loaded_runtime_bytes != other.estimated_loaded_runtime_bytes {
+            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MemoryEstimateMismatch,
+                "runtime branch task events have incompatible loaded-runtime memory estimates",
+            ));
+        }
+        ensure_batch_field_matches(
+            "context shape",
+            &self.context_shape_key,
+            &other.context_shape_key,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ContextShapeMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "operation type",
+            &self.operation_type,
+            &other.operation_type,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::OperationTypeMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "cancellation mode",
+            &self.cancellation_mode,
+            &other.cancellation_mode,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::CancellationModeMismatch,
+        )?;
+        Ok(())
+    }
+}
+
 impl WorkflowRuntimeBranchTaskEventDiagnostic {
     fn new(code: WorkflowRuntimeBranchTaskEventDiagnosticCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+impl WorkflowRuntimeBranchBatchEligibilityDiagnostic {
+    fn new(
+        code: WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             code,
             message: message.into(),
@@ -815,6 +967,68 @@ fn validate_request(
     }
     if let Some(batching_key) = &request.batching_key {
         validate_non_blank("runtime branch task event batching key", batching_key)?;
+    }
+    if let Some(batch_eligibility) = &request.batch_eligibility {
+        validate_batch_eligibility_profile(batch_eligibility)?;
+    }
+    Ok(())
+}
+
+fn validate_batch_eligibility_profile(
+    profile: &WorkflowRuntimeBranchBatchEligibilityProfile,
+) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+    validate_non_blank(
+        "runtime branch batch eligibility model artifact id",
+        &profile.model_artifact_id,
+    )?;
+    validate_non_blank(
+        "runtime branch batch eligibility runtime family",
+        &profile.runtime_family,
+    )?;
+    validate_non_blank(
+        "runtime branch batch eligibility backend id",
+        &profile.backend_id,
+    )?;
+    validate_non_blank(
+        "runtime branch batch eligibility device load target",
+        &profile.device_load_target,
+    )?;
+    validate_non_blank(
+        "runtime branch batch eligibility runtime residency key",
+        &profile.runtime_residency_key,
+    )?;
+    if profile.estimated_loaded_runtime_bytes == 0 {
+        return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+            "runtime branch batch eligibility loaded-runtime memory estimate must be greater than zero",
+        ));
+    }
+    validate_non_blank(
+        "runtime branch batch eligibility context shape key",
+        &profile.context_shape_key,
+    )?;
+    validate_non_blank(
+        "runtime branch batch eligibility operation type",
+        &profile.operation_type,
+    )?;
+    validate_non_blank(
+        "runtime branch batch eligibility cancellation mode",
+        &profile.cancellation_mode,
+    )?;
+    Ok(())
+}
+
+fn ensure_batch_field_matches(
+    label: &str,
+    left: &str,
+    right: &str,
+    code: WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
+) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
+    if left != right {
+        return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+            code,
+            format!("runtime branch task events have incompatible {label} facts"),
+        ));
     }
     Ok(())
 }
@@ -888,6 +1102,118 @@ mod tests {
             WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent
         );
         assert!(error.message.contains("workflow run id"));
+    }
+
+    #[test]
+    fn runtime_branch_task_event_batch_eligibility_compares_canonical_facts() {
+        let left = ready_record_with_batch_profile(batch_profile());
+        let mut right_profile = batch_profile();
+        right_profile.runtime_residency_key = "runtime.diffusers.loaded-model-1".to_string();
+        let right = ready_record_with_id_and_batch_profile(
+            "runtime-branch-task-event.other",
+            right_profile,
+        );
+
+        let error = left
+            .ensure_batch_compatible_with(&right)
+            .expect_err("runtime residency mismatch must fail");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeResidencyMismatch
+        );
+
+        let right = ready_record_with_id_and_batch_profile(
+            "runtime-branch-task-event.compatible",
+            batch_profile(),
+        );
+        left.ensure_batch_compatible_with(&right)
+            .expect("matching canonical facts are batch compatible");
+    }
+
+    #[test]
+    fn runtime_branch_task_event_batch_eligibility_rejects_missing_profile() {
+        let left = ready_record();
+        let right = ready_record_with_id_and_batch_profile(
+            "runtime-branch-task-event.profiled",
+            batch_profile(),
+        );
+
+        let error = left
+            .ensure_batch_compatible_with(&right)
+            .expect_err("missing canonical profile must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingEligibilityProfile
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_batch_eligibility_rejects_timeout_mismatch() {
+        let left = ready_record_with_batch_profile(batch_profile());
+        let mut request = ready_request();
+        request.event_id =
+            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.timeout-mismatch")
+                .expect("event id");
+        request.timeout_ms = Some(60_000);
+        request.batch_eligibility = Some(batch_profile());
+        let right = WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("right record");
+
+        let error = left
+            .ensure_batch_compatible_with(&right)
+            .expect_err("timeout mismatch must fail");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_batch_eligibility_ignores_matching_provisional_key() {
+        let left = ready_record_with_batch_profile(batch_profile());
+        let mut request = ready_request();
+        let mut profile = batch_profile();
+        profile.backend_id = "backend.other".to_string();
+        request.event_id =
+            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.other")
+                .expect("event id");
+        request.batch_eligibility = Some(profile);
+        let right = WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("right record");
+
+        assert_eq!(left.batching_key, right.batching_key);
+        let error = left
+            .ensure_batch_compatible_with(&right)
+            .expect_err("matching provisional batching key must not authorize batching");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::BackendMismatch
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_batch_eligibility_validates_profile_fields() {
+        let mut request = ready_request();
+        let mut profile = batch_profile();
+        profile.estimated_loaded_runtime_bytes = 0;
+        request.batch_eligibility = Some(profile);
+
+        let error = WorkflowRuntimeBranchTaskEventRecord::ready(request)
+            .expect_err("zero memory estimate must fail");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent
+        );
+        assert!(
+            error
+                .message
+                .contains("loaded-runtime memory estimate must be greater than zero"),
+            "unexpected error: {}",
+            error.message
+        );
     }
 
     #[test]
@@ -1516,6 +1842,24 @@ mod tests {
         WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("ready record")
     }
 
+    fn ready_record_with_batch_profile(
+        profile: WorkflowRuntimeBranchBatchEligibilityProfile,
+    ) -> WorkflowRuntimeBranchTaskEventRecord {
+        let mut request = ready_request();
+        request.batch_eligibility = Some(profile);
+        WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("ready record")
+    }
+
+    fn ready_record_with_id_and_batch_profile(
+        event_id: &str,
+        profile: WorkflowRuntimeBranchBatchEligibilityProfile,
+    ) -> WorkflowRuntimeBranchTaskEventRecord {
+        let mut request = ready_request();
+        request.event_id = WorkflowRuntimeBranchTaskEventId::parse(event_id).expect("event id");
+        request.batch_eligibility = Some(profile);
+        WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("ready record")
+    }
+
     fn ready_record_with_id_and_run(
         event_id: &str,
         workflow_run_id: &str,
@@ -1545,7 +1889,22 @@ mod tests {
             }]),
             timeout_ms: Some(30_000),
             batching_key: Some("runtime.diffusers.cuda0".to_string()),
+            batch_eligibility: None,
             ready_at_ms: 42,
+        }
+    }
+
+    fn batch_profile() -> WorkflowRuntimeBranchBatchEligibilityProfile {
+        WorkflowRuntimeBranchBatchEligibilityProfile {
+            model_artifact_id: "artifact.stable-diffusion-xl".to_string(),
+            runtime_family: "diffusers".to_string(),
+            backend_id: "backend.cuda".to_string(),
+            device_load_target: "cuda:0".to_string(),
+            runtime_residency_key: "runtime.diffusers.loaded-model-0".to_string(),
+            estimated_loaded_runtime_bytes: 8_589_934_592,
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            operation_type: "image-generation.txt2img".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
         }
     }
 

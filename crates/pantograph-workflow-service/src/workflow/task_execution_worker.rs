@@ -1164,6 +1164,7 @@ mod tests {
                 output_targets: None,
                 timeout_ms: Some(500),
                 batching_key: Some("runtime-branch-task.workflow-1.image-task".to_string()),
+                batch_eligibility: None,
                 ready_at_ms: unix_timestamp_ms().saturating_sub(1),
             })
             .expect("runtime branch task event record");
@@ -1263,6 +1264,7 @@ mod tests {
                 output_targets: None,
                 timeout_ms: Some(500),
                 batching_key: Some("runtime-branch-task.workflow-1.image-task".to_string()),
+                batch_eligibility: None,
                 ready_at_ms: 100,
             })
             .expect("runtime branch task event record");

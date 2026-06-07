@@ -392,6 +392,7 @@ mod tests {
             }]),
             timeout_ms,
             batching_key: Some("runtime-branch-task.workflow-image-plan.image-task".to_string()),
+            batch_eligibility: None,
             ready_at_ms: 1,
         })
         .expect("runtime branch task event")

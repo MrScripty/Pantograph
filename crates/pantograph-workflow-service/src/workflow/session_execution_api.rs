@@ -2395,6 +2395,7 @@ impl WorkflowService {
                         workflow_id,
                         task.task_id.as_str()
                     )),
+                    batch_eligibility: None,
                     ready_at_ms,
                 },
             )
@@ -2468,6 +2469,7 @@ impl WorkflowService {
                         workflow_id,
                         task.task_id.as_str()
                     )),
+                    batch_eligibility: None,
                     ready_at_ms,
                 },
             )
