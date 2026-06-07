@@ -435,6 +435,30 @@ that still executes runtime-containing workflows directly through
 `WorkflowService`; if no such call sites remain, mark the Option 2 validation
 sequence complete and resume the planned Option 3 durable lifecycle work.
 
+2026-06-07 embedded runtime session-run adapter slice: migrated the
+production `EmbeddedRuntime::run_workflow_execution_session` and
+`run_workflow_execution_session_with_event_sink` call sites to construct
+`WorkflowSessionExecutionRuntime` from the shared workflow service and cloned
+embedded host before running a session. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/embedded_workflow_service_api.rs` and
+this plan. No-fallback/no-legacy confirmation: the embedded adapter no longer
+executes session runs by calling direct `WorkflowService` with a request-scoped
+host, does not branch on runtime/non-runtime in the adapter, and does not add
+compatibility shims. Verification: `cargo fmt` passed;
+`cargo check -p pantograph-embedded-runtime` passed;
+`cargo test -p pantograph-embedded-runtime test_runtime_run_and_session_execution --lib`
+passed with 1 test. Discovered during broader verification and deferred as
+separate test/architecture follow-up:
+`cargo test -p pantograph-embedded-runtime session_execution_state --lib`
+failed 2 stale keep-alive executor tests that still expect the old backend
+session executor to exist under worker-owned session runs, and
+`cargo test -p pantograph-embedded-runtime workflow_run_execution --lib`
+failed 7 tests that mix direct `WorkflowService` runtime calls, stale
+unknown-node/diagnostic expectations, human-input classification expectations,
+and live-event assumptions from the legacy execution path. These failures are
+recorded for the next embedded-runtime test migration slice and must not be
+fixed by reintroducing direct request-scoped runtime execution.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,

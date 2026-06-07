@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime;
 use pantograph_workflow_service::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
@@ -175,9 +178,12 @@ impl EmbeddedRuntime {
         &self,
         request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_service
-            .run_workflow_execution_session(&self.host(), request)
-            .await
+        WorkflowSessionExecutionRuntime::from_shared_service(
+            self.workflow_service.clone(),
+            Arc::new(self.host()),
+        )
+        .run_workflow_execution_session(request)
+        .await
     }
 
     pub async fn run_workflow_execution_session_with_event_sink(
@@ -185,9 +191,12 @@ impl EmbeddedRuntime {
         request: WorkflowExecutionSessionRunRequest,
         event_sink: std::sync::Arc<dyn node_engine::EventSink>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_service
-            .run_workflow_execution_session(&self.host().with_node_event_sink(event_sink), request)
-            .await
+        WorkflowSessionExecutionRuntime::from_shared_service(
+            self.workflow_service.clone(),
+            Arc::new(self.host().with_node_event_sink(event_sink)),
+        )
+        .run_workflow_execution_session(request)
+        .await
     }
 
     pub async fn resume_workflow_execution_session_runtime_dependency_readiness(
