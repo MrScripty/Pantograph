@@ -10,19 +10,35 @@ use super::{
 #[must_use]
 pub struct WorkflowSessionExecutionRuntime {
     service: Arc<WorkflowService>,
+    host: Arc<dyn WorkflowHost>,
     task_execution_runtime_owner: WorkflowTaskExecutionRuntimeOwner,
 }
 
 impl WorkflowSessionExecutionRuntime {
-    pub fn new(service: WorkflowService) -> Self {
-        Self::from_shared_service(Arc::new(service))
+    pub fn new<H>(service: WorkflowService, host: Arc<H>) -> Self
+    where
+        H: WorkflowHost + 'static,
+    {
+        Self::from_shared_service(Arc::new(service), host)
     }
 
-    pub fn from_shared_service(service: Arc<WorkflowService>) -> Self {
+    pub fn from_shared_service<H>(service: Arc<WorkflowService>, host: Arc<H>) -> Self
+    where
+        H: WorkflowHost + 'static,
+    {
+        let host: Arc<dyn WorkflowHost> = host;
+        Self::from_shared_service_and_host(service, host)
+    }
+
+    pub fn from_shared_service_and_host(
+        service: Arc<WorkflowService>,
+        host: Arc<dyn WorkflowHost>,
+    ) -> Self {
         let task_execution_runtime_owner =
             WorkflowTaskExecutionRuntimeOwner::new(Arc::clone(&service));
         Self {
             service,
+            host,
             task_execution_runtime_owner,
         }
     }
@@ -31,14 +47,17 @@ impl WorkflowSessionExecutionRuntime {
         Arc::clone(&self.service)
     }
 
-    pub async fn run_workflow_execution_session<H: WorkflowHost>(
+    pub fn host(&self) -> Arc<dyn WorkflowHost> {
+        Arc::clone(&self.host)
+    }
+
+    pub async fn run_workflow_execution_session(
         &self,
-        host: &H,
         request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         self.service
             .run_workflow_execution_session_with_runtime_owner(
-                host,
+                self.host.as_ref(),
                 request,
                 Some(self.task_execution_runtime_owner()),
             )
@@ -83,19 +102,23 @@ mod tests {
     #[test]
     fn session_execution_runtime_owns_shared_service_and_runtime_owner() {
         let service = Arc::new(WorkflowService::new());
+        let host = Arc::new(DelegatingHost);
 
-        let runtime = WorkflowSessionExecutionRuntime::from_shared_service(Arc::clone(&service));
+        let runtime =
+            WorkflowSessionExecutionRuntime::from_shared_service(Arc::clone(&service), host);
 
         assert!(Arc::ptr_eq(&service, &runtime.service()));
         assert!(Arc::ptr_eq(
             &service,
             &runtime.task_execution_runtime_owner().service()
         ));
+        assert_eq!(Arc::strong_count(&runtime.host()), 2);
     }
 
     #[test]
     fn session_execution_runtime_builds_runtime_branch_context_from_owned_runtime_owner() {
-        let runtime = WorkflowSessionExecutionRuntime::new(WorkflowService::new());
+        let runtime =
+            WorkflowSessionExecutionRuntime::new(WorkflowService::new(), Arc::new(DelegatingHost));
         let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
             session_id: "session-1".to_string(),
             workflow_run_id: "run-1".to_string(),
@@ -118,21 +141,19 @@ mod tests {
 
     #[tokio::test]
     async fn session_execution_runtime_delegates_session_run_to_workflow_service() {
-        let runtime = WorkflowSessionExecutionRuntime::new(WorkflowService::new());
+        let runtime =
+            WorkflowSessionExecutionRuntime::new(WorkflowService::new(), Arc::new(DelegatingHost));
 
         let error = runtime
-            .run_workflow_execution_session(
-                &DelegatingHost,
-                WorkflowExecutionSessionRunRequest {
-                    session_id: " ".to_string(),
-                    workflow_semantic_version: "1.0.0".to_string(),
-                    inputs: Vec::new(),
-                    output_targets: None,
-                    override_selection: None,
-                    timeout_ms: None,
-                    priority: None,
-                },
-            )
+            .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+                session_id: " ".to_string(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            })
             .await
             .expect_err("empty session id should be rejected by WorkflowService");
 

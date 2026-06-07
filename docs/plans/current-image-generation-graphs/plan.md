@@ -1,5 +1,18 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 composition-root host boundary ownership update:
+`WorkflowSessionExecutionRuntime` now owns the shared `Arc<WorkflowService>`,
+an `Arc<dyn WorkflowHost>` backend host/runtime boundary, and
+`WorkflowTaskExecutionRuntimeOwner`. Facade session runs use the owned host
+boundary instead of taking request-scoped host references, and focused tests
+prove the facade-owned host/service/runtime-owner construction plus the
+canonical runtime readiness-deferral path. Direct `WorkflowService` runtime
+execution remains fail-closed; no worker-owned completion, fake oneshot,
+request-scoped runtime dispatch/completion, frontend/Tauri policy,
+compatibility DTO, or durable claiming was added. Next Option 2 slice: pass
+the backend runtime branch execution environment from
+`WorkflowTaskExecutionRuntimeOwner` into the task-execution worker spawn path.
+
 2026-06-06 worker-owned runtime branch completion decision: use Option 2 for
 the immediate worker-owned completion path. `WorkflowSessionExecutionRuntime`
 must become the production composition-root owner for the shared

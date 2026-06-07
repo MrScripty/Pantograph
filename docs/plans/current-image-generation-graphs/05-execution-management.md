@@ -27005,6 +27005,31 @@ Worker rules:
       execution remains fail-closed. Do not add fake direct-execution oneshots,
       request-scoped runtime dispatch/completion, frontend/Tauri policy,
       compatibility DTOs, or durable claiming in the next source slice.
+  - 2026-06-06 composition-root host boundary ownership source slice:
+    - Smallest vertical slice: make `WorkflowSessionExecutionRuntime` own the
+      backend host/runtime boundary as `Arc<dyn WorkflowHost>` and route
+      facade session execution through that owned boundary.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+      `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and these
+      plan files.
+    - No-fallback/no-legacy confirmation: the facade now owns the long-lived
+      host boundary needed by the worker path, but direct `WorkflowService`
+      runtime execution still fails closed. No fake direct-execution oneshot,
+      request-scoped runtime dispatch/completion, frontend/Tauri policy,
+      compatibility DTO, durable claiming, or worker-loop execution move was
+      added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service session_execution_runtime --lib`;
+      `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`.
+    - Remaining follow-up: change the task-execution worker spawn path to
+      receive the backend runtime branch execution environment from
+      `WorkflowTaskExecutionRuntimeOwner`, then add the real completion
+      responder and move runtime branch execution into the worker loop.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

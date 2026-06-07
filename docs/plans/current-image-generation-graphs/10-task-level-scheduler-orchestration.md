@@ -1178,6 +1178,20 @@ Option 3 thin implementation sequence:
      blocking inference path is complete: decouple runtime branch execution
      from `WorkflowHost` where feasible, then evolve to durable task-event-loop
      claiming for replay, restart, and batching.
+   - 2026-06-06 composition-root host boundary ownership slice:
+     `WorkflowSessionExecutionRuntime` now owns an `Arc<dyn WorkflowHost>`
+     alongside the shared workflow service and task-execution runtime owner,
+     and facade session runs use that owned backend host/runtime boundary.
+     Verified with `cargo test -p pantograph-workflow-service
+     session_execution_runtime --lib` and `cargo test -p
+     pantograph-workflow-service
+     workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
+     --lib`. No worker-owned completion, direct-execution oneshot,
+     request-scoped runtime dispatch/completion, frontend/Tauri policy,
+     compatibility DTO, or durable claiming was added. Next source slice:
+     pass the backend runtime branch execution environment from
+     `WorkflowTaskExecutionRuntimeOwner` into the task-execution worker spawn
+     path.
 
 Worker-system standards gates:
 

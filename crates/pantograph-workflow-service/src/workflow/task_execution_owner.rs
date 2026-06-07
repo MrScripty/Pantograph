@@ -22,7 +22,7 @@ impl WorkflowTaskExecutionOwner {
             .ensure_task_execution_available()
     }
 
-    pub(super) async fn run_non_runtime_to_completion<H: WorkflowHost>(
+    pub(super) async fn run_non_runtime_to_completion<H: WorkflowHost + ?Sized>(
         service: &WorkflowService,
         host: &H,
         session: &WorkflowExecutionSessionSummary,
@@ -108,7 +108,7 @@ impl WorkflowTaskExecutionOwner {
         run_result
     }
 
-    pub(super) async fn run_runtime_branch_until_dispatch_boundary<H: WorkflowHost>(
+    pub(super) async fn run_runtime_branch_until_dispatch_boundary<H: WorkflowHost + ?Sized>(
         context: &WorkflowTaskExecutionRuntimeBranchContext,
         host: &H,
         session: &WorkflowExecutionSessionSummary,

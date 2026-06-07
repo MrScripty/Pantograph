@@ -953,6 +953,20 @@ durable task orchestration path.
     after the blocking inference path is complete and validated, decouple
     runtime branch execution from `WorkflowHost` where feasible and then move
     to durable task-event-loop claiming for replay/restart/batching.
+  - 2026-06-06 composition-root host boundary ownership slice:
+    `WorkflowSessionExecutionRuntime` now owns the shared
+    `Arc<WorkflowService>`, an `Arc<dyn WorkflowHost>` host/runtime boundary,
+    and `WorkflowTaskExecutionRuntimeOwner`; facade session runs use the owned
+    host boundary. Verified with `cargo test -p pantograph-workflow-service
+    session_execution_runtime --lib` and `cargo test -p
+    pantograph-workflow-service
+    workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch
+    --lib`. Direct `WorkflowService` runtime execution remains fail-closed;
+    no fake oneshot, request-scoped runtime dispatch/completion,
+    frontend/Tauri policy, compatibility DTO, durable claiming, or worker-loop
+    execution move was added. Next source slice: pass the backend runtime
+    branch execution environment from `WorkflowTaskExecutionRuntimeOwner` into
+    the task-execution worker spawn path.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

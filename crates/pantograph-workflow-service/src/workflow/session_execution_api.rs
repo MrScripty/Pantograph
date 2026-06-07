@@ -202,7 +202,9 @@ impl WorkflowService {
             .await
     }
 
-    pub(super) async fn run_workflow_execution_session_with_runtime_owner<H: WorkflowHost>(
+    pub(super) async fn run_workflow_execution_session_with_runtime_owner<
+        H: WorkflowHost + ?Sized,
+    >(
         &self,
         host: &H,
         request: WorkflowExecutionSessionRunRequest,
@@ -709,7 +711,7 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)
     }
 
-    async fn scheduler_task_graph_for_session_run<H: WorkflowHost>(
+    async fn scheduler_task_graph_for_session_run<H: WorkflowHost + ?Sized>(
         &self,
         host: &H,
         workflow_id: &str,
@@ -777,7 +779,7 @@ impl WorkflowService {
         )))
     }
 
-    async fn create_queued_run_snapshot_if_configured<H: WorkflowHost>(
+    async fn create_queued_run_snapshot_if_configured<H: WorkflowHost + ?Sized>(
         &self,
         host: &H,
         session: &WorkflowExecutionSessionSummary,

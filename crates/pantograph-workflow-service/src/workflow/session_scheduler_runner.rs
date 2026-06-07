@@ -63,7 +63,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         Self { service }
     }
 
-    pub(super) async fn run_non_runtime_only<H: WorkflowHost>(
+    pub(super) async fn run_non_runtime_only<H: WorkflowHost + ?Sized>(
         &self,
         host: &H,
         session_id: &str,
@@ -107,7 +107,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     pub(super) async fn run_until_runtime_dispatch_boundary(
         &self,
-        host: &impl WorkflowHost,
+        host: &(impl WorkflowHost + ?Sized),
         session_id: &str,
         workflow_run_id: &str,
         workflow_id: &str,
@@ -138,7 +138,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     pub(super) async fn resume_runtime_dependency_readiness(
         &self,
-        host: &impl WorkflowHost,
+        host: &(impl WorkflowHost + ?Sized),
         session_id: &str,
         workflow_run_id: &str,
         workflow_id: &str,
@@ -176,7 +176,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     async fn continue_runtime_dependency_readiness(
         &self,
-        host: &impl WorkflowHost,
+        host: &(impl WorkflowHost + ?Sized),
         session_id: &str,
         workflow_run_id: &str,
         workflow_id: &str,
@@ -654,7 +654,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     async fn run_runtime_dispatch_ready_tasks(
         &self,
-        host: &impl WorkflowHost,
+        host: &(impl WorkflowHost + ?Sized),
         session_id: &str,
         workflow_run_id: &str,
         workflow_id: &str,
@@ -1433,7 +1433,7 @@ fn active_run_scheduler_task_state_required(
         })
 }
 
-async fn scheduler_output_targets_for_run<H: WorkflowHost>(
+async fn scheduler_output_targets_for_run<H: WorkflowHost + ?Sized>(
     host: &H,
     workflow_id: &str,
     output_targets: Option<&[WorkflowOutputTarget]>,

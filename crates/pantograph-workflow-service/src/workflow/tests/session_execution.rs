@@ -369,11 +369,11 @@ async fn workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown
 
 #[tokio::test]
 async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launch() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-runtime-fail-closed".to_string(),
                 usage_profile: None,
@@ -386,7 +386,7 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
 
     let error = service
         .run_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
                 workflow_semantic_version: "1.2.3".to_string(),
@@ -425,13 +425,14 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
 #[tokio::test]
 async fn workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch(
 ) {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
             .expect("service")
             .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
             .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone()),
+        Arc::clone(&host),
     );
     let service = runtime.service();
     let workflow_id = "wf-runtime-dispatch-boundary";
@@ -448,7 +449,7 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -460,22 +461,19 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
     let session_id = created.session_id.clone();
 
     let error = runtime
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: None,
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect_err("runtime-containing scheduler run should defer at readiness admission");
 
@@ -535,7 +533,7 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
     );
     let resumed_error = service
         .resume_workflow_execution_session_runtime_dependency_readiness(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionResumeRequest {
                 session_id: session_id.clone(),
                 workflow_run_id: workflow_run_id.clone(),
