@@ -339,7 +339,7 @@ async fn workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown
         .await
         .expect_err("task lifecycle shutdown should reject new execution");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
     assert!(
         error
             .message()

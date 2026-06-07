@@ -118,7 +118,8 @@ passed,
 passed, and `cargo fmt -p pantograph-workflow-service -- --check` passed after
 formatting. Broader verification
 `cargo test -p pantograph-workflow-service session_execution --lib` still fails
-with 17 remaining tests, covering expected follow-on migration work: stale
+with 16 remaining tests after the 2026-06-07 dispatch-boundary slice, covering
+expected follow-on migration work: stale
 direct runtime entrypoints, tests that now require saved executable validation
 snapshots, legacy host-execution assumptions after scheduler task ownership,
 and runtime-load/unload diagnostics still expecting direct request-scoped
@@ -168,6 +169,14 @@ Behavioral note:
 missing runtime dispatch selection now surfaces through the worker-owned path as
 `InternalError` while preserving the canonical diagnostic text
 `runtime scheduler dispatch selection failed closed`.
+
+2026-06-07 assertion correction slice:
+fixed an accidental assertion drift in
+`workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown`; this
+test remains direct fail-closed coverage and correctly expects
+`CapabilityViolation` when task execution ownership is unavailable. Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown --lib`
+passed and `cargo fmt -p pantograph-workflow-service -- --check` passed.
 
 Outstanding Option 2 migration work:
 - migrate the remaining runtime-containing tests that still call
