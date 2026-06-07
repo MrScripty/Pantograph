@@ -935,6 +935,31 @@ Verification passed:
 `cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
 for the slice files.
 
+2026-06-07 runtime-branch retry-ready defer slice: completed the next Option 3
+retry/defer step. Smallest useful vertical slice: separate durable
+`deferred_at_ms` from retry `ready_at_ms` for runtime-branch task events and
+have the task-execution worker use a bounded dependency-readiness retry delay
+when persisting readiness-pending `Deferred` state. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`, and
+this plan.
+
+No-fallback/no-legacy confirmation: readiness-pending runtime work remains a
+durable `Deferred` event, not a released plain `Ready` event, request-scoped
+retry loop, frontend/Tauri timer, graph-derived retry policy, or synthetic
+completion. Existing immediate `defer` remains a test/state-machine shorthand;
+worker-owned runtime dependency readiness uses `defer_until` with an explicit
+backend-owned retry-ready timestamp.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
+for the slice files.
+
 2026-06-07 runtime-branch dispatch-unavailable claim-release update:
 completed the first immediate bridge slice. Smallest useful vertical slice:
 add `release_claim` to the runtime-branch task-event repository/state machine

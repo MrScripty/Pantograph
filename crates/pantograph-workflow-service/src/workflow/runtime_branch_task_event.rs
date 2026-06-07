@@ -173,6 +173,14 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         deferred_at_ms: u64,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
+    fn defer_until(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        deferred_at_ms: u64,
+        ready_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
+
     fn release_claim(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -378,6 +386,21 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
     {
         let record = self.record(event_id)?;
         let updated = record.defer(claim, deferred_at_ms)?;
+        self.records
+            .insert(event_id.as_str().to_string(), updated.clone());
+        Ok(updated)
+    }
+
+    fn defer_until(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        deferred_at_ms: u64,
+        ready_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
+    {
+        let record = self.record(event_id)?;
+        let updated = record.defer_until(claim, deferred_at_ms, ready_at_ms)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -637,14 +660,29 @@ impl WorkflowRuntimeBranchTaskEventRecord {
     }
 
     pub(super) fn defer(
-        mut self,
+        self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
+        self.defer_until(claim, deferred_at_ms, deferred_at_ms)
+    }
+
+    pub(super) fn defer_until(
+        mut self,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        deferred_at_ms: u64,
+        ready_at_ms: u64,
+    ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
         self.validate_active_claim(claim, deferred_at_ms)?;
+        if ready_at_ms < deferred_at_ms {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
+                "runtime branch task event retry ready time cannot be before deferred time",
+            ));
+        }
         self.state = WorkflowRuntimeBranchTaskEventState::Deferred;
         self.claim = None;
-        self.ready_at_ms = deferred_at_ms;
+        self.ready_at_ms = ready_at_ms;
         self.deferred_at_ms = Some(deferred_at_ms);
         Ok(self)
     }
@@ -1063,6 +1101,37 @@ mod tests {
             .expect("current claim fails");
         assert_eq!(failed.state, WorkflowRuntimeBranchTaskEventState::Failed);
         assert_eq!(failed.failed_at_ms, Some(220));
+    }
+
+    #[test]
+    fn runtime_branch_task_event_defer_until_separates_deferred_and_retry_ready_times() {
+        let deferred_claim = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 80)
+            .expect("ready event claims");
+        let deferred = deferred_claim
+            .record
+            .defer_until(&deferred_claim.claim, 120, 180)
+            .expect("current claim defers until retry time");
+
+        assert_eq!(
+            deferred.state,
+            WorkflowRuntimeBranchTaskEventState::Deferred
+        );
+        assert_eq!(deferred.deferred_at_ms, Some(120));
+        assert_eq!(deferred.ready_at_ms, 180);
+        assert!(deferred.claim.is_none());
+
+        let invalid_claimed = ready_record()
+            .claim(owner_id("worker.beta"), 200, 80)
+            .expect("ready event claims");
+        let error = invalid_claimed
+            .record
+            .defer_until(&invalid_claimed.claim, 220, 219)
+            .expect_err("retry ready time cannot precede deferred time");
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition
+        );
     }
 
     #[test]

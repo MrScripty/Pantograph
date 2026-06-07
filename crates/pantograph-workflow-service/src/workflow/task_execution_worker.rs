@@ -25,6 +25,7 @@ use super::{
 
 const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
 const RUNTIME_BRANCH_TASK_EVENT_CLAIM_LEASE_MS: u64 = 30_000;
+const RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS: u64 = 1_000;
 const TASK_EXECUTION_WORKER_CLAIM_OWNER_ID: &str = "workflow-service.task-execution-worker";
 
 #[derive(Debug)]
@@ -662,11 +663,15 @@ async fn claim_and_execute_runtime_branch_event(
                 WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
                 error.to_string(),
             )];
+            let deferred_at_ms = unix_timestamp_ms();
+            let retry_ready_at_ms =
+                deferred_at_ms.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS);
             match defer_claimed_runtime_branch_task_event(
                 service.as_ref(),
                 &claimed.record.event_id,
                 &claimed.claim,
-                unix_timestamp_ms(),
+                deferred_at_ms,
+                retry_ready_at_ms,
             ) {
                 Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
                     command,
@@ -794,7 +799,8 @@ fn defer_claimed_runtime_branch_task_event(
     service: &WorkflowService,
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
-    now_ms: u64,
+    deferred_at_ms: u64,
+    ready_at_ms: u64,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -806,7 +812,7 @@ fn defer_claimed_runtime_branch_task_event(
             )
         })?;
     repository
-        .defer(event_id, claim, now_ms)
+        .defer_until(event_id, claim, deferred_at_ms, ready_at_ms)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -1236,6 +1242,76 @@ mod tests {
             .shutdown()
             .await
             .expect("shutdown task execution worker");
+    }
+
+    #[test]
+    fn runtime_branch_dependency_defer_sets_retry_ready_time() {
+        let service = WorkflowService::new();
+        let event_id =
+            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.run-1.image-task")
+                .expect("event id");
+        let record =
+            WorkflowRuntimeBranchTaskEventRecord::ready(WorkflowRuntimeBranchTaskEventRequest {
+                event_id: event_id.clone(),
+                session_id: "session-1".to_string(),
+                workflow_id: "workflow-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
+                scheduler_task_id: "image-task".to_string(),
+                scheduler_task_attempt_id: None,
+                attempt_generation: 1,
+                queued_input_keys: vec!["prompt:prompt".to_string()],
+                output_targets: None,
+                timeout_ms: Some(500),
+                batching_key: Some("runtime-branch-task.workflow-1.image-task".to_string()),
+                ready_at_ms: 100,
+            })
+            .expect("runtime branch task event record");
+        service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .enqueue(record)
+            .expect("enqueue runtime branch task event");
+        let claimed = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .claim_event(
+                &event_id,
+                WorkflowRuntimeBranchTaskEventClaimOwnerId::parse(
+                    TASK_EXECUTION_WORKER_CLAIM_OWNER_ID,
+                )
+                .expect("owner id"),
+                110,
+                80,
+            )
+            .expect("event claims");
+        let dispatching = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .mark_dispatching(&event_id, &claimed.claim, 120)
+            .expect("event marks dispatching");
+
+        let deferred = defer_claimed_runtime_branch_task_event(
+            &service,
+            &dispatching.event_id,
+            &claimed.claim,
+            130,
+            130_u64.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS),
+        )
+        .expect("event defers");
+
+        assert_eq!(
+            deferred.state,
+            WorkflowRuntimeBranchTaskEventState::Deferred
+        );
+        assert_eq!(deferred.deferred_at_ms, Some(130));
+        assert_eq!(
+            deferred.ready_at_ms,
+            130 + RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS
+        );
+        assert!(deferred.claim.is_none());
     }
 
     fn prepare_active_runtime_run(service: &WorkflowService) -> String {
