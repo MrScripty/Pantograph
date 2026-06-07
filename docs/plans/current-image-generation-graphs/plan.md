@@ -861,7 +861,11 @@ Option 3 durable lifecycle sequence after Option 2 validation:
    recovery from process restart.
 3. Add batching/coalescing support for compatible runtime tasks across
    simultaneous workflow runs while preserving backend-owned active-run facts
-   and typed diagnostics.
+   and typed diagnostics. This must proceed in three thin phases: first define
+   the backend-owned batch eligibility contract; then add durable grouped
+   claim/lease behavior without coalesced runtime execution; then add the
+   worker-owned coalesced runtime-host execution path with per-run output,
+   cancellation, timeout, and diagnostic fan-out.
 4. Replace remaining bridge-specific worker rehydration with canonical durable
    task-attempt facts, then remove bridge-only state and tests in a dedicated
    cleanup slice.
@@ -878,6 +882,51 @@ no-legacy rule. This re-plan follows the standards by keeping business logic in
 backend workflow-service ownership, preserving composition-root lifecycle
 ownership, using typed diagnostics instead of fallback behavior, and keeping
 the next source work in validated thin vertical slices.
+
+2026-06-07 runtime-branch batching/coalescing re-plan decision: use Option 1,
+then Option 2, then Option 3. True coalesced runtime execution is the target,
+but implementing it before a backend-owned compatibility contract would push
+scheduling policy into ad hoc worker code and would make batch membership hard
+to test at the boundary. The current `batching_key` is provisional workflow
+shape metadata and must not be treated as sufficient proof that tasks can share
+one runtime execution. Batch eligibility must be derived from canonical backend
+facts: model/artifact identity, backend/runtime family, device/load target,
+runtime instance residency requirements, memory estimate and reservation,
+context/input shape required by the runtime operation, task operation type,
+and cancellation/timeout compatibility. Eligibility failures must return typed
+diagnostics, not fall back to independent request-scoped runtime execution.
+
+Batching Option 1, contract first: define a pure workflow-service-owned batch
+eligibility contract and focused tests. The contract must explain why two
+runtime-branch tasks are compatible or incompatible using typed diagnostics
+and canonical facts only. It must not execute runtime work, claim groups,
+create frontend/Tauri policy, use graph path inference, or preserve legacy
+runtime execution through a compatibility shim.
+
+Batching Option 2, durable grouped claim without coalesced execution: add a
+runtime-branch repository boundary that can claim a compatible group under one
+backend-owned lease while still dispatching each member independently. This
+validates group ownership, duplicate-dispatch protection, retry/defer behavior,
+replay after expired leases, and cancellation/timeout fan-out without adding a
+new runtime-host batch API in the same slice.
+
+Batching Option 3, worker-owned coalesced runtime execution: once Options 1
+and 2 validate, add a task-execution-worker path that claims a compatible
+group, calls a composition-root-owned runtime-host batch operation once, and
+fans out per-run outputs, terminal facts, cancellation outcomes, timeouts, and
+typed diagnostics. The worker may reuse a kept-alive model/runtime instance
+for compatible tasks, but must never carry forward workflow inputs or mutable
+per-run context from the workflow that originally loaded the model.
+
+Rejected batching paths: do not implement true coalescing before the
+eligibility contract; do not use `batching_key` alone as the compatibility
+source of truth; do not batch by frontend/Tauri request shape, graph node
+labels, or in-memory responder state; do not create request-scoped runtime
+instances as fallback for incompatible tasks; and do not add a runtime-host
+batch API in the same slice as durable grouped claiming. Verification for this
+sequence must start with eligibility boundary tests, then repository grouped
+claim/replay tests, then worker fan-out tests and the existing
+runtime-branch/workflow-service checks.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
