@@ -459,6 +459,27 @@ and live-event assumptions from the legacy execution path. These failures are
 recorded for the next embedded-runtime test migration slice and must not be
 fixed by reintroducing direct request-scoped runtime execution.
 
+2026-06-07 embedded keep-alive carry-forward re-plan trigger: attempting to
+migrate `session_execution_state` tests by simply deleting legacy executor
+assertions failed because worker-owned session runs do not yet have a canonical
+backend source for carried-forward inputs when a later keep-alive run omits an
+input. The old behavior came from `EmbeddedRuntime.session_executions` and its
+node-memory snapshots; preserving that executor path would violate the
+no-fallback/no-legacy rule after session runs enter
+`WorkflowSessionExecutionRuntime`. Re-plan before continuing embedded-runtime
+test migration. Standards-aligned options to evaluate next:
+1. Add backend-owned keep-alive input memory to workflow-service session state
+   and have worker-owned runs materialize omitted inputs from that canonical
+   state.
+2. Represent carried-forward inputs as explicit scheduler/session facts in the
+   durable task-attempt lifecycle planned in Option 3, then migrate these tests
+   after that lifecycle exists.
+3. Remove implicit carry-forward semantics from keep-alive session execution
+   and require callers to send all source inputs on each run, returning typed
+   missing-input diagnostics otherwise.
+Do not restore the embedded node-engine executor as a compatibility shim and
+do not make the embedded adapter choose legacy execution for keep-alive runs.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
