@@ -29,10 +29,11 @@ Immediate Option 1 bridge sequence:
    execution body behind the worker using that rehydrated context and the
    owned host boundary; the request path now only enqueues and awaits
    notification.
-4. Partially completed 2026-06-07: persist completed/failed durable event
-   state before notifying the in-memory responder. Remaining source follow-up:
-   persist readiness-pending deferred durable state with retry/replay semantics
-   instead of the current bridge claim-release behavior.
+4. Completed 2026-06-07: persist completed/deferred/failed durable event
+   state before notifying the in-memory responder, and keep missing/stale/
+   expired facts as typed diagnostics. Readiness-pending runtime dependency
+   outcomes now persist retryable `Deferred` state instead of releasing the
+   event as plain `Ready`.
 5. Once this proves a complete inference path, execute the follow-on Option 3
    lifecycle plan: promote runtime-branch events into the durable scheduler
    task-attempt lifecycle with explicit non-terminal running/dispatching,
@@ -149,6 +150,35 @@ bridge still releases readiness-pending events back to `Ready`; the next slice
 must promote readiness-pending runtime dependency outcomes into durable
 deferred event state with explicit retry/replay semantics before responder
 notification.
+
+2026-06-07 runtime-branch retryable deferred state update: completed the
+remaining deferred-state bridge slice. Smallest useful vertical slice: make
+`WorkflowRuntimeBranchTaskEventState::Deferred` a durable retryable state
+instead of a terminal state, clear the active claim when deferring, preserve
+`deferred_at_ms`, set `ready_at_ms` for replay, allow due deferred events to
+be reclaimed with a new attempt generation, and have the task-execution worker
+persist readiness-pending runtime dependency outcomes through `defer` before
+notifying the responder. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and plan docs. No-fallback/no-legacy confirmation: this slice does not release
+readiness-pending events as plain `Ready`, does not preserve terminal
+`Deferred` behavior, does not synthesize retry facts from request/frontend/
+Tauri state, does not fake successful completion, and keeps stale/expired
+claim handling typed through the runtime-branch task-event diagnostics.
+Verification:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+passed with 20 tests,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib` passed
+with 15 tests,
+`cargo test -p pantograph-workflow-service runtime_branch --lib` passed with
+34 tests, and `cargo check -p pantograph-workflow-service` passed with the
+known warning for unused `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort
+helpers in `scheduler/task_orchestrator.rs`. Remaining follow-up: once a
+complete inference path is validated through the bridge, promote the runtime
+branch events into the full durable scheduler task-attempt lifecycle with
+explicit running/dispatching state, batching, duplicate-dispatch guard, and
+restart semantics.
 
 2026-06-06 runtime-branch worker host-boundary update: completed the next
 Option 3 preparation slice by threading the composition-root owned

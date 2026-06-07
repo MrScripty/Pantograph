@@ -465,8 +465,16 @@ impl WorkflowRuntimeBranchTaskEventRecord {
                 }
                 self.attempt_generation = self.attempt_generation.saturating_add(1);
             }
+            WorkflowRuntimeBranchTaskEventState::Deferred => {
+                if self.ready_at_ms > now_ms {
+                    return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                        WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed,
+                        "deferred runtime branch task event is not ready for retry",
+                    ));
+                }
+                self.attempt_generation = self.attempt_generation.saturating_add(1);
+            }
             WorkflowRuntimeBranchTaskEventState::Completed
-            | WorkflowRuntimeBranchTaskEventState::Deferred
             | WorkflowRuntimeBranchTaskEventState::Failed => {
                 return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
                     WorkflowRuntimeBranchTaskEventDiagnosticCode::TerminalEvent,
@@ -508,6 +516,8 @@ impl WorkflowRuntimeBranchTaskEventRecord {
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
         self.validate_active_claim(claim, deferred_at_ms)?;
         self.state = WorkflowRuntimeBranchTaskEventState::Deferred;
+        self.claim = None;
+        self.ready_at_ms = deferred_at_ms;
         self.deferred_at_ms = Some(deferred_at_ms);
         Ok(self)
     }
@@ -570,12 +580,12 @@ impl WorkflowRuntimeBranchTaskEventRecord {
     fn is_due_for_claim(&self, now_ms: u64) -> bool {
         match self.state {
             WorkflowRuntimeBranchTaskEventState::Ready => self.ready_at_ms <= now_ms,
+            WorkflowRuntimeBranchTaskEventState::Deferred => self.ready_at_ms <= now_ms,
             WorkflowRuntimeBranchTaskEventState::Claimed => self
                 .claim
                 .as_ref()
                 .is_none_or(|claim| claim.lease_expires_at_ms <= now_ms),
             WorkflowRuntimeBranchTaskEventState::Completed
-            | WorkflowRuntimeBranchTaskEventState::Deferred
             | WorkflowRuntimeBranchTaskEventState::Failed => false,
         }
     }
@@ -794,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_branch_task_event_records_deferred_and_failed_terminal_states() {
+    fn runtime_branch_task_event_records_deferred_retry_and_failed_terminal_states() {
         let deferred_claim = ready_record()
             .claim(owner_id("worker.alpha"), 100, 50)
             .expect("ready event claims");
@@ -807,6 +817,25 @@ mod tests {
             WorkflowRuntimeBranchTaskEventState::Deferred
         );
         assert_eq!(deferred.deferred_at_ms, Some(120));
+        assert_eq!(deferred.ready_at_ms, 120);
+        assert!(deferred.claim.is_none());
+
+        let not_due = deferred
+            .clone()
+            .claim(owner_id("worker.beta"), 119, 50)
+            .expect_err("deferred event is not due before ready_at");
+        assert_eq!(
+            not_due.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed
+        );
+        let retry = deferred
+            .claim(owner_id("worker.beta"), 120, 50)
+            .expect("deferred event reclaims when due");
+        assert_eq!(
+            retry.record.state,
+            WorkflowRuntimeBranchTaskEventState::Claimed
+        );
+        assert_eq!(retry.claim.attempt_generation, 2);
 
         let failed_claim = ready_record()
             .claim(owner_id("worker.beta"), 200, 50)
@@ -1036,6 +1065,19 @@ mod tests {
             deferred.state,
             WorkflowRuntimeBranchTaskEventState::Deferred
         );
+        assert!(deferred.claim.is_none());
+        assert_eq!(
+            repository
+                .claim_next_due_for_workflow_run("run.test", owner_id("worker.retry"), 119, 50)
+                .expect("claim next succeeds"),
+            None
+        );
+        let retry_claim = repository
+            .claim_next_due_for_workflow_run("run.test", owner_id("worker.retry"), 120, 50)
+            .expect("claim next succeeds")
+            .expect("deferred event is due");
+        assert_eq!(retry_claim.record.event_id, deferred_id);
+        assert_eq!(retry_claim.claim.attempt_generation, 2);
 
         let failed_id = event_id("runtime-branch-task-event.fail");
         repository

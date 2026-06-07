@@ -633,7 +633,7 @@ async fn claim_and_execute_runtime_branch_event(
                 WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
                 error.to_string(),
             )];
-            match release_claimed_runtime_branch_task_event(
+            match defer_claimed_runtime_branch_task_event(
                 service.as_ref(),
                 &claimed.record.event_id,
                 &claimed.claim,
@@ -649,7 +649,7 @@ async fn claim_and_execute_runtime_branch_event(
                     diagnostics.push(diagnostic);
                     WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
                         command,
-                        "runtime branch task event claim release failed",
+                        "runtime branch task event defer persistence failed",
                         diagnostics,
                     )
                 }
@@ -758,6 +758,26 @@ fn release_claimed_runtime_branch_task_event(
         })?;
     repository
         .release_claim(event_id, claim, now_ms)
+        .map_err(runtime_branch_event_diagnostic)
+}
+
+fn defer_claimed_runtime_branch_task_event(
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .defer(event_id, claim, now_ms)
         .map_err(runtime_branch_event_diagnostic)
 }
 
