@@ -392,6 +392,32 @@ now runs 37 filtered tests with 36 passing and one remaining known failure,
 needs Option 2 step 4 migration to the runtime-owned shutdown/supervisor
 boundary.
 
+2026-06-07 runtime-owned shutdown facade slice: completed Option 2
+step 4 for the blocked runtime dispatch supervisor. Smallest useful vertical
+slice: add `WorkflowSessionExecutionRuntime::shutdown_workflow_execution_runtime`
+as the composition-root shutdown entrypoint, migrate the blocked runtime
+dispatch cancellation test to run and shut down through the same runtime
+facade, and preserve worker-projected runtime cancellation as typed
+`WorkflowServiceError::Cancelled` instead of flattening it to an internal
+error. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan. No-fallback/no-legacy confirmation: this slice does not start
+runtime work through direct `WorkflowService`, does not synthesize dispatch
+state during shutdown, does not bypass the worker-owned runtime branch path,
+and preserves the runtime-host cancellation handle as the shutdown signal.
+Verification: `cargo fmt` passed;
+`cargo test -p pantograph-workflow-service workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor --lib`
+passed with 1 test; `cargo test -p pantograph-workflow-service session_execution --lib`
+passed with 37 tests; `cargo test -p pantograph-workflow-service task_execution_runtime --lib`
+passed with 4 tests; and
+`cargo test -p pantograph-workflow-service task_execution_facade --lib`
+passed with 3 tests. Remaining Option 2 follow-up: keep direct
+`WorkflowService` fail-closed coverage for runtime recovery/shutdown without a
+runtime owner, then proceed to adapter/call-site migration if no new re-plan
+trigger appears.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,

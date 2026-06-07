@@ -2007,7 +2007,7 @@ async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_t
 
 #[tokio::test]
 async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
@@ -2026,6 +2026,11 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
         ))
         .with_runtime_host_execution_port(runtime_host_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let runtime = Arc::new(WorkflowSessionExecutionRuntime::new(
+        service,
+        Arc::clone(&host),
+    ));
+    let service = runtime.service();
     let workflow_id = "wf-runtime-host-shutdown-abort";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -2051,7 +2056,7 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -2061,36 +2066,33 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
         .await
         .expect("create session");
     let runtime_request_started = runtime_host_port.request_started.notified();
-    let run_service = service.clone();
+    let run_runtime = Arc::clone(&runtime);
     let run_handle = tokio::spawn(async move {
-        run_service
-            .run_workflow_execution_session(
-                &host,
-                WorkflowExecutionSessionRunRequest {
-                    session_id: created.session_id,
-                    workflow_semantic_version: workflow_semantic_version.to_string(),
-                    inputs: vec![WorkflowPortBinding {
-                        node_id: "prompt".to_string(),
-                        port_id: "text".to_string(),
-                        value: serde_json::json!("paint a red cube"),
-                    }],
-                    output_targets: Some(vec![WorkflowOutputTarget {
-                        node_id: "infer".to_string(),
-                        port_id: "image".to_string(),
-                    }]),
-                    override_selection: None,
-                    timeout_ms: None,
-                    priority: None,
-                },
-            )
+        run_runtime
+            .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: workflow_semantic_version.to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("paint a red cube"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "infer".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            })
             .await
     });
     tokio::time::timeout(std::time::Duration::from_secs(1), runtime_request_started)
         .await
         .expect("runtime dispatch should start");
 
-    service
-        .workflow_shutdown_scheduler_task_lifecycle(
+    runtime
+        .shutdown_workflow_execution_runtime(
             std::time::Duration::from_millis(1),
             std::time::Duration::from_secs(1),
         )

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
 use super::task_execution_worker::{
@@ -75,6 +76,22 @@ impl WorkflowSessionExecutionRuntime {
                 self.host.as_ref(),
                 Some(self.task_execution_runtime_owner()),
             )
+            .await
+    }
+
+    pub async fn shutdown_workflow_execution_runtime(
+        &self,
+        task_lifecycle_drain_timeout: Duration,
+        task_lifecycle_abort_timeout: Duration,
+    ) -> Result<(), WorkflowServiceError> {
+        self.service
+            .workflow_shutdown_scheduler_task_lifecycle(
+                task_lifecycle_drain_timeout,
+                task_lifecycle_abort_timeout,
+            )
+            .await?;
+        self.task_execution_runtime_owner
+            .shutdown_task_execution_worker()
             .await
     }
 

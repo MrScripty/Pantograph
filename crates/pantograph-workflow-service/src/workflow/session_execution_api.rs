@@ -1579,6 +1579,15 @@ fn workflow_response_from_runtime_branch_worker_outcome(
             }
         },
         WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) => {
+            if outcome
+                .error_message
+                .contains("runtime dispatch task was cancelled before completion")
+            {
+                return Err(WorkflowServiceError::Cancelled(worker_diagnostic_message(
+                    &outcome.error_message,
+                    &outcome.diagnostics,
+                )));
+            }
             Err(WorkflowServiceError::Internal(worker_diagnostic_message(
                 &outcome.error_message,
                 &outcome.diagnostics,
