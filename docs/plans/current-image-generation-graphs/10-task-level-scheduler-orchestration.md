@@ -1165,6 +1165,19 @@ Option 3 thin implementation sequence:
      execution/completion contract without adding fake direct-execution
      oneshots, request-scoped runtime dispatch/completion, frontend/Tauri
      policy, compatibility DTOs, or premature durable claiming.
+   - 2026-06-06 worker-owned runtime branch completion decision: use Option 2
+     now. `WorkflowSessionExecutionRuntime` becomes the production
+     composition-root owner for the shared workflow service, owned host/runtime
+     boundary, and task-execution runtime owner. The task-execution worker
+     must execute `ExecuteRuntimeBranch` in its loop and return typed
+     completed/failed/deferred/unavailable/shutdown outcomes through a real
+     completion responder. Direct `WorkflowService` runtime execution remains
+     fail-closed; do not add fake direct-execution oneshots, request-scoped
+     runtime dispatch/completion, frontend/Tauri policy, compatibility DTOs,
+     or durable claiming in the next source slice. Later target after the
+     blocking inference path is complete: decouple runtime branch execution
+     from `WorkflowHost` where feasible, then evolve to durable task-event-loop
+     claiming for replay, restart, and batching.
 
 Worker-system standards gates:
 

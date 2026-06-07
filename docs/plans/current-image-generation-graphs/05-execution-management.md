@@ -26969,6 +26969,42 @@ Worker rules:
       behind a worker-shaped command, do not move policy into Tauri/frontend,
       do not add compatibility DTOs, and do not introduce durable claiming
       before the immediate worker-owned inference path is complete.
+  - 2026-06-06 worker-owned runtime branch completion decision:
+    - Decision: use Option 2 for the immediate source path. The production
+      `WorkflowSessionExecutionRuntime` is the composition-root owner for the
+      shared `Arc<WorkflowService>`, owned host/runtime boundary, and
+      `WorkflowTaskExecutionRuntimeOwner`. `ExecuteRuntimeBranch` must be
+      executed by the task-execution worker loop and return completed, failed,
+      deferred, worker-unavailable, or shutdown outcomes through a real
+      completion responder.
+    - Standards alignment: matches composition-root runtime wiring because
+      long-lived workflow service, host/runtime boundary, and worker lifecycle
+      are assembled together. Matches single-owner and Rust task-lifecycle
+      rules because the worker owns branch execution/shutdown observation and
+      request/facade code only enqueues and awaits a typed result. Keeps
+      business logic backend-owned and preserves runtime reuse across workflow
+      runs.
+    - Immediate thin-slice sequence:
+      1. Make the composition-root facade own an `Arc<dyn WorkflowHost>` or
+         equivalent backend host/runtime boundary and update construction
+         tests.
+      2. Change the task-execution worker spawn path to receive the backend
+         runtime branch execution environment from
+         `WorkflowTaskExecutionRuntimeOwner`.
+      3. Add a real runtime-branch completion responder to
+         `ExecuteRuntimeBranch` and have the facade enqueue/await it.
+      4. Move runtime branch dispatch-boundary execution into the worker loop
+         and map completed/deferred/failed paths to typed worker outcomes.
+      5. Add shutdown/unavailable tests proving no direct helper fallback runs
+         when the worker is stopped or unavailable.
+    - Later target: after the blocking inference path is complete and
+      validated, decouple runtime branch execution from `WorkflowHost` where
+      feasible, then evolve to durable task-event-loop claiming for replay,
+      restart, and batching.
+    - No-fallback/no-legacy confirmation: direct `WorkflowService` runtime
+      execution remains fail-closed. Do not add fake direct-execution oneshots,
+      request-scoped runtime dispatch/completion, frontend/Tauri policy,
+      compatibility DTOs, or durable claiming in the next source slice.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

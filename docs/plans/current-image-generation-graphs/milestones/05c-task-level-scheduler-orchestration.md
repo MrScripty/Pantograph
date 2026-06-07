@@ -939,6 +939,20 @@ durable task orchestration path.
     completion without fake direct-execution oneshots, request-scoped runtime
     dispatch/completion, frontend/Tauri policy, compatibility DTOs, or
     premature durable claiming.
+  - 2026-06-06 worker-owned runtime branch completion decision: use Option 2
+    now. `WorkflowSessionExecutionRuntime` must own the shared
+    `Arc<WorkflowService>`, an owned host/runtime boundary, and
+    `WorkflowTaskExecutionRuntimeOwner`; the task-execution worker must execute
+    `ExecuteRuntimeBranch` in the worker loop and return typed
+    completed/failed/deferred/unavailable/shutdown outcomes through a real
+    completion responder. Immediate source sequence: make the facade own the
+    host/runtime boundary; pass branch execution environment into the runtime
+    owner/worker spawn path; add the completion responder to the command path;
+    move runtime branch dispatch-boundary execution into the worker loop; prove
+    stopped/unavailable workers fail closed without direct fallback. Later,
+    after the blocking inference path is complete and validated, decouple
+    runtime branch execution from `WorkflowHost` where feasible and then move
+    to durable task-event-loop claiming for replay/restart/batching.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

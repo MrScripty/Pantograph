@@ -1,5 +1,23 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 worker-owned runtime branch completion decision: use Option 2 for
+the immediate worker-owned completion path. `WorkflowSessionExecutionRuntime`
+must become the production composition-root owner for the shared
+`Arc<WorkflowService>`, an owned host/runtime boundary, and
+`WorkflowTaskExecutionRuntimeOwner`. The task-execution worker must receive
+backend execution context from that composition-root owner, execute
+`ExecuteRuntimeBranch` inside the worker loop, and return completed,
+failed, deferred, unavailable, or shutdown outcomes through a real completion
+responder owned by the command path. This preserves backend-owned business
+logic, runtime reuse across workflow runs, and the standards' composition-root
+and task-lifecycle rules. Direct `WorkflowService` runtime execution must
+remain fail-closed. Do not add fake direct-execution oneshots, request-scoped
+runtime dispatch/completion, Tauri/frontend policy, compatibility DTOs, or
+durable claiming in the next source slice. Later target after the blocking
+inference path is complete and validated: decouple runtime branch execution
+from `WorkflowHost` where feasible, then evolve to durable task-event-loop
+claiming for replay, restart, and batching.
+
 2026-06-06 worker-owned runtime branch completion re-plan trigger: stop
 before moving runtime branch completion behind the task-execution worker
 command path. The current worker owns bounded queue/lifecycle mechanics only:
