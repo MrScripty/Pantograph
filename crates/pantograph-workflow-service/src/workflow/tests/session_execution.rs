@@ -1592,6 +1592,19 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     );
     assert!(recovery_plan.decisions[0].runtime_dispatch_recovery_state_available);
 
+    let direct_recovery_error = service
+        .recover_workflow_execution_session_bootstrap(host.as_ref())
+        .await
+        .expect_err("direct service recovery should reject runtime redispatch");
+    assert!(
+        direct_recovery_error
+            .message()
+            .contains("WorkflowSessionExecutionRuntime"),
+        "unexpected direct recovery error: {}",
+        direct_recovery_error.message()
+    );
+    assert_eq!(runtime_host_port.requests().len(), 0);
+
     let recovery_result = runtime
         .recover_workflow_execution_session_bootstrap()
         .await

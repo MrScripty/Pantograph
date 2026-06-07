@@ -418,6 +418,23 @@ passed with 3 tests. Remaining Option 2 follow-up: keep direct
 runtime owner, then proceed to adapter/call-site migration if no new re-plan
 trigger appears.
 
+2026-06-07 direct recovery fail-closed coverage slice: completed the
+remaining Option 2 step 5 recovery assertion by adding explicit coverage that
+direct `WorkflowService::recover_workflow_execution_session_bootstrap` rejects
+a ready-runtime redispatch plan unless recovery enters through
+`WorkflowSessionExecutionRuntime`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan. No-fallback/no-legacy confirmation: the direct service recovery
+path returns the typed missing composition-root owner diagnostic and does not
+dispatch to the runtime host. Verification: `cargo fmt` passed;
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task --lib`
+passed with 1 test, and
+`cargo test -p pantograph-workflow-service session_execution --lib` passed
+with 37 tests. Remaining Option 2 work: update any production adapter/call-site
+that still executes runtime-containing workflows directly through
+`WorkflowService`; if no such call sites remain, mark the Option 2 validation
+sequence complete and resume the planned Option 3 durable lifecycle work.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
