@@ -1324,6 +1324,43 @@ re-plan if provider wiring needs shared workflow-service, scheduler,
 runtime-registry, Pumas, generated, lockfile, or saved workflow fixture
 contract changes in the same slice.
 
+2026-06-07 runtime dispatch evidence provider gate slice: completed the
+fail-closed portion of Option 2 step 2. Smallest useful vertical slice: route
+the embedded runtime dispatch candidate provider through
+`runtime_dispatch_evidence` before it may reserve resources or construct a
+workflow-service runtime dispatch candidate fact. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`
+and this plan. No workflow-service contract, scheduler DTO,
+runtime-registry, Pumas, generated, lockfile, saved workflow fixture,
+task-attempt persistence, grouped-claim, or runtime-host coalescing files were
+changed.
+
+No-fallback/no-legacy confirmation: the provider now emits typed scheduler
+diagnostics and produces no candidate when canonical runtime dispatch evidence
+is incomplete. It does not keep the old resource-backed candidate path alive
+without evidence validation, and it does not acquire runtime-registry
+reservations before evidence validation succeeds. Runtime-registry status is
+projected only into the evidence load-state enum; missing runtime family,
+resolved load target, residency key, and loaded-runtime memory estimate remain
+fail-closed diagnostics rather than being derived from runtime ids,
+graph/request shape, `batching_key`, trait settings, or scheduler estimate
+hints.
+
+Verification passed:
+`cargo fmt -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_evidence --lib`,
+and `cargo check -p pantograph-embedded-runtime`.
+
+Remaining follow-up: complete Option 2 step 2 by adding canonical embedded
+runtime evidence sources for runtime family, resolved load target, residency
+key, and loaded-runtime memory estimate. Do not proceed to
+`WorkflowRuntimeDispatchCandidateFact` rich fields or task-attempt persistence
+until the provider can produce one complete validated evidence record from
+backend-owned facts. Stop and re-plan if that requires changing shared
+workflow-service, scheduler, runtime-registry, Pumas, generated, lockfile, or
+saved workflow fixture contracts in the same slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

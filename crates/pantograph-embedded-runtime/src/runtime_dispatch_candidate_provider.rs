@@ -5,12 +5,14 @@ use pantograph_dependency_planning::{
     DependencyReadinessProofEnvelope, PumasModelRef, RuntimeIntentId,
 };
 use pantograph_runtime_registry::{
-    RuntimeReservationRequirements, RuntimeReservationResourceClaim, RuntimeRetentionHint,
+    RuntimeRegistryStatus, RuntimeReservationRequirements, RuntimeReservationResourceClaim,
+    RuntimeRetentionHint,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerDispatchSelectionDiagnostic,
     SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionDiagnosticSeverity,
-    SchedulerEstimateHintKind, SchedulerTaskStateRecord,
+    SchedulerEstimateHintKind, SchedulerResourceFitAssessment, SchedulerResourceFitState,
+    SchedulerTaskStateRecord,
 };
 use pantograph_workflow_service::workflow::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
@@ -26,6 +28,10 @@ use crate::pumas_dispatch_package_facts::{
 use crate::runtime_dispatch_capability_facts::{
     RuntimeDispatchCapabilityFactsDiagnostic, RuntimeDispatchCapabilityFactsOutcome,
     RuntimeDispatchCapabilityFactsProjection, RuntimeDispatchRuntimeCapabilityFacts,
+};
+use crate::runtime_dispatch_evidence::{
+    RuntimeDispatchEvidenceDiagnostic, RuntimeDispatchEvidenceLoadState,
+    RuntimeDispatchEvidenceRecord, RuntimeDispatchEvidenceRequest,
 };
 use crate::runtime_dispatch_resource_facts::{
     RuntimeDispatchResourceFactsDiagnostic, RuntimeDispatchResourceFactsOutcome,
@@ -51,6 +57,8 @@ const PATH_CARRYING_MODEL_REF_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.path_carrying_model_ref";
 const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.incompatible_runtime_backend";
+const MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT: &str =
+    "embedded_runtime_dispatch_candidate_provider.missing_runtime_dispatch_evidence";
 
 #[derive(Clone)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
@@ -85,6 +93,8 @@ struct EmbeddedRuntimeDispatchCandidateDraft {
     selected_runtime_id: RuntimeIntentId,
     selected_backend_key: String,
     selected_model_ref: PumasModelRef,
+    runtime_status: RuntimeRegistryStatus,
+    runtime_instance_id: Option<String>,
 }
 
 impl EmbeddedRuntimeDispatchCandidateProvider {
@@ -236,6 +246,15 @@ fn resource_backed_candidate_set(
 
     let mut facts = Vec::new();
     for draft in candidate_drafts {
+        if let Err(evidence_diagnostic) =
+            pre_reservation_evidence_check(&draft, task_intent, selected_device_id.clone())
+        {
+            diagnostics.push(runtime_dispatch_evidence_diagnostic(
+                &draft.candidate_id,
+                evidence_diagnostic,
+            ));
+            continue;
+        }
         match resource_facts_source.reserve(resource_facts_request(
             &draft,
             task_intent,
@@ -589,6 +608,65 @@ fn runtime_candidate_draft(
             .expect("runtime registry ids should be runtime-intent safe"),
         selected_backend_key,
         selected_model_ref: package_facts.model_ref.clone(),
+        runtime_status: runtime.status,
+        runtime_instance_id: runtime.runtime_instance_id.clone(),
+    }
+}
+
+fn pre_reservation_evidence_check(
+    draft: &EmbeddedRuntimeDispatchCandidateDraft,
+    task_intent: &pantograph_scheduler::SchedulableTaskIntent,
+    selected_device_id: pantograph_dependency_planning::DeviceIntentId,
+) -> Result<RuntimeDispatchEvidenceRecord, RuntimeDispatchEvidenceDiagnostic> {
+    RuntimeDispatchEvidenceRecord::new(RuntimeDispatchEvidenceRequest {
+        selected_backend_key: draft.selected_backend_key.clone(),
+        runtime_family: String::new(),
+        resolved_load_target: String::new(),
+        runtime_residency_key: String::new(),
+        loaded_runtime_memory_estimate_bytes: 0,
+        runtime_load_state: Some(runtime_dispatch_evidence_load_state(draft.runtime_status)),
+        runtime_instance_id: draft.runtime_instance_id.clone(),
+        selected_runtime_id: draft.selected_runtime_id.clone(),
+        selected_model_ref: draft.selected_model_ref.clone(),
+        selected_device_id,
+        reservations: Vec::new(),
+        resource_fit_assessment: SchedulerResourceFitAssessment {
+            workflow_run_id: task_intent.workflow_run_id.clone(),
+            task_id: task_intent.task_id.clone(),
+            state: SchedulerResourceFitState::Fits,
+            diagnostics: Vec::new(),
+        },
+    })
+}
+
+fn runtime_dispatch_evidence_load_state(
+    status: RuntimeRegistryStatus,
+) -> RuntimeDispatchEvidenceLoadState {
+    match status {
+        RuntimeRegistryStatus::Stopped => RuntimeDispatchEvidenceLoadState::NotLoaded,
+        RuntimeRegistryStatus::Warming => RuntimeDispatchEvidenceLoadState::Loading,
+        RuntimeRegistryStatus::Ready => RuntimeDispatchEvidenceLoadState::Loaded,
+        RuntimeRegistryStatus::Busy => RuntimeDispatchEvidenceLoadState::Busy,
+        RuntimeRegistryStatus::Unhealthy | RuntimeRegistryStatus::Failed => {
+            RuntimeDispatchEvidenceLoadState::Failed
+        }
+        RuntimeRegistryStatus::Stopping => RuntimeDispatchEvidenceLoadState::Unloading,
+    }
+}
+
+fn runtime_dispatch_evidence_diagnostic(
+    candidate_id: &SchedulerDispatchCandidateId,
+    diagnostic: RuntimeDispatchEvidenceDiagnostic,
+) -> SchedulerDispatchSelectionDiagnostic {
+    SchedulerDispatchSelectionDiagnostic {
+        severity: SchedulerDispatchSelectionDiagnosticSeverity::Error,
+        code: SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+        message: diagnostic.message,
+        candidate_id: Some(candidate_id.clone()),
+        hint: Some(format!(
+            "{MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT}:{}",
+            diagnostic.field_path
+        )),
     }
 }
 
@@ -881,7 +959,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_emits_resource_backed_candidate_for_explicit_device_task() {
+    fn provider_fails_closed_when_runtime_dispatch_evidence_is_missing() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
@@ -923,16 +1001,22 @@ mod tests {
                 &ready_record(),
                 &readiness_proof(),
             )
-            .expect("resource-backed provider should not fail");
+            .expect("missing runtime dispatch evidence should be a typed diagnostic");
 
-        assert!(candidate_set.diagnostics.is_empty());
-        assert_eq!(candidate_set.candidates.len(), 1);
-        let candidate = &candidate_set.candidates[0];
-        assert_eq!(candidate.selected_runtime_id.as_str(), "pytorch");
-        assert_eq!(candidate.selected_device_ids[0].as_str(), "cuda:0");
-        assert_eq!(candidate.reservations.len(), 2);
-        assert!(candidate.resource_fit_assessment.is_some());
-        assert_eq!(registry.snapshot().reservations.len(), 1);
+        assert!(candidate_set.candidates.is_empty());
+        assert!(candidate_set.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .candidate_id
+                .as_ref()
+                .is_some_and(|candidate_id| candidate_id.as_str() == "runtime.pytorch")
+                && diagnostic.code
+                    == SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+                && diagnostic
+                    .hint
+                    .as_deref()
+                    .is_some_and(|hint| hint.starts_with(MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT))
+        }));
+        assert_eq!(registry.snapshot().reservations.len(), 0);
     }
 
     #[test]
