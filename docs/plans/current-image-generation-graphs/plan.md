@@ -1226,6 +1226,70 @@ with fail-closed diagnostics. The next plan update must choose the
 intermediate owner for runtime family, load target, residency key,
 loaded-runtime memory estimate, and load-state facts.
 
+2026-06-07 runtime dispatch candidate evidence decision: use Option 2 as the
+intermediate path and keep Option 3 as the final architecture target.
+Embedded-runtime will own a runtime dispatch evidence projection layer that
+combines existing backend-owned facts into one validated evidence object per
+candidate before workflow-service rich candidate facts are extended. The
+projection may consume runtime-registry capability snapshots, Pumas logical
+size facts, runtime resource reservation facts, and runtime observation ledger
+facts. It must not infer runtime family, load target, residency key,
+loaded-runtime memory estimate, load state, or runtime instance identity from
+runtime id strings, graph/request shape, `batching_key`, trait settings, or
+partial scheduler estimate hints.
+
+Option 2 implementation sequence:
+1. Add an embedded-runtime internal runtime dispatch evidence contract with
+   typed diagnostics and validation tests. The contract must represent the
+   selected backend id/key, runtime family, resolved load target,
+   runtime-residency key, loaded-runtime memory estimate, load state,
+   optional runtime instance id, selected model/artifact identity, selected
+   device id, reservation facts, and resource-fit facts. Missing required
+   evidence must return typed diagnostics rather than producing a candidate.
+   Allowed files for this slice: a new embedded-runtime evidence module,
+   `crates/pantograph-embedded-runtime/src/lib.rs` module wiring if needed,
+   focused embedded-runtime tests, and this plan. No workflow-service
+   contract, scheduler DTO, generated DTO, Pumas, lockfile, or saved workflow
+   fixture edits.
+2. Wire the embedded runtime dispatch candidate provider to build evidence
+   from already-canonical source facts before constructing
+   `WorkflowRuntimeDispatchCandidateFact`. If the evidence layer cannot
+   provide a required fact, the provider must emit typed scheduler diagnostics
+   and fail closed with no fallback candidate. Tests must cover missing
+   Pumas logical size, missing runtime instance/load-state facts, missing
+   load target, missing residency key, and missing memory estimate evidence.
+3. Extend `WorkflowRuntimeDispatchCandidateFact` only after the embedded
+   evidence layer is validated, then populate the richer workflow-service
+   candidate fields from the evidence object. Scheduler
+   `SchedulerDispatchCandidate` remains unchanged in this sequence; projection
+   into scheduler candidates must ignore the richer evidence only after it has
+   been validated at the workflow-service boundary.
+4. Add the selected validated workflow-service candidate to
+   `WorkflowRuntimeTaskAttemptFactRecord` projection and persistence at the
+   backend dispatch-selection boundary. If scheduler selection cannot be
+   matched exactly to one validated workflow-service candidate fact, fail
+   closed with a typed diagnostic.
+5. When durable worker/runtime lifecycle records land, migrate the evidence
+   source for runtime family, load target, residency key, memory estimate,
+   runtime instance id, and load state from the embedded projection layer to
+   those durable records. The evidence contract remains the boundary so the
+   migration replaces the source owner without changing scheduler selection
+   semantics.
+
+No-fallback/no-legacy confirmation for this decision: embedded-runtime owns
+the intermediate projection because it is the composition boundary that can
+see runtime-registry facts, Pumas logical size facts, resource reservations,
+and observation ledger facts together. Workflow-service remains strict and
+does not synthesize missing evidence. Scheduler remains ranking/selection
+mechanism and does not become the owner of rich runtime evidence. The final
+worker/runtime lifecycle architecture must replace the intermediate evidence
+source rather than preserve parallel legacy paths.
+
+Next thin slice: implement Option 2 step 1 only. Stop and re-plan again if the
+evidence contract cannot be defined without changing shared scheduler,
+workflow-service, runtime-registry, Pumas, generated, lockfile, or saved
+workflow fixture contracts in the same slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
