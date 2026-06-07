@@ -21,6 +21,7 @@ use pantograph_workflow_service::workflow::{
 };
 use pantograph_workflow_service::WorkflowSchedulerTask;
 
+use crate::inference_resource_estimator::conservative_loaded_runtime_memory_estimate_bytes;
 use crate::pumas_dispatch_package_facts::{
     PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsDiagnostic,
     PumasDispatchPackageFactsDiagnosticCode, PumasDispatchPackageFactsProjection,
@@ -93,6 +94,7 @@ struct EmbeddedRuntimeDispatchCandidateDraft {
     selected_runtime_id: RuntimeIntentId,
     selected_backend_key: String,
     selected_model_ref: PumasModelRef,
+    loaded_runtime_memory_estimate_bytes: Option<u64>,
     runtime_status: RuntimeRegistryStatus,
     runtime_instance_id: Option<String>,
 }
@@ -608,6 +610,9 @@ fn runtime_candidate_draft(
             .expect("runtime registry ids should be runtime-intent safe"),
         selected_backend_key,
         selected_model_ref: package_facts.model_ref.clone(),
+        loaded_runtime_memory_estimate_bytes: conservative_loaded_runtime_memory_estimate_bytes(
+            &package_facts.logical_size,
+        ),
         runtime_status: runtime.status,
         runtime_instance_id: runtime.runtime_instance_id.clone(),
     }
@@ -623,7 +628,9 @@ fn pre_reservation_evidence_check(
         runtime_family: String::new(),
         resolved_load_target: String::new(),
         runtime_residency_key: String::new(),
-        loaded_runtime_memory_estimate_bytes: 0,
+        loaded_runtime_memory_estimate_bytes: draft
+            .loaded_runtime_memory_estimate_bytes
+            .unwrap_or_default(),
         runtime_load_state: Some(runtime_dispatch_evidence_load_state(draft.runtime_status)),
         runtime_instance_id: draft.runtime_instance_id.clone(),
         selected_runtime_id: draft.selected_runtime_id.clone(),
@@ -936,6 +943,7 @@ mod tests {
         assert_eq!(draft.selected_backend_key, "diffusers");
         assert_eq!(draft.selected_model_ref.model_id, "pumas.model.sdxl");
         assert_eq!(draft.selected_model_ref.selected_artifact_path, None);
+        assert_eq!(draft.loaded_runtime_memory_estimate_bytes, Some(23_856));
     }
 
     #[test]
@@ -956,6 +964,21 @@ mod tests {
             diagnostic.hint.as_deref(),
             Some(INCOMPATIBLE_RUNTIME_BACKEND_HINT)
         );
+    }
+
+    #[test]
+    fn candidate_drafts_do_not_synthesize_memory_estimate_from_weak_size_facts() {
+        let mut package_facts = pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]);
+        package_facts.logical_size.value_source = inference::PackageFactValueSource::FilenameWeak;
+
+        let (drafts, diagnostics) = candidate_drafts_from_projected_facts(
+            &package_facts,
+            &runtime_capability_facts(vec![runtime_capability("pytorch", vec!["diffusers"])]),
+        );
+
+        assert!(diagnostics.is_empty());
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0].loaded_runtime_memory_estimate_bytes, None);
     }
 
     #[test]

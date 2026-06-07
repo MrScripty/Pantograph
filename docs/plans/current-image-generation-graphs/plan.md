@@ -1361,6 +1361,41 @@ backend-owned facts. Stop and re-plan if that requires changing shared
 workflow-service, scheduler, runtime-registry, Pumas, generated, lockfile, or
 saved workflow fixture contracts in the same slice.
 
+2026-06-07 runtime dispatch loaded-memory evidence slice: completed the
+loaded-runtime memory estimate portion of Option 2 step 2. Smallest useful
+vertical slice: expose a narrow embedded-runtime estimator helper for the
+loaded model-residency memory component derived from Pumas logical size facts,
+then carry that estimate into runtime dispatch candidate drafts and the
+evidence request. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/inference_resource_estimator.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+and this plan. No workflow-service contract, scheduler DTO,
+runtime-registry, Pumas, generated, lockfile, saved workflow fixture,
+task-attempt persistence, grouped-claim, or runtime-host coalescing files were
+changed.
+
+No-fallback/no-legacy confirmation: loaded-runtime memory evidence now comes
+from Pumas logical size through the existing conservative estimator. Weak or
+insufficient logical-size facts produce no memory estimate, so the evidence
+contract continues to fail closed instead of synthesizing memory from
+scheduler estimate hints, runtime ids, request shape, `batching_key`, trait
+settings, or sentinel values. Candidate production remains blocked until
+runtime family, resolved load target, and residency key have canonical
+embedded-runtime evidence sources.
+
+Verification passed:
+`cargo fmt -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-embedded-runtime inference_resource_estimator --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_evidence --lib`,
+and `cargo check -p pantograph-embedded-runtime`.
+
+Remaining follow-up: complete Option 2 step 2 by adding canonical sources for
+runtime family, resolved load target, and runtime residency key. Do not
+proceed to workflow-service rich candidate facts or task-attempt persistence
+until the provider can produce one complete validated evidence record from
+backend-owned facts.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

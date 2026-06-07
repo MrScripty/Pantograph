@@ -38,6 +38,14 @@ pub(crate) fn conservative_estimates_from_package_logical_size(
     }
 }
 
+pub(crate) fn conservative_loaded_runtime_memory_estimate_bytes(
+    logical_size: &PackageLogicalSizeFacts,
+) -> Option<u64> {
+    conservative_memory_estimate(logical_size)
+        .ok()
+        .map(|estimate| estimate.model_residency_bytes)
+}
+
 fn conservative_memory_estimate(
     logical_size: &PackageLogicalSizeFacts,
 ) -> Result<ConservativeMemoryEstimate, ConservativeMemoryEstimateError> {
@@ -256,6 +264,27 @@ mod tests {
             ),
             Some(STATIC_RUNTIME_OVERHEAD_BYTES)
         );
+    }
+
+    #[test]
+    fn loaded_runtime_memory_estimate_uses_model_residency_component() {
+        let estimate =
+            conservative_loaded_runtime_memory_estimate_bytes(&logical_size_with_total(1_024));
+
+        assert_eq!(estimate, Some(3_072));
+    }
+
+    #[test]
+    fn loaded_runtime_memory_estimate_is_absent_for_insufficient_size_facts() {
+        let estimate =
+            conservative_loaded_runtime_memory_estimate_bytes(&PackageLogicalSizeFacts {
+                total_size_bytes: None,
+                value_source: PackageFactValueSource::FilesystemMetadata,
+                files: Vec::new(),
+                diagnostics: Vec::new(),
+            });
+
+        assert_eq!(estimate, None);
     }
 
     #[test]
