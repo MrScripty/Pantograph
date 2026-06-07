@@ -261,12 +261,40 @@ executable validation snapshots, sanitized terminal runtime failure
 classification, dependency-readiness resume planning, and shutdown supervisor
 observation under the worker-owned path.
 
+2026-06-07 snapshot and attribution session_execution slice:
+smallest useful vertical slice: migrate
+`workflow_execution_session_run_records_snapshot_before_execution` and
+`attributed_workflow_execution_session_carries_client_bucket_into_run_events`
+to the canonical saved executable validation snapshot requirement and source
+input materialization boundary. The slice also fixes scheduler task-attempt
+diagnostic attribution by reading the run snapshot from the attribution store
+instead of emitting task-attempt events with empty client/session/bucket
+metadata. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan. No-fallback/no-legacy confirmation: the tests do not bypass
+snapshot admission, do not restore `SchedulerRunAdmitted`, do not manufacture
+runtime reservation/model-load events for a non-runtime scheduler path, and do
+not reintroduce request-scoped host execution.
+
+Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution --lib`
+passed,
+`cargo test -p pantograph-workflow-service attributed_workflow_execution_session_carries_client_bucket_into_run_events --lib`
+passed,
+`cargo fmt -p pantograph-workflow-service -- --check` passed, and
+`cargo test -p pantograph-workflow-service session_execution --lib` now fails
+with 7 remaining tests: runtime load/unload diagnostic classification and
+phase hints, sanitized terminal runtime failure classification,
+dependency-readiness resume planning, and shutdown supervisor observation under
+the worker-owned path.
+
 Outstanding Option 2 migration work:
-- migrate the remaining runtime-containing tests that still call
-  `WorkflowService::run_workflow_execution_session` for direct coverage that is
-  expected to succeed,
-- keep explicit runtime fail-closed coverage on direct `WorkflowService`, and
-  proceed to adapter/call-site migration in the next slice.
+- migrate or re-scope the remaining runtime diagnostic tests that still expect
+  direct request-scoped runtime load/run/unload failure surfaces,
+- keep explicit runtime fail-closed coverage on direct `WorkflowService`,
+- update dependency-readiness resume and shutdown supervisor coverage to the
+  worker-owned path, and then proceed to adapter/call-site migration.
 
 Rejected immediate paths: passing a full in-memory execution envelope in the
 worker command would preserve request-scoped execution ownership; duplicating

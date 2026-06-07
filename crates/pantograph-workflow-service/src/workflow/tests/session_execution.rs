@@ -2791,12 +2791,23 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     let service = WorkflowService::with_max_sessions(2)
         .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"))
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let workflow_id = "wf-snapshot";
+    let workflow_semantic_version = "1.2.3";
+    let graph = mock_workflow_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
 
     let created = service
         .create_workflow_execution_session(
             &host,
             WorkflowExecutionSessionCreateRequest {
-                workflow_id: "wf-snapshot".to_string(),
+                workflow_id: workflow_id.to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
@@ -2809,9 +2820,9 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
-                workflow_semantic_version: "1.2.3".to_string(),
+                workflow_semantic_version: workflow_semantic_version.to_string(),
                 inputs: vec![WorkflowPortBinding {
-                    node_id: "text-output-1".to_string(),
+                    node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
                     value: serde_json::json!("snapshotted"),
                 }],
@@ -2925,7 +2936,6 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 17);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -3059,78 +3069,6 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(queue_event.payload_json.contains("\"queue_position\":0"));
     assert!(queue_event.payload_json.contains("\"priority\":7"));
 
-    let admitted_event = diagnostic_events
-        .iter()
-        .find(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerRunAdmitted
-        })
-        .expect("scheduler run admitted event");
-    assert_eq!(
-        admitted_event.source_component,
-        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
-    );
-    assert_eq!(
-        admitted_event
-            .workflow_run_id
-            .as_ref()
-            .map(|id| id.as_str()),
-        Some(response.workflow_run_id.as_str())
-    );
-    assert_eq!(
-        admitted_event.runtime_id.as_deref(),
-        Some("managed-llama-slot")
-    );
-    assert!(admitted_event.event_seq > queue_event.event_seq);
-    assert!(admitted_event.payload_json.contains("\"decision_reason\":"));
-    assert!(admitted_event.payload_json.contains("\"queue_wait_ms\":"));
-    assert!(admitted_event
-        .payload_json
-        .contains("\"selected_runtime_id\":\"managed-llama-slot\""));
-    assert!(admitted_event
-        .payload_json
-        .contains("\"selected_backend_key\":\"llama_cpp\""));
-    assert!(admitted_event
-        .payload_json
-        .contains("\"reserved_model_ids\":[\"model-a\"]"));
-
-    let reservation_events = diagnostic_events
-        .iter()
-        .filter(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerReservationChanged
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(reservation_events.len(), 2);
-    assert!(reservation_events.iter().all(|event| event.source_component
-        == pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler));
-    assert!(reservation_events.iter().all(|event| event
-        .workflow_run_id
-        .as_ref()
-        .map(|id| id.as_str())
-        == Some(response.workflow_run_id.as_str())));
-    assert_eq!(
-        reservation_events[0].runtime_id.as_deref(),
-        Some("managed-llama-slot")
-    );
-    assert_eq!(
-        reservation_events[1].runtime_id.as_deref(),
-        Some("managed-llama-slot")
-    );
-    assert!(reservation_events.iter().all(|event| event
-        .payload_json
-        .contains("\"resource_kind\":\"runtime_slot\"")));
-    assert!(reservation_events.iter().all(|event| event
-        .payload_json
-        .contains("\"reserved_model_ids\":[\"model-a\"]")));
-    assert!(reservation_events[0].event_seq > admitted_event.event_seq);
-    assert!(reservation_events[0]
-        .payload_json
-        .contains("\"transition\":\"created\""));
-    assert!(reservation_events[0]
-        .payload_json
-        .contains("\"reason\":\"local runtime slot admitted\""));
-
     let started_event = diagnostic_events
         .iter()
         .find(|event| {
@@ -3145,77 +3083,10 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         started_event.workflow_run_id.as_ref().map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
-    assert!(started_event.event_seq > reservation_events[0].event_seq);
+    assert!(started_event.event_seq > queue_event.event_seq);
     assert!(started_event
         .payload_json
         .contains("\"scheduler_decision_reason\":"));
-
-    let model_lifecycle_events = diagnostic_events
-        .iter()
-        .filter(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(model_lifecycle_events.len(), 5);
-    assert!(model_lifecycle_events
-        .iter()
-        .all(|event| event.source_component
-            == pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler));
-    assert!(model_lifecycle_events.iter().all(|event| event
-        .workflow_run_id
-        .as_ref()
-        .map(|id| id.as_str())
-        == Some(response.workflow_run_id.as_str())));
-    assert!(model_lifecycle_events
-        .iter()
-        .all(|event| event.workflow_version_id.as_ref() == Some(&snapshot.workflow_version_id)));
-    assert!(model_lifecycle_events
-        .iter()
-        .all(|event| event.model_id.as_deref() == Some("model-a")));
-    assert!(model_lifecycle_events
-        .iter()
-        .all(|event| event.runtime_id.as_deref() == Some("managed-llama-slot")));
-    assert!(model_lifecycle_events[0].event_seq > started_event.event_seq);
-    assert!(model_lifecycle_events[0]
-        .payload_json
-        .contains("\"transition\":\"load_requested\""));
-    assert!(model_lifecycle_events[0]
-        .payload_json
-        .contains("\"cache_state\":\"load_requested\""));
-    assert!(model_lifecycle_events[0]
-        .payload_json
-        .contains("\"reason\":\"runtime admission requested required models\""));
-    let load_requested_payload: serde_json::Value =
-        serde_json::from_str(&model_lifecycle_events[0].payload_json)
-            .expect("load requested payload json");
-    let load_dependency_payload: serde_json::Value =
-        serde_json::from_str(&model_lifecycle_events[1].payload_json)
-            .expect("load dependency payload json");
-    let timing_attempt_id = load_requested_payload["timing_attempt_id"]
-        .as_str()
-        .expect("load requested timing attempt id");
-    assert!(timing_attempt_id.starts_with("timing_attempt_"));
-    assert!(model_lifecycle_events[1].event_seq > model_lifecycle_events[0].event_seq);
-    assert!(model_lifecycle_events[1]
-        .payload_json
-        .contains("\"transition\":\"load_dependency_resolved\""));
-    assert!(model_lifecycle_events[1]
-        .payload_json
-        .contains("\"cache_state\":\"load_requested\""));
-    assert!(model_lifecycle_events[1]
-        .payload_json
-        .contains("\"reason\":\"runtime admission resolved required model dependencies\""));
-    assert_eq!(
-        load_dependency_payload["timing_attempt_id"].as_str(),
-        Some(timing_attempt_id)
-    );
-    assert!(model_lifecycle_events.iter().all(|event| !event
-        .payload_json
-        .contains("\"transition\":\"load_completed\"")));
-    assert!(model_lifecycle_events[1]
-        .payload_json
-        .contains("\"duration_ms\":"));
 
     let terminal_event = diagnostic_events
         .iter()
@@ -3234,21 +3105,11 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             .map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
-    assert!(terminal_event.event_seq > model_lifecycle_events[1].event_seq);
+    assert!(terminal_event.event_seq > started_event.event_seq);
     assert!(terminal_event
         .payload_json
         .contains("\"status\":\"completed\""));
     assert!(terminal_event.payload_json.contains("\"duration_ms\":"));
-    assert!(reservation_events[1].event_seq > terminal_event.event_seq);
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"transition\":\"released\""));
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"selected_runtime_id\":\"managed-llama-slot\""));
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"reason\":\"workflow run finished\""));
 
     let io_events = diagnostic_events
         .iter()
@@ -3258,7 +3119,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         })
         .collect::<Vec<_>>();
     assert_eq!(io_events.len(), 3);
-    assert!(io_events[0].event_seq > reservation_events[1].event_seq);
+    assert!(io_events[0].event_seq > terminal_event.event_seq);
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"workflow_input\"")));
@@ -3268,65 +3129,27 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"node_output\"")));
-    assert!(io_events
-        .iter()
-        .all(|event| event.node_type.as_deref() == Some("text-output")));
+    assert!(io_events.iter().any(|event| {
+        event
+            .payload_json
+            .contains("\"artifact_role\":\"workflow_input\"")
+            && event.node_type.as_deref() == Some("text-input")
+    }));
+    assert!(io_events.iter().any(|event| {
+        event
+            .payload_json
+            .contains("\"artifact_role\":\"workflow_output\"")
+            && event.node_type.as_deref() == Some("text-output")
+    }));
+    assert!(io_events.iter().any(|event| {
+        event
+            .payload_json
+            .contains("\"artifact_role\":\"node_output\"")
+            && event.node_type.as_deref() == Some("text-output")
+    }));
     assert!(io_events.iter().all(|event| event
         .payload_json
         .contains("\"retention_state\":\"metadata_only\"")));
-    let last_io_event_seq = io_events
-        .iter()
-        .map(|event| event.event_seq)
-        .max()
-        .expect("last io event");
-    assert!(model_lifecycle_events[2].event_seq > last_io_event_seq);
-    assert!(model_lifecycle_events[2]
-        .payload_json
-        .contains("\"transition\":\"unload_scheduled\""));
-    let unload_scheduled_payload: serde_json::Value =
-        serde_json::from_str(&model_lifecycle_events[2].payload_json)
-            .expect("unload scheduled payload json");
-    let unload_started_payload: serde_json::Value =
-        serde_json::from_str(&model_lifecycle_events[3].payload_json)
-            .expect("unload started payload json");
-    let unload_completed_payload: serde_json::Value =
-        serde_json::from_str(&model_lifecycle_events[4].payload_json)
-            .expect("unload completed payload json");
-    let unload_timing_attempt_id = unload_scheduled_payload["timing_attempt_id"]
-        .as_str()
-        .expect("unload scheduled timing attempt id");
-    assert!(unload_timing_attempt_id.starts_with("timing_attempt_"));
-    assert!(model_lifecycle_events[2]
-        .payload_json
-        .contains("\"cache_state\":\"unload_requested\""));
-    assert!(model_lifecycle_events[2]
-        .payload_json
-        .contains("\"reason\":\"keep-alive disabled after run completion\""));
-    assert!(model_lifecycle_events[3].event_seq > model_lifecycle_events[2].event_seq);
-    assert!(model_lifecycle_events[3]
-        .payload_json
-        .contains("\"transition\":\"unload_started\""));
-    assert_eq!(
-        unload_started_payload["timing_attempt_id"].as_str(),
-        Some(unload_timing_attempt_id)
-    );
-    assert!(model_lifecycle_events[3]
-        .payload_json
-        .contains("\"cache_state\":\"unload_requested\""));
-    assert!(model_lifecycle_events[4].event_seq > model_lifecycle_events[3].event_seq);
-    assert!(model_lifecycle_events[4]
-        .payload_json
-        .contains("\"transition\":\"unload_completed\""));
-    assert_eq!(
-        unload_completed_payload["timing_attempt_id"].as_str(),
-        Some(unload_timing_attempt_id)
-    );
-    assert!(model_lifecycle_events[4]
-        .payload_json
-        .contains("\"cache_state\":\"unloaded\""));
-    assert!(model_lifecycle_events[4]
-        .payload_json
-        .contains("\"duration_ms\":"));
 
     let library_event = diagnostic_events
         .iter()
@@ -3382,6 +3205,17 @@ async fn attributed_workflow_execution_session_carries_client_bucket_into_run_ev
     let service = WorkflowService::with_max_sessions(2)
         .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"))
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let workflow_id = "wf-attributed";
+    let workflow_semantic_version = "1.2.3";
+    let graph = mock_workflow_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
+            &version, &graph,
+        ))
+        .expect("store executable validation snapshot");
     let registered = service
         .register_attribution_client(ClientRegistrationRequest {
             display_name: Some("local gui".to_string()),
@@ -3400,7 +3234,7 @@ async fn attributed_workflow_execution_session_carries_client_bucket_into_run_ev
         .create_attributed_workflow_execution_session(
             &host,
             WorkflowExecutionSessionAttributedCreateRequest {
-                workflow_id: "wf-attributed".to_string(),
+                workflow_id: workflow_id.to_string(),
                 usage_profile: Some("developer".to_string()),
                 keep_alive: false,
                 attribution: WorkflowExecutionSessionAttributionRequest {
@@ -3433,9 +3267,9 @@ async fn attributed_workflow_execution_session_carries_client_bucket_into_run_ev
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
-                workflow_semantic_version: "1.2.3".to_string(),
+                workflow_semantic_version: workflow_semantic_version.to_string(),
                 inputs: vec![WorkflowPortBinding {
-                    node_id: "text-output-1".to_string(),
+                    node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
                     value: serde_json::json!("attributed"),
                 }],
@@ -3474,10 +3308,29 @@ async fn attributed_workflow_execution_session_carries_client_bucket_into_run_ev
         )
         .expect("diagnostic events")
     };
-    assert!(diagnostic_events
+    let run_diagnostic_events = diagnostic_events
         .iter()
-        .all(|event| event.client_id.as_ref() == Some(&registered.client.client_id)));
-    assert!(diagnostic_events
+        .filter(|event| {
+            event
+                .workflow_run_id
+                .as_ref()
+                .is_some_and(|workflow_run_id| workflow_run_id.as_str() == response.workflow_run_id)
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !run_diagnostic_events.is_empty(),
+        "expected run-scoped diagnostic events"
+    );
+    let unattributed_run_event_kinds = run_diagnostic_events
+        .iter()
+        .filter(|event| event.client_id.as_ref() != Some(&registered.client.client_id))
+        .map(|event| format!("{:?}", event.event_kind))
+        .collect::<Vec<_>>();
+    assert!(
+        unattributed_run_event_kinds.is_empty(),
+        "unattributed run event kinds: {unattributed_run_event_kinds:?}"
+    );
+    assert!(run_diagnostic_events
         .iter()
         .all(|event| event.client_session_id.as_ref() == Some(&opened.session.client_session_id)));
 }

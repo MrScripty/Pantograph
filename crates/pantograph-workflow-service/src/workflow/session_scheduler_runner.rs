@@ -16,7 +16,9 @@ use pantograph_diagnostics_ledger::{
     SchedulerTaskAttemptExecutionClass, SchedulerTaskAttemptLifecycleChangedPayload,
     SchedulerTaskAttemptLifecycleTransition,
 };
-use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
+use pantograph_runtime_attribution::{
+    BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
+};
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 
 use crate::scheduler::task_orchestrator::SelectedRuntimeTaskDispatch;
@@ -56,6 +58,22 @@ struct RuntimeDependencyReadinessAdmissionResult {
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
+}
+
+struct SchedulerTaskAttemptDiagnosticAttribution {
+    client_id: Option<ClientId>,
+    client_session_id: Option<ClientSessionId>,
+    bucket_id: Option<BucketId>,
+}
+
+impl SchedulerTaskAttemptDiagnosticAttribution {
+    fn none() -> Self {
+        Self {
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+        }
+    }
 }
 
 impl<'a> WorkflowSchedulerSessionRunner<'a> {
@@ -346,6 +364,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     })?
             };
             self.record_scheduler_task_attempt_started(
+                session_id,
                 started.task(),
                 started.attempt_id().as_str(),
                 started.started_at_ms(),
@@ -374,6 +393,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             ))
                         })?;
                     self.record_scheduler_task_attempt_terminal(
+                        session_id,
                         started.task(),
                         started.attempt_id().as_str(),
                         started.started_at_ms(),
@@ -402,6 +422,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         );
                     if failed.is_ok() {
                         self.record_scheduler_task_attempt_terminal(
+                            session_id,
                             started.task(),
                             started.attempt_id().as_str(),
                             started.started_at_ms(),
@@ -726,6 +747,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     })?
             };
             self.record_scheduler_task_attempt_started(
+                session_id,
                 started_runtime_task.task(),
                 started_runtime_task.attempt_id().as_str(),
                 started_runtime_task.started_at_ms(),
@@ -758,6 +780,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             })?
                         };
                         self.record_scheduler_task_attempt_terminal(
+                            session_id,
                             started_runtime_task.task(),
                             started_runtime_task.attempt_id().as_str(),
                             started_runtime_task.started_at_ms(),
@@ -786,6 +809,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             })?
                         };
                         self.record_scheduler_task_attempt_terminal(
+                            session_id,
                             started_runtime_task.task(),
                             started_runtime_task.attempt_id().as_str(),
                             started_runtime_task.started_at_ms(),
@@ -858,6 +882,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     let (transition, reason, error_summary) =
                         scheduler_task_attempt_terminal_transition_from_result(&result);
                     self.record_scheduler_task_attempt_terminal(
+                        session_id,
                         started_runtime_task.task(),
                         started_runtime_task.attempt_id().as_str(),
                         started_runtime_task.started_at_ms(),
@@ -901,6 +926,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 })?
                         };
                         self.record_scheduler_task_attempt_terminal(
+                            session_id,
                             started_runtime_task.task(),
                             started_runtime_task.attempt_id().as_str(),
                             started_runtime_task.started_at_ms(),
@@ -943,6 +969,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 })?
                         };
                         self.record_scheduler_task_attempt_terminal(
+                            session_id,
                             started_runtime_task.task(),
                             started_runtime_task.attempt_id().as_str(),
                             started_runtime_task.started_at_ms(),
@@ -998,6 +1025,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     fn record_scheduler_task_attempt_started(
         &self,
+        _session_id: &str,
         task: &WorkflowSchedulerTask,
         attempt_id: &str,
         started_at_ms: u64,
@@ -1020,6 +1048,8 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 task.task_id.as_str()
             ))
         })?;
+        let attribution =
+            self.scheduler_task_attempt_diagnostic_attribution(task.workflow_run_id.as_str())?;
         self.service
             .workflow_diagnostic_event_record(DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1038,9 +1068,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: attribution.client_id,
+                client_session_id: attribution.client_session_id,
+                bucket_id: attribution.bucket_id,
                 scheduler_policy_id: Some("priority_then_fifo".to_string()),
                 retention_policy_id: None,
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -1071,8 +1101,27 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         Ok(())
     }
 
+    fn scheduler_task_attempt_diagnostic_attribution(
+        &self,
+        workflow_run_id: &str,
+    ) -> Result<SchedulerTaskAttemptDiagnosticAttribution, WorkflowServiceError> {
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let snapshot = self
+            .service
+            .workflow_run_snapshot_for_execution_resume_if_configured(&workflow_run_id)?;
+        let Some(snapshot) = snapshot else {
+            return Ok(SchedulerTaskAttemptDiagnosticAttribution::none());
+        };
+        Ok(SchedulerTaskAttemptDiagnosticAttribution {
+            client_id: snapshot.client_id,
+            client_session_id: snapshot.client_session_id,
+            bucket_id: snapshot.bucket_id,
+        })
+    }
+
     fn record_scheduler_task_attempt_terminal(
         &self,
+        _session_id: &str,
         task: &WorkflowSchedulerTask,
         attempt_id: &str,
         started_at_ms: u64,
@@ -1123,6 +1172,8 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 selected_dispatch
                     .map(|dispatch| dispatch.reservation_lease_id().as_str().to_string())
             });
+        let attribution =
+            self.scheduler_task_attempt_diagnostic_attribution(task.workflow_run_id.as_str())?;
         self.service
             .workflow_diagnostic_event_record(DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1141,9 +1192,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: attribution.client_id,
+                client_session_id: attribution.client_session_id,
+                bucket_id: attribution.bucket_id,
                 scheduler_policy_id: Some("priority_then_fifo".to_string()),
                 retention_policy_id: None,
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
