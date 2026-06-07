@@ -992,6 +992,17 @@ durable task orchestration path.
     frontend/Tauri policy, compatibility DTO, durable claiming, or legacy path
     was added. Next source slice: move dispatch-boundary execution into the
     worker loop and map completed/deferred/failed paths to typed outcomes.
+  - 2026-06-06 runtime branch worker execution re-plan trigger: stop before
+    moving dispatch-boundary execution into the worker loop because the
+    existing direct helper needs execution facts not currently carried by the
+    worker command: owned host boundary, session summary, optional run
+    snapshot, admitted/dequeued run facts, queued inputs/output targets,
+    timeout, and scheduler task-run summary. Options are immediate in-memory
+    execution envelope with host in the worker environment, explicit worker
+    rehydration APIs from run ids, or jumping to durable task-event claiming
+    now. Do not preserve request-scoped runtime execution, synthesize missing
+    facts from graph/frontend state, add compatibility DTOs, or add durable
+    claiming unless selected.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

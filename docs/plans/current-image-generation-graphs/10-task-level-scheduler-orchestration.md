@@ -1217,6 +1217,16 @@ Option 3 thin implementation sequence:
      frontend/Tauri policy, compatibility DTO, or durable claiming was added.
      Next slice: move dispatch-boundary execution into the worker loop and map
      completed/deferred/failed paths to typed outcomes.
+   - 2026-06-06 runtime branch worker execution re-plan trigger: stop before
+     moving dispatch-boundary execution into the worker loop because the
+     direct helper needs execution facts that are not in the worker command:
+     owned host boundary, session summary, optional run snapshot,
+     admitted/dequeued run facts, queued inputs/output targets, timeout, and
+     scheduler task-run summary. Options are: immediate in-memory execution
+     envelope with host in the worker environment; explicit worker rehydration
+     APIs from run ids; or jumping to durable task-event claiming now. Do not
+     preserve request-scoped runtime execution or synthesize missing facts from
+     graph/frontend state.
 
 Worker-system standards gates:
 

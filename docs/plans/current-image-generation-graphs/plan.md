@@ -1,5 +1,23 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime branch worker execution re-plan trigger: stop before
+moving dispatch-boundary execution into the task-execution worker loop. The
+worker command now has a real responder and backend service environment, but
+the current direct execution helper also needs the owned host boundary,
+session summary, optional run snapshot, admitted/dequeued run facts, queued
+inputs/output targets, timeout, and scheduler task-run summary. The next
+implementation must choose how those facts enter the worker without keeping
+request-scoped runtime execution. Standards-aligned options: (1) immediate
+in-memory execution envelope: include the already-admitted execution facts in
+the worker command and put the owned host in the worker environment; (2)
+worker rehydration: add explicit workflow-service/store read APIs so the
+worker rehydrates the execution facts from run ids; (3) defer to durable
+task-event claiming, which is the later target but would block the current
+inference path. Do not move dispatch by calling the existing direct helper
+from the request path, do not synthesize missing execution facts from graph or
+frontend state, and do not add durable claiming inside the immediate Option 2
+path unless this re-plan selects it.
+
 2026-06-06 runtime branch completion responder update:
 `ExecuteRuntimeBranch` now carries a real typed completion responder, and
 `WorkflowTaskExecutionRuntimeOwner` plus `WorkflowSessionExecutionRuntime`

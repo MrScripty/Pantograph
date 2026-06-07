@@ -27076,6 +27076,31 @@ Worker rules:
       into the worker loop and map completed/deferred/failed paths to typed
       worker outcomes, then route the runtime session path through that worker
       completion boundary.
+  - 2026-06-06 runtime branch worker execution re-plan trigger:
+    - Stop before moving dispatch-boundary execution into the worker loop.
+      The existing direct helper requires more than the current worker command
+      carries: owned host boundary, session summary, optional run snapshot,
+      admitted/dequeued run facts, queued inputs/output targets, timeout, and
+      scheduler task-run summary.
+    - Required decision: choose how execution facts enter the worker without
+      preserving request-scoped runtime execution.
+    - Standards-aligned options:
+      1. Immediate in-memory execution envelope: include the already-admitted
+         execution facts in the worker command and add the owned host to the
+         worker runtime environment. This is the smallest continuation of
+         Option 2 and keeps the blocking inference path moving, but it is not
+         durable/replay-capable.
+      2. Worker rehydration: add explicit workflow-service/store read APIs so
+         the worker rehydrates execution facts from session/run ids. This
+         keeps commands smaller but requires new store ownership and
+         stale/missing-fact diagnostics before dispatch can move.
+      3. Durable task-event claiming now: skip the in-memory path and
+         implement the later durable event-loop claiming architecture. This is
+         the final target, but it is too broad for the current thin slice.
+    - No-fallback/no-legacy guard: do not move dispatch by keeping the existing
+      direct helper call in the request path, do not synthesize execution facts
+      from graph/frontend state, do not add compatibility DTOs, and do not add
+      durable claiming unless that option is explicitly selected.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
