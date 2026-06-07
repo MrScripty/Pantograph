@@ -677,12 +677,7 @@ impl WorkflowExecutionSessionStore {
         }
 
         let task_id = result.task_id.clone();
-        if active_run.scheduler_task_results.contains_key(&task_id) {
-            return Err(WorkflowServiceError::InvalidRequest(format!(
-                "scheduler task result '{}' is already recorded",
-                task_id
-            )));
-        }
+        let result_already_recorded = active_run.scheduler_task_results.contains_key(&task_id);
 
         let task_graph = active_run.scheduler_task_graph.as_ref().ok_or_else(|| {
             WorkflowServiceError::InvalidRequest(format!(
@@ -746,7 +741,9 @@ impl WorkflowExecutionSessionStore {
         active_run
             .scheduler_task_records
             .insert(task_id.clone(), record.clone());
-        active_run.scheduler_task_results.insert(task_id, result);
+        if !result_already_recorded {
+            active_run.scheduler_task_results.insert(task_id, result);
+        }
         Self::mark_session_access(state, tick);
         Ok(apply_result)
     }

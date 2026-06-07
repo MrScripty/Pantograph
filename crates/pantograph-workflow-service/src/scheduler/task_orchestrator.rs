@@ -847,6 +847,15 @@ impl WorkflowSchedulerTaskOrchestrator {
                         )),
                     )
                 })?;
+            if record.state.kind() == SchedulerTaskStateKind::Completed
+                && store
+                    .active_run_scheduler_task_results(session_id, workflow_run_id)
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+                    .iter()
+                    .any(|recorded| recorded.task_id == result.task_id)
+            {
+                continue;
+            }
             let transition = source_input_materialization_transition(record, task)?;
             let completed = store
                 .materialize_active_run_source_input_task(

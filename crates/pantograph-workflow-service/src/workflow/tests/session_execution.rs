@@ -1170,7 +1170,7 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
 
 #[tokio::test]
 async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
@@ -1189,6 +1189,8 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         ))
         .with_runtime_host_execution_port(runtime_host_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(service, Arc::clone(&host));
+    let service = runtime.service();
     let workflow_id = "wf-bootstrap-recovery-resume";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -1203,7 +1205,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -1213,26 +1215,23 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         .await
         .expect("create session");
     let session_id = created.session_id.clone();
-    service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: session_id.clone(),
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "infer".to_string(),
-                    port_id: "image".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+    runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: session_id.clone(),
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "infer".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect_err("runtime run should pause before readiness facts exist");
     let workflow_run_id = {
@@ -1257,8 +1256,8 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         )
         .expect("store dependency readiness snapshot");
 
-    let recovery_result = service
-        .recover_workflow_execution_session_bootstrap(&host)
+    let recovery_result = runtime
+        .recover_workflow_execution_session_bootstrap()
         .await
         .expect("bootstrap recovery should resume dependency readiness");
 
@@ -1287,7 +1286,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
 #[tokio::test]
 async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume(
 ) {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
@@ -1305,6 +1304,8 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
         ))
         .with_runtime_host_execution_port(runtime_host_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port);
+    let runtime = WorkflowSessionExecutionRuntime::new(service, Arc::clone(&host));
+    let service = runtime.service();
     let workflow_id = "wf-bootstrap-progress-loop";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -1321,7 +1322,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -1412,8 +1413,8 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
         )
         .expect("store dependency readiness snapshot");
 
-    let recovery_result = service
-        .recover_workflow_execution_session_bootstrap(&host)
+    let recovery_result = runtime
+        .recover_workflow_execution_session_bootstrap()
         .await
         .expect("bootstrap recovery should run progress loop then resume readiness");
 
@@ -1438,7 +1439,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
 
 #[tokio::test]
 async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
@@ -1457,6 +1458,8 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
         ))
         .with_runtime_host_execution_port(runtime_host_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port);
+    let runtime = WorkflowSessionExecutionRuntime::new(service, Arc::clone(&host));
+    let service = runtime.service();
     let workflow_id = "wf-bootstrap-ready-redispatch";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -1473,7 +1476,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -1589,8 +1592,8 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     );
     assert!(recovery_plan.decisions[0].runtime_dispatch_recovery_state_available);
 
-    let recovery_result = service
-        .recover_workflow_execution_session_bootstrap(&host)
+    let recovery_result = runtime
+        .recover_workflow_execution_session_bootstrap()
         .await
         .expect("bootstrap recovery should redispatch ready runtime task");
 

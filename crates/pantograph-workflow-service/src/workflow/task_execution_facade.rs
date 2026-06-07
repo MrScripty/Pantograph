@@ -5,8 +5,8 @@ use super::task_execution_worker::{
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
 };
 use super::{
-    WorkflowExecutionSessionRunRequest, WorkflowHost, WorkflowRunResponse, WorkflowService,
-    WorkflowServiceError,
+    WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowExecutionSessionRunRequest,
+    WorkflowHost, WorkflowRunResponse, WorkflowService, WorkflowServiceError,
 };
 
 /// Composition-root entrypoint for production workflow session execution.
@@ -62,6 +62,17 @@ impl WorkflowSessionExecutionRuntime {
             .run_workflow_execution_session_with_runtime_owner(
                 self.host.as_ref(),
                 request,
+                Some(self.task_execution_runtime_owner()),
+            )
+            .await
+    }
+
+    pub async fn recover_workflow_execution_session_bootstrap(
+        &self,
+    ) -> Result<WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowServiceError> {
+        self.service
+            .recover_workflow_execution_session_bootstrap_with_runtime_owner(
+                self.host.as_ref(),
                 Some(self.task_execution_runtime_owner()),
             )
             .await

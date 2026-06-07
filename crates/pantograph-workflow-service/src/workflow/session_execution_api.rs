@@ -39,6 +39,7 @@ use super::diagnostic_errors::{
 use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventId, WorkflowRuntimeBranchTaskEventRecord,
     WorkflowRuntimeBranchTaskEventRepository, WorkflowRuntimeBranchTaskEventRequest,
+    WorkflowRuntimeBranchTaskEventState,
 };
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
@@ -460,17 +461,19 @@ impl WorkflowService {
             host,
             request,
             SchedulerTaskAttemptLifecycleTransition::Started,
+            None,
         )
         .await
     }
 
     async fn resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition<
-        H: WorkflowHost,
+        H: WorkflowHost + ?Sized,
     >(
         &self,
         host: &H,
         request: WorkflowExecutionSessionResumeRequest,
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
+        task_execution_runtime_owner: Option<&WorkflowTaskExecutionRuntimeOwner>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim().to_string();
         if session_id.is_empty() {
@@ -485,7 +488,7 @@ impl WorkflowService {
             ));
         }
 
-        let (session, active_run, scheduler_task_run_summary) = {
+        let (session, active_run, scheduler_task_graph, scheduler_task_run_summary) = {
             let store = self.session_store_guard()?;
             let session = store.session_summary(&session_id)?;
             let active_run = store.active_run_context(&session_id, &workflow_run_id)?;
@@ -503,13 +506,38 @@ impl WorkflowService {
                         "scheduler task run summary failed before resume: {error}"
                     ))
                 })?;
-            (session, active_run, summary)
+            (session, active_run, task_graph, summary)
         };
         if !scheduler_task_run_summary.has_runtime_inference() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
                 "workflow run '{}' is not a runtime inference run",
                 workflow_run_id
             )));
+        }
+
+        if let Some(task_execution_runtime_owner) = task_execution_runtime_owner {
+            self.ensure_runtime_branch_task_events_for_recovery(
+                &session_id,
+                &active_run.workflow_id,
+                &workflow_run_id,
+                active_run.output_targets.clone(),
+                active_run.timeout_ms,
+                &scheduler_task_graph,
+            )?;
+            let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+                session_id,
+                workflow_run_id,
+                workflow_id: active_run.workflow_id,
+                output_targets: active_run.output_targets,
+                timeout_ms: active_run.timeout_ms,
+                start_reason: workflow_task_execution_worker_runtime_branch_start_reason(
+                    attempt_start_transition,
+                )?,
+            };
+            let outcome = task_execution_runtime_owner
+                .enqueue_runtime_branch_and_wait(command)
+                .await?;
+            return workflow_response_from_runtime_branch_worker_outcome(outcome);
         }
 
         let workflow_run_id_typed = WorkflowRunId::try_from(workflow_run_id.clone())?;
@@ -618,9 +646,20 @@ impl WorkflowService {
         Ok(workflow_bootstrap_recovery_plan_from_report(report))
     }
 
-    pub async fn recover_workflow_execution_session_bootstrap<H: WorkflowHost>(
+    pub async fn recover_workflow_execution_session_bootstrap<H: WorkflowHost + ?Sized>(
         &self,
         host: &H,
+    ) -> Result<WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowServiceError> {
+        self.recover_workflow_execution_session_bootstrap_with_runtime_owner(host, None)
+            .await
+    }
+
+    pub(super) async fn recover_workflow_execution_session_bootstrap_with_runtime_owner<
+        H: WorkflowHost + ?Sized,
+    >(
+        &self,
+        host: &H,
+        task_execution_runtime_owner: Option<&WorkflowTaskExecutionRuntimeOwner>,
     ) -> Result<WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowServiceError> {
         let plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
         workflow_bootstrap_recovery_apply_gate(&plan)?;
@@ -632,13 +671,22 @@ impl WorkflowService {
 
         let resume_plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
         workflow_bootstrap_recovery_apply_gate(&resume_plan)?;
+        let runtime_resume_requests =
+            workflow_bootstrap_recovery_runtime_resume_requests(&resume_plan);
+        if !runtime_resume_requests.is_empty() && task_execution_runtime_owner.is_none() {
+            return Err(WorkflowServiceError::CapabilityViolation(
+                "bootstrap runtime recovery requires WorkflowSessionExecutionRuntime composition-root entrypoint"
+                    .to_string(),
+            ));
+        }
         let mut resumed_runs = Vec::new();
-        for runtime_resume in workflow_bootstrap_recovery_runtime_resume_requests(&resume_plan) {
+        for runtime_resume in runtime_resume_requests {
             resumed_runs.push(
                 self.resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition(
                     host,
                     runtime_resume.request,
                     runtime_resume.attempt_start_transition,
+                    task_execution_runtime_owner,
                 )
                 .await?,
             );
@@ -1548,6 +1596,27 @@ fn workflow_response_from_runtime_branch_worker_outcome(
     }
 }
 
+fn workflow_task_execution_worker_runtime_branch_start_reason(
+    transition: SchedulerTaskAttemptLifecycleTransition,
+) -> Result<WorkflowTaskExecutionWorkerRuntimeBranchStartReason, WorkflowServiceError> {
+    match transition {
+        SchedulerTaskAttemptLifecycleTransition::Started => {
+            Ok(WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started)
+        }
+        SchedulerTaskAttemptLifecycleTransition::Redispatched => {
+            Ok(WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched)
+        }
+        SchedulerTaskAttemptLifecycleTransition::Completed
+        | SchedulerTaskAttemptLifecycleTransition::Failed
+        | SchedulerTaskAttemptLifecycleTransition::Cancelled => {
+            Err(WorkflowServiceError::Internal(
+                "terminal scheduler task attempt transition cannot start runtime branch execution"
+                    .to_string(),
+            ))
+        }
+    }
+}
+
 fn worker_diagnostic_message(
     fallback: &str,
     diagnostics: &[super::task_execution_worker::WorkflowTaskExecutionWorkerDiagnostic],
@@ -2242,6 +2311,96 @@ fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) ->
 }
 
 impl WorkflowService {
+    fn ensure_runtime_branch_task_events_for_recovery(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        workflow_run_id: &str,
+        output_targets: Option<Vec<super::WorkflowOutputTarget>>,
+        timeout_ms: Option<u64>,
+        task_graph: &WorkflowSchedulerTaskGraph,
+    ) -> Result<usize, WorkflowServiceError> {
+        let mut repository = self
+            .runtime_branch_task_event_repository
+            .lock()
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "runtime branch task-event repository lock poisoned".to_string(),
+                )
+            })?;
+        let ready_at_ms = unix_timestamp_ms();
+        let mut ensured = 0;
+        for task in task_graph.tasks.iter().filter(|task| {
+            task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+        }) {
+            let event_id = WorkflowRuntimeBranchTaskEventId::parse(format!(
+                "runtime-branch-task-event.{}.{}",
+                workflow_run_id,
+                task.task_id.as_str()
+            ))
+            .map_err(runtime_branch_task_event_diagnostic_error)?;
+            if let Some(record) = repository.get(&event_id) {
+                match record.state {
+                    WorkflowRuntimeBranchTaskEventState::Ready
+                    | WorkflowRuntimeBranchTaskEventState::Deferred
+                    | WorkflowRuntimeBranchTaskEventState::Claimed => {
+                        ensured += 1;
+                        continue;
+                    }
+                    WorkflowRuntimeBranchTaskEventState::Completed
+                    | WorkflowRuntimeBranchTaskEventState::Failed => {
+                        return Err(WorkflowServiceError::InvalidRequest(format!(
+                            "runtime branch task event '{}' is terminal and cannot be recovered",
+                            event_id.as_str()
+                        )));
+                    }
+                }
+            }
+            let queued_input_keys = task
+                .input_bindings
+                .iter()
+                .map(|binding| {
+                    format!(
+                        "{}:{}",
+                        binding.source_task_id.as_str(),
+                        binding.target_port_id
+                    )
+                })
+                .collect::<Vec<_>>();
+            let record = WorkflowRuntimeBranchTaskEventRecord::ready(
+                WorkflowRuntimeBranchTaskEventRequest {
+                    event_id,
+                    session_id: session_id.to_string(),
+                    workflow_id: workflow_id.to_string(),
+                    workflow_run_id: workflow_run_id.to_string(),
+                    scheduler_task_id: task.task_id.as_str().to_string(),
+                    scheduler_task_attempt_id: None,
+                    attempt_generation: 1,
+                    queued_input_keys,
+                    output_targets: output_targets.clone(),
+                    timeout_ms,
+                    batching_key: Some(format!(
+                        "runtime-branch-task.{}.{}",
+                        workflow_id,
+                        task.task_id.as_str()
+                    )),
+                    ready_at_ms,
+                },
+            )
+            .map_err(runtime_branch_task_event_diagnostic_error)?;
+            repository
+                .enqueue(record)
+                .map_err(runtime_branch_task_event_diagnostic_error)?;
+            ensured += 1;
+        }
+        if ensured == 0 {
+            return Err(WorkflowServiceError::Internal(
+                "runtime branch recovery found no runtime inference scheduler tasks".to_string(),
+            ));
+        }
+        Ok(ensured)
+    }
+
     fn persist_runtime_branch_task_events_for_admission(
         &self,
         session_id: &str,

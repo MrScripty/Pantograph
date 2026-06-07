@@ -1,10 +1,12 @@
 use std::time::Duration;
 
 use crate::scheduler::WorkflowExecutionSessionDequeuedRun;
+use pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition;
 use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRecord};
 
 use super::runtime_branch_rehydration::WorkflowRuntimeBranchRehydratedContext;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
+use super::task_execution_worker::WorkflowTaskExecutionWorkerRuntimeBranchStartReason;
 use super::{
     WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionSummary, WorkflowHost,
     WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTaskRunSummary, WorkflowService,
@@ -136,7 +138,7 @@ impl WorkflowTaskExecutionOwner {
         )?;
         let run_started_at = std::time::Instant::now();
         let runner = WorkflowSchedulerSessionRunner::new(service);
-        let run_future = runner.run_until_runtime_dispatch_boundary(
+        let run_future = runner.run_until_runtime_dispatch_boundary_with_attempt_transition(
             host,
             &command.session_id,
             &command.workflow_run_id,
@@ -145,6 +147,7 @@ impl WorkflowTaskExecutionOwner {
             command.output_targets.as_deref(),
             &rehydrated.task_run_summary,
             run_started_at,
+            scheduler_transition_from_runtime_branch_start_reason(command.start_reason),
         );
         let run_result = if let Some(timeout_ms) = command.timeout_ms {
             match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
@@ -217,5 +220,18 @@ impl WorkflowTaskExecutionOwner {
             return Err(record_error);
         }
         run_result
+    }
+}
+
+fn scheduler_transition_from_runtime_branch_start_reason(
+    start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+) -> SchedulerTaskAttemptLifecycleTransition {
+    match start_reason {
+        WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started => {
+            SchedulerTaskAttemptLifecycleTransition::Started
+        }
+        WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched => {
+            SchedulerTaskAttemptLifecycleTransition::Redispatched
+        }
     }
 }

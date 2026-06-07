@@ -123,7 +123,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         })
     }
 
-    pub(super) async fn run_until_runtime_dispatch_boundary(
+    pub(super) async fn run_until_runtime_dispatch_boundary_with_attempt_transition(
         &self,
         host: &(impl WorkflowHost + ?Sized),
         session_id: &str,
@@ -133,6 +133,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         output_targets: Option<&[WorkflowOutputTarget]>,
         summary: &WorkflowSchedulerTaskRunSummary,
         started_at: Instant,
+        attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         if !summary.has_runtime_inference() {
             return Err(WorkflowServiceError::Internal(
@@ -149,7 +150,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             output_targets,
             summary,
             started_at,
-            SchedulerTaskAttemptLifecycleTransition::Started,
+            attempt_start_transition,
         )
         .await
     }

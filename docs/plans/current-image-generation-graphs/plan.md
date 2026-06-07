@@ -360,6 +360,38 @@ Option 2 recovery/shutdown sequence:
    focused runtime-branch/task-execution worker tests, and formatting checks.
    Only after this passes may adapter/call-site migration continue.
 
+2026-06-07 bootstrap runtime recovery facade slice: completed Option 2
+steps 1-3 for bootstrap runtime recovery. Smallest useful vertical slice:
+route bootstrap runtime dependency-readiness resume and ready-runtime
+redispatch through `WorkflowSessionExecutionRuntime` and
+`WorkflowTaskExecutionRuntimeOwner`, while direct `WorkflowService` recovery
+still owns planning, progress-loop recovery, and typed fail-closed diagnostics
+when runtime recovery is attempted without the composition-root owner. Allowed
+files touched:
+`crates/pantograph-workflow-service/src/scheduler/store_task_results.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan. No-fallback/no-legacy confirmation: this slice does not call
+the request-scoped runtime helper for bootstrap runtime recovery, does not
+preserve direct service runtime redispatch, does not synthesize successful
+completion, and routes runtime dispatch through the owned worker command path.
+Focused behavior added/updated: the runtime facade exposes bootstrap recovery,
+runtime recovery ensures claimable runtime-branch task events exist before
+worker dispatch, rehydrated worker redispatch preserves the typed
+`Redispatched` scheduler attempt lifecycle transition, and progress-loop
+recovery is idempotent for already-materialized source-input results.
+Verification: `cargo fmt` passed;
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery --lib`
+passed with 3 tests; `cargo test -p pantograph-workflow-service session_execution --lib`
+now runs 37 filtered tests with 36 passing and one remaining known failure,
+`workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`, which still
+needs Option 2 step 4 migration to the runtime-owned shutdown/supervisor
+boundary.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
