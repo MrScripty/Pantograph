@@ -311,6 +311,16 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
     > {
         let Some(event_id) = self.next_due_event_id_for_workflow_run(workflow_run_id, now_ms)
         else {
+            if let Some(record) = self.active_event_for_workflow_run(workflow_run_id, now_ms) {
+                return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                    WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed,
+                    format!(
+                        "runtime branch task event '{}' is already active for workflow run '{}'",
+                        record.event_id.as_str(),
+                        workflow_run_id
+                    ),
+                ));
+            }
             return Ok(None);
         };
         self.claim_event(&event_id, owner_id, now_ms, lease_duration_ms)
@@ -450,6 +460,25 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
                     .then_with(|| left.event_id.as_str().cmp(right.event_id.as_str()))
             })
             .map(|record| record.event_id.clone())
+    }
+
+    fn active_event_for_workflow_run(
+        &self,
+        workflow_run_id: &str,
+        now_ms: u64,
+    ) -> Option<WorkflowRuntimeBranchTaskEventRecord> {
+        self.records
+            .values()
+            .filter(|record| record.workflow_run_id == workflow_run_id)
+            .filter(|record| record.has_active_unexpired_claim(now_ms))
+            .min_by(|left, right| {
+                left.claim
+                    .as_ref()
+                    .map(|claim| claim.claimed_at_ms)
+                    .cmp(&right.claim.as_ref().map(|claim| claim.claimed_at_ms))
+                    .then_with(|| left.event_id.as_str().cmp(right.event_id.as_str()))
+            })
+            .cloned()
     }
 }
 
@@ -709,6 +738,18 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             WorkflowRuntimeBranchTaskEventState::Completed
             | WorkflowRuntimeBranchTaskEventState::Failed => false,
         }
+    }
+
+    fn has_active_unexpired_claim(&self, now_ms: u64) -> bool {
+        matches!(
+            self.state,
+            WorkflowRuntimeBranchTaskEventState::Claimed
+                | WorkflowRuntimeBranchTaskEventState::Dispatching
+                | WorkflowRuntimeBranchTaskEventState::Running
+        ) && self
+            .claim
+            .as_ref()
+            .is_some_and(|claim| now_ms < claim.lease_expires_at_ms)
     }
 }
 
@@ -1177,6 +1218,37 @@ mod tests {
         assert_eq!(second.record.attempt_generation, 2);
         assert_eq!(second.claim.owner_id.as_str(), "worker.beta");
         assert_ne!(second.claim.lease_id, first.claim.lease_id);
+    }
+
+    #[test]
+    fn runtime_branch_task_event_repository_rejects_duplicate_active_dispatch_for_run() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        let event_id = event_id("runtime-branch-task-event.test");
+        repository.enqueue(ready_record()).expect("event enqueues");
+        let claimed = repository
+            .claim_event(&event_id, owner_id("worker.alpha"), 100, 80)
+            .expect("event claims");
+        let dispatching = repository
+            .mark_dispatching(&event_id, &claimed.claim, 110)
+            .expect("event marks dispatching");
+        assert_eq!(
+            dispatching.state,
+            WorkflowRuntimeBranchTaskEventState::Dispatching
+        );
+
+        let error = repository
+            .claim_next_due_for_workflow_run("run.test", owner_id("worker.beta"), 120, 80)
+            .expect_err("duplicate active dispatch is rejected");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed
+        );
+        assert!(
+            error.message.contains("already active for workflow run"),
+            "unexpected diagnostic: {}",
+            error.message
+        );
     }
 
     #[test]

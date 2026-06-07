@@ -911,6 +911,30 @@ Verification passed:
 `cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
 for the slice files.
 
+2026-06-07 runtime-branch duplicate-dispatch guard slice: completed the next
+Option 3 duplicate-dispatch step. Smallest useful vertical slice: make
+claim-by-workflow-run return a typed `AlreadyClaimed` diagnostic when a
+runtime-branch event for that run is already active under an unexpired
+`Claimed`, `Dispatching`, or `Running` lease, instead of reporting that no due
+event exists. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: duplicate detection is owned by the
+durable runtime-branch event repository, not by request parameters, frontend
+state, in-memory responder state, graph path inference, or a worker command
+compatibility envelope. Deferred future retries and future ready events still
+return no due event until their durable `ready_at_ms`; active in-flight work
+returns a typed guard diagnostic.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
+for the slice files.
+
 2026-06-07 runtime-branch dispatch-unavailable claim-release update:
 completed the first immediate bridge slice. Smallest useful vertical slice:
 add `release_claim` to the runtime-branch task-event repository/state machine
