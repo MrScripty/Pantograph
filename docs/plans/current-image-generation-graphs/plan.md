@@ -25,12 +25,14 @@ Immediate Option 1 bridge sequence:
    that accepts a claimed runtime-branch event plus claim and reads only
    backend active-run/session records to build the execution context needed by
    the worker.
-3. Move the existing runtime dispatch-boundary execution body behind the worker
-   using that rehydrated context and the owned host boundary; the request path
-   may only enqueue and await notification.
-4. Persist completed/deferred/failed durable event state before notifying the
-   in-memory responder, and keep missing/stale/expired facts as typed
-   diagnostics.
+3. Completed 2026-06-07: move the existing runtime dispatch-boundary
+   execution body behind the worker using that rehydrated context and the
+   owned host boundary; the request path now only enqueues and awaits
+   notification.
+4. Partially completed 2026-06-07: persist completed/failed durable event
+   state before notifying the in-memory responder. Remaining source follow-up:
+   persist readiness-pending deferred durable state with retry/replay semantics
+   instead of the current bridge claim-release behavior.
 5. Once this proves a complete inference path, execute the follow-on Option 3
    lifecycle plan: promote runtime-branch events into the durable scheduler
    task-attempt lifecycle with explicit non-terminal running/dispatching,
@@ -101,6 +103,51 @@ worker cancellation/shutdown lifecycle or removed in a dedicated lifecycle
 cleanup slice. Remaining follow-up: move dispatch-boundary execution behind
 the worker using the rehydrated backend context and owned host boundary, then
 persist durable completed/deferred/failed event state before responder
+notification.
+
+2026-06-07 runtime-branch worker dispatch ownership update: completed the
+third immediate bridge slice and the terminal portion of the fourth slice.
+Smallest useful vertical slice: expose enqueue timestamp and scheduler
+decision reason through the backend active-run context, add a
+workflow-service-owned active-run `RunStarted` diagnostic recorder, move
+runtime dispatch-boundary execution into the task-execution worker after
+claim/rehydration, and switch the session runtime branch request path to
+persist the durable event, enqueue a worker command, and await the worker
+notification. The obsolete request-scoped runtime-branch context and direct
+dispatch helper were removed rather than retained as a compatibility shim.
+Terminal worker results now complete/fail the claimed durable runtime-branch
+event before notifying the in-memory responder; readiness-pending runtime
+dependency outcomes still release the claim back to `Ready` as bridge
+behavior until the durable deferred/retry lifecycle slice lands. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/scheduler/store.rs`,
+`crates/pantograph-workflow-service/src/scheduler/store_queue.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and plan docs. No-fallback/no-legacy confirmation: this slice does not pass
+request-scoped execution envelopes into the worker, does not call the removed
+direct helper from the request path, does not synthesize graph/frontend/Tauri
+facts, does not add compatibility DTOs, does not fake successful completion,
+and returns typed worker/service diagnostics for missing events, stale
+rehydration facts, readiness-pending dispatch, and terminal dispatch failures.
+Verification:
+`cargo test -p pantograph-workflow-service task_execution_worker --lib` passed
+with 15 tests,
+`cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+passed with 3 tests,
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`
+passed with 3 tests,
+`cargo test -p pantograph-workflow-service runtime_branch --lib` passed with
+34 tests, and `cargo check -p pantograph-workflow-service` passed with the
+known warning for unused `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort
+helpers in `scheduler/task_orchestrator.rs`. Discovered issue recorded: the
+bridge still releases readiness-pending events back to `Ready`; the next slice
+must promote readiness-pending runtime dependency outcomes into durable
+deferred event state with explicit retry/replay semantics before responder
 notification.
 
 2026-06-06 runtime-branch worker host-boundary update: completed the next

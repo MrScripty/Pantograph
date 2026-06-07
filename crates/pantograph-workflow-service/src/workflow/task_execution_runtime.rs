@@ -21,13 +21,6 @@ enum WorkflowTaskExecutionRuntimeWorkerState {
     Shutdown,
 }
 
-#[must_use]
-pub(super) struct WorkflowTaskExecutionRuntimeBranchContext {
-    service: Arc<WorkflowService>,
-    host: Arc<dyn WorkflowHost>,
-    command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
-}
-
 impl WorkflowTaskExecutionRuntimeOwner {
     pub(super) fn new(service: Arc<WorkflowService>, host: Arc<dyn WorkflowHost>) -> Self {
         Self {
@@ -45,17 +38,6 @@ impl WorkflowTaskExecutionRuntimeOwner {
 
     pub(super) fn host(&self) -> Arc<dyn WorkflowHost> {
         Arc::clone(&self.host)
-    }
-
-    pub(super) fn runtime_branch_context(
-        &self,
-        command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
-    ) -> WorkflowTaskExecutionRuntimeBranchContext {
-        WorkflowTaskExecutionRuntimeBranchContext {
-            service: Arc::clone(&self.service),
-            host: Arc::clone(&self.host),
-            command,
-        }
     }
 
     pub(super) async fn ensure_task_execution_worker_started(
@@ -148,20 +130,6 @@ impl WorkflowTaskExecutionRuntimeOwner {
             worker.shutdown().await?;
         }
         Ok(())
-    }
-}
-
-impl WorkflowTaskExecutionRuntimeBranchContext {
-    pub(super) fn service(&self) -> Arc<WorkflowService> {
-        Arc::clone(&self.service)
-    }
-
-    pub(super) fn host(&self) -> Arc<dyn WorkflowHost> {
-        Arc::clone(&self.host)
-    }
-
-    pub(super) fn command(&self) -> &WorkflowTaskExecutionWorkerRuntimeBranchCommand {
-        &self.command
     }
 }
 
@@ -347,30 +315,6 @@ mod tests {
             .shutdown_task_execution_worker()
             .await
             .expect("shutdown task execution worker");
-    }
-
-    #[test]
-    fn runtime_owner_builds_runtime_branch_context_from_command() {
-        let service = Arc::new(WorkflowService::new());
-        let host = test_host();
-        let owner = WorkflowTaskExecutionRuntimeOwner::new(service, Arc::clone(&host));
-        let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
-            session_id: "session-1".to_string(),
-            workflow_run_id: "run-1".to_string(),
-            workflow_id: "workflow-1".to_string(),
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "image-output".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            timeout_ms: Some(500),
-            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
-        };
-
-        let context = owner.runtime_branch_context(command.clone());
-
-        assert!(Arc::ptr_eq(&context.service(), &owner.service()));
-        assert!(Arc::ptr_eq(&context.host(), &host));
-        assert_eq!(context.command(), &command);
     }
 
     fn test_host() -> Arc<dyn WorkflowHost> {

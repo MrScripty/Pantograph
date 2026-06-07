@@ -130,30 +130,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn session_execution_runtime_builds_runtime_branch_context_from_owned_runtime_owner() {
-        let runtime =
-            WorkflowSessionExecutionRuntime::new(WorkflowService::new(), Arc::new(DelegatingHost));
-        let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
-            session_id: "session-1".to_string(),
-            workflow_run_id: "run-1".to_string(),
-            workflow_id: "workflow-1".to_string(),
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "image-output".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            timeout_ms: Some(500),
-            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
-        };
-
-        let context = runtime
-            .task_execution_runtime_owner()
-            .runtime_branch_context(command.clone());
-
-        assert!(Arc::ptr_eq(&runtime.service(), &context.service()));
-        assert_eq!(context.command(), &command);
-    }
-
     #[tokio::test]
     async fn session_execution_runtime_delegates_session_run_to_workflow_service() {
         let runtime =

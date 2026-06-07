@@ -22,21 +22,6 @@ pub(super) struct WorkflowRuntimeBranchRehydratedContext {
     pub(super) runtime_task_id: String,
 }
 
-impl WorkflowRuntimeBranchRehydratedContext {
-    pub(super) fn dispatch_unavailable_message(&self) -> String {
-        format!(
-            "runtime branch dispatch execution has not moved into the task-execution worker loop yet; rehydrated session '{}' run '{}' task '{}' with {} active inputs, {} scheduler tasks, {} task records, and {} runtime inference tasks",
-            self.session.session_id,
-            self.task_graph.workflow_run_id.as_str(),
-            self.runtime_task_id,
-            self.active_run.inputs.len(),
-            self.task_graph.tasks.len(),
-            self.task_records.len(),
-            self.task_run_summary.runtime_inference_tasks
-        )
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchRehydrationDiagnostic {
