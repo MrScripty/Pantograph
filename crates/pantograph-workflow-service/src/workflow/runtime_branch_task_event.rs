@@ -1321,6 +1321,44 @@ mod tests {
     }
 
     #[test]
+    fn runtime_branch_task_event_repository_reclaims_expired_running_event_for_replay() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        let event_id = event_id("runtime-branch-task-event.test");
+        repository.enqueue(ready_record()).expect("event enqueues");
+        let first = repository
+            .claim_event(&event_id, owner_id("worker.alpha"), 100, 80)
+            .expect("event claims");
+        let dispatching = repository
+            .mark_dispatching(&event_id, &first.claim, 110)
+            .expect("event marks dispatching");
+        assert_eq!(
+            dispatching.state,
+            WorkflowRuntimeBranchTaskEventState::Dispatching
+        );
+        let running = repository
+            .mark_running(&event_id, &first.claim, 120)
+            .expect("event marks running");
+        assert_eq!(running.state, WorkflowRuntimeBranchTaskEventState::Running);
+
+        let replay = repository
+            .claim_next_due_for_workflow_run("run.test", owner_id("worker.replay"), 180, 90)
+            .expect("claim next succeeds")
+            .expect("expired running event is replayable");
+
+        assert_eq!(replay.record.event_id, event_id);
+        assert_eq!(replay.record.attempt_generation, 2);
+        assert_eq!(replay.claim.attempt_generation, 2);
+        assert_eq!(replay.claim.owner_id.as_str(), "worker.replay");
+        assert_ne!(replay.claim.lease_id, first.claim.lease_id);
+        assert_eq!(
+            replay.record.state,
+            WorkflowRuntimeBranchTaskEventState::Claimed
+        );
+        assert_eq!(replay.record.dispatching_at_ms, None);
+        assert_eq!(replay.record.running_at_ms, None);
+    }
+
+    #[test]
     fn runtime_branch_task_event_repository_persists_terminal_completion() {
         let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
         let event_id = event_id("runtime-branch-task-event.test");

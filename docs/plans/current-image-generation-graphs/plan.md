@@ -960,6 +960,28 @@ Verification passed:
 `cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
 for the slice files.
 
+2026-06-07 runtime-branch expired-running replay invariant slice: completed
+the next Option 3 replay/restart guard. Smallest useful vertical slice: add a
+repository boundary invariant proving an expired `Running` runtime-branch event
+can be reclaimed by a later worker as a new attempt generation, with stale
+dispatching/running timestamps cleared when the event returns to `Claimed`.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: replay authority remains the durable event
+claim lease and generation, not request-scoped runtime execution, in-memory
+responder state, graph/frontend state, or synthesized worker facts. Unexpired
+active dispatch remains blocked by the duplicate-dispatch guard; only expired
+active work is reclaimable.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
+for the slice files.
+
 2026-06-07 runtime-branch dispatch-unavailable claim-release update:
 completed the first immediate bridge slice. Smallest useful vertical slice:
 add `release_claim` to the runtime-branch task-event repository/state machine
