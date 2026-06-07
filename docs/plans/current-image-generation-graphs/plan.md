@@ -715,6 +715,64 @@ re-plan area: keep-alive checkpoint capacity/recovery semantics without
 workflow input carry-forward, followed by node-execution ledger artifacts,
 retired data-graph fixtures, and runtime-preflight restart classification.
 
+2026-06-07 keep-alive checkpoint capacity/recovery re-plan decision: use
+Option 2 and redefine the stale checkpoint behavior as runtime/model residency
+fact coverage. The six failing checkpoint capacity/recovery tests still assert
+the retired `EmbeddedRuntime.session_executions` executor/checkpoint path.
+Those assertions are not canonical checkpoint requirements. The supported
+behavior is that a compatible runtime/model instance may remain resident or
+become reusable after capacity pressure, recovery, or scheduler reclaim; it is
+not that node-engine memory, workflow inputs, upstream task results, prompt
+values, run envelopes, or executor snapshots carry into later workflow runs.
+
+Canonical checkpoint/residency evidence may include runtime id, runtime
+instance or reservation id when one exists, backend/model/artifact identity,
+retention intent, residency state, reclaim/reuse eligibility, reservation
+release facts, and bounded typed diagnostics for failed restore, unavailable
+runtime, or incompatible reuse. It must not include workflow input values,
+upstream task outputs, node memory snapshots, prompt/context values, frontend
+state, graph-authored paths, or the old executor checkpoint snapshot state.
+The durable task-attempt lifecycle remains the later target for replay,
+retry/defer, process-restart recovery, and batching; this slice only replaces
+the embedded-runtime keep-alive checkpoint semantics with canonical residency
+facts.
+
+Next embedded-runtime checkpoint/residency slice:
+1. Allowed write set:
+   `crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_capacity_tests.rs`,
+   `crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_recovery_tests.rs`,
+   `crates/pantograph-embedded-runtime/src/lib_tests/README.md` if test
+   ownership notes need updating, and this plan. Source files are allowed only
+   if focused tests prove a missing narrow residency fact boundary:
+   `crates/pantograph-embedded-runtime/src/workflow_execution_session_execution.rs`,
+   `crates/pantograph-embedded-runtime/src/embedded_workflow_host.rs`,
+   `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`, and
+   `crates/pantograph-embedded-runtime/src/lib.rs`.
+2. Migrate capacity/recovery tests away from
+   `EmbeddedRuntime.session_executions`, preserved node-memory counts, carried
+   KV handles, and executor checkpoint summaries.
+3. Assert only canonical residency facts: resident/warm/checkpointed-unloaded
+   state where still exposed, reservation/load-proof identity, release/reclaim
+   behavior, reuse eligibility, and typed diagnostics when restore or runtime
+   readiness fails.
+4. If the current embedded-runtime API cannot expose enough canonical
+   residency facts without `session_executions`, add the smallest backend-owned
+   fact projection and document it; do not restore executor snapshots as a
+   compatibility shim.
+5. Run
+   `cargo test -p pantograph-embedded-runtime session_checkpoint_capacity --lib`,
+   `cargo test -p pantograph-embedded-runtime session_checkpoint_recovery --lib`,
+   `cargo check -p pantograph-embedded-runtime`, and
+   `cargo fmt -p pantograph-embedded-runtime -- --check`. Rerun
+   `cargo test -p pantograph-embedded-runtime --lib` only after focused
+   verification passes to update the remaining-failure inventory.
+
+Re-plan triggers: stop if implementation would require preserving
+`EmbeddedRuntime.session_executions` as the source of truth, carrying workflow
+inputs or node memory between runs, using graph/frontend paths to infer
+residency, moving durable process-restart replay into this narrow slice, or
+editing outside the allowed checkpoint/residency write set.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,

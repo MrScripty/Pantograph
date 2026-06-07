@@ -153,6 +153,13 @@ dependency preflight outputs.
   materialize its own source inputs and upstream task results. Omitted required
   inputs must produce typed diagnostics instead of replaying values from the
   run that first loaded or warmed the runtime.
+- 2026-06-07 checkpoint/residency clarification: embedded-runtime
+  keep-alive checkpoint coverage is an immediate residency-fact migration, not
+  durable replay. Runtime id, model/artifact identity, reservation/load-proof
+  identity, reclaim/reuse eligibility, and typed restore/readiness diagnostics
+  may be carried as lifecycle facts. Workflow inputs, upstream results, node
+  memory, prompt/context values, prior run envelopes, and executor snapshots
+  must not be carried into later runs.
 - `SchedulerTaskStateReadModel`: backend-owned status for graph editor,
   run-inspection, and diagnostics views. It exposes waiting/running/failed
   facts, not scheduler internals or executable load targets.

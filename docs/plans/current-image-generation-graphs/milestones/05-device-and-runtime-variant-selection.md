@@ -7516,4 +7516,42 @@ capacity/recovery tests next, because they still assert the retired
 `EmbeddedRuntime.session_executions` executor/checkpoint path under
 worker-owned session runs.
 
+2026-06-07 keep-alive checkpoint capacity/recovery re-plan decision: use
+Option 2. Checkpoint coverage for this milestone means runtime/model residency
+facts, not executor snapshot restoration. The next slice must migrate
+`session_checkpoint_capacity_tests.rs` and
+`session_checkpoint_recovery_tests.rs` away from
+`EmbeddedRuntime.session_executions`, preserved node-memory counts, carried KV
+handles, and workflow input carry-forward. Supported assertions are residency
+state, runtime/model/load-proof identity, reservation release/reclaim behavior,
+reuse eligibility, and typed diagnostics when restore or runtime readiness
+fails.
+
+Allowed write set:
+`crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_capacity_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_recovery_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/README.md` if test ownership
+notes need updating, this milestone file, and the main plan. Source files are
+allowed only if focused tests prove a missing narrow residency fact boundary:
+`crates/pantograph-embedded-runtime/src/workflow_execution_session_execution.rs`,
+`crates/pantograph-embedded-runtime/src/embedded_workflow_host.rs`,
+`crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`, and
+`crates/pantograph-embedded-runtime/src/lib.rs`.
+
+No-fallback/no-legacy rule: do not preserve
+`EmbeddedRuntime.session_executions` as canonical checkpoint state, do not
+carry workflow inputs, upstream task outputs, node memory, prompt/context
+values, or executor snapshots between runs, and do not use graph/frontend
+paths to infer residency. If durable replay, process-restart recovery, or
+task-attempt batching is needed, stop and re-plan into the task-level durable
+lifecycle sequence instead of expanding this slice.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime session_checkpoint_capacity --lib`,
+`cargo test -p pantograph-embedded-runtime session_checkpoint_recovery --lib`,
+`cargo check -p pantograph-embedded-runtime`, and
+`cargo fmt -p pantograph-embedded-runtime -- --check`. After focused
+verification passes, rerun `cargo test -p pantograph-embedded-runtime --lib`
+only to update the remaining-failure inventory.
+
 **Status:** In progress. First slice is the device/runtime contract gate.
