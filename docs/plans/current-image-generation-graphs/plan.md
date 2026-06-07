@@ -318,6 +318,65 @@ Outstanding Option 2 migration work:
 - update dependency-readiness resume and shutdown supervisor coverage to the
   worker-owned path, and then proceed to adapter/call-site migration.
 
+2026-06-07 bootstrap recovery and shutdown re-plan decision: do Option 2 now,
+then Option 3 after validation. Option 2 is the runtime-owned recovery/shutdown
+execution boundary: `WorkflowService` remains the owner of backend recovery
+reporting, recovery planning, active-run/session records, and typed diagnostics,
+but runtime recovery execution must move to `WorkflowSessionExecutionRuntime`
+and its `WorkflowTaskExecutionRuntimeOwner`. Direct `WorkflowService`
+recovery may continue to plan and may apply non-runtime/progress-loop backend
+state transitions, but it must not execute runtime dependency-readiness resume,
+ready-runtime redispatch, runtime-host dispatch, or runtime dispatch supervisor
+shutdown without the composition-root runtime owner. Runtime recovery or
+shutdown without that owner must fail closed with typed diagnostics instead of
+falling back to request-scoped host execution. Option 3 remains the follow-on
+durable lifecycle promotion after the Option 2 boundary validates the complete
+inference path.
+
+Option 2 recovery/shutdown sequence:
+1. Add a composition-root recovery facade on `WorkflowSessionExecutionRuntime`
+   that delegates recovery planning/reporting to `WorkflowService` but applies
+   runtime resume/redispatch through the owned task-execution runtime owner.
+   Keep shared contracts and runtime-owner wiring serial integration-owner
+   work.
+2. Split bootstrap recovery application so `WorkflowService` exposes backend
+   plan/report primitives plus non-runtime/progress-loop recovery, while
+   runtime dependency-readiness resume and ready-runtime redispatch require an
+   explicit runtime owner.
+3. Migrate
+   `workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`
+   to use `WorkflowSessionExecutionRuntime` and assert the runtime-host dispatch
+   request, dependency-readiness work queue cleanup, and absence of direct host
+   runtime load/run attempts.
+4. Move shutdown/supervisor coverage to the same runtime-owned boundary:
+   runtime dispatch starts through the worker, lifecycle shutdown cancels the
+   owned runtime dispatch supervisor, and the runtime-host cancellation handle
+   observes the shutdown request. Direct service shutdown must not synthesize
+   runtime dispatch state.
+5. Preserve direct `WorkflowService` fail-closed tests for runtime recovery or
+   shutdown attempted without a runtime owner, with typed diagnostics that name
+   the missing composition-root runtime owner.
+6. Run `cargo test -p pantograph-workflow-service session_execution --lib`,
+   focused runtime-branch/task-execution worker tests, and formatting checks.
+   Only after this passes may adapter/call-site migration continue.
+
+Option 3 durable lifecycle sequence after Option 2 validation:
+1. Promote runtime-branch events into the durable scheduler task-attempt
+   lifecycle with explicit non-terminal running/dispatching/deferred states,
+   instead of treating the runtime-branch event repository as a bridge.
+2. Add duplicate-dispatch guard, replay/restart semantics, retry/defer
+   decisions, and durable supervisor lifecycle facts before enabling runtime
+   recovery from process restart.
+3. Add batching/coalescing support for compatible runtime tasks across
+   simultaneous workflow runs while preserving backend-owned active-run facts
+   and typed diagnostics.
+4. Replace remaining bridge-specific worker rehydration with canonical durable
+   task-attempt facts, then remove bridge-only state and tests in a dedicated
+   cleanup slice.
+5. Verify with boundary invariant tests that direct request paths cannot
+   execute runtime work, worker-owned runtime attempts are replayable and
+   cancelable, and no frontend/Tauri adapter owns runtime scheduling policy.
+
 Rejected immediate paths: passing a full in-memory execution envelope in the
 worker command would preserve request-scoped execution ownership; duplicating
 all run facts into the runtime-branch event now would create a second mutable
