@@ -573,9 +573,25 @@ async fn claim_and_execute_runtime_branch_event(
             }
         };
 
+    let dispatching_record = match mark_claimed_runtime_branch_task_event_dispatching(
+        service.as_ref(),
+        &claimed.record.event_id,
+        &claimed.claim,
+        now_ms,
+    ) {
+        Ok(record) => record,
+        Err(diagnostic) => {
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch task event dispatching persistence failed",
+                vec![diagnostic],
+            );
+        }
+    };
+
     let rehydrated = match rehydrate_runtime_branch_execution_context(
         service.as_ref(),
-        &claimed.record,
+        &dispatching_record,
         &claimed.claim,
     ) {
         Ok(context) => context,
@@ -596,6 +612,19 @@ async fn claim_and_execute_runtime_branch_event(
             );
         }
     };
+
+    if let Err(diagnostic) = mark_claimed_runtime_branch_task_event_running(
+        service.as_ref(),
+        &claimed.record.event_id,
+        &claimed.claim,
+        unix_timestamp_ms(),
+    ) {
+        return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            "runtime branch task event running persistence failed",
+            vec![diagnostic],
+        );
+    }
 
     let host = environment.host();
     let run_result =
@@ -778,6 +807,46 @@ fn defer_claimed_runtime_branch_task_event(
         })?;
     repository
         .defer(event_id, claim, now_ms)
+        .map_err(runtime_branch_event_diagnostic)
+}
+
+fn mark_claimed_runtime_branch_task_event_dispatching(
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .mark_dispatching(event_id, claim, now_ms)
+        .map_err(runtime_branch_event_diagnostic)
+}
+
+fn mark_claimed_runtime_branch_task_event_running(
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .mark_running(event_id, claim, now_ms)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -1159,6 +1228,8 @@ mod tests {
             .expect("runtime branch task event");
         assert_eq!(persisted.state, WorkflowRuntimeBranchTaskEventState::Failed);
         assert!(persisted.claim.is_some());
+        assert!(persisted.dispatching_at_ms.is_some());
+        assert!(persisted.running_at_ms.is_some());
         assert!(persisted.failed_at_ms.is_some());
 
         worker

@@ -2352,7 +2352,9 @@ impl WorkflowService {
                 match record.state {
                     WorkflowRuntimeBranchTaskEventState::Ready
                     | WorkflowRuntimeBranchTaskEventState::Deferred
-                    | WorkflowRuntimeBranchTaskEventState::Claimed => {
+                    | WorkflowRuntimeBranchTaskEventState::Claimed
+                    | WorkflowRuntimeBranchTaskEventState::Dispatching
+                    | WorkflowRuntimeBranchTaskEventState::Running => {
                         ensured += 1;
                         continue;
                     }

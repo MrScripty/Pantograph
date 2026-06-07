@@ -118,10 +118,14 @@ fn validate_claimed_event(
     record: &WorkflowRuntimeBranchTaskEventRecord,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
 ) -> Result<(), WorkflowRuntimeBranchRehydrationDiagnostic> {
-    if record.state != WorkflowRuntimeBranchTaskEventState::Claimed {
+    if !matches!(
+        record.state,
+        WorkflowRuntimeBranchTaskEventState::Claimed
+            | WorkflowRuntimeBranchTaskEventState::Dispatching
+    ) {
         return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
             WorkflowRuntimeBranchRehydrationDiagnosticCode::ClaimMismatch,
-            "runtime branch rehydration requires a claimed task event",
+            "runtime branch rehydration requires an active claimed or dispatching task event",
         ));
     }
     if record.claim.as_ref() != Some(claim) {
@@ -231,6 +235,27 @@ mod tests {
             diagnostic.code,
             WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch
         );
+    }
+
+    #[test]
+    fn runtime_branch_rehydration_accepts_dispatching_task_event() {
+        let service = WorkflowService::new();
+        let session_id = prepare_active_runtime_run(&service, "run.dispatching", Some(750));
+        let claimed = ready_runtime_branch_record(&session_id, "run.dispatching", Some(750))
+            .claim(owner_id(), 100, 1_000)
+            .expect("event claims");
+        let dispatching = claimed
+            .record
+            .mark_dispatching(&claimed.claim, 110)
+            .expect("event marks dispatching");
+
+        let context =
+            rehydrate_runtime_branch_execution_context(&service, &dispatching, &claimed.claim)
+                .expect("dispatching context");
+
+        assert_eq!(context.session.session_id, session_id);
+        assert_eq!(context.active_run.workflow_id, "workflow-image-plan");
+        assert_eq!(context.runtime_task_id, "image-task");
     }
 
     #[test]

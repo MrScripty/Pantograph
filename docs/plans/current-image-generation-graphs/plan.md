@@ -879,6 +879,38 @@ backend workflow-service ownership, preserving composition-root lifecycle
 ownership, using typed diagnostics instead of fallback behavior, and keeping
 the next source work in validated thin vertical slices.
 
+2026-06-07 runtime-branch durable active-state slice: completed the first
+Option 3 promotion step. Smallest useful vertical slice: extend the durable
+runtime-branch task-event contract from bridge-style `Claimed` directly to
+terminal/deferred states into explicit non-terminal `Dispatching` and
+`Running` states with timestamps, add repository transitions for those states,
+and have the task-execution worker persist `Dispatching` before backend
+rehydration and `Running` before dispatch-boundary execution. The rehydration
+boundary now accepts claimed-or-dispatching active events so it can read
+backend active-run/session facts after the worker has durably recorded
+dispatch intent. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not move execution facts
+into the worker command, does not synthesize facts from graph/frontend/Tauri
+state, does not add compatibility DTOs, does not call request-scoped runtime
+execution, and does not change batching/replay policy. Runtime branch events
+remain backend-owned durable facts; recovery treats `Dispatching` and
+`Running` as active non-terminal states instead of terminal events.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
+for the slice files.
+
 2026-06-07 runtime-branch dispatch-unavailable claim-release update:
 completed the first immediate bridge slice. Smallest useful vertical slice:
 add `release_claim` to the runtime-branch task-event repository/state machine
