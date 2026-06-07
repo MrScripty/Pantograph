@@ -40,6 +40,23 @@ Immediate Option 1 bridge sequence:
    retry/defer/replay, batching, duplicate-dispatch guard, and restart
    semantics.
 
+2026-06-07 complete inference path validation re-plan trigger:
+`cargo test -p pantograph-workflow-service session_execution --lib` failed
+with 21 of 44 filtered tests failing after the bridge completion. The dominant
+pattern is stale test and call-site coverage that still drives runtime
+inference through direct `WorkflowService::run_workflow_execution_session` or
+asserts request-scoped runtime execution behavior; the new no-legacy rule
+requires runtime-containing runs to enter through `WorkflowSessionExecutionRuntime`
+so the task-execution worker owns dispatch. Other failures expose stale
+expectations around source-input materialization, snapshot requirements,
+diagnostic phase hints, terminal diagnostics, runtime host failure
+classification, and shutdown supervisor observation under the worker-owned
+path. Do not promote to the follow-on full task-attempt lifecycle until this
+is replanned: the next plan decision must choose how to update the
+workflow-service session execution tests and any remaining direct runtime
+call sites without reintroducing compatibility shims or request-scoped
+runtime execution.
+
 Rejected immediate paths: passing a full in-memory execution envelope in the
 worker command would preserve request-scoped execution ownership; duplicating
 all run facts into the runtime-branch event now would create a second mutable
