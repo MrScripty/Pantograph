@@ -28,8 +28,7 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionMediaArtifactRef,
     RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, WorkflowSessionRuntimeLoadProofDiagnosticPhase,
-    WorkflowSessionRuntimeLoadProofReadinessState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RuntimeHostExecutionState, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
@@ -49,11 +48,7 @@ use crate::workflow::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
     WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
 };
-use crate::{
-    GraphNode, Position, WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitHistoryThresholdState,
-    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitSelectionPolicyTrace,
-};
+use crate::{GraphNode, Position, WorkflowTechnicalFitDeviceClass};
 
 #[tokio::test]
 async fn workflow_execution_session_lifecycle_create_run_close() {
@@ -781,24 +776,28 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
 
 #[tokio::test]
 async fn workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
     let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
-    let service = WorkflowService::with_ephemeral_attribution_store()
-        .expect("service")
-        .with_dependency_environment_provider(std::sync::Arc::new(
-            dependency_readiness_provider.clone(),
-        ))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
-        .with_runtime_dispatch_source_refresher(source_refresher.clone())
-        .with_runtime_dispatch_candidate_provider(Arc::new(
-            SingleCanonicalRuntimeDispatchCandidateProvider,
-        ))
-        .with_runtime_host_execution_port(runtime_host_port.clone())
-        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_dependency_environment_provider(std::sync::Arc::new(
+                dependency_readiness_provider.clone(),
+            ))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+            .with_runtime_dispatch_source_refresher(source_refresher.clone())
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                SingleCanonicalRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
+        Arc::clone(&host),
+    );
+    let service = runtime.service();
     reservation_lifecycle_port.observe_reservation_cleanup_lifecycle(
         service
             .scheduler_task_orchestrator
@@ -829,7 +828,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -840,26 +839,23 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         .expect("create session");
     let session_id = created.session_id.clone();
 
-    let response = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "infer".to_string(),
-                    port_id: "image".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+    let response = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "infer".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect("ready runtime task should dispatch through scheduler selection");
 
@@ -931,25 +927,29 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
 #[tokio::test]
 async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run(
 ) {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
     let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
-    let service = WorkflowService::with_ephemeral_attribution_store()
-        .expect("service")
-        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
-        .with_dependency_environment_provider(std::sync::Arc::new(
-            dependency_readiness_provider.clone(),
-        ))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
-        .with_runtime_dispatch_source_refresher(source_refresher.clone())
-        .with_runtime_dispatch_candidate_provider(Arc::new(
-            SingleCanonicalRuntimeDispatchCandidateProvider,
-        ))
-        .with_runtime_host_execution_port(runtime_host_port.clone())
-        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
+            .with_dependency_environment_provider(std::sync::Arc::new(
+                dependency_readiness_provider.clone(),
+            ))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+            .with_runtime_dispatch_source_refresher(source_refresher.clone())
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                SingleCanonicalRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
+        Arc::clone(&host),
+    );
+    let service = runtime.service();
     let workflow_id = "wf-runtime-resume-dispatch";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -964,7 +964,7 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -975,26 +975,23 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
         .expect("create session");
     let session_id = created.session_id.clone();
 
-    let pending_error = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: session_id.clone(),
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "infer".to_string(),
-                    port_id: "image".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+    let pending_error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: session_id.clone(),
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "infer".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect_err("runtime run should pause before readiness facts exist");
     assert_eq!(pending_error.code(), WorkflowErrorCode::RuntimeNotReady);
@@ -1022,7 +1019,7 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
 
     let response = service
         .resume_workflow_execution_session_runtime_dependency_readiness(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionResumeRequest {
                 session_id: session_id.clone(),
                 workflow_run_id: workflow_run_id.clone(),
@@ -1767,25 +1764,29 @@ async fn workflow_execution_session_resume_rejects_inactive_and_non_runtime_runs
 
 #[tokio::test]
 async fn workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure() {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
     let runtime_host_port = Arc::new(FailingRuntimeHostPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
-    let service = WorkflowService::with_ephemeral_attribution_store()
-        .expect("service")
-        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
-        .with_dependency_environment_provider(std::sync::Arc::new(
-            dependency_readiness_provider.clone(),
-        ))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
-        .with_runtime_dispatch_source_refresher(source_refresher)
-        .with_runtime_dispatch_candidate_provider(Arc::new(
-            SingleCanonicalRuntimeDispatchCandidateProvider,
-        ))
-        .with_runtime_host_execution_port(runtime_host_port.clone())
-        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
+            .with_dependency_environment_provider(std::sync::Arc::new(
+                dependency_readiness_provider.clone(),
+            ))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+            .with_runtime_dispatch_source_refresher(source_refresher)
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                SingleCanonicalRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
+        Arc::clone(&host),
+    );
+    let service = runtime.service();
     let workflow_id = "wf-runtime-host-failed-result";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -1811,7 +1812,7 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -1820,30 +1821,27 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
         )
         .await
         .expect("create session");
-    let error = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "infer".to_string(),
-                    port_id: "image".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+    let error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "infer".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect_err("failed runtime-host result should fail the workflow run");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
     assert!(
         error
             .message()
@@ -3425,256 +3423,6 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert_eq!(library_usage.assets.len(), 1);
     assert_eq!(library_usage.assets[0].asset_id, "pumas://models/model-a");
     assert_eq!(library_usage.assets[0].run_access_count, 1);
-}
-
-#[tokio::test]
-async fn workflow_execution_session_records_load_completed_only_with_runtime_proof() {
-    let mut host = MockWorkflowHost::with_runtime_load_proof(
-        8,
-        1024,
-        WorkflowSessionRuntimeLoadProof {
-            contract_version:
-                pantograph_runtime_host_contracts::RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
-            workflow_id: "wf-runtime-proof".to_string(),
-            task_id: Some("node-1".to_string()),
-            backend_key: "llama_cpp".to_string(),
-            runtime_id: Some("managed-llama-slot".to_string()),
-            model_id: Some("model-a".to_string()),
-            artifact_id: Some("artifact-model-a".to_string()),
-            load_target_id: Some("load-target-model-a".to_string()),
-            readiness_state: WorkflowSessionRuntimeLoadProofReadinessState::Ready,
-            diagnostic_phase: Some(
-                WorkflowSessionRuntimeLoadProofDiagnosticPhase::RuntimeModelLoad,
-            ),
-            requested_model_active: true,
-        },
-    );
-    host.technical_fit_decision = Some(WorkflowTechnicalFitDecision {
-        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
-        selected_candidate_id: Some("candidate-managed-llama".to_string()),
-        selected_runtime_id: Some("managed-llama-slot".to_string()),
-        selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
-        selected_backend_key: Some("llama_cpp".to_string()),
-        selected_model_id: Some("model-a".to_string()),
-        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
-        selected_device_id: Some("cuda:0".to_string()),
-        resource_estimates: Vec::new(),
-        observed_throughput_hint: None,
-        device_diagnostics: Vec::new(),
-        dependency_readiness: Vec::new(),
-        reasons: vec![WorkflowTechnicalFitReason::new(
-            WorkflowTechnicalFitReasonCode::RuntimeRequirements,
-            Some("candidate-managed-llama"),
-        )],
-        selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
-            policy_version: 1,
-            policy_phase: Some(WorkflowTechnicalFitPolicyPhase::CandidateRanking),
-            decision_code: Some(WorkflowTechnicalFitDecisionCode::SelectedCandidate),
-            history_threshold_state: Some(WorkflowTechnicalFitHistoryThresholdState::NotEvaluated),
-            candidate_set_summary: Some(WorkflowTechnicalFitCandidateSetSummary {
-                total_candidate_count: 2,
-                eligible_candidate_count: 2,
-                rejected_candidate_count: 0,
-                eligible_candidate_ids: vec![
-                    "candidate-managed-llama".to_string(),
-                    "candidate-pytorch".to_string(),
-                ],
-            }),
-            ranking_reason: Some("candidate_priority".to_string()),
-            exploration_reason: Some("equal_priority_seeded_choice".to_string()),
-            seed_basis: Some(
-                "workflow:wf-runtime-proof|snapshot:123|candidates:candidate-managed-llama,candidate-pytorch"
-                    .to_string(),
-            ),
-        }),
-        compatibility_report: None,
-        compatibility_issue_count: 0,
-        compatibility_issues: Vec::new(),
-    });
-    let service = WorkflowService::with_max_sessions(2)
-        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
-
-    let created = service
-        .create_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionCreateRequest {
-                workflow_id: "wf-runtime-proof".to_string(),
-                usage_profile: None,
-                keep_alive: false,
-            },
-        )
-        .await
-        .expect("create session");
-
-    let response = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: "1.2.3".to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "text-input-1".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("hello"),
-                }],
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
-        .await
-        .expect("run session");
-
-    let diagnostic_events = {
-        let ledger = service
-            .diagnostics_ledger_guard()
-            .expect("diagnostics ledger");
-        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
-            &*ledger, 0, 30,
-        )
-        .expect("diagnostic events")
-    };
-    let admission_event = diagnostic_events
-        .iter()
-        .find(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerRunAdmitted
-                && event.workflow_run_id.as_ref().map(|id| id.as_str())
-                    == Some(response.workflow_run_id.as_str())
-        })
-        .expect("scheduler admission event");
-    assert!(admission_event
-        .payload_json
-        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"selected_backend_key\":\"llama_cpp\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"selected_device_class\":\"cuda\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"selected_device_id\":\"cuda:0\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"technical_fit_selection_policy_trace\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"execution_plan_summary\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"schema_version\":1"));
-    assert!(admission_event
-        .payload_json
-        .contains("\"node_decision_count\":1"));
-    assert!(admission_event
-        .payload_json
-        .contains("\"policy_trace_ids\":[\"technical_fit_policy_v1\"]"));
-    assert!(admission_event
-        .payload_json
-        .contains("\"policy_phase\":\"candidate_ranking\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"decision_code\":\"selected_candidate\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"history_threshold_state\":\"not_evaluated\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"ranking_reason\":\"candidate_priority\""));
-    assert!(admission_event
-        .payload_json
-        .contains("\"exploration_reason\":\"equal_priority_seeded_choice\""));
-
-    let lifecycle_events = diagnostic_events
-        .iter()
-        .filter(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
-                && event
-                    .workflow_run_id
-                    .as_ref()
-                    .map(|id| id.as_str())
-                    == Some(response.workflow_run_id.as_str())
-        })
-        .collect::<Vec<_>>();
-
-    let load_requested = lifecycle_events
-        .iter()
-        .find(|event| {
-            event
-                .payload_json
-                .contains("\"transition\":\"load_requested\"")
-        })
-        .expect("load requested event");
-    let dependency_resolved = lifecycle_events
-        .iter()
-        .find(|event| {
-            event
-                .payload_json
-                .contains("\"transition\":\"load_dependency_resolved\"")
-        })
-        .expect("dependency resolved event");
-    let load_completed = lifecycle_events
-        .iter()
-        .find(|event| {
-            event
-                .payload_json
-                .contains("\"transition\":\"load_completed\"")
-        })
-        .expect("load completed event");
-
-    assert!(dependency_resolved.event_seq > load_requested.event_seq);
-    assert!(load_completed.event_seq > dependency_resolved.event_seq);
-    assert!(load_completed
-        .payload_json
-        .contains("\"cache_state\":\"loaded\""));
-    assert!(load_completed
-        .payload_json
-        .contains("\"reason\":\"runtime admission proved requested model active\""));
-    assert!(lifecycle_events.iter().all(|event| event
-        .payload_json
-        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\"")));
-    assert!(lifecycle_events
-        .iter()
-        .all(|event| event.payload_json.contains("\"execution_plan_summary\"")));
-    assert!(lifecycle_events.iter().all(|event| event
-        .payload_json
-        .contains("\"policy_trace_ids\":[\"technical_fit_policy_v1\"]")));
-    let reservation_events = diagnostic_events
-        .iter()
-        .filter(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerReservationChanged
-                && event.workflow_run_id.as_ref().map(|id| id.as_str())
-                    == Some(response.workflow_run_id.as_str())
-        })
-        .collect::<Vec<_>>();
-    assert!(reservation_events[0]
-        .payload_json
-        .contains("\"transition\":\"created\""));
-    assert!(reservation_events[0]
-        .payload_json
-        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
-    assert!(reservation_events[0]
-        .payload_json
-        .contains("\"selected_device_class\":\"cuda\""));
-    assert!(reservation_events[0]
-        .payload_json
-        .contains("\"selected_device_id\":\"cuda:0\""));
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"transition\":\"released\""));
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"selected_device_class\":\"cuda\""));
-    assert!(reservation_events[1]
-        .payload_json
-        .contains("\"selected_device_id\":\"cuda:0\""));
 }
 
 #[tokio::test]

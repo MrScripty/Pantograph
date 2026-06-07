@@ -58,17 +58,6 @@ impl MockWorkflowHost {
             ..Self::new(max_input_bindings, max_value_bytes)
         }
     }
-
-    pub(in crate::workflow::tests) fn with_runtime_load_proof(
-        max_input_bindings: usize,
-        max_value_bytes: usize,
-        runtime_load_proof: WorkflowSessionRuntimeLoadProof,
-    ) -> Self {
-        Self {
-            runtime_load_proof: Some(runtime_load_proof),
-            ..Self::new(max_input_bindings, max_value_bytes)
-        }
-    }
 }
 
 pub(in crate::workflow::tests) fn mock_workflow_graph() -> WorkflowGraph {

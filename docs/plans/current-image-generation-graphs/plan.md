@@ -88,6 +88,54 @@ Option 2 validation sequence:
    followed by the focused runtime-branch checks. Only when this passes may the
    plan resume the follow-on full durable scheduler task-attempt lifecycle.
 
+2026-06-07 runtime-capable session_execution test migration slice:
+in this runtime migration slice, moved runtime-containing `session_execution`
+coverage that was still calling direct `WorkflowService` APIs into
+`WorkflowSessionExecutionRuntime`:
+`workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`,
+`workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run`,
+and `workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure`.
+The stale
+`workflow_execution_session_records_load_completed_only_with_runtime_proof`
+test was removed instead of migrated: it asserted the old
+`SchedulerRunAdmitted`/`WorkflowSessionRuntimeLoadProof` diagnostic path, but
+current production code no longer writes `SchedulerRunAdmitted` and no longer
+uses `WorkflowHost::session_runtime_load_proof` during one-shot direct
+execution. Keeping or reintroducing that behavior would preserve a legacy
+fallback diagnostic path instead of the canonical runtime-owner and
+task-attempt lifecycle systems.
+No-fallback/no-legacy confirmation: runtime-owning sessions now enter through the
+composition-root runtime owner; no request-scoped dispatch/completion was
+added and no compatibility path was preserved. The obsolete test fixture helper
+for manufacturing runtime load proofs was removed from workflow-service tests.
+
+Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+passed,
+`cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`
+passed,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`
+passed, and `cargo fmt -p pantograph-workflow-service -- --check` passed after
+formatting. Broader verification
+`cargo test -p pantograph-workflow-service session_execution --lib` still fails
+with 17 remaining tests, covering expected follow-on migration work: stale
+direct runtime entrypoints, tests that now require saved executable validation
+snapshots, legacy host-execution assumptions after scheduler task ownership,
+and runtime-load/unload diagnostics still expecting direct request-scoped
+surfaces.
+
+Behavioral note:
+runtime-branch failures from worker-owned dispatch remain surfaced as
+`InternalError` with message `scheduler task ... final state was TerminalFailed`
+instead of the previous direct `WorkflowService` terminal-invalid surface.
+
+Outstanding Option 2 migration work:
+- migrate the remaining runtime-containing tests that still call
+  `WorkflowService::run_workflow_execution_session` for direct coverage that is
+  expected to succeed,
+- keep explicit runtime fail-closed coverage on direct `WorkflowService`, and
+  proceed to adapter/call-site migration in the next slice.
+
 Rejected immediate paths: passing a full in-memory execution envelope in the
 worker command would preserve request-scoped execution ownership; duplicating
 all run facts into the runtime-branch event now would create a second mutable
