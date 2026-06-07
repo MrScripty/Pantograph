@@ -57,6 +57,37 @@ workflow-service session execution tests and any remaining direct runtime
 call sites without reintroducing compatibility shims or request-scoped
 runtime execution.
 
+2026-06-07 complete inference path validation re-plan decision: use Option 2,
+the boundary contract migration. `WorkflowService::run_workflow_execution_session`
+remains a direct workflow-service API for non-runtime runs and fail-closed
+runtime rejection; runtime-containing workflow execution must enter through
+`WorkflowSessionExecutionRuntime`, which is the composition-root runtime owner
+for the task-execution worker, shared backend service, and host boundary.
+This keeps business logic in backend workflow-service ownership, keeps worker
+and runtime lifecycle ownership in the composition root, avoids Tauri/frontend
+runtime policy, and removes request-scoped runtime execution rather than
+preserving it through a compatibility shim. Do not start the follow-on full
+durable task-attempt lifecycle promotion until this migration validates the
+complete inference path.
+
+Option 2 validation sequence:
+1. Classify the failing `session_execution` tests by owner: direct
+   non-runtime `WorkflowService` coverage, direct runtime rejection coverage,
+   runtime-capable `WorkflowSessionExecutionRuntime` coverage, diagnostics
+   coverage, and shutdown/supervisor coverage.
+2. Migrate runtime-capable workflow-service tests to construct and use
+   `WorkflowSessionExecutionRuntime`; keep direct `WorkflowService` tests only
+   for non-runtime behavior and explicit fail-closed runtime rejection.
+3. Update any production adapter/call-site that executes runtime-containing
+   workflows to enter through the composition-root runtime boundary instead of
+   direct `WorkflowService` execution.
+4. Update diagnostics expectations for worker-owned execution: source-input
+   materialization, executable snapshot requirements, phase hints, terminal
+   diagnostics, runtime host failures, and shutdown supervisor observation.
+5. Run `cargo test -p pantograph-workflow-service session_execution --lib`,
+   followed by the focused runtime-branch checks. Only when this passes may the
+   plan resume the follow-on full durable scheduler task-attempt lifecycle.
+
 Rejected immediate paths: passing a full in-memory execution envelope in the
 worker command would preserve request-scoped execution ownership; duplicating
 all run facts into the runtime-branch event now would create a second mutable
