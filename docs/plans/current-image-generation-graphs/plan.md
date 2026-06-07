@@ -150,6 +150,25 @@ Behavioral note:
 runtime host dispatch panics now surface as `InternalError` while preserving the
 canonical supervisor diagnostic text `runtime task supervisor join failed`.
 
+2026-06-07 runtime dispatch-boundary migration slice:
+smallest useful vertical slice: migrate
+`workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary`
+from direct `WorkflowService::run_workflow_execution_session` to
+`WorkflowSessionExecutionRuntime`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan. No-fallback/no-legacy confirmation: the test now reaches the
+canonical runtime worker path and verifies fail-closed dispatch selection
+without restoring direct runtime execution.
+
+Verification:
+`cargo test -p pantograph-workflow-service workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary --lib`
+passed and `cargo fmt -p pantograph-workflow-service -- --check` passed.
+
+Behavioral note:
+missing runtime dispatch selection now surfaces through the worker-owned path as
+`InternalError` while preserving the canonical diagnostic text
+`runtime scheduler dispatch selection failed closed`.
+
 Outstanding Option 2 migration work:
 - migrate the remaining runtime-containing tests that still call
   `WorkflowService::run_workflow_execution_session` for direct coverage that is

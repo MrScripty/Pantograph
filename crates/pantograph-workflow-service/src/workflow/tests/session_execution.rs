@@ -339,7 +339,7 @@ async fn workflow_execution_session_rejects_new_run_when_task_lifecycle_shutdown
         .await
         .expect_err("task lifecycle shutdown should reject new execution");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
     assert!(
         error
             .message()
@@ -674,15 +674,19 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
 #[tokio::test]
 async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary()
 {
-    let host = RuntimeInferenceSessionHost::new();
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
-    let service = WorkflowService::with_ephemeral_attribution_store()
-        .expect("service")
-        .with_dependency_environment_provider(std::sync::Arc::new(
-            dependency_readiness_provider.clone(),
-        ))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_dependency_environment_provider(std::sync::Arc::new(
+                dependency_readiness_provider.clone(),
+            ))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone()),
+        Arc::clone(&host),
+    );
+    let service = runtime.service();
     let workflow_id = "wf-runtime-ready-dispatch-boundary";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
@@ -708,7 +712,7 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
 
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -719,27 +723,24 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
         .expect("create session");
     let session_id = created.session_id.clone();
 
-    let error = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
+    let error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: None,
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
         .await
         .expect_err("ready dependency proof should still stop before dispatch wiring");
 
-    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
     assert!(
         error
             .message()
