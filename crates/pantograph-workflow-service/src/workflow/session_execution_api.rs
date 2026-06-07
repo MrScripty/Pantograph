@@ -36,6 +36,10 @@ use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
     WorkflowDiagnosticSchedulerScope,
 };
+use super::runtime_branch_task_event::{
+    WorkflowRuntimeBranchTaskEventId, WorkflowRuntimeBranchTaskEventRecord,
+    WorkflowRuntimeBranchTaskEventRepository, WorkflowRuntimeBranchTaskEventRequest,
+};
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
 use super::task_execution_owner::WorkflowTaskExecutionOwner;
@@ -413,6 +417,14 @@ impl WorkflowService {
                         .to_string(),
                 )
             })?;
+            self.persist_runtime_branch_task_events_for_admission(
+                &session_id,
+                &queued_run.workflow_id,
+                &workflow_run_id,
+                queued_run.queued.output_targets.clone(),
+                queued_run.queued.timeout_ms,
+                &scheduler_task_graph,
+            )?;
             let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
                 session_id: session_id.clone(),
                 workflow_run_id: workflow_run_id.clone(),
@@ -2124,6 +2136,101 @@ fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) ->
     }
 }
 
+impl WorkflowService {
+    fn persist_runtime_branch_task_events_for_admission(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        workflow_run_id: &str,
+        output_targets: Option<Vec<super::WorkflowOutputTarget>>,
+        timeout_ms: Option<u64>,
+        task_graph: &WorkflowSchedulerTaskGraph,
+    ) -> Result<usize, WorkflowServiceError> {
+        let mut repository = self
+            .runtime_branch_task_event_repository
+            .lock()
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "runtime branch task-event repository lock poisoned".to_string(),
+                )
+            })?;
+        let ready_at_ms = unix_timestamp_ms();
+        let mut persisted = 0;
+        for task in task_graph.tasks.iter().filter(|task| {
+            task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+        }) {
+            let event_id = WorkflowRuntimeBranchTaskEventId::parse(format!(
+                "runtime-branch-task-event.{}.{}",
+                workflow_run_id,
+                task.task_id.as_str()
+            ))
+            .map_err(runtime_branch_task_event_diagnostic_error)?;
+            let queued_input_keys = task
+                .input_bindings
+                .iter()
+                .map(|binding| {
+                    format!(
+                        "{}:{}",
+                        binding.source_task_id.as_str(),
+                        binding.target_port_id
+                    )
+                })
+                .collect::<Vec<_>>();
+            let record = WorkflowRuntimeBranchTaskEventRecord::ready(
+                WorkflowRuntimeBranchTaskEventRequest {
+                    event_id,
+                    session_id: session_id.to_string(),
+                    workflow_id: workflow_id.to_string(),
+                    workflow_run_id: workflow_run_id.to_string(),
+                    scheduler_task_id: task.task_id.as_str().to_string(),
+                    scheduler_task_attempt_id: None,
+                    attempt_generation: 1,
+                    queued_input_keys,
+                    output_targets: output_targets.clone(),
+                    timeout_ms,
+                    batching_key: Some(format!(
+                        "runtime-branch-task.{}.{}",
+                        workflow_id,
+                        task.task_id.as_str()
+                    )),
+                    ready_at_ms,
+                },
+            )
+            .map_err(runtime_branch_task_event_diagnostic_error)?;
+            repository
+                .enqueue(record)
+                .map_err(runtime_branch_task_event_diagnostic_error)?;
+            persisted += 1;
+        }
+        if persisted == 0 {
+            return Err(WorkflowServiceError::Internal(
+                "runtime branch admission found no runtime inference scheduler tasks".to_string(),
+            ));
+        }
+        Ok(persisted)
+    }
+
+    #[cfg(test)]
+    fn runtime_branch_task_event_for_test(
+        &self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+    ) -> Option<WorkflowRuntimeBranchTaskEventRecord> {
+        self.runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch event repository lock")
+            .get(event_id)
+    }
+}
+
+fn runtime_branch_task_event_diagnostic_error(
+    diagnostic: super::runtime_branch_task_event::WorkflowRuntimeBranchTaskEventDiagnostic,
+) -> WorkflowServiceError {
+    WorkflowServiceError::Internal(format!(
+        "runtime branch task-event admission failed ({:?}): {}",
+        diagnostic.code, diagnostic.message
+    ))
+}
+
 fn workflow_execution_session_retention_policy(
     session: &WorkflowExecutionSessionSummary,
 ) -> &'static str {
@@ -2137,6 +2244,13 @@ fn workflow_execution_session_retention_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workflow::{
+        WorkflowSchedulerTask, WorkflowSchedulerTaskInputBinding,
+        WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    };
+    use pantograph_scheduler::{
+        SchedulerNodeId, SchedulerTaskId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+    };
 
     fn empty_runtime_requirements() -> WorkflowRuntimeRequirements {
         WorkflowRuntimeRequirements {
@@ -2144,6 +2258,55 @@ mod tests {
             required_models: Vec::new(),
             required_backends: Vec::new(),
             required_extensions: Vec::new(),
+        }
+    }
+
+    fn runtime_task_graph() -> WorkflowSchedulerTaskGraph {
+        let workflow_id = SchedulerWorkflowId::parse("workflow.image").expect("workflow id");
+        let workflow_run_id = SchedulerWorkflowRunId::parse("run.runtime").expect("run id");
+        WorkflowSchedulerTaskGraph {
+            schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+            workflow_id: workflow_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
+            tasks: vec![
+                WorkflowSchedulerTask {
+                    workflow_id: workflow_id.clone(),
+                    workflow_run_id: workflow_run_id.clone(),
+                    node_id: SchedulerNodeId::parse("prompt").expect("node id"),
+                    task_id: SchedulerTaskId::parse("prompt").expect("task id"),
+                    node_type: "text_input".to_string(),
+                    execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
+                    dependency_task_ids: Vec::new(),
+                    input_bindings: Vec::new(),
+                    schedulable_intent: None,
+                    schedulable_intent_template: None,
+                    non_runtime_task_template: None,
+                    source_input_task_template: None,
+                    inference_descriptor_fingerprint: None,
+                    diagnostics: Vec::new(),
+                },
+                WorkflowSchedulerTask {
+                    workflow_id,
+                    workflow_run_id,
+                    node_id: SchedulerNodeId::parse("image").expect("node id"),
+                    task_id: SchedulerTaskId::parse("image").expect("task id"),
+                    node_type: "image_generation".to_string(),
+                    execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+                    dependency_task_ids: vec![SchedulerTaskId::parse("prompt").expect("task id")],
+                    input_bindings: vec![WorkflowSchedulerTaskInputBinding {
+                        source_node_id: SchedulerNodeId::parse("prompt").expect("node id"),
+                        source_task_id: SchedulerTaskId::parse("prompt").expect("task id"),
+                        source_port_id: "text".to_string(),
+                        target_port_id: "prompt".to_string(),
+                    }],
+                    schedulable_intent: None,
+                    schedulable_intent_template: None,
+                    non_runtime_task_template: None,
+                    source_input_task_template: None,
+                    inference_descriptor_fingerprint: None,
+                    diagnostics: Vec::new(),
+                },
+            ],
         }
     }
 
@@ -2171,6 +2334,77 @@ mod tests {
 
         assert!(truncated.len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN);
         assert!(truncated.ends_with(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX));
+    }
+
+    #[test]
+    fn runtime_branch_admission_persists_claimable_task_event() {
+        let service = WorkflowService::new();
+        let output_targets = Some(vec![super::super::WorkflowOutputTarget {
+            node_id: "image-output".to_string(),
+            port_id: "image".to_string(),
+        }]);
+        let persisted = service
+            .persist_runtime_branch_task_events_for_admission(
+                "session.runtime",
+                "workflow.image",
+                "run.runtime",
+                output_targets.clone(),
+                Some(30_000),
+                &runtime_task_graph(),
+            )
+            .expect("runtime branch events persist");
+
+        assert_eq!(persisted, 1);
+        let event_id =
+            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.run.runtime.image")
+                .expect("event id");
+        let record = service
+            .runtime_branch_task_event_for_test(&event_id)
+            .expect("runtime branch event record");
+        assert_eq!(record.session_id, "session.runtime");
+        assert_eq!(record.workflow_id, "workflow.image");
+        assert_eq!(record.workflow_run_id, "run.runtime");
+        assert_eq!(record.scheduler_task_id, "image");
+        assert_eq!(record.scheduler_task_attempt_id, None);
+        assert_eq!(record.attempt_generation, 1);
+        assert_eq!(record.queued_input_keys, vec!["prompt:prompt".to_string()]);
+        assert_eq!(record.output_targets, output_targets);
+        assert_eq!(record.timeout_ms, Some(30_000));
+        assert_eq!(
+            record.batching_key.as_deref(),
+            Some("runtime-branch-task.workflow.image.image")
+        );
+    }
+
+    #[test]
+    fn runtime_branch_admission_rejects_duplicate_claimable_task_event() {
+        let service = WorkflowService::new();
+        service
+            .persist_runtime_branch_task_events_for_admission(
+                "session.runtime",
+                "workflow.image",
+                "run.runtime",
+                None,
+                None,
+                &runtime_task_graph(),
+            )
+            .expect("runtime branch events persist");
+
+        let error = service
+            .persist_runtime_branch_task_events_for_admission(
+                "session.runtime",
+                "workflow.image",
+                "run.runtime",
+                None,
+                None,
+                &runtime_task_graph(),
+            )
+            .expect_err("duplicate runtime branch event fails");
+
+        assert!(error
+            .message()
+            .contains("runtime branch task-event admission failed"));
+        assert!(error.message().contains("DuplicateEvent"));
     }
 
     #[test]

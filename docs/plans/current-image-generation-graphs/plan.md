@@ -1,5 +1,32 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime-branch admission event persistence update: completed the
+third Option 3 source slice by wiring runtime-containing run admission to
+persist claimable runtime-branch task events through the workflow-service
+repository boundary. Smallest useful vertical slice: add the repository owner
+to `WorkflowService`, derive one deterministic event id per runtime inference
+scheduler task from backend-owned task graph/run facts, persist queued input
+keys, output targets, timeout, batching key, and no scheduler attempt id until
+the later worker-claim/start slice creates the attempt. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+and plan docs. Deviation recorded: scheduler task ids are available at
+admission, but scheduler task attempt ids are not; the event contract now
+allows `scheduler_task_attempt_id` to be absent until worker claim/start binds
+the scheduler attempt. No-fallback/no-legacy confirmation: this slice does not
+execute runtime branches, does not claim events in the worker, does not call
+the direct helper as completion, does not synthesize graph/frontend facts, does
+not add frontend/Tauri policy, does not add compatibility DTOs, and does not
+fake completion. Verification:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+passed with 17 tests, and
+`cargo test -p pantograph-workflow-service runtime_branch_admission --lib`
+passed with 2 tests. Remaining follow-up: make the task-execution worker claim
+due runtime-branch task events from the repository and return typed diagnostics
+for missing/stale facts.
+
 2026-06-06 durable runtime-branch task-event repository update: completed
 the second Option 3 source slice by adding the workflow-service repository
 boundary for durable runtime-branch task-event records. Smallest useful

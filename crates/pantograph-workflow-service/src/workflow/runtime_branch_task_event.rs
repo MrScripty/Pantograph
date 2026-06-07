@@ -26,7 +26,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRequest {
     pub(super) workflow_id: String,
     pub(super) workflow_run_id: String,
     pub(super) scheduler_task_id: String,
-    pub(super) scheduler_task_attempt_id: String,
+    pub(super) scheduler_task_attempt_id: Option<String>,
     pub(super) attempt_generation: u64,
     pub(super) queued_input_keys: Vec<String>,
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
@@ -44,7 +44,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRecord {
     pub(super) workflow_id: String,
     pub(super) workflow_run_id: String,
     pub(super) scheduler_task_id: String,
-    pub(super) scheduler_task_attempt_id: String,
+    pub(super) scheduler_task_attempt_id: Option<String>,
     pub(super) attempt_generation: u64,
     pub(super) queued_input_keys: Vec<String>,
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
@@ -518,10 +518,9 @@ fn validate_request(
     validate_non_blank("workflow id", &request.workflow_id)?;
     validate_non_blank("workflow run id", &request.workflow_run_id)?;
     validate_non_blank("scheduler task id", &request.scheduler_task_id)?;
-    validate_non_blank(
-        "scheduler task attempt id",
-        &request.scheduler_task_attempt_id,
-    )?;
+    if let Some(scheduler_task_attempt_id) = &request.scheduler_task_attempt_id {
+        validate_non_blank("scheduler task attempt id", scheduler_task_attempt_id)?;
+    }
     for queued_input_key in &request.queued_input_keys {
         validate_non_blank("queued input key", queued_input_key)?;
     }
@@ -570,7 +569,10 @@ mod tests {
         assert_eq!(record.workflow_id, "workflow.image");
         assert_eq!(record.workflow_run_id, "run.test");
         assert_eq!(record.scheduler_task_id, "image-task");
-        assert_eq!(record.scheduler_task_attempt_id, "attempt.1");
+        assert_eq!(
+            record.scheduler_task_attempt_id.as_deref(),
+            Some("attempt.1")
+        );
         assert_eq!(record.attempt_generation, 1);
         assert_eq!(record.queued_input_keys, vec!["prompt".to_string()]);
         assert_eq!(record.timeout_ms, Some(30_000));
@@ -932,7 +934,7 @@ mod tests {
             workflow_id: "workflow.image".to_string(),
             workflow_run_id: "run.test".to_string(),
             scheduler_task_id: "image-task".to_string(),
-            scheduler_task_attempt_id: "attempt.1".to_string(),
+            scheduler_task_attempt_id: Some("attempt.1".to_string()),
             attempt_generation: 1,
             queued_input_keys: vec!["prompt".to_string()],
             output_targets: Some(vec![WorkflowOutputTarget {

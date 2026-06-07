@@ -1272,6 +1272,23 @@ Option 3 thin implementation sequence:
      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
      passed with 17 tests. Next slice: persist claimable runtime-branch events
      at admission through this repository boundary.
+   - 2026-06-06 runtime-branch admission event persistence slice complete:
+     runtime-containing run admission now persists one claimable runtime-branch
+     task event per backend-owned runtime inference scheduler task through the
+     workflow-service repository boundary. Event ids are deterministic from
+     workflow run and scheduler task ids; queued input keys come from scheduler
+     task bindings; output targets, timeout, and batching key are persisted.
+     Deviation/ownership fact: scheduler task attempt ids do not exist at
+     admission, so `scheduler_task_attempt_id` remains absent until the
+     worker-claim/start slice binds the scheduler attempt. No runtime dispatch,
+     worker event claiming, direct helper completion, graph/frontend fact
+     synthesis, frontend/Tauri policy, compatibility DTO, or fake completion
+     was added. Verification:
+     `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+     passed with 17 tests and
+     `cargo test -p pantograph-workflow-service runtime_branch_admission --lib`
+     passed with 2 tests. Next slice: worker claims due runtime-branch events
+     from the repository with typed missing/stale diagnostics.
 
 Worker-system standards gates:
 

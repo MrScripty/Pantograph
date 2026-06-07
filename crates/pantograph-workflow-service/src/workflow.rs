@@ -268,6 +268,8 @@ pub use crate::scheduler::{
 #[derive(Clone)]
 pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
+    runtime_branch_task_event_repository:
+        Arc<Mutex<runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository>>,
     graph_session_store: Arc<GraphSessionStore>,
     artifact_writer: Option<WorkflowArtifactWriter>,
     artifact_format_settings: Arc<Mutex<ArtifactFormatSettings>>,

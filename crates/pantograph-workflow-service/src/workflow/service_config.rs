@@ -23,6 +23,7 @@ use crate::scheduler::{
 };
 
 use super::{
+    runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository,
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher, SqliteAttributionStore,
     SqliteDiagnosticsLedger, WorkflowDiagnosticsProjectionRefreshSink,
@@ -53,6 +54,9 @@ impl WorkflowService {
                 max_sessions,
                 max_loaded_sessions,
             ))),
+            runtime_branch_task_event_repository: Arc::new(Mutex::new(
+                InMemoryWorkflowRuntimeBranchTaskEventRepository::new(),
+            )),
             graph_session_store: Arc::new(GraphSessionStore::new()),
             artifact_writer: None,
             artifact_format_settings: Arc::new(Mutex::new(ArtifactFormatSettings::default())),

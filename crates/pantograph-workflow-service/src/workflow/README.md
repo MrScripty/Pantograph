@@ -30,7 +30,7 @@ public exports out of the service crate.
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `execution_plan_model_ref.rs` | Parse-once selected Pumas model-ref value object for run execution plans, including raw model-id normalization and local-path/unsupported-URI rejection. |
 | `execution_plan_selected_facts.rs` | Workflow-owned selected backend/runtime/device fact value objects for run execution plans. |
-| `runtime_branch_task_event.rs` | Durable runtime-branch task-event claim contract and pure state machine for worker claiming, lease expiry, replay/reclaim, terminal transitions, batching eligibility, and typed diagnostics before storage or dispatch execution wiring. |
+| `runtime_branch_task_event.rs` | Durable runtime-branch task-event claim contract, repository boundary, and pure state machine for worker claiming, lease expiry, replay/reclaim, terminal transitions, batching eligibility, and typed diagnostics before dispatch execution wiring. |
 | `runtime_dispatch_selection.rs` | Workflow-service assembly boundary for runtime dispatch-selection requests from admitted readiness proof plus canonical dispatch candidates; it provides an empty default source so scheduler selection fails closed until production candidate facts are wired. |
 | `runtime_host_task_result_mapping.rs` | Focused mapping from validated runtime-host terminal responses into typed scheduler task results without exposing executable load targets. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
@@ -116,11 +116,14 @@ diagnostics into the scheduler selection request so missing Pumas facts,
 runtime capability facts, reservation facts, or resource-fit facts can be
 reported without fabricating candidates.
 Runtime-branch task execution is moving to durable task-event claiming. The
-durable claim contract is backend-owned in `runtime_branch_task_event.rs`;
-request handlers and Tauri/frontend code must not synthesize task facts or own
-runtime-branch completion. The current in-memory responder is notification over
-durable completion only, not the source of truth for replay, restart, or
-batching.
+durable claim contract and repository boundary are backend-owned in
+`runtime_branch_task_event.rs`; request handlers and Tauri/frontend code must
+not synthesize task facts or own runtime-branch completion. Runtime-containing
+run admission persists claimable task events from backend-owned scheduler task
+graph facts. Scheduler task attempt identity is bound later by worker
+claim/start because admission does not own scheduler attempts. The current
+in-memory responder is notification over durable completion only, not the
+source of truth for replay, restart, or batching.
 The staged production-provider contract introduces a validated path-free
 candidate-fact bundle that maps one-to-one into scheduler dispatch candidates.
 Embedded-runtime composition owns the concrete async Pumas, runtime capability,

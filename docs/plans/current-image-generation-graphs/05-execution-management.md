@@ -27187,6 +27187,37 @@ Worker rules:
     - Remaining follow-up: wire runtime branch admission to persist claimable
       events through the repository boundary, then make the task-execution
       worker claim due events from the repository.
+  - 2026-06-06 runtime-branch admission event persistence slice:
+    - Smallest useful vertical slice: make runtime-containing run admission
+      persist one claimable runtime-branch task event per backend-owned runtime
+      inference scheduler task before worker claim/execution wiring.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow.rs`,
+      `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+      `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+      `crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+      and plan docs.
+    - Implemented `WorkflowService` ownership of the runtime-branch event
+      repository, deterministic event ids from workflow run plus scheduler task
+      ids, queued input-key derivation from scheduler task bindings, output
+      target/timeout/batching-key persistence, duplicate admission diagnostics,
+      and focused admission persistence tests.
+    - Deviation/discovered ownership fact: admission has scheduler task ids but
+      not scheduler task attempt ids. The contract now permits a missing
+      `scheduler_task_attempt_id`; worker claim/start remains responsible for
+      binding the scheduler attempt identity.
+    - No-fallback/no-legacy confirmation: no runtime dispatch execution,
+      worker event claiming, direct helper completion, request-scoped
+      completion, graph/frontend fact synthesis, frontend/Tauri policy,
+      compatibility DTO, or fake completion was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+      passed with 17 tests;
+      `cargo test -p pantograph-workflow-service runtime_branch_admission --lib`
+      passed with 2 tests.
+    - Remaining follow-up: make the task-execution worker claim due
+      runtime-branch task events from the repository and return typed
+      diagnostics for missing/stale facts.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal
