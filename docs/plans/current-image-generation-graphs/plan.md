@@ -2895,6 +2895,39 @@ Discovered issues and follow-ups:
   data-graph Python sidecar reconciliation expectations and the two
   runtime-preflight restart classification expectations.
 
+2026-06-07 retired data-graph Python sidecar test migration slice:
+completed. Smallest useful vertical slice: migrate the two stale
+`data_graph_execution_tests` that expected successful direct Python-sidecar
+media execution and runtime-registry reconciliation from retired
+`onnx-inference`/`audio-generation` graph fixtures. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/data_graph_execution_tests.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the tests no longer ask
+`EmbeddedRuntime::execute_data_graph` to execute retired media/runtime nodes
+through the Python adapter, no longer expect synthetic audio output from
+retired fixtures, and no longer reconcile `onnx-runtime` or `stable_audio`
+runtime-registry records from direct data-graph execution. The migrated tests
+assert the canonical fail-closed shape: no Python adapter calls, no sidecar
+runtime reconciliation, no audio output for the retired intermediate ONNX
+path, and typed `dependency_preflight_retired` errors for retired terminal
+media nodes.
+
+Verification passed:
+`cargo test -p pantograph-embedded-runtime execute_data_graph_retired --lib`,
+`cargo fmt -p pantograph-embedded-runtime -- --check`, and
+`cargo check -p pantograph-embedded-runtime`. Broader verification
+`cargo test -p pantograph-embedded-runtime --lib` now reports 404 passing and
+2 failing tests; the retired data-graph Python sidecar reconciliation failures
+are removed.
+
+Discovered issues and follow-ups:
+- Remaining embedded-runtime broad failures are the two runtime-preflight
+  restart classification expectations that currently observe
+  `InvalidRequest` where the stale tests expected `RuntimeNotReady`.
+- The unused `synthetic_kv_node_memory_snapshot` warning remains the same
+  shared fixture cleanup follow-up from the checkpoint migration.
+
 ## Standards Rule
 
 The standards constraints in

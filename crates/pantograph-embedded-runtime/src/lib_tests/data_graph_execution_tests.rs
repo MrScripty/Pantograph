@@ -1,7 +1,8 @@
 use super::*;
 
 #[tokio::test]
-async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
+async fn execute_data_graph_retired_onnx_audio_path_does_not_call_python_sidecar_or_reconcile_runtime(
+) {
     let temp = TempDir::new().expect("temp dir");
 
     let app_data_dir = temp.path().join("app-data");
@@ -9,6 +10,9 @@ async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
     install_fake_default_runtime(&app_data_dir);
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
+    let python_runtime = Arc::new(MockMediaPythonRuntime {
+        requests: Mutex::new(Vec::new()),
+    });
     let runtime = EmbeddedRuntime::from_components(
         EmbeddedRuntimeConfig {
             app_data_dir,
@@ -20,9 +24,7 @@ async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-        Arc::new(MockMediaPythonRuntime {
-            requests: Mutex::new(Vec::new()),
-        }),
+        python_runtime.clone(),
     )
     .with_runtime_registry(runtime_registry.clone());
 
@@ -39,29 +41,24 @@ async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
         .await
         .expect("data graph execution");
 
-    assert_eq!(
-        outputs.get("audio"),
-        Some(&serde_json::json!("data:audio/wav;base64,bW9jay1hdWRpbw=="))
-    );
+    assert!(outputs.get("audio").is_none());
     assert_eq!(
         outputs.get("_graph_id"),
         Some(&serde_json::json!("runtime-onnx-audio-data-graph"))
     );
 
+    let requests = python_runtime.requests.lock().expect("requests lock");
+    assert!(requests.is_empty());
+
     let snapshot = runtime_registry.snapshot();
-    let onnx = snapshot
+    assert!(snapshot
         .runtimes
         .iter()
-        .find(|runtime| runtime.runtime_id == "onnx-runtime")
-        .expect("python runtime should be observed");
-    assert_eq!(onnx.display_name, "ONNX Runtime (Python sidecar)");
-    assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
-    assert!(onnx.runtime_instance_id.is_none());
-    assert!(onnx.models.is_empty());
+        .all(|runtime| runtime.runtime_id != "onnx-runtime"));
 }
 
 #[tokio::test]
-async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_registry() {
+async fn execute_data_graph_retired_python_media_nodes_do_not_reconcile_sidecar_runtimes() {
     let temp = TempDir::new().expect("temp dir");
 
     let app_data_dir = temp.path().join("app-data");
@@ -69,6 +66,9 @@ async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_reg
     install_fake_default_runtime(&app_data_dir);
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
+    let python_runtime = Arc::new(MockMediaPythonRuntime {
+        requests: Mutex::new(Vec::new()),
+    });
     let runtime = EmbeddedRuntime::from_components(
         EmbeddedRuntimeConfig {
             app_data_dir,
@@ -80,13 +80,11 @@ async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_reg
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-        Arc::new(MockMediaPythonRuntime {
-            requests: Mutex::new(Vec::new()),
-        }),
+        python_runtime.clone(),
     )
     .with_runtime_registry(runtime_registry.clone());
 
-    runtime
+    let outputs = runtime
         .execute_data_graph(
             "multi-python-runtime-data-graph",
             &multi_python_runtime_data_graph(),
@@ -96,24 +94,29 @@ async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_reg
         .await
         .expect("data graph execution");
 
-    let snapshot = runtime_registry.snapshot();
-    let stable_audio = snapshot
-        .runtimes
-        .iter()
-        .find(|runtime| runtime.runtime_id == "stable_audio")
-        .expect("Stable Audio runtime should be observed");
-    assert_eq!(stable_audio.status, RuntimeRegistryStatus::Stopped);
-    assert!(stable_audio.runtime_instance_id.is_none());
-    assert!(stable_audio.models.is_empty());
+    let audio_error = outputs
+        .get("audio-generation-1.error")
+        .and_then(|value| value.as_str())
+        .expect("retired audio-generation error");
+    assert!(audio_error.contains("dependency_preflight_retired"));
+    let onnx_error = outputs
+        .get("onnx-inference-1.error")
+        .and_then(|value| value.as_str())
+        .expect("retired onnx-inference error");
+    assert!(onnx_error.contains("dependency_preflight_retired"));
 
-    let onnx = snapshot
+    let requests = python_runtime.requests.lock().expect("requests lock");
+    assert!(requests.is_empty());
+
+    let snapshot = runtime_registry.snapshot();
+    assert!(snapshot
         .runtimes
         .iter()
-        .find(|runtime| runtime.runtime_id == "onnx-runtime")
-        .expect("onnx runtime should be observed");
-    assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
-    assert!(onnx.runtime_instance_id.is_none());
-    assert!(onnx.models.is_empty());
+        .all(|runtime| runtime.runtime_id != "stable_audio"));
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .all(|runtime| runtime.runtime_id != "onnx-runtime"));
 }
 
 #[tokio::test]
