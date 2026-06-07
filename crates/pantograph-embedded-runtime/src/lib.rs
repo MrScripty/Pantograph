@@ -75,6 +75,8 @@ mod runtime_dispatch_candidate_provider;
 #[allow(dead_code)]
 mod runtime_dispatch_capability_facts;
 #[allow(dead_code)]
+mod runtime_dispatch_evidence;
+#[allow(dead_code)]
 mod runtime_dispatch_resource_facts;
 #[allow(dead_code)]
 mod runtime_dispatch_source_snapshot;

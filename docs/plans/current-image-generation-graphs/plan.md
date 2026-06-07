@@ -1290,6 +1290,40 @@ evidence contract cannot be defined without changing shared scheduler,
 workflow-service, runtime-registry, Pumas, generated, lockfile, or saved
 workflow fixture contracts in the same slice.
 
+2026-06-07 runtime dispatch evidence contract slice: completed Option 2 step
+1. Smallest useful vertical slice: add an internal embedded-runtime
+`runtime_dispatch_evidence` boundary contract that validates one complete
+runtime dispatch evidence record before any workflow-service rich candidate
+fact or scheduler candidate is produced. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_evidence.rs`,
+`crates/pantograph-embedded-runtime/src/lib.rs`, and this plan. No
+workflow-service contract, scheduler DTO, runtime-registry, Pumas, generated,
+lockfile, saved workflow fixture, provider wiring, persistence, grouped-claim,
+or runtime-host coalescing files were changed.
+
+No-fallback/no-legacy confirmation: the evidence contract requires canonical
+selected backend key, runtime family, resolved load target, residency key,
+loaded-runtime memory estimate, load state, selected model/artifact identity,
+selected device, reservation facts, and resource-fit facts. Missing or invalid
+facts return typed diagnostics. The contract rejects path-carrying model refs,
+zero memory estimates, missing load state, missing loaded-runtime instance id,
+reservations for unselected devices, and non-fit resource facts without
+diagnostics. It does not derive evidence from runtime id strings,
+graph/request shape, `batching_key`, trait settings, or partial scheduler
+estimate hints.
+
+Verification passed:
+`cargo fmt -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_evidence --lib`,
+and `cargo check -p pantograph-embedded-runtime`.
+
+Remaining follow-up: implement Option 2 step 2 by wiring the embedded runtime
+dispatch candidate provider to build this evidence from already-canonical
+source facts before constructing workflow-service candidate facts. Stop and
+re-plan if provider wiring needs shared workflow-service, scheduler,
+runtime-registry, Pumas, generated, lockfile, or saved workflow fixture
+contract changes in the same slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
