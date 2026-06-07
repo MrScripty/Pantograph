@@ -1289,6 +1289,24 @@ Option 3 thin implementation sequence:
      `cargo test -p pantograph-workflow-service runtime_branch_admission --lib`
      passed with 2 tests. Next slice: worker claims due runtime-branch events
      from the repository with typed missing/stale diagnostics.
+   - 2026-06-06 runtime-branch worker event claim/defer slice complete:
+     the task-execution worker now claims the next due runtime-branch task
+     event for the command workflow run through the workflow-service
+     repository. Missing due events return typed
+     `RuntimeBranchEventUnavailable` diagnostics. Claimed events are
+     immediately persisted as `Deferred` with typed
+     `RuntimeBranchDispatchUnavailable` diagnostics so the worker proves the
+     durable claim path without leaving leases hanging while dispatch execution
+     remains unwired. No direct helper call, runtime dispatch execution,
+     graph/frontend fact synthesis, frontend/Tauri policy, compatibility DTO,
+     request-scoped successful completion, or fake completion was added.
+     Verification:
+     `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+     passed with 19 tests and
+     `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+     passed with 15 tests. Next slice: reconstruct execution facts from the
+     claimed durable event/backend run records and move dispatch-boundary
+     execution into the worker loop before responder notification.
 
 Worker-system standards gates:
 

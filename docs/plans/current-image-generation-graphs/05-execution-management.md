@@ -27218,6 +27218,35 @@ Worker rules:
     - Remaining follow-up: make the task-execution worker claim due
       runtime-branch task events from the repository and return typed
       diagnostics for missing/stale facts.
+  - 2026-06-06 runtime-branch worker event claim/defer slice:
+    - Smallest useful vertical slice: make the task-execution worker claim the
+      next due runtime-branch task event for the command's workflow run from
+      the workflow-service repository, then persist a deferred event state with
+      typed dispatch-unavailable diagnostics while dispatch execution remains
+      a later slice.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      and plan docs.
+    - Implemented repository `claim_next_due_for_workflow_run`, worker-side
+      claim owner/lease handling, typed no-due-event failure diagnostics,
+      typed dispatch-unavailable deferral, and focused tests proving the
+      repository claims only matching workflow-run events and the worker
+      persists a claimed event as deferred instead of leaving an active lease.
+    - No-fallback/no-legacy confirmation: no runtime dispatch execution,
+      direct helper call, request-scoped successful completion, graph/frontend
+      fact synthesis, frontend/Tauri policy, compatibility DTO, or fake
+      success completion was added. The completion responder remains only an
+      in-memory notification over durable state, not the source of truth.
+    - Verification:
+      `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+      passed with 19 tests;
+      `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+      passed with 15 tests.
+    - Remaining follow-up: reconstruct execution facts from the claimed
+      durable event and backend run records, move dispatch-boundary execution
+      into the worker loop, persist completed/deferred/failed outcomes, and
+      notify waiting responders only after durable state is written.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

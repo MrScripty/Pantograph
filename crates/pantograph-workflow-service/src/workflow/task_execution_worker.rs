@@ -3,16 +3,24 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use crate::scheduler::{
-    WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
-    WorkflowSchedulerLifecycleComponentState,
+    unix_timestamp_ms, WorkflowSchedulerLifecycleComponentKind,
+    WorkflowSchedulerLifecycleComponentRegistryHandle, WorkflowSchedulerLifecycleComponentState,
 };
 
+use super::runtime_branch_task_event::{
+    WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventClaimOutcome,
+    WorkflowRuntimeBranchTaskEventClaimOwnerId, WorkflowRuntimeBranchTaskEventDiagnostic,
+    WorkflowRuntimeBranchTaskEventDiagnosticCode, WorkflowRuntimeBranchTaskEventId,
+    WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
+};
 use super::{
     WorkflowOutputTarget, WorkflowRunResponse, WorkflowSchedulerTaskExecutionClass,
     WorkflowService, WorkflowServiceError,
 };
 
 const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
+const RUNTIME_BRANCH_TASK_EVENT_CLAIM_LEASE_MS: u64 = 30_000;
+const TASK_EXECUTION_WORKER_CLAIM_OWNER_ID: &str = "workflow-service.task-execution-worker";
 
 #[derive(Debug)]
 pub(super) struct WorkflowTaskExecutionWorker {
@@ -310,6 +318,7 @@ pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
 #[must_use]
 pub(super) enum WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason {
     DependencyReadinessPending,
+    RuntimeDispatchUnavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -329,6 +338,9 @@ pub(super) enum WorkflowTaskExecutionWorkerDiagnosticCode {
     RuntimeSupervisorCancelled,
     ReservationReconcileFailed,
     TaskLifecycleHandleReleaseFailed,
+    RuntimeBranchEventUnavailable,
+    RuntimeBranchEventClaimFailed,
+    RuntimeBranchDispatchUnavailable,
     RuntimeBranchFailed,
 }
 
@@ -494,16 +506,11 @@ async fn task_execution_worker_loop(
                         observed_task_attempt_commands.fetch_add(1, Ordering::SeqCst);
                     }
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(request)) => {
-                        let _service = runtime_branch_environment.service();
+                        let service = runtime_branch_environment.service();
                         observed_runtime_branch_commands.fetch_add(1, Ordering::SeqCst);
-                        let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
-                            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchFailed,
-                            "runtime branch execution is not yet owned by the task-execution worker loop",
-                        );
-                        let outcome = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                        let outcome = claim_and_defer_runtime_branch_event(
+                            service.as_ref(),
                             &request.command,
-                            "runtime branch execution is not yet available in the worker loop",
-                            vec![diagnostic],
                         );
                         let _ = request.completion_responder.complete(outcome);
                     }
@@ -521,12 +528,144 @@ async fn task_execution_worker_loop(
     );
 }
 
+fn claim_and_defer_runtime_branch_event(
+    service: &WorkflowService,
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+) -> WorkflowTaskExecutionWorkerOutcome {
+    let now_ms = unix_timestamp_ms();
+    let claimed = match claim_runtime_branch_task_event_for_worker(service, command, now_ms) {
+        Ok(Some(claimed)) => claimed,
+        Ok(None) => {
+            let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventUnavailable,
+                "no due runtime branch task event is available for workflow run",
+            );
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch task event is not available for worker claim",
+                vec![diagnostic],
+            );
+        }
+        Err(diagnostic) => {
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch task event claim failed",
+                vec![diagnostic],
+            );
+        }
+    };
+
+    let deferred = defer_claimed_runtime_branch_task_event(
+        service,
+        &claimed.record.event_id,
+        &claimed.claim,
+        now_ms,
+    );
+    match deferred {
+        Ok(record) => {
+            let diagnostic = WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime branch dispatch execution has not moved into the task-execution worker loop yet",
+            );
+            WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
+                command,
+                WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::RuntimeDispatchUnavailable,
+                vec![record.scheduler_task_id],
+                vec![diagnostic],
+            )
+        }
+        Err(diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            "runtime branch task event defer failed after claim",
+            vec![diagnostic],
+        ),
+    }
+}
+
+fn claim_runtime_branch_task_event_for_worker(
+    service: &WorkflowService,
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    now_ms: u64,
+) -> Result<Option<WorkflowRuntimeBranchTaskEventClaimOutcome>, WorkflowTaskExecutionWorkerDiagnostic>
+{
+    let owner_id =
+        WorkflowRuntimeBranchTaskEventClaimOwnerId::parse(TASK_EXECUTION_WORKER_CLAIM_OWNER_ID)
+            .map_err(runtime_branch_event_diagnostic)?;
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .claim_next_due_for_workflow_run(
+            &command.workflow_run_id,
+            owner_id,
+            now_ms,
+            RUNTIME_BRANCH_TASK_EVENT_CLAIM_LEASE_MS,
+        )
+        .map_err(runtime_branch_event_diagnostic)
+}
+
+fn defer_claimed_runtime_branch_task_event(
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .defer(event_id, claim, now_ms)
+        .map_err(runtime_branch_event_diagnostic)
+}
+
+fn runtime_branch_event_diagnostic(
+    diagnostic: WorkflowRuntimeBranchTaskEventDiagnostic,
+) -> WorkflowTaskExecutionWorkerDiagnostic {
+    let code = match diagnostic.code {
+        WorkflowRuntimeBranchTaskEventDiagnosticCode::DuplicateEvent
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::EventNotFound
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::MissingClaim
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim => {
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed
+        }
+        WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::LeaseExpired
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::TerminalEvent
+        | WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition => {
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventUnavailable
+        }
+    };
+    WorkflowTaskExecutionWorkerDiagnostic::new(
+        code,
+        format!(
+            "runtime branch task-event diagnostic ({:?}): {}",
+            diagnostic.code, diagnostic.message
+        ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::scheduler::{
         WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
         WorkflowSchedulerLifecycleComponentState, WorkflowSchedulerLifecycleOwnerId,
+    };
+    use crate::workflow::runtime_branch_task_event::{
+        WorkflowRuntimeBranchTaskEventRequest, WorkflowRuntimeBranchTaskEventState,
     };
     use crate::workflow::WorkflowSchedulerTaskExecutionClass;
     use std::time::Duration;
@@ -682,13 +821,102 @@ mod tests {
         let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = outcome else {
             panic!("expected fail-closed runtime branch outcome");
         };
+        assert_eq!(
+            outcome.diagnostics,
+            vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventUnavailable,
+                "no due runtime branch task event is available for workflow run",
+            )]
+        );
         assert!(
             outcome
                 .error_message
-                .contains("not yet available in the worker loop"),
+                .contains("not available for worker claim"),
             "unexpected error message: {}",
             outcome.error_message
         );
+
+        worker
+            .shutdown()
+            .await
+            .expect("shutdown task execution worker");
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_claims_and_defers_runtime_branch_task_event() {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let service = Arc::new(WorkflowService::new());
+        let event_id =
+            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.run-1.image-task")
+                .expect("event id");
+        let record =
+            WorkflowRuntimeBranchTaskEventRecord::ready(WorkflowRuntimeBranchTaskEventRequest {
+                event_id: event_id.clone(),
+                session_id: "session-1".to_string(),
+                workflow_id: "workflow-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
+                scheduler_task_id: "image-task".to_string(),
+                scheduler_task_attempt_id: None,
+                attempt_generation: 1,
+                queued_input_keys: vec!["prompt:prompt".to_string()],
+                output_targets: None,
+                timeout_ms: Some(500),
+                batching_key: Some("runtime-branch-task.workflow-1.image-task".to_string()),
+                ready_at_ms: unix_timestamp_ms().saturating_sub(1),
+            })
+            .expect("runtime branch task event record");
+        service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .enqueue(record)
+            .expect("enqueue runtime branch task event");
+        let worker = WorkflowTaskExecutionWorker::spawn(
+            scheduler_lifecycle,
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::clone(&service)),
+        )
+        .expect("spawn task execution worker");
+        let (completion_responder, completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+
+        worker
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
+                runtime_branch_command(),
+                completion_responder,
+            ))
+            .expect("enqueue runtime branch command");
+
+        let outcome = tokio::time::timeout(Duration::from_secs(1), async {
+            completion_rx.await.expect("runtime branch completion")
+        })
+        .await
+        .expect("runtime branch command should complete");
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(outcome) = outcome else {
+            panic!("expected runtime branch deferred outcome");
+        };
+        assert_eq!(
+            outcome.reason,
+            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::RuntimeDispatchUnavailable
+        );
+        assert_eq!(outcome.deferred_task_ids, vec!["image-task"]);
+        assert_eq!(
+            outcome.diagnostics,
+            vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime branch dispatch execution has not moved into the task-execution worker loop yet",
+            )]
+        );
+        let persisted = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .get(&event_id)
+            .expect("runtime branch task event");
+        assert_eq!(
+            persisted.state,
+            WorkflowRuntimeBranchTaskEventState::Deferred
+        );
+        assert!(persisted.deferred_at_ms.is_some());
 
         worker
             .shutdown()

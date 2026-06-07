@@ -1067,6 +1067,23 @@ durable task orchestration path.
     `cargo test -p pantograph-workflow-service runtime_branch_admission --lib`
     passed with 2 tests. Next slice: worker claims due runtime-branch events
     from the repository with typed missing/stale diagnostics.
+  - 2026-06-06 runtime-branch worker event claim/defer slice complete:
+    the task-execution worker now claims the next due runtime-branch task event
+    for the command workflow run through the workflow-service repository.
+    Missing due events return typed `RuntimeBranchEventUnavailable`
+    diagnostics. Claimed events are immediately persisted as `Deferred` with
+    typed `RuntimeBranchDispatchUnavailable` diagnostics so the durable claim
+    path is validated without executing dispatch or leaving active leases.
+    This intentionally did not add a direct helper call, runtime dispatch
+    execution, graph/frontend fact synthesis, frontend/Tauri policy,
+    compatibility DTO, request-scoped successful completion, or fake
+    completion. Verification:
+    `cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+    passed with 19 tests and
+    `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+    passed with 15 tests. Next slice: reconstruct execution facts from the
+    claimed durable event/backend run records and move dispatch-boundary
+    execution into the worker loop before responder notification.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

@@ -130,6 +130,17 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         WorkflowRuntimeBranchTaskEventDiagnostic,
     >;
 
+    fn claim_next_due_for_workflow_run(
+        &mut self,
+        workflow_run_id: &str,
+        owner_id: WorkflowRuntimeBranchTaskEventClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+    ) -> Result<
+        Option<WorkflowRuntimeBranchTaskEventClaimOutcome>,
+        WorkflowRuntimeBranchTaskEventDiagnostic,
+    >;
+
     fn complete(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -263,6 +274,24 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
             .map(Some)
     }
 
+    fn claim_next_due_for_workflow_run(
+        &mut self,
+        workflow_run_id: &str,
+        owner_id: WorkflowRuntimeBranchTaskEventClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+    ) -> Result<
+        Option<WorkflowRuntimeBranchTaskEventClaimOutcome>,
+        WorkflowRuntimeBranchTaskEventDiagnostic,
+    > {
+        let Some(event_id) = self.next_due_event_id_for_workflow_run(workflow_run_id, now_ms)
+        else {
+            return Ok(None);
+        };
+        self.claim_event(&event_id, owner_id, now_ms, lease_duration_ms)
+            .map(Some)
+    }
+
     fn complete(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -330,6 +359,23 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
     fn next_due_event_id(&self, now_ms: u64) -> Option<WorkflowRuntimeBranchTaskEventId> {
         self.records
             .values()
+            .filter(|record| record.is_due_for_claim(now_ms))
+            .min_by(|left, right| {
+                left.ready_at_ms
+                    .cmp(&right.ready_at_ms)
+                    .then_with(|| left.event_id.as_str().cmp(right.event_id.as_str()))
+            })
+            .map(|record| record.event_id.clone())
+    }
+
+    fn next_due_event_id_for_workflow_run(
+        &self,
+        workflow_run_id: &str,
+        now_ms: u64,
+    ) -> Option<WorkflowRuntimeBranchTaskEventId> {
+        self.records
+            .values()
+            .filter(|record| record.workflow_run_id == workflow_run_id)
             .filter(|record| record.is_due_for_claim(now_ms))
             .min_by(|left, right| {
                 left.ready_at_ms
@@ -818,6 +864,42 @@ mod tests {
     }
 
     #[test]
+    fn runtime_branch_task_event_repository_claims_next_due_for_workflow_run_only() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        repository
+            .enqueue(ready_record_with_id_and_run(
+                "runtime-branch-task-event.other",
+                "run.other",
+                10,
+            ))
+            .expect("other event enqueues");
+        repository
+            .enqueue(ready_record_with_id_and_run(
+                "runtime-branch-task-event.target",
+                "run.target",
+                20,
+            ))
+            .expect("target event enqueues");
+
+        let claimed = repository
+            .claim_next_due_for_workflow_run("run.target", owner_id("worker.alpha"), 25, 50)
+            .expect("claim next succeeds")
+            .expect("target event is due");
+
+        assert_eq!(
+            claimed.record.event_id.as_str(),
+            "runtime-branch-task-event.target"
+        );
+        assert_eq!(
+            repository
+                .get(&event_id("runtime-branch-task-event.other"))
+                .expect("other event")
+                .state,
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+    }
+
+    #[test]
     fn runtime_branch_task_event_repository_reclaims_expired_claim() {
         let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
         let event_id = event_id("runtime-branch-task-event.test");
@@ -923,6 +1005,18 @@ mod tests {
     fn ready_record_with_id(event_id: &str) -> WorkflowRuntimeBranchTaskEventRecord {
         let mut request = ready_request();
         request.event_id = WorkflowRuntimeBranchTaskEventId::parse(event_id).expect("event id");
+        WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("ready record")
+    }
+
+    fn ready_record_with_id_and_run(
+        event_id: &str,
+        workflow_run_id: &str,
+        ready_at_ms: u64,
+    ) -> WorkflowRuntimeBranchTaskEventRecord {
+        let mut request = ready_request();
+        request.event_id = WorkflowRuntimeBranchTaskEventId::parse(event_id).expect("event id");
+        request.workflow_run_id = workflow_run_id.to_string();
+        request.ready_at_ms = ready_at_ms;
         WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("ready record")
     }
 

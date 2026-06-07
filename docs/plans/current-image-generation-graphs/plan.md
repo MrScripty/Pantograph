@@ -1,5 +1,30 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime-branch worker event claim/defer update: completed the
+fourth Option 3 source slice by making the task-execution worker claim a due
+runtime-branch task event from the workflow-service repository by workflow run
+id, then persist a typed deferred event state while dispatch execution remains
+unmoved. Smallest useful vertical slice: add repository claim-by-workflow-run
+selection, wire `ExecuteRuntimeBranch` to claim through the worker-owned
+backend service environment, return typed missing-event diagnostics when no
+due durable event exists, and immediately defer a claimed event with a typed
+`RuntimeBranchDispatchUnavailable` diagnostic so the lease is not left
+hanging. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and plan docs. No-fallback/no-legacy confirmation: this slice does not execute
+runtime branches, does not call the direct helper, does not synthesize
+execution facts from graph/frontend state, does not add frontend/Tauri
+business policy, does not add compatibility DTOs, does not fake successful
+completion, and does not make the in-memory responder the durable source of
+truth. Verification:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`
+passed with 19 tests, and
+`cargo test -p pantograph-workflow-service task_execution_worker --lib` passed
+with 15 tests. Remaining follow-up: reconstruct execution facts from claimed
+durable records and move dispatch-boundary execution into the worker loop,
+then persist completed/deferred/failed outcomes before responder notification.
+
 2026-06-06 runtime-branch admission event persistence update: completed the
 third Option 3 source slice by wiring runtime-containing run admission to
 persist claimable runtime-branch task events through the workflow-service
@@ -108,7 +133,10 @@ Option 3 thin sequence:
    direct helper call.
 4. Make the task-execution worker claim due durable runtime-branch events and
    reconstruct execution facts only from backend-owned durable records,
-   returning typed diagnostics for missing or stale facts.
+   returning typed diagnostics for missing or stale facts. Partial
+   2026-06-06: the worker now claims due events by workflow run and defers the
+   claimed event with typed dispatch-unavailable diagnostics; execution-fact
+   reconstruction and dispatch remain next.
 5. Move dispatch-boundary execution into the worker loop using the claimed
    durable event facts and owned host/runtime environment, then persist the
    branch outcome before responder notification.
