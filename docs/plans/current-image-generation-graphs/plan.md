@@ -571,6 +571,27 @@ runtime-host test still entering direct `WorkflowService` runtime execution,
 one run-detail/node-IO projection expectation, and one live-event expectation
 that still looks for legacy `TaskCompleted` node-engine events.
 
+2026-06-07 embedded production image runtime-owner test slice:
+smallest useful vertical slice: migrate
+`workflow_execution_session_dispatches_through_production_embedded_image_runtime_host`
+from direct `WorkflowService::run_workflow_execution_session` to
+`WorkflowSessionExecutionRuntime`. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`
+and this plan. No-fallback/no-legacy confirmation: the test now uses the
+composition-root runtime owner and shared workflow service, does not restore
+direct request-scoped runtime execution, and still verifies the production
+embedded runtime-host port, artifact retention, dependency readiness, dispatch
+source refresh, reservation lifecycle, and absence of legacy host runtime/run
+attempts.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime workflow_execution_session_dispatches_through_production_embedded_image_runtime_host --lib`
+passed with 1 test. Broader verification
+`cargo test -p pantograph-embedded-runtime workflow_run_execution --lib` now
+has 7 passing tests and 2 remaining failures: one run-detail/node-IO projection
+expectation and one live-event expectation that still looks for legacy
+`TaskCompleted` node-engine events.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,

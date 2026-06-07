@@ -136,13 +136,17 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
             "PyTorch",
         )),
     ));
-    let service = workflow_service
-        .with_dependency_environment_provider(Arc::new(dependency_readiness_provider.clone()))
-        .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
-        .with_runtime_dispatch_source_refresher(source_refresher.clone())
-        .with_runtime_dispatch_candidate_provider(Arc::new(TestRuntimeDispatchCandidateProvider))
-        .with_runtime_host_execution_port(runtime_host_port)
-        .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
+    let service = Arc::new(
+        workflow_service
+            .with_dependency_environment_provider(Arc::new(dependency_readiness_provider.clone()))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+            .with_runtime_dispatch_source_refresher(source_refresher.clone())
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                TestRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port)
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
+    );
     let workflow_id = "wf-production-embedded-image-runtime-host";
     let workflow_semantic_version = "1.2.3";
     let graph = image_runtime_session_graph(MODEL_ID, SELECTED_ARTIFACT_ID);
@@ -170,10 +174,10 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         )
         .expect("insert readiness snapshot");
 
-    let host = ImageRuntimeSessionHost::new(graph);
+    let host = Arc::new(ImageRuntimeSessionHost::new(graph));
     let created = service
         .create_workflow_execution_session(
-            &host,
+            host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
@@ -182,9 +186,11 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         )
         .await
         .expect("create session");
-    let response = service
+    let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
+        service.clone(),
+        host.clone(),
+    )
         .run_workflow_execution_session(
-            &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: workflow_semantic_version.to_string(),
