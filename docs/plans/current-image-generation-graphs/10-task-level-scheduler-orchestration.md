@@ -147,6 +147,12 @@ dependency preflight outputs.
   missing or stale readiness proof, reduced execution-plan projections, graph
   paths, local Pumas load targets, scheduler-owned execution payloads, and
   worker launch metadata.
+- Runtime residency and keep-alive state are model/runtime lifecycle facts, not
+  workflow input memory. Residency may allow a later compatible task to reuse a
+  loaded runtime/model instance, but each workflow/session run must provide or
+  materialize its own source inputs and upstream task results. Omitted required
+  inputs must produce typed diagnostics instead of replaying values from the
+  run that first loaded or warmed the runtime.
 - `SchedulerTaskStateReadModel`: backend-owned status for graph editor,
   run-inspection, and diagnostics views. It exposes waiting/running/failed
   facts, not scheduler internals or executable load targets.

@@ -459,26 +459,48 @@ and live-event assumptions from the legacy execution path. These failures are
 recorded for the next embedded-runtime test migration slice and must not be
 fixed by reintroducing direct request-scoped runtime execution.
 
-2026-06-07 embedded keep-alive carry-forward re-plan trigger: attempting to
-migrate `session_execution_state` tests by simply deleting legacy executor
-assertions failed because worker-owned session runs do not yet have a canonical
-backend source for carried-forward inputs when a later keep-alive run omits an
-input. The old behavior came from `EmbeddedRuntime.session_executions` and its
-node-memory snapshots; preserving that executor path would violate the
-no-fallback/no-legacy rule after session runs enter
-`WorkflowSessionExecutionRuntime`. Re-plan before continuing embedded-runtime
-test migration. Standards-aligned options to evaluate next:
-1. Add backend-owned keep-alive input memory to workflow-service session state
-   and have worker-owned runs materialize omitted inputs from that canonical
-   state.
-2. Represent carried-forward inputs as explicit scheduler/session facts in the
-   durable task-attempt lifecycle planned in Option 3, then migrate these tests
-   after that lifecycle exists.
-3. Remove implicit carry-forward semantics from keep-alive session execution
-   and require callers to send all source inputs on each run, returning typed
-   missing-input diagnostics otherwise.
-Do not restore the embedded node-engine executor as a compatibility shim and
-do not make the embedded adapter choose legacy execution for keep-alive runs.
+2026-06-07 embedded keep-alive input carry-forward re-plan decision: use
+Option 3 and remove implicit input carry-forward from keep-alive session
+execution. The failed `session_execution_state` migration exposed that stale
+tests still treat keep-alive as backend node-memory persistence: a later
+keep-alive run may omit a required input and still expect the old
+`EmbeddedRuntime.session_executions` executor to replay a value from an earlier
+run. That behavior is rejected. Keep-alive means runtime/model residency only:
+Pantograph may keep a compatible runtime instance and loaded model resident so
+later compatible tasks can reuse it without memory churn, but workflow inputs,
+upstream task results, node memory, prompt values, and other run-scoped context
+must not be carried from the workflow run that first loaded the runtime into
+later runs. Every workflow/session run owns its own source inputs. Missing,
+wrong-type, unavailable, or invalid required inputs must return typed
+diagnostics before task execution, not silently reuse prior values.
+
+Rejected alternatives:
+1. Backend-owned keep-alive input memory in workflow-service session state is
+   rejected because it would formalize the input carry-forward anti-feature and
+   couple runtime residency to workflow data persistence.
+2. Durable scheduler/session facts for carried-forward omitted inputs are
+   rejected for the same reason. The durable task-attempt lifecycle remains the
+   target for runtime attempt ownership, batching, replay, retry/defer, and
+   residency evidence, but not for replaying omitted workflow inputs.
+
+Next embedded-runtime test migration slice:
+1. Update
+   `crates/pantograph-embedded-runtime/src/lib_tests/session_execution_state_tests.rs`
+   so keep-alive tests assert runtime/model residency semantics and per-run
+   input ownership, not backend executor or node-memory input reuse.
+2. Replace omitted-required-input expectations with typed missing-input
+   diagnostics from the worker-owned path.
+3. Preserve or add focused coverage that same-model/same-runtime keep-alive
+   reuse is driven by canonical runtime residency facts rather than by carried
+   workflow inputs.
+4. Run `cargo test -p pantograph-embedded-runtime session_execution_state --lib`
+   and `cargo check -p pantograph-embedded-runtime`, then update this plan with
+   the verification result and any remaining stale checkpoint/README ownership
+   follow-ups.
+
+Do not restore the embedded node-engine executor as a compatibility shim, do
+not add backend input memory for omitted keep-alive inputs, and do not make the
+embedded adapter choose legacy execution for keep-alive runs.
 
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
