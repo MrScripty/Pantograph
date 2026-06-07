@@ -1,5 +1,17 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 task-execution worker runtime environment update:
+`WorkflowTaskExecutionRuntimeOwner` now builds a typed
+`WorkflowTaskExecutionWorkerRuntimeBranchEnvironment` from its shared
+`Arc<WorkflowService>` and passes that environment into
+`WorkflowTaskExecutionWorker::spawn`. The worker loop owns that backend
+runtime-branch environment and observes runtime-branch commands without
+executing them yet. This preserves the no-fallback boundary: no branch
+execution, fake completion responder, request-scoped runtime dispatch, Tauri
+policy, compatibility DTO, or durable claiming was added. Next Option 2
+slice: add a real runtime-branch completion responder to
+`ExecuteRuntimeBranch` and have the facade enqueue/await it.
+
 2026-06-06 composition-root host boundary ownership update:
 `WorkflowSessionExecutionRuntime` now owns the shared `Arc<WorkflowService>`,
 an `Arc<dyn WorkflowHost>` backend host/runtime boundary, and

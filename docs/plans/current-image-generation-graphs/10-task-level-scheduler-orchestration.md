@@ -1192,6 +1192,18 @@ Option 3 thin implementation sequence:
      pass the backend runtime branch execution environment from
      `WorkflowTaskExecutionRuntimeOwner` into the task-execution worker spawn
      path.
+   - 2026-06-06 task-execution worker runtime environment slice:
+     `WorkflowTaskExecutionRuntimeOwner` now creates a typed
+     `WorkflowTaskExecutionWorkerRuntimeBranchEnvironment` from its shared
+     workflow service and passes it into `WorkflowTaskExecutionWorker::spawn`;
+     the worker loop owns that environment and observes runtime-branch
+     commands. Verified with `cargo test -p pantograph-workflow-service
+     task_execution_worker --lib` and `cargo test -p
+     pantograph-workflow-service runtime_owner --lib`. No branch execution,
+     fake completion responder, request-scoped runtime dispatch, frontend/Tauri
+     policy, compatibility DTO, or durable claiming was added. Next slice:
+     add the real completion responder to `ExecuteRuntimeBranch` and have the
+     facade enqueue/await it.
 
 Worker-system standards gates:
 

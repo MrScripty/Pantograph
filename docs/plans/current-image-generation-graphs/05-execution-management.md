@@ -27030,6 +27030,27 @@ Worker rules:
       receive the backend runtime branch execution environment from
       `WorkflowTaskExecutionRuntimeOwner`, then add the real completion
       responder and move runtime branch execution into the worker loop.
+  - 2026-06-06 task-execution worker runtime environment source slice:
+    - Smallest vertical slice: introduce a typed
+      `WorkflowTaskExecutionWorkerRuntimeBranchEnvironment` and pass it from
+      `WorkflowTaskExecutionRuntimeOwner` into the task-execution worker spawn
+      path.
+    - Allowed write set used:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      `crates/pantograph-workflow-service/src/workflow/README.md`, and these
+      plan files.
+    - No-fallback/no-legacy confirmation: the worker now owns the backend
+      runtime-branch environment and observes runtime-branch commands, but it
+      still does not execute the branch, synthesize completion, call direct
+      request-scoped helpers, add frontend/Tauri policy, introduce
+      compatibility DTOs, or add durable claiming.
+    - Verification:
+      `cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+      `cargo test -p pantograph-workflow-service runtime_owner --lib`.
+    - Remaining follow-up: add the real runtime-branch completion responder to
+      `ExecuteRuntimeBranch` and have the facade enqueue/await it, then move
+      runtime branch dispatch-boundary execution into the worker loop.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

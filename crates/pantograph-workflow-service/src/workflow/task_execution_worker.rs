@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -8,7 +9,7 @@ use crate::scheduler::{
 
 use super::{
     WorkflowOutputTarget, WorkflowRunResponse, WorkflowSchedulerTaskExecutionClass,
-    WorkflowServiceError,
+    WorkflowService, WorkflowServiceError,
 };
 
 const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
@@ -16,27 +17,35 @@ const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
 #[derive(Debug)]
 pub(super) struct WorkflowTaskExecutionWorker {
     scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    runtime_branch_environment: WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     command_tx: tokio::sync::mpsc::Sender<WorkflowTaskExecutionWorkerCommand>,
     shutdown_tx: tokio::sync::watch::Sender<bool>,
     join_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     observed_task_attempt_commands: Arc<AtomicU64>,
+    observed_runtime_branch_commands: Arc<AtomicU64>,
 }
 
 impl WorkflowTaskExecutionWorker {
     pub(super) fn spawn(
         scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+        runtime_branch_environment: WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     ) -> Result<Self, WorkflowServiceError> {
         let runtime_handle = tokio::runtime::Handle::try_current().map_err(|_| {
             WorkflowServiceError::Internal(
                 "task execution worker requires an active Tokio runtime".to_string(),
             )
         })?;
-        Self::spawn_with_handle(scheduler_lifecycle, runtime_handle)
+        Self::spawn_with_handle(
+            scheduler_lifecycle,
+            runtime_handle,
+            runtime_branch_environment,
+        )
     }
 
     pub(super) fn spawn_with_handle(
         scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
         runtime_handle: tokio::runtime::Handle,
+        runtime_branch_environment: WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     ) -> Result<Self, WorkflowServiceError> {
         scheduler_lifecycle
             .update_component_state(
@@ -49,19 +58,24 @@ impl WorkflowTaskExecutionWorker {
             tokio::sync::mpsc::channel(TASK_EXECUTION_WORKER_COMMAND_CAPACITY);
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let observed_task_attempt_commands = Arc::new(AtomicU64::new(0));
+        let observed_runtime_branch_commands = Arc::new(AtomicU64::new(0));
         let join_handle = runtime_handle.spawn(task_execution_worker_loop(
             scheduler_lifecycle.clone(),
+            runtime_branch_environment.clone(),
             command_rx,
             shutdown_rx,
             Arc::clone(&observed_task_attempt_commands),
+            Arc::clone(&observed_runtime_branch_commands),
         ));
 
         Ok(Self {
             scheduler_lifecycle,
+            runtime_branch_environment,
             command_tx,
             shutdown_tx,
             join_handle: tokio::sync::Mutex::new(Some(join_handle)),
             observed_task_attempt_commands,
+            observed_runtime_branch_commands,
         })
     }
 
@@ -94,6 +108,16 @@ impl WorkflowTaskExecutionWorker {
         self.observed_task_attempt_commands.load(Ordering::SeqCst)
     }
 
+    #[cfg(test)]
+    pub(super) fn observed_runtime_branch_command_count(&self) -> u64 {
+        self.observed_runtime_branch_commands.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(super) fn runtime_branch_environment_service(&self) -> Arc<WorkflowService> {
+        self.runtime_branch_environment.service()
+    }
+
     fn mark_shutting_down_if_running(&self) -> Result<(), WorkflowServiceError> {
         let current = self
             .scheduler_lifecycle
@@ -116,6 +140,31 @@ impl WorkflowTaskExecutionWorker {
                 WorkflowSchedulerLifecycleComponentState::Shutdown,
             )
             .map(|_record| ())
+    }
+}
+
+#[derive(Clone)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
+    service: Arc<WorkflowService>,
+}
+
+impl WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
+    pub(super) fn new(service: Arc<WorkflowService>) -> Self {
+        Self { service }
+    }
+
+    pub(super) fn service(&self) -> Arc<WorkflowService> {
+        Arc::clone(&self.service)
+    }
+}
+
+impl fmt::Debug for WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("WorkflowTaskExecutionWorkerRuntimeBranchEnvironment")
+            .field("service", &"<shared WorkflowService>")
+            .finish()
     }
 }
 
@@ -404,9 +453,11 @@ impl WorkflowTaskExecutionWorkerDiagnostic {
 
 async fn task_execution_worker_loop(
     scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
+    runtime_branch_environment: WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     mut command_rx: tokio::sync::mpsc::Receiver<WorkflowTaskExecutionWorkerCommand>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
     observed_task_attempt_commands: Arc<AtomicU64>,
+    observed_runtime_branch_commands: Arc<AtomicU64>,
 ) {
     loop {
         tokio::select! {
@@ -420,7 +471,10 @@ async fn task_execution_worker_loop(
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteTaskAttempt(_command)) => {
                         observed_task_attempt_commands.fetch_add(1, Ordering::SeqCst);
                     }
-                    Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(_command)) => {}
+                    Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(_command)) => {
+                        let _service = runtime_branch_environment.service();
+                        observed_runtime_branch_commands.fetch_add(1, Ordering::SeqCst);
+                    }
                     Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
                         break;
                     }
@@ -448,8 +502,9 @@ mod tests {
     #[tokio::test]
     async fn task_execution_worker_marks_running_until_shutdown() {
         let scheduler_lifecycle = scheduler_lifecycle();
-        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle.clone())
-            .expect("spawn task execution worker");
+        let worker =
+            WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle.clone(), runtime_environment())
+                .expect("spawn task execution worker");
 
         assert_eq!(
             scheduler_lifecycle
@@ -476,7 +531,7 @@ mod tests {
     #[tokio::test]
     async fn task_execution_worker_observes_task_attempt_command_without_executing_task() {
         let scheduler_lifecycle = scheduler_lifecycle();
-        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle)
+        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle, runtime_environment())
             .expect("spawn task execution worker");
 
         worker
@@ -509,8 +564,9 @@ mod tests {
     #[tokio::test]
     async fn task_execution_worker_shutdown_is_idempotent() {
         let scheduler_lifecycle = scheduler_lifecycle();
-        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle.clone())
-            .expect("spawn task execution worker");
+        let worker =
+            WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle.clone(), runtime_environment())
+                .expect("spawn task execution worker");
 
         worker
             .shutdown()
@@ -532,8 +588,9 @@ mod tests {
 
     #[test]
     fn task_execution_worker_spawn_requires_active_tokio_runtime() {
-        let error = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle())
-            .expect_err("task execution worker spawn should require runtime");
+        let error =
+            WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle(), runtime_environment())
+                .expect_err("task execution worker spawn should require runtime");
 
         assert!(
             error
@@ -543,11 +600,65 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn task_execution_worker_owns_runtime_branch_environment() {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let service = Arc::new(WorkflowService::new());
+        let worker = WorkflowTaskExecutionWorker::spawn(
+            scheduler_lifecycle,
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::clone(&service)),
+        )
+        .expect("spawn task execution worker");
+
+        assert!(Arc::ptr_eq(
+            &service,
+            &worker.runtime_branch_environment_service()
+        ));
+
+        worker
+            .shutdown()
+            .await
+            .expect("shutdown task execution worker");
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_observes_runtime_branch_command_with_owned_environment() {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle, runtime_environment())
+            .expect("spawn task execution worker");
+
+        worker
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(
+                runtime_branch_command(),
+            ))
+            .expect("enqueue runtime branch command");
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if worker.observed_runtime_branch_command_count() > 0 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("worker should observe runtime branch command");
+
+        worker
+            .shutdown()
+            .await
+            .expect("shutdown task execution worker");
+    }
+
     fn scheduler_lifecycle() -> WorkflowSchedulerLifecycleComponentRegistryHandle {
         WorkflowSchedulerLifecycleComponentRegistryHandle::new(
             WorkflowSchedulerLifecycleOwnerId::parse("workflow-service.task-execution-worker.test")
                 .expect("scheduler lifecycle owner id"),
         )
+    }
+
+    fn runtime_environment() -> WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
+        WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::new(WorkflowService::new()))
     }
 
     #[test]

@@ -967,6 +967,18 @@ durable task orchestration path.
     execution move was added. Next source slice: pass the backend runtime
     branch execution environment from `WorkflowTaskExecutionRuntimeOwner` into
     the task-execution worker spawn path.
+  - 2026-06-06 task-execution worker runtime environment slice:
+    `WorkflowTaskExecutionRuntimeOwner` now passes a typed
+    `WorkflowTaskExecutionWorkerRuntimeBranchEnvironment` built from its
+    shared workflow service into `WorkflowTaskExecutionWorker::spawn`; the
+    worker loop owns that environment and observes runtime-branch commands.
+    Verified with `cargo test -p pantograph-workflow-service
+    task_execution_worker --lib` and `cargo test -p
+    pantograph-workflow-service runtime_owner --lib`. No branch execution,
+    fake completion responder, request-scoped runtime dispatch, frontend/Tauri
+    policy, compatibility DTO, durable claiming, or worker-loop dispatch move
+    was added. Next source slice: add the real completion responder to
+    `ExecuteRuntimeBranch` and have the facade enqueue/await it.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

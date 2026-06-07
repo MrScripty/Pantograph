@@ -4,6 +4,7 @@ use super::task_execution_worker::{
     WorkflowTaskExecutionWorker, WorkflowTaskExecutionWorkerCommand,
     WorkflowTaskExecutionWorkerDiagnostic, WorkflowTaskExecutionWorkerDiagnosticCode,
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
 };
 use super::{WorkflowService, WorkflowServiceError};
 
@@ -66,9 +67,11 @@ impl WorkflowTaskExecutionRuntimeOwner {
             .service
             .scheduler_task_orchestrator
             .scheduler_lifecycle_handle();
-        *worker = WorkflowTaskExecutionRuntimeWorkerState::Running(
-            WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle)?,
-        );
+        *worker =
+            WorkflowTaskExecutionRuntimeWorkerState::Running(WorkflowTaskExecutionWorker::spawn(
+                scheduler_lifecycle,
+                WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::clone(&self.service)),
+            )?);
         Ok(())
     }
 
@@ -156,6 +159,17 @@ mod tests {
             .ensure_task_execution_worker_started()
             .await
             .expect("second start should reuse worker");
+
+        {
+            let worker = owner.task_execution_worker.lock().await;
+            let WorkflowTaskExecutionRuntimeWorkerState::Running(worker) = &*worker else {
+                panic!("worker should be running");
+            };
+            assert!(Arc::ptr_eq(
+                &service,
+                &worker.runtime_branch_environment_service()
+            ));
+        }
 
         assert_eq!(
             service
