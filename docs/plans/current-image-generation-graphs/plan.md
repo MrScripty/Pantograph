@@ -1,5 +1,31 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime-branch worker host-boundary update: completed the next
+Option 3 preparation slice by threading the composition-root owned
+`WorkflowHost` into `WorkflowTaskExecutionRuntimeOwner`,
+`WorkflowTaskExecutionRuntimeBranchContext`, and the task-execution worker
+runtime-branch environment. Smallest useful vertical slice: preserve the
+existing durable-event claim/defer behavior while proving the worker will own
+the same backend host/runtime boundary needed by the later claimed-event
+dispatch slice. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and plan docs. No-fallback/no-legacy confirmation: this slice does not
+execute runtime branches, does not call the direct helper, does not add
+request-scoped worker/runtime instances, does not synthesize graph/frontend
+facts, does not add frontend/Tauri policy, does not add compatibility DTOs,
+and does not fake successful completion. Verification:
+`cargo test -p pantograph-workflow-service task_execution_worker --lib` passed
+with 15 tests,
+`cargo test -p pantograph-workflow-service runtime_owner_ --lib` passed with
+5 tests, and
+`cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+passed with 4 tests. Remaining follow-up: have the worker reconstruct
+execution facts from the claimed durable event and backend run records, then
+execute dispatch through this owned host boundary before durable terminal
+state and responder notification.
+
 2026-06-06 runtime-branch worker claim verification fix: corrected stale
 runtime-owner/facade tests that still expected the pre-claim fail-closed
 message after the worker began returning typed durable-event claim diagnostics.

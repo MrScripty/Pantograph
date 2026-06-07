@@ -1307,6 +1307,23 @@ Option 3 thin implementation sequence:
      passed with 15 tests. Next slice: reconstruct execution facts from the
      claimed durable event/backend run records and move dispatch-boundary
      execution into the worker loop before responder notification.
+   - 2026-06-06 runtime-branch worker host-boundary slice complete:
+     the composition-root owned `WorkflowHost` is now carried by
+     `WorkflowTaskExecutionRuntimeOwner`, runtime-branch contexts, and the
+     task-execution worker environment. This gives the worker the backend
+     host/runtime boundary required by the later claimed-event dispatch slice
+     without executing dispatch yet. No direct helper call, request-scoped
+     worker/runtime construction, graph/frontend fact synthesis,
+     frontend/Tauri policy, compatibility DTO, or fake completion was added.
+     Verification:
+     `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+     passed with 15 tests,
+     `cargo test -p pantograph-workflow-service runtime_owner_ --lib` passed
+     with 5 tests, and
+     `cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+     passed with 4 tests. Next slice: reconstruct execution facts from
+     claimed durable events/backend run records and execute through this owned
+     host boundary before durable terminal state and responder notification.
 
 Worker-system standards gates:
 

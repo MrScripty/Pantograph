@@ -14,7 +14,7 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
 };
 use super::{
-    WorkflowOutputTarget, WorkflowRunResponse, WorkflowSchedulerTaskExecutionClass,
+    WorkflowHost, WorkflowOutputTarget, WorkflowRunResponse, WorkflowSchedulerTaskExecutionClass,
     WorkflowService, WorkflowServiceError,
 };
 
@@ -126,6 +126,11 @@ impl WorkflowTaskExecutionWorker {
         self.runtime_branch_environment.service()
     }
 
+    #[cfg(test)]
+    pub(super) fn runtime_branch_environment_host(&self) -> Arc<dyn WorkflowHost> {
+        self.runtime_branch_environment.host()
+    }
+
     fn mark_shutting_down_if_running(&self) -> Result<(), WorkflowServiceError> {
         let current = self
             .scheduler_lifecycle
@@ -155,15 +160,20 @@ impl WorkflowTaskExecutionWorker {
 #[must_use]
 pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
     service: Arc<WorkflowService>,
+    host: Arc<dyn WorkflowHost>,
 }
 
 impl WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
-    pub(super) fn new(service: Arc<WorkflowService>) -> Self {
-        Self { service }
+    pub(super) fn new(service: Arc<WorkflowService>, host: Arc<dyn WorkflowHost>) -> Self {
+        Self { service, host }
     }
 
     pub(super) fn service(&self) -> Arc<WorkflowService> {
         Arc::clone(&self.service)
+    }
+
+    pub(super) fn host(&self) -> Arc<dyn WorkflowHost> {
+        Arc::clone(&self.host)
     }
 }
 
@@ -172,6 +182,7 @@ impl fmt::Debug for WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
         formatter
             .debug_struct("WorkflowTaskExecutionWorkerRuntimeBranchEnvironment")
             .field("service", &"<shared WorkflowService>")
+            .field("host", &"<shared WorkflowHost>")
             .finish()
     }
 }
@@ -667,8 +678,29 @@ mod tests {
     use crate::workflow::runtime_branch_task_event::{
         WorkflowRuntimeBranchTaskEventRequest, WorkflowRuntimeBranchTaskEventState,
     };
-    use crate::workflow::WorkflowSchedulerTaskExecutionClass;
+    use crate::workflow::{
+        WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
+        WorkflowSchedulerTaskExecutionClass,
+    };
     use std::time::Duration;
+
+    struct WorkerHost;
+
+    #[async_trait::async_trait]
+    impl WorkflowHost for WorkerHost {
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Err(WorkflowServiceError::Internal(
+                "task execution worker test host should not execute workflows".to_string(),
+            ))
+        }
+    }
 
     #[tokio::test]
     async fn task_execution_worker_marks_running_until_shutdown() {
@@ -775,15 +807,23 @@ mod tests {
     async fn task_execution_worker_owns_runtime_branch_environment() {
         let scheduler_lifecycle = scheduler_lifecycle();
         let service = Arc::new(WorkflowService::new());
+        let host = test_host();
         let worker = WorkflowTaskExecutionWorker::spawn(
             scheduler_lifecycle,
-            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::clone(&service)),
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(
+                Arc::clone(&service),
+                Arc::clone(&host),
+            ),
         )
         .expect("spawn task execution worker");
 
         assert!(Arc::ptr_eq(
             &service,
             &worker.runtime_branch_environment_service()
+        ));
+        assert!(Arc::ptr_eq(
+            &host,
+            &worker.runtime_branch_environment_host()
         ));
 
         worker
@@ -873,7 +913,10 @@ mod tests {
             .expect("enqueue runtime branch task event");
         let worker = WorkflowTaskExecutionWorker::spawn(
             scheduler_lifecycle,
-            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::clone(&service)),
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(
+                Arc::clone(&service),
+                test_host(),
+            ),
         )
         .expect("spawn task execution worker");
         let (completion_responder, completion_rx) =
@@ -932,7 +975,14 @@ mod tests {
     }
 
     fn runtime_environment() -> WorkflowTaskExecutionWorkerRuntimeBranchEnvironment {
-        WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::new(WorkflowService::new()))
+        WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(
+            Arc::new(WorkflowService::new()),
+            test_host(),
+        )
+    }
+
+    fn test_host() -> Arc<dyn WorkflowHost> {
+        Arc::new(WorkerHost)
     }
 
     #[test]

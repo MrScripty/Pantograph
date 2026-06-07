@@ -27247,6 +27247,30 @@ Worker rules:
       durable event and backend run records, move dispatch-boundary execution
       into the worker loop, persist completed/deferred/failed outcomes, and
       notify waiting responders only after durable state is written.
+  - 2026-06-06 runtime-branch worker host-boundary slice:
+    - Smallest useful vertical slice: thread the composition-root owned
+      `WorkflowHost` into `WorkflowTaskExecutionRuntimeOwner`,
+      `WorkflowTaskExecutionRuntimeBranchContext`, and the worker
+      runtime-branch environment without moving dispatch execution.
+    - Allowed write set:
+      `crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_runtime.rs`,
+      `crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+      and plan docs.
+    - No-fallback/no-legacy confirmation: no runtime dispatch execution,
+      direct helper call, request-scoped worker/runtime instance, graph/frontend
+      fact synthesis, frontend/Tauri policy, compatibility DTO, or fake success
+      completion was added.
+    - Verification:
+      `cargo test -p pantograph-workflow-service task_execution_worker --lib`
+      passed with 15 tests;
+      `cargo test -p pantograph-workflow-service runtime_owner_ --lib` passed
+      with 5 tests;
+      `cargo test -p pantograph-workflow-service session_execution_runtime --lib`
+      passed with 4 tests.
+    - Remaining follow-up: the worker must reconstruct execution facts from
+      claimed durable records and execute dispatch through this owned host
+      boundary before durable terminal state and responder notification.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

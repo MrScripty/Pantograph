@@ -38,7 +38,7 @@ impl WorkflowSessionExecutionRuntime {
         host: Arc<dyn WorkflowHost>,
     ) -> Self {
         let task_execution_runtime_owner =
-            WorkflowTaskExecutionRuntimeOwner::new(Arc::clone(&service));
+            WorkflowTaskExecutionRuntimeOwner::new(Arc::clone(&service), Arc::clone(&host));
         Self {
             service,
             host,
@@ -124,7 +124,10 @@ mod tests {
             &service,
             &runtime.task_execution_runtime_owner().service()
         ));
-        assert_eq!(Arc::strong_count(&runtime.host()), 2);
+        assert!(Arc::ptr_eq(
+            &runtime.host(),
+            &runtime.task_execution_runtime_owner().host()
+        ));
     }
 
     #[test]

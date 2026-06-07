@@ -7,10 +7,11 @@ use super::task_execution_worker::{
     WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
     WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
 };
-use super::{WorkflowService, WorkflowServiceError};
+use super::{WorkflowHost, WorkflowService, WorkflowServiceError};
 
 pub(super) struct WorkflowTaskExecutionRuntimeOwner {
     service: Arc<WorkflowService>,
+    host: Arc<dyn WorkflowHost>,
     task_execution_worker: tokio::sync::Mutex<WorkflowTaskExecutionRuntimeWorkerState>,
 }
 
@@ -23,13 +24,15 @@ enum WorkflowTaskExecutionRuntimeWorkerState {
 #[must_use]
 pub(super) struct WorkflowTaskExecutionRuntimeBranchContext {
     service: Arc<WorkflowService>,
+    host: Arc<dyn WorkflowHost>,
     command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
 }
 
 impl WorkflowTaskExecutionRuntimeOwner {
-    pub(super) fn new(service: Arc<WorkflowService>) -> Self {
+    pub(super) fn new(service: Arc<WorkflowService>, host: Arc<dyn WorkflowHost>) -> Self {
         Self {
             service,
+            host,
             task_execution_worker: tokio::sync::Mutex::new(
                 WorkflowTaskExecutionRuntimeWorkerState::NotStarted,
             ),
@@ -40,12 +43,17 @@ impl WorkflowTaskExecutionRuntimeOwner {
         Arc::clone(&self.service)
     }
 
+    pub(super) fn host(&self) -> Arc<dyn WorkflowHost> {
+        Arc::clone(&self.host)
+    }
+
     pub(super) fn runtime_branch_context(
         &self,
         command: WorkflowTaskExecutionWorkerRuntimeBranchCommand,
     ) -> WorkflowTaskExecutionRuntimeBranchContext {
         WorkflowTaskExecutionRuntimeBranchContext {
             service: Arc::clone(&self.service),
+            host: Arc::clone(&self.host),
             command,
         }
     }
@@ -71,7 +79,10 @@ impl WorkflowTaskExecutionRuntimeOwner {
         *worker =
             WorkflowTaskExecutionRuntimeWorkerState::Running(WorkflowTaskExecutionWorker::spawn(
                 scheduler_lifecycle,
-                WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(Arc::clone(&self.service)),
+                WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(
+                    Arc::clone(&self.service),
+                    Arc::clone(&self.host),
+                ),
             )?);
         Ok(())
     }
@@ -145,6 +156,10 @@ impl WorkflowTaskExecutionRuntimeBranchContext {
         Arc::clone(&self.service)
     }
 
+    pub(super) fn host(&self) -> Arc<dyn WorkflowHost> {
+        Arc::clone(&self.host)
+    }
+
     pub(super) fn command(&self) -> &WorkflowTaskExecutionWorkerRuntimeBranchCommand {
         &self.command
     }
@@ -170,14 +185,37 @@ mod tests {
         WorkflowTaskExecutionWorkerRuntimeBranchCommand,
         WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
     };
-    use crate::workflow::{WorkflowOutputTarget, WorkflowSchedulerTaskExecutionClass};
+    use crate::workflow::{
+        WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
+        WorkflowSchedulerTaskExecutionClass,
+    };
+
+    struct RuntimeOwnerHost;
+
+    #[async_trait::async_trait]
+    impl WorkflowHost for RuntimeOwnerHost {
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Err(WorkflowServiceError::Internal(
+                "runtime owner test host should not execute workflows".to_string(),
+            ))
+        }
+    }
 
     #[tokio::test]
     async fn runtime_owner_holds_service_and_worker_without_service_self_reference() {
         let service = Arc::new(WorkflowService::new());
-        let owner = WorkflowTaskExecutionRuntimeOwner::new(Arc::clone(&service));
+        let host: Arc<dyn WorkflowHost> = Arc::new(RuntimeOwnerHost);
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(Arc::clone(&service), Arc::clone(&host));
 
         assert!(Arc::ptr_eq(&service, &owner.service()));
+        assert!(Arc::ptr_eq(&host, &owner.host()));
 
         owner
             .ensure_task_execution_worker_started()
@@ -196,6 +234,10 @@ mod tests {
             assert!(Arc::ptr_eq(
                 &service,
                 &worker.runtime_branch_environment_service()
+            ));
+            assert!(Arc::ptr_eq(
+                &host,
+                &worker.runtime_branch_environment_host()
             ));
         }
 
@@ -232,7 +274,7 @@ mod tests {
     #[tokio::test]
     async fn runtime_owner_returns_typed_diagnostics_when_worker_is_unavailable() {
         let service = Arc::new(WorkflowService::new());
-        let owner = WorkflowTaskExecutionRuntimeOwner::new(service);
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(service, test_host());
 
         let error = owner
             .try_enqueue_task_execution_command(task_attempt_command())
@@ -253,7 +295,7 @@ mod tests {
     #[tokio::test]
     async fn runtime_owner_returns_typed_diagnostics_after_shutdown() {
         let service = Arc::new(WorkflowService::new());
-        let owner = WorkflowTaskExecutionRuntimeOwner::new(service);
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(service, test_host());
 
         owner
             .ensure_task_execution_worker_started()
@@ -283,7 +325,7 @@ mod tests {
     #[tokio::test]
     async fn runtime_owner_enqueues_runtime_branch_and_awaits_worker_completion() {
         let service = Arc::new(WorkflowService::new());
-        let owner = WorkflowTaskExecutionRuntimeOwner::new(service);
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(service, test_host());
 
         let outcome = owner
             .enqueue_runtime_branch_and_wait(runtime_branch_command())
@@ -310,7 +352,8 @@ mod tests {
     #[test]
     fn runtime_owner_builds_runtime_branch_context_from_command() {
         let service = Arc::new(WorkflowService::new());
-        let owner = WorkflowTaskExecutionRuntimeOwner::new(service);
+        let host = test_host();
+        let owner = WorkflowTaskExecutionRuntimeOwner::new(service, Arc::clone(&host));
         let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
             session_id: "session-1".to_string(),
             workflow_run_id: "run-1".to_string(),
@@ -326,7 +369,12 @@ mod tests {
         let context = owner.runtime_branch_context(command.clone());
 
         assert!(Arc::ptr_eq(&context.service(), &owner.service()));
+        assert!(Arc::ptr_eq(&context.host(), &host));
         assert_eq!(context.command(), &command);
+    }
+
+    fn test_host() -> Arc<dyn WorkflowHost> {
+        Arc::new(RuntimeOwnerHost)
     }
 
     fn task_attempt_command() -> WorkflowTaskExecutionWorkerCommand {
