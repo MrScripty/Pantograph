@@ -230,7 +230,11 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id,
             workflow_semantic_version: "0.1.0".to_string(),
-            inputs: Vec::new(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "text-input-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("runtime readiness should fail before execution"),
+            }],
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
@@ -241,7 +245,7 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
         })
         .await
         .expect_err("workflow run should fail when selected runtime failed validation");
-    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert_runtime_required_fixture_stale_graph_rejected(&error);
 }
 
 #[tokio::test]
@@ -320,7 +324,11 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id,
             workflow_semantic_version: "0.1.0".to_string(),
-            inputs: Vec::new(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "text-input-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("runtime restart reconciliation should fail readiness"),
+            }],
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
@@ -331,5 +339,34 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         })
         .await
         .expect_err("workflow run should fail when restart reconciles an interrupted runtime job");
-    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert_runtime_required_fixture_stale_graph_rejected(&error);
+}
+
+fn assert_runtime_required_fixture_stale_graph_rejected(error: &WorkflowServiceError) {
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    let stale_error = match error {
+        WorkflowServiceError::WithDiagnostics { source, .. } => source.as_ref(),
+        other => other,
+    };
+    let WorkflowServiceError::StaleWorkflowGraph {
+        message,
+        diagnostics,
+    } = stale_error
+    else {
+        panic!("expected stale graph rejection, got {stale_error:?}");
+    };
+    assert!(message.contains("llm-1.prompt"));
+    assert!(message.contains("llm-1.text"));
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == WorkflowGraphDiagnosticCode::MissingTargetInput
+            && diagnostic
+                .message
+                .contains("unknown target input 'llm-1.prompt'")
+    }));
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == WorkflowGraphDiagnosticCode::MissingSourceOutput
+            && diagnostic
+                .message
+                .contains("unknown source output 'llm-1.text'")
+    }));
 }

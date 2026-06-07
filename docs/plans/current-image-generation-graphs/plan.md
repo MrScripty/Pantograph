@@ -817,6 +817,41 @@ Discovered issues and follow-ups:
   artifact expectations, two retired data-graph Python sidecar reconciliation
   expectations, and two runtime-preflight restart classification expectations.
 
+2026-06-07 runtime-preflight restart diagnostic test migration slice:
+completed. Smallest useful vertical slice: migrate the two stale
+embedded-runtime runtime-preflight restart tests so the preflight checks still
+assert selected-runtime readiness failures, while the subsequent session-run
+assertions accept the canonical executable graph validation boundary. Allowed
+files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/runtime_preflight_tests.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: the slice does not revive the old
+`llm-inference` fixture ports, does not bypass stale-graph executable
+validation, does not reorder session execution so runtime readiness can mask
+invalid graph structure, and does not restore request-scoped runtime
+execution. The tests now assert typed `MissingTargetInput` and
+`MissingSourceOutput` diagnostics for stale `llm-1.prompt` and `llm-1.text`
+ports when the runtime-required fixture is executed.
+
+Verification passed:
+`cargo test -p pantograph-embedded-runtime runtime_preflight --lib`,
+`cargo fmt -p pantograph-embedded-runtime -- --check`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo test -p pantograph-embedded-runtime --lib` with 406 passing tests, and
+`git diff --check` for the slice files.
+
+Discovered follow-ups:
+- The full embedded-runtime lib run still reports the existing unused
+  `synthetic_kv_node_memory_snapshot` fixture/import warning after the
+  keep-alive checkpoint migration. Clean this up in a dedicated shared test
+  harness slice.
+- `cargo check` and `cargo test` still report the existing unused
+  `WorkflowSchedulerStartedRuntimeTaskSupervisor` abort helper warning in
+  workflow-service. Keep that cleanup with the worker cancellation/shutdown
+  lifecycle work.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
@@ -2922,9 +2957,13 @@ Verification passed:
 are removed.
 
 Discovered issues and follow-ups:
-- Remaining embedded-runtime broad failures are the two runtime-preflight
-  restart classification expectations that currently observe
-  `InvalidRequest` where the stale tests expected `RuntimeNotReady`.
+- The two runtime-preflight restart classification failures were resolved by
+  the 2026-06-07 runtime-preflight restart diagnostic test migration slice:
+  preflight still asserts selected-runtime readiness, while session execution
+  now rejects the stale runtime-required fixture at the canonical stale-graph
+  validation boundary.
+- Broader embedded-runtime verification now passes:
+  `cargo test -p pantograph-embedded-runtime --lib` reports 406 passing tests.
 - The unused `synthetic_kv_node_memory_snapshot` warning remains the same
   shared fixture cleanup follow-up from the checkpoint migration.
 
