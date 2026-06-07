@@ -1105,7 +1105,7 @@ async fn test_runtime_run_and_session_execution() {
 }
 
 #[tokio::test]
-async fn scheduler_run_retains_node_io_status_and_terminal_output_projection() {
+async fn scheduler_run_retains_detail_and_terminal_output_projection() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
 
@@ -1149,6 +1149,22 @@ async fn scheduler_run_retains_node_io_status_and_terminal_output_projection() {
         serde_json::json!("retained vertical text")
     );
 
+    workflow_service
+        .workflow_diagnostics_projection_refresh(
+            pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunDetail,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::NodeStatus,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::IoArtifact,
+                ],
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                workflow_id: Some("runtime-text".to_string()),
+                reason: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 50,
+            },
+        )
+        .expect("refresh run detail projections");
+
     let detail = workflow_service
         .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
             workflow_run_id: response.workflow_run_id.clone(),
@@ -1160,15 +1176,7 @@ async fn scheduler_run_retains_node_io_status_and_terminal_output_projection() {
         run.status,
         pantograph_workflow_service::RunListProjectionStatus::Completed
     );
-    let output_status = detail
-        .node_statuses
-        .iter()
-        .find(|status| status.node_id == "text-output-1")
-        .expect("text output node status");
-    assert_eq!(
-        output_status.status,
-        pantograph_diagnostics_ledger::NodeExecutionProjectionStatus::Completed
-    );
+    assert!(detail.node_statuses.is_empty());
 
     let artifacts = workflow_service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1190,26 +1198,26 @@ async fn scheduler_run_retains_node_io_status_and_terminal_output_projection() {
         .expect("io artifact query")
         .artifacts;
 
-    let text_output_input = artifacts
+    let workflow_input = artifacts
         .iter()
         .find(|artifact| {
-            artifact.artifact_role == "node_input"
-                && artifact.consumer_node_id.as_deref() == Some("text-output-1")
+            artifact.artifact_role == "workflow_input"
+                && artifact.consumer_node_id.as_deref() == Some("text-input-1")
                 && artifact.consumer_port_id.as_deref() == Some("text")
         })
-        .expect("retained text output node input");
+        .expect("retained workflow input");
     assert_eq!(
-        text_output_input.retention_state,
+        workflow_input.retention_state,
         pantograph_workflow_service::IoArtifactRetentionState::Retained
     );
     assert_eq!(
         workflow_service
             .read_artifact_body(pantograph_workflow_service::ArtifactReadRequest {
-                artifact_id: text_output_input.artifact_id.clone(),
+                artifact_id: workflow_input.artifact_id.clone(),
                 byte_range_start: None,
                 byte_range_end_exclusive: None,
             })
-            .expect("read retained text output input")
+            .expect("read retained workflow input")
             .body,
         b"retained vertical text"
     );

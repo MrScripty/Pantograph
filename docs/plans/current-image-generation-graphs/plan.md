@@ -592,6 +592,26 @@ has 7 passing tests and 2 remaining failures: one run-detail/node-IO projection
 expectation and one live-event expectation that still looks for legacy
 `TaskCompleted` node-engine events.
 
+2026-06-07 embedded scheduler projection refresh test slice:
+smallest useful vertical slice: update the scheduler projection test to refresh
+canonical `RunDetail`, `NodeStatus`, and `IoArtifact` projections explicitly
+before querying, and align retained artifact expectations with the worker-owned
+path. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`
+and this plan. No-fallback/no-legacy confirmation: the test does not rely on
+implicit projection side effects from legacy node-engine execution, does not
+manufacture old `node_input` artifacts for the output node, and records that
+this worker-owned path currently has no node-status rows while preserving run
+detail plus retained workflow input, node output, and workflow output artifact
+coverage.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime scheduler_run_retains_detail_and_terminal_output_projection --lib`
+passed with 1 test. Broader verification
+`cargo test -p pantograph-embedded-runtime workflow_run_execution --lib` now
+has 8 passing tests and 1 remaining failure: the live-event expectation still
+looks for legacy `TaskCompleted` node-engine events.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,
