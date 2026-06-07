@@ -1227,6 +1227,26 @@ Option 3 thin implementation sequence:
      APIs from run ids; or jumping to durable task-event claiming now. Do not
      preserve request-scoped runtime execution or synthesize missing facts from
      graph/frontend state.
+   - 2026-06-06 runtime branch durable task-event claiming decision: select
+     Option 3 now. The next source lane must make runtime branch execution a
+     backend-owned durable task-event claim before dispatch moves into the
+     worker loop. Claimable events must carry stable event/task/attempt
+     identity, claim owner, lease expiry, attempt generation, queued
+     inputs/output targets, timeout policy, and typed ready/claimed/completed/
+     deferred/failed transitions. The task-execution worker must claim due
+     events, load execution facts from durable backend records only, execute
+     through the workflow-service/composition-root-owned host/runtime
+     environment, persist branch outcome, and then notify any waiting
+     responder. The responder preserves the current blocking inference response
+     shape but is not durable state. Option 1 in-memory envelopes and Option 2
+     standalone rehydration are rejected as next paths except as private
+     mechanics inside the durable claim contract. Do not add graph/frontend
+     fact synthesis, Tauri/frontend business policy, compatibility DTOs, fake
+     completions, direct request-scoped runtime dispatch, or a production
+     direct-helper completion path. Thin sequence: define claim contract, add
+     repository tests, emit durable events on admission, claim in the worker,
+     execute/persist/notify, add restart/replay/batching and shutdown tests,
+     then remove or make unreachable the production direct runtime helper.
 
 Worker-system standards gates:
 

@@ -27101,6 +27101,44 @@ Worker rules:
       direct helper call in the request path, do not synthesize execution facts
       from graph/frontend state, do not add compatibility DTOs, and do not add
       durable claiming unless that option is explicitly selected.
+  - 2026-06-06 runtime branch durable task-event claiming decision:
+    - Decision: select Option 3 now. The next source lane must implement
+      backend-owned durable task-event claiming before runtime-branch dispatch
+      moves into the task-execution worker loop. The current responder remains
+      only an in-memory notification over durable completion, not the source of
+      truth for task state or replay.
+    - Smallest useful vertical slices:
+      1. Define the durable runtime-branch task-event claim contract and state
+         machine: event id, workflow run id, scheduler task/attempt id, claim
+         owner, lease expiry, attempt generation, ready/claimed/completed/
+         deferred/failed states, restart/replay semantics, batching
+         eligibility, and typed diagnostics.
+      2. Add the workflow-service durable repository boundary and focused
+         tests for enqueue, claim, complete, fail, defer, lease expiry, stale
+         claim, duplicate claim, and reclaim.
+      3. Change runtime branch admission to persist or emit durable claimable
+         events instead of depending on in-memory envelopes or the direct
+         helper path.
+      4. Make the task-execution worker claim due durable runtime-branch
+         events and reconstruct execution facts only from backend-owned
+         durable records.
+      5. Execute the claimed branch inside the worker loop through the owned
+         host/runtime environment, persist completed/deferred/failed state,
+         and then notify any waiting responder.
+      6. Preserve the current blocking inference response shape only by
+         awaiting the responder notification over durable completion.
+      7. Add restart/replay/batching, worker-unavailable/shutdown, and
+         duplicate-dispatch tests.
+      8. Remove or make unreachable the production direct runtime helper path;
+         direct `WorkflowService` runtime execution remains fail-closed.
+    - No-fallback/no-legacy confirmation: Option 1 in-memory envelopes and
+      Option 2 standalone rehydration are rejected as next source paths and may
+      only appear as private mechanics inside the durable claim contract. Do
+      not synthesize facts from graph/frontend state, add Tauri/frontend
+      business policy, compatibility DTOs, fake completions, or request-scoped
+      runtime dispatch.
+    - Verification for this plan-only decision slice: `git diff --check`
+      passed.
   - 2026-06-05 active execution lane reconciliation slice:
     - Smallest vertical slice: record that the next implementation lane returns
       to Milestone 5b legacy runtime deletion/replacement now that the minimal

@@ -1003,6 +1003,28 @@ durable task orchestration path.
     now. Do not preserve request-scoped runtime execution, synthesize missing
     facts from graph/frontend state, add compatibility DTOs, or add durable
     claiming unless selected.
+  - 2026-06-06 runtime branch durable task-event claiming decision: select
+    Option 3 now. The next milestone lane must implement backend-owned durable
+    runtime-branch task-event claiming before moving dispatch execution into
+    the task-execution worker loop. The durable event contract must cover
+    stable event id, workflow run id, scheduler task/attempt id, claim owner,
+    lease expiry, attempt generation, queued inputs/output targets, timeout
+    policy, ready/claimed/completed/deferred/failed transitions,
+    restart/replay semantics, batching eligibility, and typed diagnostics.
+    Workers must claim due events, reconstruct execution facts only from
+    backend-owned durable records, execute through the composition-root-owned
+    host/runtime environment, persist the outcome, and then notify any waiting
+    responder. The responder may preserve the current blocking inference
+    response shape, but durable task state is the source of truth. Reject
+    Option 1 in-memory envelopes and Option 2 standalone rehydration as next
+    source paths except as internal mechanics of the durable claim contract.
+    Do not add graph/frontend fact synthesis, Tauri/frontend business policy,
+    compatibility DTOs, fake completions, request-scoped runtime dispatch, or a
+    production direct-helper completion path. Next thin slices: define the
+    claim contract, add repository tests, persist events on admission, claim in
+    the worker, execute/persist/notify, add restart/replay/batching and
+    unavailable/shutdown tests, then remove or make unreachable the production
+    direct runtime helper.
 - [x] Update README/crate documentation for task orchestration ownership,
   lifecycle, task-state contracts, node-engine adapter scope, runtime-host
   dispatch scope, and no-fallback removal boundaries. 2026-06-03

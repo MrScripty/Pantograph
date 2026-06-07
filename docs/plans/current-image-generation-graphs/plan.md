@@ -1,5 +1,60 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+2026-06-06 runtime branch durable task-event claiming decision: use Option 3
+as the active next implementation path. This supersedes the earlier immediate
+Option 2 worker-rehydration continuation for runtime-branch dispatch: the next
+source lane must introduce backend-owned durable task-event claiming before
+moving runtime dispatch into the task-execution worker loop. The existing
+runtime-branch completion responder may remain only as an in-memory
+notification for callers waiting on the durable event outcome; it is not the
+source of truth for task state, replay, or restart. Runtime branch admission
+must persist or emit a durable claimable execution event with stable event id,
+workflow run id, scheduler task/attempt identity, claim owner, lease expiry,
+attempt generation, queued inputs/output targets, timeout policy, and typed
+state transitions. Workers must claim due events, load or derive execution
+facts from durable backend records only, execute through the
+workflow-service/composition-root-owned host/runtime environment, persist
+completed/deferred/failed terminal state, and only then notify the waiting
+responder when one exists. Missing, stale, already-claimed, or lease-expired
+facts must return typed diagnostics and transition or leave durable state
+according to the claim contract; do not synthesize facts from graph/frontend
+state.
+
+Option 1 in-memory execution envelopes and Option 2 standalone rehydration are
+rejected as next source paths because they would keep the current worker move
+request/completion-shaped instead of durable/replay-shaped. They may appear
+only as private implementation details inside the durable claim contract. The
+no-fallback/no-legacy rule remains active: do not keep direct request-scoped
+runtime dispatch, do not call the existing direct helper as the production
+completion path, do not add Tauri/frontend business policy, do not add
+compatibility DTOs, and do not fake successful completion.
+
+Option 3 thin sequence:
+1. Define the durable runtime-branch task-event claim contract and state
+   machine: event ids, task/attempt ids, claim owner, lease expiry, attempt
+   generation, ready/claimed/completed/deferred/failed states, restart/replay
+   semantics, batching eligibility, and typed diagnostics.
+2. Add the workflow-service durable storage/repository boundary with focused
+   tests for enqueue, claim, complete, fail, defer, lease expiry, stale claim,
+   duplicate claim, and reclaim.
+3. Change runtime branch admission to persist or emit a durable runtime-branch
+   execution event instead of depending on an in-memory execution envelope or
+   direct helper call.
+4. Make the task-execution worker claim due durable runtime-branch events and
+   reconstruct execution facts only from backend-owned durable records,
+   returning typed diagnostics for missing or stale facts.
+5. Move dispatch-boundary execution into the worker loop using the claimed
+   durable event facts and owned host/runtime environment, then persist the
+   branch outcome before responder notification.
+6. Preserve the current blocking inference response shape by awaiting the
+   responder notification over durable completion while keeping durable task
+   state as the source of truth.
+7. Add restart/replay/batching tests, worker-unavailable/shutdown diagnostics,
+   and duplicate-dispatch prevention coverage.
+8. Remove or make unreachable the production direct runtime helper path once
+   the durable worker path is validated; direct `WorkflowService` runtime
+   execution must remain fail-closed.
+
 2026-06-06 runtime branch worker execution re-plan trigger: stop before
 moving dispatch-boundary execution into the task-execution worker loop. The
 worker command now has a real responder and backend service environment, but
