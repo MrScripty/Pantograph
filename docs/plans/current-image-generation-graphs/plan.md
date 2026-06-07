@@ -530,6 +530,27 @@ Discovered follow-up:
 warning is outside the embedded-runtime keep-alive test migration slice and is
 not fixed here.
 
+2026-06-07 embedded human-input scheduler rejection test slice:
+smallest useful vertical slice: update the stale
+`workflow_run_execution_session_returns_invalid_request_for_human_input_workflow`
+expectation after session runs moved to the scheduler-owned execution path.
+Allowed files touched:
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`
+and this plan. No-fallback/no-legacy confirmation: the test now accepts the
+canonical fail-closed `CapabilityViolation` for an unsupported scheduler task
+state with no execution path; it does not restore the old invalid-request
+surface, direct node-engine execution, or a human-input compatibility runner.
+
+Verification:
+`cargo test -p pantograph-embedded-runtime workflow_run_execution_session_rejects_human_input_workflow_without_execution_path --lib`
+passed with 1 test. Broader verification
+`cargo test -p pantograph-embedded-runtime workflow_run_execution --lib` now
+has 3 passing tests and 6 remaining failures: three stale `onnx-inference`
+fixture tests blocked by stale graph diagnostics, one production embedded image
+runtime-host test still entering direct `WorkflowService` runtime execution,
+one run-detail/node-IO projection expectation, and one live-event expectation
+that still looks for legacy `TaskCompleted` node-engine events.
+
 Option 3 durable lifecycle sequence after Option 2 validation:
 1. Promote runtime-branch events into the durable scheduler task-attempt
    lifecycle with explicit non-terminal running/dispatching/deferred states,

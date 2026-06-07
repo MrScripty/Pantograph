@@ -1384,7 +1384,7 @@ async fn embedded_workflow_host_run_workflow_returns_cancelled_for_precancelled_
 }
 
 #[tokio::test]
-async fn workflow_run_execution_session_returns_invalid_request_for_human_input_workflow() {
+async fn workflow_run_execution_session_rejects_human_input_workflow_without_execution_path() {
     let temp = TempDir::new().expect("temp dir");
     write_human_input_workflow(temp.path(), "interactive-human-input");
 
@@ -1434,13 +1434,13 @@ async fn workflow_run_execution_session_returns_invalid_request_for_human_input_
         );
 
     match error {
-        WorkflowServiceError::InvalidRequest(message) => {
+        WorkflowServiceError::CapabilityViolation(message) => {
             assert!(
-                message.contains("interactive") || message.contains("input"),
-                "unexpected invalid-request message: {message}"
+                message.contains("unsupported=1") || message.contains("execution path"),
+                "unexpected capability-violation message: {message}"
             );
         }
-        other => panic!("expected invalid request error, got {other:?}"),
+        other => panic!("expected scheduler execution-path rejection, got {other:?}"),
     }
 }
 
