@@ -990,6 +990,71 @@ Do not proceed to durable grouped claims until one option is selected and the
 plan identifies the owner of selected runtime/backend/device/residency/resource
 facts.
 
+2026-06-07 runtime-branch batch eligibility fact-population decision: use
+Option 3. Do not populate `batch_eligibility` from runtime-branch
+admission/recovery, scheduler graph shape, provisional `batching_key`, request
+parameters, or partial scheduler intent. The selected runtime/backend/device,
+load-target, residency, reservation, resource-fit, loaded-runtime memory, and
+runtime-instance facts must become canonical durable scheduler task-attempt
+facts first; runtime-branch batch eligibility can then be derived from those
+attempt facts. Until that promotion is complete, `batch_eligibility: None` is
+the correct fail-closed state and durable grouped claims remain blocked.
+
+Option 3 implementation sequence:
+1. Define the durable runtime task-attempt fact contract in workflow-service
+   without changing execution. The contract must name the selected model and
+   artifact, backend/runtime family, resolved device/load target, residency
+   key, loaded-runtime memory estimate, resource-fit/reservation facts,
+   operation/context shape, cancellation mode, timeout policy, workflow run,
+   scheduler task, and task-attempt identity. Add pure validation and boundary
+   tests proving missing selected facts fail closed with typed diagnostics.
+2. Persist task-attempt selected runtime/resource facts only at the backend
+   boundary that already owns the selected dispatch/resource decision. Do not
+   synthesize facts from graph nodes, request DTOs, frontend/Tauri state, or
+   worker command envelopes. If the current code has no such boundary for all
+   required facts, stop and re-plan that ownership boundary before adding
+   persistence.
+3. Rehydrate worker dispatch from durable task-attempt facts, not from
+   bridge-only runtime-branch records, while preserving the existing
+   worker-owned dispatch path and typed stale/missing-fact diagnostics.
+4. Derive runtime-branch `batch_eligibility` from task-attempt facts or remove
+   the bridge field once task-attempt facts become the only compatibility
+   source. The derivation must never carry forward workflow inputs from the
+   run that originally loaded a kept-alive model/runtime instance.
+5. Add durable grouped claiming over compatible task-attempt facts before
+   adding runtime-host coalescing. This validates group lease ownership,
+   duplicate-dispatch protection, retry/defer behavior, replay after expired
+   leases, and per-run cancellation/timeout diagnostics without a runtime-host
+   batch API in the same slice.
+6. Add worker-owned coalesced runtime execution only after grouped claims pass:
+   claim a compatible task-attempt group, reuse a kept-alive compatible
+   runtime/model instance when available, call the composition-root-owned
+   runtime-host batch operation once, and fan out per-run outputs, terminal
+   facts, cancellations, timeouts, and typed diagnostics.
+7. Remove bridge-specific runtime-branch state/tests that duplicate
+   task-attempt lifecycle facts after the task-attempt path owns claim,
+   dispatching/running, defer/retry, replay, cancellation, terminal facts, and
+   batching eligibility.
+
+Next thin slice: implement only step 1, the durable runtime task-attempt fact
+contract and pure tests, in workflow-service. Allowed source scope should stay
+inside workflow-service task-attempt/runtime-branch lifecycle modules plus
+this plan. No execution, repository grouped claim, runtime-host batch API,
+frontend/Tauri policy, generated DTO, lockfile, saved workflow fixture, or
+bridge cleanup may be included in that slice.
+
+Re-plan triggers for Option 3:
+- The selected dispatch/resource decision is not represented at a stable
+  backend boundary that can own all required task-attempt facts.
+- Persisting task-attempt facts would require changing shared scheduler,
+  runtime-registry, Pumas, generated DTO, lockfile, or saved workflow fixture
+  contracts in the same slice.
+- A runtime-host batch API is needed before grouped task-attempt claims are
+  durable and tested.
+- Any implementation path would preserve request-scoped runtime execution,
+  use compatibility shims, or treat old graph/backend/runtime/device/frontend
+  execution methods as fallback.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
