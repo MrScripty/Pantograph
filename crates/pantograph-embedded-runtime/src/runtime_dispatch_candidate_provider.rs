@@ -1156,6 +1156,8 @@ mod tests {
         RuntimeDispatchRuntimeCapabilityFacts {
             runtime_id: runtime_id.to_string(),
             backend_keys: backend_keys.into_iter().map(str::to_string).collect(),
+            runtime_family: "diffusers".to_string(),
+            runtime_residency_key: format!("runtime.diffusers.{runtime_id}.shared"),
             status: pantograph_runtime_registry::RuntimeRegistryStatus::Ready,
             runtime_instance_id: Some(format!("{runtime_id}.instance")),
             loaded_model_ids: Vec::new(),

@@ -343,6 +343,8 @@ mod tests {
                 runtimes: vec![RuntimeDispatchRuntimeCapabilityFacts {
                     runtime_id: "pytorch".to_string(),
                     backend_keys: vec!["pytorch".to_string()],
+                    runtime_family: "diffusers".to_string(),
+                    runtime_residency_key: "runtime.diffusers.pytorch.shared".to_string(),
                     status: RuntimeRegistryStatus::Ready,
                     runtime_instance_id: Some("runtime.1".to_string()),
                     loaded_model_ids: Vec::new(),

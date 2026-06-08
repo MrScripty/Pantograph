@@ -34,7 +34,8 @@ pub use snapshot::{
 };
 use state::RuntimeTransition as Transition;
 pub use state::{
-    RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
+    RuntimeDispatchIdentity, RuntimeDispatchIdentityError, RuntimeModelResidencyRecord,
+    RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
 };
 pub use technical_fit::{
     select_runtime_technical_fit, RuntimeTechnicalFitCandidate,
@@ -119,6 +120,7 @@ pub struct RuntimeRegistration {
     pub runtime_id: String,
     pub display_name: String,
     pub backend_keys: Vec<String>,
+    pub dispatch_identity: Option<RuntimeDispatchIdentity>,
     pub admission_budget: Option<RuntimeAdmissionBudget>,
 }
 
@@ -128,12 +130,18 @@ impl RuntimeRegistration {
             runtime_id: runtime_id.into(),
             display_name: display_name.into(),
             backend_keys: Vec::new(),
+            dispatch_identity: None,
             admission_budget: None,
         }
     }
 
     pub fn with_backend_keys(mut self, backend_keys: Vec<String>) -> Self {
         self.backend_keys = backend_keys;
+        self
+    }
+
+    pub fn with_dispatch_identity(mut self, dispatch_identity: RuntimeDispatchIdentity) -> Self {
+        self.dispatch_identity = Some(dispatch_identity);
         self
     }
 
@@ -178,11 +186,13 @@ impl RuntimeRegistry {
             runtime_id: _,
             display_name,
             backend_keys,
+            dispatch_identity,
             admission_budget,
         } = registration;
 
         record.display_name = display_name.trim().to_string();
         record.set_backend_keys(backend_keys);
+        record.set_dispatch_identity(dispatch_identity);
         record.runtime_id = runtime_id.clone();
         if let Some(admission_budget) = admission_budget {
             record.admission_budget = Some(admission_budget);

@@ -18,6 +18,39 @@ fn register_runtime_canonicalizes_runtime_and_backend_keys() {
 }
 
 #[test]
+fn register_runtime_projects_dispatch_identity_without_deriving_from_runtime_id() {
+    let registry = RuntimeRegistry::new();
+    let identity = RuntimeDispatchIdentity::new("diffusers", "runtime.diffusers.shared")
+        .expect("dispatch identity");
+
+    let snapshot = registry.register_runtime(
+        RuntimeRegistration::new("PyTorch", "PyTorch sidecar")
+            .with_backend_keys(vec!["torch".to_string()])
+            .with_dispatch_identity(identity),
+    );
+
+    assert_eq!(snapshot.runtime_id, "pytorch");
+    assert_eq!(snapshot.runtime_family.as_deref(), Some("diffusers"));
+    assert_eq!(
+        snapshot.runtime_residency_key.as_deref(),
+        Some("runtime.diffusers.shared")
+    );
+}
+
+#[test]
+fn dispatch_identity_rejects_blank_required_facts() {
+    assert_eq!(
+        RuntimeDispatchIdentity::new("", "runtime.diffusers.shared")
+            .expect_err("blank runtime family must fail"),
+        RuntimeDispatchIdentityError::BlankRuntimeFamily
+    );
+    assert_eq!(
+        RuntimeDispatchIdentity::new("diffusers", " ").expect_err("blank residency key must fail"),
+        RuntimeDispatchIdentityError::BlankRuntimeResidencyKey
+    );
+}
+
+#[test]
 fn transition_runtime_rejects_invalid_state_changes() {
     let registry = RuntimeRegistry::new();
     registry.register_runtime(RuntimeRegistration::new("llama.cpp", "llama.cpp"));

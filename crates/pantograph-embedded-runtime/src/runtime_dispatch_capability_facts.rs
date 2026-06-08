@@ -52,6 +52,8 @@ pub(crate) struct RuntimeDispatchCapabilityFactsProjection {
 pub(crate) struct RuntimeDispatchRuntimeCapabilityFacts {
     pub runtime_id: String,
     pub backend_keys: Vec<String>,
+    pub runtime_family: String,
+    pub runtime_residency_key: String,
     pub status: RuntimeRegistryStatus,
     pub runtime_instance_id: Option<String>,
     pub loaded_model_ids: Vec<String>,
@@ -70,6 +72,7 @@ pub(crate) struct RuntimeDispatchCapabilityFactsDiagnostic {
 pub(crate) enum RuntimeDispatchCapabilityFactsDiagnosticCode {
     NoRegisteredRuntimes,
     RuntimeMissingBackendKeys,
+    RuntimeMissingDispatchIdentity,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,9 +109,23 @@ fn project_runtime(
         return None;
     }
 
+    let (Some(runtime_family), Some(runtime_residency_key)) =
+        (runtime.runtime_family, runtime.runtime_residency_key)
+    else {
+        diagnostics.push(RuntimeDispatchCapabilityFactsDiagnostic {
+            code: RuntimeDispatchCapabilityFactsDiagnosticCode::RuntimeMissingDispatchIdentity,
+            runtime_id: Some(runtime.runtime_id),
+            message: "runtime registry record has no dispatch identity for capability projection"
+                .to_string(),
+        });
+        return None;
+    };
+
     Some(RuntimeDispatchRuntimeCapabilityFacts {
         runtime_id: runtime.runtime_id,
         backend_keys: runtime.backend_keys,
+        runtime_family,
+        runtime_residency_key,
         status: runtime.status,
         runtime_instance_id: runtime.runtime_instance_id,
         loaded_model_ids: runtime
@@ -136,7 +153,9 @@ fn diagnostic(
 mod tests {
     use std::sync::Arc;
 
-    use pantograph_runtime_registry::{RuntimeRegistration, RuntimeRegistry, RuntimeTransition};
+    use pantograph_runtime_registry::{
+        RuntimeDispatchIdentity, RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
+    };
 
     use super::*;
 
@@ -145,7 +164,8 @@ mod tests {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
-                .with_backend_keys(vec!["torch".to_string(), "pytorch".to_string()]),
+                .with_backend_keys(vec!["torch".to_string(), "pytorch".to_string()])
+                .with_dispatch_identity(dispatch_identity()),
         );
         registry
             .transition_runtime(
@@ -165,6 +185,11 @@ mod tests {
         assert_eq!(facts.runtimes.len(), 1);
         let runtime = &facts.runtimes[0];
         assert_eq!(runtime.runtime_id, "pytorch");
+        assert_eq!(runtime.runtime_family, "diffusers");
+        assert_eq!(
+            runtime.runtime_residency_key,
+            "runtime.diffusers.pytorch.shared"
+        );
         assert_eq!(runtime.status, RuntimeRegistryStatus::Ready);
         assert_eq!(
             runtime.runtime_instance_id.as_deref(),
@@ -193,7 +218,10 @@ mod tests {
     #[test]
     fn source_rejects_runtime_without_backend_keys() {
         let registry = Arc::new(RuntimeRegistry::new());
-        registry.register_runtime(RuntimeRegistration::new("custom-runtime", "Custom Runtime"));
+        registry.register_runtime(
+            RuntimeRegistration::new("custom-runtime", "Custom Runtime")
+                .with_dispatch_identity(dispatch_identity()),
+        );
         let source = RuntimeDispatchCapabilityFactsSource::new(registry);
 
         let outcome = source.collect();
@@ -207,5 +235,32 @@ mod tests {
                 == RuntimeDispatchCapabilityFactsDiagnosticCode::RuntimeMissingBackendKeys
                 && diagnostic.runtime_id.as_deref() == Some("custom-runtime")
         }));
+    }
+
+    #[test]
+    fn source_rejects_dispatch_runtime_without_dispatch_identity() {
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["pytorch".to_string()]),
+        );
+        let source = RuntimeDispatchCapabilityFactsSource::new(registry);
+
+        let outcome = source.collect();
+
+        assert!(matches!(
+            outcome,
+            RuntimeDispatchCapabilityFactsOutcome::Unavailable { .. }
+        ));
+        assert!(outcome.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code
+                == RuntimeDispatchCapabilityFactsDiagnosticCode::RuntimeMissingDispatchIdentity
+                && diagnostic.runtime_id.as_deref() == Some("pytorch")
+        }));
+    }
+
+    fn dispatch_identity() -> RuntimeDispatchIdentity {
+        RuntimeDispatchIdentity::new("diffusers", "runtime.diffusers.pytorch.shared")
+            .expect("dispatch identity fixture")
     }
 }

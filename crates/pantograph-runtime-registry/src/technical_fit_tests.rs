@@ -73,6 +73,8 @@ fn runtime_snapshot(
         runtime_id: runtime_id.to_string(),
         display_name: runtime_id.to_string(),
         backend_keys: backend_keys.into_iter().map(ToOwned::to_owned).collect(),
+        runtime_family: Some("llama_cpp".to_string()),
+        runtime_residency_key: Some(format!("runtime.llama_cpp.{runtime_id}")),
         status,
         runtime_instance_id: Some(format!("{runtime_id}-instance")),
         last_error: None,

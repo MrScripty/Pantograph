@@ -31,6 +31,8 @@ pub struct RuntimeRegistryRecord {
     pub runtime_id: String,
     pub display_name: String,
     pub backend_keys: BTreeSet<String>,
+    pub runtime_family: Option<String>,
+    pub runtime_residency_key: Option<String>,
     pub status: RuntimeRegistryStatus,
     pub runtime_instance_id: Option<String>,
     pub last_error: Option<String>,
@@ -46,6 +48,8 @@ impl RuntimeRegistryRecord {
             runtime_id: canonical_runtime_id(runtime_id),
             display_name: display_name.trim().to_string(),
             backend_keys: BTreeSet::new(),
+            runtime_family: None,
+            runtime_residency_key: None,
             status: RuntimeRegistryStatus::Stopped,
             runtime_instance_id: None,
             last_error: None,
@@ -66,6 +70,47 @@ impl RuntimeRegistryRecord {
             .filter(|backend_key| !backend_key.is_empty())
             .collect();
     }
+
+    pub fn set_dispatch_identity(&mut self, identity: Option<RuntimeDispatchIdentity>) {
+        if let Some(identity) = identity {
+            self.runtime_family = Some(identity.runtime_family);
+            self.runtime_residency_key = Some(identity.runtime_residency_key);
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDispatchIdentity {
+    pub runtime_family: String,
+    pub runtime_residency_key: String,
+}
+
+impl RuntimeDispatchIdentity {
+    pub fn new(
+        runtime_family: impl Into<String>,
+        runtime_residency_key: impl Into<String>,
+    ) -> Result<Self, RuntimeDispatchIdentityError> {
+        let runtime_family = runtime_family.into().trim().to_string();
+        if runtime_family.is_empty() {
+            return Err(RuntimeDispatchIdentityError::BlankRuntimeFamily);
+        }
+        let runtime_residency_key = runtime_residency_key.into().trim().to_string();
+        if runtime_residency_key.is_empty() {
+            return Err(RuntimeDispatchIdentityError::BlankRuntimeResidencyKey);
+        }
+        Ok(Self {
+            runtime_family,
+            runtime_residency_key,
+        })
+    }
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum RuntimeDispatchIdentityError {
+    #[error("runtime dispatch identity requires a runtime family")]
+    BlankRuntimeFamily,
+    #[error("runtime dispatch identity requires a runtime residency key")]
+    BlankRuntimeResidencyKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

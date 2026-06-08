@@ -1506,6 +1506,51 @@ first-class runtime family and residency identity cannot be done without
 changing workflow-service contracts, scheduler DTOs, Pumas, generated files,
 lockfiles, or saved workflow fixtures in the same slice.
 
+2026-06-07 runtime-registry dispatch identity slice: completed intermediate
+sequence step 1. Smallest useful vertical slice: add runtime-registry-owned
+`RuntimeDispatchIdentity` with explicit runtime family and runtime residency
+key, carry those facts through runtime registration records and runtime
+snapshots, and require embedded-runtime dispatch capability projection to
+receive both fields before it emits dispatch-capable runtime facts. Allowed
+files touched:
+`crates/pantograph-runtime-registry/src/state.rs`,
+`crates/pantograph-runtime-registry/src/lib.rs`,
+`crates/pantograph-runtime-registry/src/snapshot.rs`,
+`crates/pantograph-runtime-registry/src/registry_queries.rs`,
+`crates/pantograph-runtime-registry/src/lib_tests/lifecycle.rs`,
+`crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_capability_facts.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_source_snapshot.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+`crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs`,
+and this plan. No workflow-service contract, scheduler DTO, Pumas, generated,
+lockfile, or saved workflow fixture files were changed.
+
+No-fallback/no-legacy confirmation: runtime family and residency key are now
+first-class registry facts, not values derived from runtime id, selected
+backend key, device id, `batching_key`, graph/request shape, scheduler hints,
+trait settings, or runtime-host execution requests. Dispatch capability
+projection fails closed with a typed diagnostic when a runtime has backend keys
+but no dispatch identity. Existing runtime registrations without dispatch
+identity remain valid registry records for non-dispatch/lifecycle use; they do
+not project as dispatch candidates until identity is supplied.
+
+Verification passed:
+`cargo fmt -p pantograph-runtime-registry -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-runtime-registry lifecycle --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_capability_facts --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_source_snapshot --lib`,
+`cargo test -p pantograph-embedded-runtime inference_interface_facts_provider --lib`,
+`cargo check -p pantograph-runtime-registry`, and
+`cargo check -p pantograph-embedded-runtime`.
+
+Remaining follow-up: implement intermediate sequence step 2 by adding
+embedded-runtime Pumas load-target evidence to the async dispatch source
+refresh path. Stop and re-plan if the load-target source requires
+workflow-service contracts, scheduler DTOs, Pumas API/contract changes,
+generated files, lockfiles, or saved workflow fixtures in the same slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

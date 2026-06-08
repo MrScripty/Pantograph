@@ -168,6 +168,8 @@ fn runtime_snapshot_with_claims(
         runtime_id: record.runtime_id.clone(),
         display_name: record.display_name.clone(),
         backend_keys,
+        runtime_family: record.runtime_family.clone(),
+        runtime_residency_key: record.runtime_residency_key.clone(),
         status: record.status,
         runtime_instance_id: record.runtime_instance_id.clone(),
         last_error: record.last_error.clone(),

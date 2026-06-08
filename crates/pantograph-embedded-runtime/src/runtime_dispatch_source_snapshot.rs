@@ -258,7 +258,9 @@ fn diagnostic(
 mod tests {
     use std::sync::Arc;
 
-    use pantograph_runtime_registry::{RuntimeRegistration, RuntimeRegistry, RuntimeTransition};
+    use pantograph_runtime_registry::{
+        RuntimeDispatchIdentity, RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
+    };
 
     use super::*;
 
@@ -267,7 +269,8 @@ mod tests {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
-                .with_backend_keys(vec!["diffusers".to_string()]),
+                .with_backend_keys(vec!["diffusers".to_string()])
+                .with_dispatch_identity(dispatch_identity()),
         );
         registry
             .transition_runtime(
@@ -299,6 +302,11 @@ mod tests {
             snapshot.runtime_capability_facts,
             Some(RuntimeDispatchCapabilityFactsOutcome::Projected { .. })
         ));
+    }
+
+    fn dispatch_identity() -> RuntimeDispatchIdentity {
+        RuntimeDispatchIdentity::new("diffusers", "runtime.diffusers.pytorch.shared")
+            .expect("dispatch identity fixture")
     }
 
     #[tokio::test]

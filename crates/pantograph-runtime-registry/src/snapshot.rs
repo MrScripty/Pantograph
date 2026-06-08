@@ -18,6 +18,10 @@ pub struct RuntimeRegistryRuntimeSnapshot {
     pub runtime_id: String,
     pub display_name: String,
     pub backend_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_residency_key: Option<String>,
     pub status: RuntimeRegistryStatus,
     #[serde(default)]
     pub runtime_instance_id: Option<String>,
