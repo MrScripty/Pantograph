@@ -1832,6 +1832,58 @@ runtime-branch ownership boundaries. Do not proceed until ownership is
 re-planned so the task-attempt fact builder consumes canonical facts from the
 same backend-owned source that owns those fields.
 
+2026-06-07 task-attempt fact construction re-plan decision: use Option 1,
+the runtime-branch/worker-owned construction path. Runtime-branch task
+events/claims remain the canonical owner for attempt generation, operation
+type, context shape key, cancellation mode, and timeout. Runtime dispatch
+selection remains the canonical owner for selected candidate runtime/model/
+resource evidence. Scheduler attempt lifecycle remains the canonical owner for
+attempt id and start timestamp. The worker/runtime-branch dispatch boundary
+will compose those already-validated backend facts into
+`WorkflowRuntimeTaskAttemptFactRecord` before runtime-host dispatch starts.
+
+No-fallback/no-legacy confirmation: do not move operation/context/cancellation
+facts into scheduler DTOs, do not derive them from graph/request/runtime-host
+state in `session_scheduler_runner`, do not copy Pumas contracts into this
+boundary, and do not preserve request-scoped dispatch as a hidden legacy owner.
+If any required field is missing from the runtime-branch/worker rehydrated
+context, dispatch must fail closed with typed diagnostics.
+
+Option 1 implementation sequence:
+1. Add a runtime-branch/worker task-attempt source context contract that
+   groups the existing runtime-branch profile fields (`attempt_generation`,
+   `operation_type`, `context_shape_key`, `cancellation_mode`, `timeout_ms`)
+   with the selected candidate evidence resolved from
+   `WorkflowRuntimeDispatchCandidateEvidenceContext`. The contract must be
+   workflow-service-owned and validated at construction.
+2. Persist or carry the selected candidate evidence into the runtime-branch
+   dispatch/claim boundary as backend-owned evidence, not as scheduler DTO
+   expansion and not as a runtime-host request field. Missing or stale
+   selected candidate evidence must fail closed before a worker dispatches.
+3. Extend runtime-branch worker rehydration to return the validated
+   task-attempt source context plus scheduler attempt id/start timestamp.
+   Rehydration must reject mismatched workflow run, task id, attempt
+   generation, timeout, or selected candidate evidence.
+4. Build `WorkflowRuntimeTaskAttemptFactRecord` at the worker dispatch
+   boundary from the rehydrated source context, selected candidate fact,
+   scheduler attempt identity, and current recorded timestamp before
+   runtime-host dispatch starts.
+5. Add boundary invariant tests proving the worker does not synthesize
+   operation/context/cancellation facts, scheduler DTOs remain ranking-only,
+   and missing selected candidate evidence or runtime-branch profile fields
+   block dispatch.
+6. After this validates, remove or narrow any temporary session-runner
+   selected-evidence checks that are superseded by durable worker ownership,
+   without restoring request-scoped runtime execution.
+
+Next thin slice: implement Option 1 sequence step 1 by introducing the
+workflow-service runtime-branch/worker task-attempt source context contract
+and focused validation tests only. Allowed files should be limited to
+workflow-service runtime-branch/task-attempt contract modules, their focused
+tests, and this plan. Stop and re-plan if the slice requires scheduler DTO
+changes, Pumas contracts, generated files, lockfiles, saved workflow fixtures,
+or any synthesis from graph/request/runtime-host state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
