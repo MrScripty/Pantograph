@@ -34,15 +34,17 @@ use pantograph_runtime_host_contracts::{
     RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
-    SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerEstimateHint,
-    SchedulerEstimateHintKind, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
-    SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
-    SchedulerTaskStateRecord,
+    SchedulerDispatchCandidateId, SchedulerEstimateHint, SchedulerEstimateHintKind,
+    SchedulerReservationLeaseId, SchedulerResourceFitAssessment, SchedulerResourceFitState,
+    SchedulerResourceKind, SchedulerResourceReservation, SchedulerTaskStateRecord,
 };
 use pantograph_workflow_service::workflow::{
-    WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
-    WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchSourceRefreshError,
+    ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
+    WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
+    WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+    WorkflowRuntimeDispatchLoadState, WorkflowRuntimeDispatchSourceRefreshError,
     WorkflowRuntimeDispatchSourceRefresher,
+    WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 use pantograph_workflow_service::{
     ArtifactReadRequest, WorkflowArtifactWriter, WorkflowExecutableValidationSnapshotId,
@@ -601,7 +603,7 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
         &self,
         task: &WorkflowSchedulerTask,
         _ready_record: &SchedulerTaskStateRecord,
-        _readiness_proof: &DependencyReadinessProofEnvelope,
+        readiness_proof: &DependencyReadinessProofEnvelope,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
         let intent = task.schedulable_intent.as_ref().ok_or_else(|| {
@@ -634,48 +636,75 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
                         task.task_id.as_str()
                     ),
                 })?;
-        Ok(WorkflowRuntimeDispatchCandidateSet {
-            candidates: vec![SchedulerDispatchCandidate {
-                candidate_id: SchedulerDispatchCandidateId::parse(
-                    "candidate.embedded_runtime_session_test",
-                )
-                .map_err(|error| {
-                    WorkflowRuntimeDispatchCandidateProviderError::Failed {
-                        message: error.to_string(),
-                    }
-                })?,
-                selected_runtime_id,
-                selected_runtime_variant_id: None,
-                selected_device_ids: vec![selected_device_id.clone()],
-                selected_model_ref: intent.model_ref.clone(),
-                runtime_trait_settings: Vec::new(),
-                reservations: vec![SchedulerResourceReservation {
-                    reservation_lease_id: SchedulerReservationLeaseId::parse(
-                        "reservation.embedded_runtime_session_test",
-                    )
-                    .map_err(|error| {
-                        WorkflowRuntimeDispatchCandidateProviderError::Failed {
-                            message: error.to_string(),
-                        }
-                    })?,
-                    workflow_run_id: intent.workflow_run_id.clone(),
-                    task_id: intent.task_id.clone(),
-                    device_id: selected_device_id,
-                    resource_kind: SchedulerResourceKind::DeviceVram,
-                    reserved_bytes: 1,
-                }],
-                resource_fit_assessment: Some(SchedulerResourceFitAssessment {
-                    workflow_run_id: intent.workflow_run_id.clone(),
-                    task_id: intent.task_id.clone(),
-                    state: SchedulerResourceFitState::Fits,
-                    diagnostics: Vec::new(),
-                }),
-                batching_group_id: None,
-                candidate_source_diagnostics: Vec::new(),
-            }],
-            diagnostics: Vec::new(),
-            candidate_evidence_context: Default::default(),
-        })
+        let environment_ref = readiness_proof
+            .preflight_result
+            .environment_ref
+            .clone()
+            .ok_or_else(|| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!(
+                    "runtime scheduler task '{}' has no environment ref",
+                    task.task_id.as_str()
+                ),
+            })?;
+        let reservation = SchedulerResourceReservation {
+            reservation_lease_id: SchedulerReservationLeaseId::parse(
+                "reservation.embedded_runtime_session_test",
+            )
+            .map_err(|error| {
+                WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                    message: error.to_string(),
+                }
+            })?,
+            workflow_run_id: intent.workflow_run_id.clone(),
+            task_id: intent.task_id.clone(),
+            device_id: selected_device_id.clone(),
+            resource_kind: SchedulerResourceKind::DeviceVram,
+            reserved_bytes: 1,
+        };
+        let fact = WorkflowRuntimeDispatchCandidateFact {
+            candidate_id: SchedulerDispatchCandidateId::parse(
+                "candidate.embedded_runtime_session_test",
+            )
+            .map_err(|error| {
+                WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                    message: error.to_string(),
+                }
+            })?,
+            selected_runtime_id,
+            selected_runtime_variant_id: None,
+            selected_backend_key: "test-runtime".to_string(),
+            runtime_family: "test-runtime".to_string(),
+            resolved_load_target: format!("test:{}", intent.model_ref.model_id),
+            runtime_residency_key: format!("test-runtime:{}", intent.model_ref.model_id),
+            loaded_runtime_memory_estimate_bytes: 1,
+            runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
+            runtime_instance_id: Some("runtime.embedded-session-test.001".to_string()),
+            selected_device_ids: vec![selected_device_id],
+            selected_model_ref: intent.model_ref.clone(),
+            runtime_trait_settings: Vec::new(),
+            environment_ref,
+            reservations: vec![reservation],
+            resource_fit_assessment: SchedulerResourceFitAssessment {
+                workflow_run_id: intent.workflow_run_id.clone(),
+                task_id: intent.task_id.clone(),
+                state: SchedulerResourceFitState::Fits,
+                diagnostics: Vec::new(),
+            },
+            batching_group_id: None,
+        };
+        let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+            WorkflowRuntimeDispatchCandidateFactBundle {
+                contract_version: WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+                facts: vec![fact],
+                diagnostics: Vec::new(),
+            },
+        )
+        .map_err(
+            |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: error.to_string(),
+            },
+        )?;
+        Ok(WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle))
     }
 }
 

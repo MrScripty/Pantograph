@@ -1764,6 +1764,58 @@ fail closed. Stop and re-plan if this requires scheduler DTO changes, Pumas
 contracts, generated files, lockfiles, saved workflow fixtures, or evidence
 synthesis from graph/request/runtime-host state.
 
+2026-06-07 workflow-service selected-candidate fact resolution slice:
+completed Option 1 sequence step 2. Smallest useful vertical slice: change the
+workflow-service runtime dispatch selection request builder to return the
+validated scheduler selection request plus the retained candidate evidence
+context, expose the selected scheduler candidate id from
+`SelectedRuntimeTaskDispatch`, and resolve that id against the retained
+`WorkflowRuntimeDispatchCandidateEvidenceContext` before runtime-host dispatch.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: scheduler selection still receives only
+the validated `SchedulerDispatchSelectionRequest`; the retained evidence
+context is not added to scheduler DTOs and is not reconstructed from runtime
+ids, backend keys, graph/request shape, runtime-host requests, Pumas
+contracts, or scheduler hints. Missing selected candidate ids and stale
+candidate ids now return typed workflow-service diagnostics and fail closed
+before runtime-host dispatch. Duplicate candidate ids remain blocked at the
+validated candidate fact bundle boundary before the context is built. Test
+providers that previously emitted scheduler-only candidates were moved to the
+validated candidate fact bundle path instead of preserving a scheduler-only
+test fallback.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo check -p pantograph-workflow-service`, and
+`cargo check -p pantograph-embedded-runtime`.
+
+Additional verification/deviation:
+`cargo test -p pantograph-workflow-service session_execution --lib` now fixes
+the selected-evidence failures from scheduler-only test providers and reports
+36 passing tests plus one remaining failure:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`
+fails with `no due runtime branch task event is available for workflow run`.
+The same test fails when run alone, so this is recorded as a discovered
+runtime-branch bootstrap recovery issue outside the selected-evidence slice.
+
+Next thin slice: implement Option 1 sequence step 3 by constructing the
+`WorkflowRuntimeTaskAttemptFactRecord` from the selected validated candidate
+fact, the started task attempt identity, operation/context/cancel facts, and
+current timestamp before runtime-host dispatch starts. Stop and re-plan if
+this requires scheduler DTO changes, Pumas contracts, generated files,
+lockfiles, saved workflow fixtures, or any synthesis of selected runtime
+evidence from graph/request/runtime-host state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

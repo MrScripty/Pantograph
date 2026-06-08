@@ -34,8 +34,9 @@ use super::validation::{
     validate_requested_outputs_produced,
 };
 use super::{
-    project_scheduler_task_results_to_outputs, runtime_dispatch_selection_request, WorkflowHost,
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTask,
+    project_scheduler_task_results_to_outputs, runtime_dispatch_selection_request,
+    selected_runtime_dispatch_candidate_fact, WorkflowHost, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTask,
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskRunSummary, WorkflowService,
     WorkflowServiceError,
@@ -726,7 +727,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         "runtime dispatch candidate collection failed: {error}"
                     ))
                 })?;
-            let selection_request = runtime_dispatch_selection_request(
+            let dispatch_selection_request = runtime_dispatch_selection_request(
                 &dispatch_context.task,
                 readiness_proof,
                 candidate_set,
@@ -736,6 +737,8 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     "runtime dispatch selection request failed: {error}"
                 ))
             })?;
+            let selection_request = dispatch_selection_request.selection_request;
+            let candidate_evidence_context = dispatch_selection_request.candidate_evidence_context;
             let started_runtime_task = {
                 let mut store = self.service.session_store_guard()?;
                 self.service
@@ -827,6 +830,15 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )));
                 }
             };
+            let _selected_candidate_fact = selected_runtime_dispatch_candidate_fact(
+                selected_dispatch.candidate_id(),
+                &candidate_evidence_context,
+            )
+            .map_err(|error| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "runtime dispatch selected candidate evidence failed: {error}"
+                ))
+            })?;
             {
                 let mut store = self.service.session_store_guard()?;
                 self.service

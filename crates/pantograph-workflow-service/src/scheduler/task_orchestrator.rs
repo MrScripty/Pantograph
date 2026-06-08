@@ -147,6 +147,10 @@ impl SelectedRuntimeTaskDispatch {
     pub(crate) fn reservation_lease_id(&self) -> &SchedulerReservationLeaseId {
         &self.reservation_lease_id
     }
+
+    pub(crate) fn candidate_id(&self) -> Option<&SchedulerDispatchCandidateId> {
+        self.candidate_id.as_ref()
+    }
 }
 
 impl StartedNonRuntimeTaskExecution {

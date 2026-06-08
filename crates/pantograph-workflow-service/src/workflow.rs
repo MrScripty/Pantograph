@@ -154,8 +154,8 @@ pub(crate) use self::non_runtime_task_adapter::{
     execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
 };
 pub(crate) use self::runtime_dispatch_selection::{
-    runtime_dispatch_selection_request, NoRuntimeDispatchCandidatesProvider,
-    NoRuntimeDispatchSourceRefresher,
+    runtime_dispatch_selection_request, selected_runtime_dispatch_candidate_fact,
+    NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,
 };
 pub use self::runtime_dispatch_selection::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle,

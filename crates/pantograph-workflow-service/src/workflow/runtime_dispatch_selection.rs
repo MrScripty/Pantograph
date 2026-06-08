@@ -211,7 +211,7 @@ pub(crate) fn runtime_dispatch_selection_request(
     task: &WorkflowSchedulerTask,
     readiness_proof: DependencyReadinessProofEnvelope,
     candidate_set: WorkflowRuntimeDispatchCandidateSet,
-) -> Result<ValidatedSchedulerDispatchSelectionRequest, WorkflowRuntimeDispatchSelectionError> {
+) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchSelectionError> {
     let Some(task_intent) = task.schedulable_intent.clone() else {
         return Err(WorkflowRuntimeDispatchSelectionError::WorkflowService(
             WorkflowServiceError::InvalidRequest(format!(
@@ -228,7 +228,7 @@ pub(crate) fn runtime_dispatch_selection_request(
             )),
         ));
     };
-    SchedulerDispatchSelectionRequest {
+    let selection_request = SchedulerDispatchSelectionRequest {
         contract_version: SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
         task_intent,
         readiness_proof,
@@ -237,7 +237,34 @@ pub(crate) fn runtime_dispatch_selection_request(
         diagnostics: candidate_set.diagnostics,
     }
     .try_into()
-    .map_err(WorkflowRuntimeDispatchSelectionError::SchedulerContract)
+    .map_err(WorkflowRuntimeDispatchSelectionError::SchedulerContract)?;
+    Ok(WorkflowRuntimeDispatchSelectionRequest {
+        selection_request,
+        candidate_evidence_context: candidate_set.candidate_evidence_context,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowRuntimeDispatchSelectionRequest {
+    pub(crate) selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    pub(crate) candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext,
+}
+
+pub(crate) fn selected_runtime_dispatch_candidate_fact(
+    candidate_id: Option<&SchedulerDispatchCandidateId>,
+    candidate_evidence_context: &WorkflowRuntimeDispatchCandidateEvidenceContext,
+) -> Result<WorkflowRuntimeDispatchCandidateFact, WorkflowRuntimeDispatchSelectionError> {
+    let Some(candidate_id) = candidate_id else {
+        return Err(WorkflowRuntimeDispatchSelectionError::MissingSelectedCandidateId);
+    };
+    candidate_evidence_context
+        .candidate_fact(candidate_id)
+        .cloned()
+        .ok_or_else(
+            || WorkflowRuntimeDispatchSelectionError::MissingSelectedCandidateFact {
+                candidate_id: candidate_id.as_str().to_string(),
+            },
+        )
 }
 
 #[derive(Debug, Error)]
@@ -317,6 +344,10 @@ pub(crate) enum WorkflowRuntimeDispatchSelectionError {
     WorkflowService(WorkflowServiceError),
     #[error("scheduler dispatch-selection contract validation failed")]
     SchedulerContract(#[from] pantograph_scheduler::SchedulerContractError),
+    #[error("scheduler selected runtime dispatch without a candidate id")]
+    MissingSelectedCandidateId,
+    #[error("scheduler selected candidate '{candidate_id}' has no retained workflow-service candidate fact")]
+    MissingSelectedCandidateFact { candidate_id: String },
 }
 
 fn validate_candidate_fact_bundle(
@@ -748,6 +779,64 @@ mod tests {
         assert!(candidate_set.candidates.is_empty());
         assert_eq!(candidate_set.diagnostics.len(), 1);
         assert!(candidate_set.candidate_evidence_context.is_empty());
+    }
+
+    #[test]
+    fn selected_candidate_fact_resolves_from_retained_evidence_context() {
+        let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+            candidate_fact_bundle(vec![candidate_fact()]),
+        )
+        .expect("candidate fact bundle");
+        let candidate_set = WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle);
+        let candidate_id = candidate_set.candidates[0].candidate_id.clone();
+
+        let selected_fact = selected_runtime_dispatch_candidate_fact(
+            Some(&candidate_id),
+            &candidate_set.candidate_evidence_context,
+        )
+        .expect("selected candidate fact should resolve");
+
+        assert_eq!(selected_fact.candidate_id, candidate_id);
+        assert_eq!(selected_fact.selected_backend_key, "diffusers");
+        assert_eq!(
+            selected_fact.runtime_instance_id.as_deref(),
+            Some("runtime.diffusers-pytorch.001")
+        );
+    }
+
+    #[test]
+    fn selected_candidate_fact_rejects_missing_selected_candidate_id() {
+        let candidate_set = WorkflowRuntimeDispatchCandidateSet::from_diagnostics(Vec::new());
+
+        let error = selected_runtime_dispatch_candidate_fact(
+            None,
+            &candidate_set.candidate_evidence_context,
+        )
+        .expect_err("missing selected candidate id must fail closed");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchSelectionError::MissingSelectedCandidateId
+        ));
+    }
+
+    #[test]
+    fn selected_candidate_fact_rejects_stale_selected_candidate_id() {
+        let candidate_set = WorkflowRuntimeDispatchCandidateSet::from_diagnostics(Vec::new());
+        let stale_candidate_id: SchedulerDispatchCandidateId =
+            "candidate.stale".parse().expect("candidate id");
+
+        let error = selected_runtime_dispatch_candidate_fact(
+            Some(&stale_candidate_id),
+            &candidate_set.candidate_evidence_context,
+        )
+        .expect_err("stale selected candidate id must fail closed");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchSelectionError::MissingSelectedCandidateFact { candidate_id }
+                if candidate_id == "candidate.stale"
+        ));
     }
 
     fn candidate_fact_bundle(
