@@ -1672,6 +1672,58 @@ runtime-host dispatch starts. Do not proceed by adding evidence to scheduler
 DTOs, re-deriving it from scheduler candidates, runtime ids, graph/request
 shape, runtime-host requests, or embedded provider internals.
 
+2026-06-07 task-attempt fact persistence re-plan decision: use Option 1 now,
+the workflow-service candidate evidence context. Workflow-service will retain
+the validated `WorkflowRuntimeDispatchCandidateFactBundle` as an
+application-layer dispatch context while building the scheduler ranking
+request. After scheduler selection returns a candidate id, workflow-service
+will resolve that id against the retained validated fact context and use that
+selected fact to build the durable `WorkflowRuntimeTaskAttemptFactRecord`.
+Scheduler DTOs remain ranking-only, embedded-runtime remains the source owner
+for producing validated provider facts, and workflow-service remains the owner
+for retaining selected candidate evidence long enough to persist the
+task-attempt fact. This preserves the standards requirements for single state
+ownership, backend-owned durable truth, explicit contracts, and boundary
+invariant testing.
+
+Rejected immediate paths:
+1. Persist all candidate facts before scheduler selection. This remains a
+   valid later durability/replay upgrade, but it is too broad for the next
+   thin slice because it needs store shape, cleanup, stale-attempt handling,
+   and replay semantics before implementation.
+2. Move selected evidence ownership directly into runtime-branch task events.
+   This remains the likely long-term worker/runtime lifecycle direction, but
+   it is too broad until the immediate workflow-service context proves
+   selected candidate evidence can be resolved without scheduler DTO changes
+   or fallback derivation.
+
+Option 1 implementation sequence:
+1. Change the workflow-service dispatch selection boundary so
+   `WorkflowRuntimeDispatchCandidateSet` can retain the validated fact bundle
+   or an equivalent workflow-service-owned context alongside the scheduler
+   candidates. The context must be keyed by candidate id and must not expose
+   policy to scheduler DTOs.
+2. Update runtime dispatch selection to return selected scheduler dispatch
+   plus the matching validated workflow-service candidate fact. Missing,
+   duplicate, or stale selected fact lookups must return typed diagnostics and
+   fail closed before runtime-host dispatch.
+3. Build `WorkflowRuntimeTaskAttemptFactRecord` from the selected validated
+   candidate fact, started task attempt identity, operation/context/cancel
+   facts, and current timestamp. Persist or record it at the workflow-service
+   task-attempt boundary before runtime-host dispatch starts.
+4. Add boundary invariant tests that prove scheduler candidates do not carry
+   rich evidence, workflow-service does not synthesize selected evidence after
+   selection, and missing selected fact context blocks dispatch.
+5. After this validates, plan the later durable candidate evidence store or
+   runtime-branch event ownership upgrade for restart/replay/coalescing.
+
+Next thin slice: implement Option 1 sequence step 1 only in workflow-service
+runtime dispatch selection contracts/tests and the embedded-runtime provider
+projection if required by the changed constructor shape. Stop and re-plan if
+the slice requires scheduler DTO changes, Pumas contracts, generated files,
+lockfiles, saved workflow fixtures, or any derivation from graph/request/
+runtime-host state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
