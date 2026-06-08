@@ -908,6 +908,9 @@ mod tests {
             crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource::new(
                 Arc::new(RuntimeRegistry::new()),
             ),
+            crate::runtime_dispatch_load_target_facts::RuntimeDispatchLoadTargetFactsSource::new(
+                None,
+            ),
             100,
         );
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(store);

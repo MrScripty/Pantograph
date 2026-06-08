@@ -17,6 +17,7 @@ use crate::pumas_dispatch_package_facts::PumasDispatchPackageFactsSource;
 use crate::reservation_lifecycle::EmbeddedReservationLifecyclePort;
 use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
 use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
+use crate::runtime_dispatch_load_target_facts::RuntimeDispatchLoadTargetFactsSource;
 use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
 use crate::runtime_dispatch_source_snapshot::{
     EmbeddedRuntimeDispatchSourceFactRefresher, EmbeddedRuntimeDispatchSourceFactSnapshotStore,
@@ -233,6 +234,7 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     pub(crate) fn resource_backed(
         pumas_source: PumasDispatchPackageFactsSource,
         runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
+        load_target_source: RuntimeDispatchLoadTargetFactsSource,
         resource_facts_source: RuntimeDispatchResourceFactsSource,
         max_snapshot_age_ms: u64,
         runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
@@ -241,6 +243,7 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
         let snapshot_store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
             pumas_source,
             runtime_capability_source,
+            load_target_source,
             max_snapshot_age_ms,
         );
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(
@@ -337,6 +340,7 @@ impl EmbeddedWorkflowServiceComposition {
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
+            RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
             runtime_host_execution_port,
@@ -406,6 +410,7 @@ impl EmbeddedWorkflowServiceComposition {
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
+            RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
             runtime_host_execution_port,
@@ -601,7 +606,8 @@ mod tests {
         RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     };
     use pantograph_runtime_registry::{
-        RuntimeRegistration, RuntimeRegistry, RuntimeTransition, SharedRuntimeRegistry,
+        RuntimeDispatchIdentity, RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
+        SharedRuntimeRegistry,
     };
     use pantograph_scheduler::{SchedulerEstimateHintKind, SchedulerTaskStateRecord};
     use pantograph_workflow_service::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
@@ -730,6 +736,7 @@ mod tests {
         let dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(None),
             RuntimeDispatchCapabilityFactsSource::new(registry.clone()),
+            RuntimeDispatchLoadTargetFactsSource::new(None),
             RuntimeDispatchResourceFactsSource::new(registry),
             1_000,
             Arc::new(RejectingRuntimeHostPort),
@@ -798,7 +805,8 @@ mod tests {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
-                .with_backend_keys(vec!["pytorch".to_string(), "diffusers".to_string()]),
+                .with_backend_keys(vec!["pytorch".to_string(), "diffusers".to_string()])
+                .with_dispatch_identity(diffusers_dispatch_identity()),
         );
         registry
             .transition_runtime(
@@ -892,7 +900,8 @@ mod tests {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
-                .with_backend_keys(vec!["pytorch".to_string(), "diffusers".to_string()]),
+                .with_backend_keys(vec!["pytorch".to_string(), "diffusers".to_string()])
+                .with_dispatch_identity(diffusers_dispatch_identity()),
         );
         registry
             .transition_runtime(
@@ -1459,6 +1468,11 @@ mod tests {
             target_handle: "dependency_environment_sidecar".to_string(),
         });
         graph
+    }
+
+    fn diffusers_dispatch_identity() -> RuntimeDispatchIdentity {
+        RuntimeDispatchIdentity::new("diffusers", "runtime.diffusers.pytorch.shared")
+            .expect("diffusers dispatch identity")
     }
 
     fn write_test_diffusers_bundle(root: &std::path::Path) {

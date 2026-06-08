@@ -15,6 +15,9 @@ use crate::pumas_dispatch_package_facts::{
 use crate::runtime_dispatch_capability_facts::{
     RuntimeDispatchCapabilityFactsOutcome, RuntimeDispatchCapabilityFactsSource,
 };
+use crate::runtime_dispatch_load_target_facts::{
+    RuntimeDispatchLoadTargetFactsOutcome, RuntimeDispatchLoadTargetFactsSource,
+};
 
 pub(crate) const EMBEDDED_RUNTIME_DISPATCH_SOURCE_FACT_SNAPSHOT_CONTRACT_VERSION: u16 = 1;
 
@@ -26,6 +29,7 @@ pub(crate) struct EmbeddedRuntimeDispatchCandidateSourceSnapshot {
     pub(crate) model_ref: Option<PumasModelRef>,
     pub(crate) pumas_package_facts: Option<PumasDispatchPackageFactsBridgeOutcome>,
     pub(crate) runtime_capability_facts: Option<RuntimeDispatchCapabilityFactsOutcome>,
+    pub(crate) pumas_load_target_facts: Option<RuntimeDispatchLoadTargetFactsOutcome>,
     pub(crate) diagnostics: Vec<EmbeddedRuntimeDispatchSourceSnapshotDiagnostic>,
 }
 
@@ -38,6 +42,7 @@ impl Default for EmbeddedRuntimeDispatchCandidateSourceSnapshot {
             model_ref: None,
             pumas_package_facts: None,
             runtime_capability_facts: None,
+            pumas_load_target_facts: None,
             diagnostics: Vec::new(),
         }
     }
@@ -62,6 +67,7 @@ pub(crate) enum EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode {
 pub(crate) struct EmbeddedRuntimeDispatchSourceFactSnapshotStore {
     pumas_source: PumasDispatchPackageFactsSource,
     runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
+    load_target_source: RuntimeDispatchLoadTargetFactsSource,
     max_snapshot_age_ms: u64,
     state: Arc<Mutex<EmbeddedRuntimeDispatchSourceFactSnapshotState>>,
 }
@@ -81,11 +87,13 @@ impl EmbeddedRuntimeDispatchSourceFactSnapshotStore {
     pub(crate) fn new(
         pumas_source: PumasDispatchPackageFactsSource,
         runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
+        load_target_source: RuntimeDispatchLoadTargetFactsSource,
         max_snapshot_age_ms: u64,
     ) -> Self {
         Self {
             pumas_source,
             runtime_capability_source,
+            load_target_source,
             max_snapshot_age_ms,
             state: Arc::new(Mutex::new(EmbeddedRuntimeDispatchSourceFactSnapshotState {
                 next_snapshot_version: 1,
@@ -100,14 +108,25 @@ impl EmbeddedRuntimeDispatchSourceFactSnapshotStore {
         refreshed_at_ms: u64,
     ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
         let diagnostics = validate_model_ref(model_ref);
-        let (pumas_package_facts, runtime_capability_facts) = if diagnostics.is_empty() {
-            (
-                Some(self.pumas_source.collect(model_ref).await),
-                Some(self.runtime_capability_source.collect()),
-            )
-        } else {
-            (None, None)
-        };
+        let (pumas_package_facts, runtime_capability_facts, pumas_load_target_facts) =
+            if diagnostics.is_empty() {
+                let pumas_package_facts = self.pumas_source.collect(model_ref).await;
+                let runtime_capability_facts = self.runtime_capability_source.collect();
+                let pumas_load_target_facts = load_target_facts_for_sources(
+                    &self.load_target_source,
+                    model_ref,
+                    &pumas_package_facts,
+                    &runtime_capability_facts,
+                )
+                .await;
+                (
+                    Some(pumas_package_facts),
+                    Some(runtime_capability_facts),
+                    pumas_load_target_facts,
+                )
+            } else {
+                (None, None, None)
+            };
 
         let mut state = self
             .state
@@ -120,6 +139,7 @@ impl EmbeddedRuntimeDispatchSourceFactSnapshotStore {
             model_ref: Some(model_ref.clone()),
             pumas_package_facts,
             runtime_capability_facts,
+            pumas_load_target_facts,
             diagnostics,
         };
         state.next_snapshot_version = state
@@ -212,8 +232,40 @@ fn validate_snapshot_for_dispatch(
 
     snapshot.pumas_package_facts = None;
     snapshot.runtime_capability_facts = None;
+    snapshot.pumas_load_target_facts = None;
     snapshot.diagnostics.extend(diagnostics);
     snapshot
+}
+
+async fn load_target_facts_for_sources(
+    load_target_source: &RuntimeDispatchLoadTargetFactsSource,
+    model_ref: &PumasModelRef,
+    pumas_package_facts: &PumasDispatchPackageFactsBridgeOutcome,
+    runtime_capability_facts: &RuntimeDispatchCapabilityFactsOutcome,
+) -> Option<RuntimeDispatchLoadTargetFactsOutcome> {
+    let RuntimeDispatchCapabilityFactsOutcome::Projected {
+        facts: runtime_facts,
+        ..
+    } = runtime_capability_facts
+    else {
+        return None;
+    };
+    let runtime_families = runtime_facts
+        .runtimes
+        .iter()
+        .map(|runtime| runtime.runtime_family.clone())
+        .collect::<Vec<_>>();
+    let task_kind = match pumas_package_facts {
+        PumasDispatchPackageFactsBridgeOutcome::Projected { facts, .. } => {
+            facts.task.task_type_primary.clone()
+        }
+        PumasDispatchPackageFactsBridgeOutcome::Unavailable { .. } => None,
+    };
+    Some(
+        load_target_source
+            .collect(model_ref, runtime_families, task_kind)
+            .await,
+    )
 }
 
 fn current_time_ms() -> u64 {
@@ -283,6 +335,7 @@ mod tests {
         let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
             PumasDispatchPackageFactsSource::new(None),
             RuntimeDispatchCapabilityFactsSource::new(registry),
+            RuntimeDispatchLoadTargetFactsSource::new(None),
             100,
         );
 
@@ -302,6 +355,10 @@ mod tests {
             snapshot.runtime_capability_facts,
             Some(RuntimeDispatchCapabilityFactsOutcome::Projected { .. })
         ));
+        assert!(matches!(
+            snapshot.pumas_load_target_facts,
+            Some(RuntimeDispatchLoadTargetFactsOutcome::Unavailable { .. })
+        ));
     }
 
     fn dispatch_identity() -> RuntimeDispatchIdentity {
@@ -314,6 +371,7 @@ mod tests {
         let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
             PumasDispatchPackageFactsSource::new(None),
             RuntimeDispatchCapabilityFactsSource::new(Arc::new(RuntimeRegistry::new())),
+            RuntimeDispatchLoadTargetFactsSource::new(None),
             100,
         );
         store
@@ -324,6 +382,7 @@ mod tests {
 
         assert!(snapshot.pumas_package_facts.is_none());
         assert!(snapshot.runtime_capability_facts.is_none());
+        assert!(snapshot.pumas_load_target_facts.is_none());
         assert!(snapshot.diagnostics.iter().any(|diagnostic| {
             diagnostic.code == EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::StaleSnapshot
         }));
@@ -334,6 +393,7 @@ mod tests {
         let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
             PumasDispatchPackageFactsSource::new(None),
             RuntimeDispatchCapabilityFactsSource::new(Arc::new(RuntimeRegistry::new())),
+            RuntimeDispatchLoadTargetFactsSource::new(None),
             100,
         );
         store
@@ -344,6 +404,7 @@ mod tests {
 
         assert!(snapshot.pumas_package_facts.is_none());
         assert!(snapshot.runtime_capability_facts.is_none());
+        assert!(snapshot.pumas_load_target_facts.is_none());
         assert!(snapshot.diagnostics.iter().any(|diagnostic| {
             diagnostic.code == EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::ModelRefMismatch
         }));
@@ -354,6 +415,7 @@ mod tests {
         let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
             PumasDispatchPackageFactsSource::new(None),
             RuntimeDispatchCapabilityFactsSource::new(Arc::new(RuntimeRegistry::new())),
+            RuntimeDispatchLoadTargetFactsSource::new(None),
             100,
         );
 
@@ -362,6 +424,7 @@ mod tests {
         assert_eq!(snapshot.snapshot_version, 0);
         assert!(snapshot.pumas_package_facts.is_none());
         assert!(snapshot.runtime_capability_facts.is_none());
+        assert!(snapshot.pumas_load_target_facts.is_none());
         assert!(snapshot.diagnostics.iter().any(|diagnostic| {
             diagnostic.code == EmbeddedRuntimeDispatchSourceSnapshotDiagnosticCode::MissingSnapshot
         }));

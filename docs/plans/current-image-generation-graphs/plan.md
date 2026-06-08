@@ -1545,11 +1545,49 @@ Verification passed:
 `cargo check -p pantograph-runtime-registry`, and
 `cargo check -p pantograph-embedded-runtime`.
 
-Remaining follow-up: implement intermediate sequence step 2 by adding
-embedded-runtime Pumas load-target evidence to the async dispatch source
-refresh path. Stop and re-plan if the load-target source requires
-workflow-service contracts, scheduler DTOs, Pumas API/contract changes,
-generated files, lockfiles, or saved workflow fixtures in the same slice.
+2026-06-07 embedded-runtime dispatch load-target facts slice: completed
+intermediate sequence step 2. Smallest useful vertical slice: add a
+Pumas-owner-backed load-target fact source to embedded-runtime dispatch source
+refresh, project only dispatch-safe load-target identifiers into the snapshot,
+and keep synchronous candidate construction blocked until the later complete
+evidence step. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_load_target_facts.rs`,
+`crates/pantograph-embedded-runtime/src/lib.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_source_snapshot.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+`crates/pantograph-embedded-runtime/src/workflow_service_composition.rs`, and
+this plan. The composition-root wiring was a necessary embedded-runtime
+production source hookup for the new source owner; no workflow-service
+contract, scheduler DTO, Pumas API/contract, generated, lockfile, or saved
+workflow fixture files were changed.
+
+No-fallback/no-legacy confirmation: Pumas owner API load-target resolution is
+the only load-target source for this dispatch evidence path. The request to
+Pumas uses a path-free model ref plus the registry-owned runtime family; the
+projection validates a ready response, strips host-only selected artifact path
+data, never stores the local filesystem load path, and emits typed diagnostics
+for missing owner access, unsupported access role, missing runtime family,
+lookup failure, unavailable load targets, ready responses without targets,
+empty load paths, and stripped path facts. The provider still fails closed
+until intermediate sequence step 3 builds a complete validated
+`RuntimeDispatchEvidenceRecord`.
+
+Verification passed:
+`cargo fmt -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_load_target_facts --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_source_snapshot --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
+`cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+
+Remaining follow-up: implement intermediate sequence step 3 by wiring
+`runtime_dispatch_candidate_provider` to build a complete
+`RuntimeDispatchEvidenceRecord` from runtime-registry family/residency facts,
+Pumas load-target source facts, Pumas logical-size memory estimates, runtime
+load state/instance facts, selected model/device facts, and resource facts.
+Stop and re-plan if this requires workflow-service contracts, scheduler DTOs,
+Pumas API/contract changes, generated files, lockfiles, or saved workflow
+fixtures in the same slice.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
