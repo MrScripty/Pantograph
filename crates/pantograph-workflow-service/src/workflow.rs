@@ -158,7 +158,8 @@ pub(crate) use self::runtime_dispatch_selection::{
     NoRuntimeDispatchSourceRefresher,
 };
 pub use self::runtime_dispatch_selection::{
-    ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
+    ValidatedWorkflowRuntimeDispatchCandidateFactBundle,
+    WorkflowRuntimeDispatchCandidateEvidenceContext, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
     WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchLoadState,

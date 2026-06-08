@@ -166,13 +166,12 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
                 readiness_proof,
             );
         }
-        Ok(WorkflowRuntimeDispatchCandidateSet {
-            candidates: Vec::new(),
-            diagnostics: fail_closed_diagnostics(
+        Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
+            fail_closed_diagnostics(
                 &source_snapshot,
                 &readiness_proof.preflight_result.identity_key.model_ref,
             ),
-        })
+        ))
     }
 }
 
@@ -203,14 +202,13 @@ fn resource_backed_candidate_set(
 ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError> {
     let model_ref = &readiness_proof.preflight_result.identity_key.model_ref;
     if model_ref.selected_artifact_path.is_some() {
-        return Ok(WorkflowRuntimeDispatchCandidateSet {
-            candidates: Vec::new(),
-            diagnostics: vec![provider_diagnostic(
+        return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(vec![
+            provider_diagnostic(
                 SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
                 "runtime dispatch candidate provider rejected a path-carrying Pumas model ref",
                 PATH_CARRYING_MODEL_REF_HINT,
-            )],
-        });
+            ),
+        ]));
     }
 
     let mut diagnostics = Vec::new();
@@ -233,10 +231,9 @@ fn resource_backed_candidate_set(
             "runtime dispatch candidate provider requires a schedulable task intent",
             MISSING_RUNTIME_RESOURCE_FACTS_HINT,
         ));
-        return Ok(WorkflowRuntimeDispatchCandidateSet {
-            candidates: Vec::new(),
+        return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
             diagnostics,
-        });
+        ));
     };
     let Some(environment_ref) = readiness_proof.preflight_result.environment_ref.clone() else {
         diagnostics.push(provider_diagnostic(
@@ -244,10 +241,9 @@ fn resource_backed_candidate_set(
             "runtime dispatch candidate provider requires a dependency environment ref",
             MISSING_DEPENDENCY_ENVIRONMENT_REF_HINT,
         ));
-        return Ok(WorkflowRuntimeDispatchCandidateSet {
-            candidates: Vec::new(),
+        return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
             diagnostics,
-        });
+        ));
     };
     let Some(selected_device_id) = task_intent.constraints.requested_device_id.clone() else {
         diagnostics.push(provider_diagnostic(
@@ -255,10 +251,9 @@ fn resource_backed_candidate_set(
             "runtime dispatch candidate provider requires an explicit selected device until runtime capability facts expose device candidates",
             MISSING_SELECTED_DEVICE_FACTS_HINT,
         ));
-        return Ok(WorkflowRuntimeDispatchCandidateSet {
-            candidates: Vec::new(),
+        return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
             diagnostics,
-        });
+        ));
     };
 
     let mut facts = Vec::new();

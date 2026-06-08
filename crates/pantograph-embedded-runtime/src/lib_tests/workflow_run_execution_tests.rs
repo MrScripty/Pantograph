@@ -674,6 +674,7 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
                 candidate_source_diagnostics: Vec::new(),
             }],
             diagnostics: Vec::new(),
+            candidate_evidence_context: Default::default(),
         })
     }
 }

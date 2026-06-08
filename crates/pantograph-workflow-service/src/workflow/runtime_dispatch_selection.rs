@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use std::collections::{BTreeMap, BTreeSet};
+
 use pantograph_dependency_planning::{
     DependencyEnvironmentRef, DependencyPlanningContractError, DependencyReadinessProofEnvelope,
     DeviceIntentId, PumasModelRef, RuntimeIntentId,
@@ -48,6 +50,7 @@ pub trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
 pub struct WorkflowRuntimeDispatchCandidateSet {
     pub candidates: Vec<SchedulerDispatchCandidate>,
     pub diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
+    pub candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext,
 }
 
 impl WorkflowRuntimeDispatchCandidateSet {
@@ -55,9 +58,60 @@ impl WorkflowRuntimeDispatchCandidateSet {
         bundle: ValidatedWorkflowRuntimeDispatchCandidateFactBundle,
     ) -> Self {
         let bundle = bundle.into_inner();
+        let facts = bundle.facts;
         Self {
-            candidates: bundle.facts.into_iter().map(dispatch_candidate).collect(),
+            candidates: facts.iter().cloned().map(dispatch_candidate).collect(),
             diagnostics: bundle.diagnostics,
+            candidate_evidence_context:
+                WorkflowRuntimeDispatchCandidateEvidenceContext::from_validated_facts(facts),
+        }
+    }
+
+    pub fn from_diagnostics(diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>) -> Self {
+        Self {
+            candidates: Vec::new(),
+            diagnostics,
+            candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkflowRuntimeDispatchCandidateEvidenceContext {
+    facts_by_candidate_id: BTreeMap<String, WorkflowRuntimeDispatchCandidateFact>,
+}
+
+impl WorkflowRuntimeDispatchCandidateEvidenceContext {
+    #[must_use]
+    pub fn candidate_fact(
+        &self,
+        candidate_id: &SchedulerDispatchCandidateId,
+    ) -> Option<&WorkflowRuntimeDispatchCandidateFact> {
+        self.facts_by_candidate_id.get(candidate_id.as_str())
+    }
+
+    #[must_use]
+    pub fn contains_candidate_id(&self, candidate_id: &SchedulerDispatchCandidateId) -> bool {
+        self.facts_by_candidate_id
+            .contains_key(candidate_id.as_str())
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.facts_by_candidate_id.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.facts_by_candidate_id.is_empty()
+    }
+
+    fn from_validated_facts(facts: Vec<WorkflowRuntimeDispatchCandidateFact>) -> Self {
+        Self {
+            facts_by_candidate_id: facts
+                .into_iter()
+                .map(|fact| (fact.candidate_id.as_str().to_string(), fact))
+                .collect(),
         }
     }
 }
@@ -275,7 +329,7 @@ fn validate_candidate_fact_bundle(
             ),
         );
     }
-    let mut candidate_ids = std::collections::BTreeSet::new();
+    let mut candidate_ids = BTreeSet::new();
     for fact in &bundle.facts {
         let candidate_id = fact.candidate_id.as_str();
         if !candidate_ids.insert(candidate_id) {
@@ -304,7 +358,7 @@ fn validate_candidate_fact(
             },
         );
     }
-    let mut device_ids = std::collections::BTreeSet::new();
+    let mut device_ids = BTreeSet::new();
     for device_id in &fact.selected_device_ids {
         if !device_ids.insert(device_id.as_str()) {
             return Err(
@@ -336,7 +390,7 @@ fn validate_candidate_fact(
             },
         );
     };
-    let mut reservation_claims = std::collections::BTreeSet::new();
+    let mut reservation_claims = BTreeSet::new();
     for reservation in &fact.reservations {
         if reservation.reservation_lease_id != first_reservation.reservation_lease_id {
             return Err(
@@ -642,6 +696,58 @@ mod tests {
         assert_eq!(candidate.reservations.len(), 1);
         assert!(candidate.resource_fit_assessment.is_some());
         assert!(candidate.candidate_source_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn candidate_fact_bundle_retains_workflow_service_evidence_context() {
+        let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+            candidate_fact_bundle(vec![candidate_fact()]),
+        )
+        .expect("candidate fact bundle");
+
+        let candidate_set = WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle);
+        let candidate = &candidate_set.candidates[0];
+        let fact = candidate_set
+            .candidate_evidence_context
+            .candidate_fact(&candidate.candidate_id)
+            .expect("candidate evidence context should retain validated fact");
+
+        assert_eq!(candidate_set.candidate_evidence_context.len(), 1);
+        assert!(candidate_set
+            .candidate_evidence_context
+            .contains_candidate_id(&candidate.candidate_id));
+        assert_eq!(fact.candidate_id, candidate.candidate_id);
+        assert_eq!(fact.selected_backend_key, "diffusers");
+        assert_eq!(
+            fact.resolved_load_target,
+            "pumas:image/example/tiny-diffusion:diffusers"
+        );
+        assert_eq!(
+            fact.runtime_instance_id.as_deref(),
+            Some("runtime.diffusers-pytorch.001")
+        );
+        assert_eq!(
+            candidate.selected_runtime_id.as_str(),
+            fact.selected_runtime_id.as_str()
+        );
+        assert!(candidate.candidate_source_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn diagnostics_only_candidate_set_has_no_evidence_context() {
+        let candidate_set = WorkflowRuntimeDispatchCandidateSet::from_diagnostics(vec![
+            SchedulerDispatchSelectionDiagnostic {
+                severity: SchedulerDispatchSelectionDiagnosticSeverity::Info,
+                code: SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+                message: "candidate source unavailable".to_string(),
+                candidate_id: None,
+                hint: None,
+            },
+        ]);
+
+        assert!(candidate_set.candidates.is_empty());
+        assert_eq!(candidate_set.diagnostics.len(), 1);
+        assert!(candidate_set.candidate_evidence_context.is_empty());
     }
 
     fn candidate_fact_bundle(

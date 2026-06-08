@@ -1724,6 +1724,46 @@ the slice requires scheduler DTO changes, Pumas contracts, generated files,
 lockfiles, saved workflow fixtures, or any derivation from graph/request/
 runtime-host state.
 
+2026-06-07 workflow-service selected-candidate evidence context slice:
+completed Option 1 sequence step 1. Smallest useful vertical slice: extend
+`WorkflowRuntimeDispatchCandidateSet` with an opaque
+`WorkflowRuntimeDispatchCandidateEvidenceContext` keyed by scheduler candidate
+id, retain validated `WorkflowRuntimeDispatchCandidateFact` records when
+building scheduler-ranking candidates, and add a diagnostics-only constructor
+for fail-closed provider paths that intentionally carry no candidate evidence.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: scheduler DTOs remain ranking-only and do
+not receive backend key, runtime-family, load-target, runtime-instance,
+memory-estimate, or resource-fit evidence beyond their existing scheduler
+ranking fields. Workflow-service now retains the validated provider facts
+beside the scheduler projection instead of re-deriving selected evidence from
+runtime ids, backend keys, graph/request shape, runtime-host requests, Pumas
+contracts, or scheduler hints. Empty/fail-closed providers carry an explicit
+empty evidence context rather than a synthesized fact.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+
+Next thin slice: implement Option 1 sequence step 2 by threading the retained
+candidate evidence context through runtime dispatch selection so a selected
+scheduler candidate id resolves to exactly one validated
+`WorkflowRuntimeDispatchCandidateFact` before runtime-host dispatch. Missing,
+duplicate, or stale selected fact lookups must return typed diagnostics and
+fail closed. Stop and re-plan if this requires scheduler DTO changes, Pumas
+contracts, generated files, lockfiles, saved workflow fixtures, or evidence
+synthesis from graph/request/runtime-host state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
