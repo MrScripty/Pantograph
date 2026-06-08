@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use super::{WorkflowSchedulerTask, WorkflowServiceError};
 
-pub const WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION: u16 = 1;
+pub const WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION: u16 = 2;
 
 /// Workflow-service pre-dispatch refresh boundary for runtime dispatch sources.
 ///
@@ -74,6 +74,13 @@ pub struct WorkflowRuntimeDispatchCandidateFact {
     pub candidate_id: SchedulerDispatchCandidateId,
     pub selected_runtime_id: RuntimeIntentId,
     pub selected_runtime_variant_id: Option<SchedulerRuntimeVariantId>,
+    pub selected_backend_key: String,
+    pub runtime_family: String,
+    pub resolved_load_target: String,
+    pub runtime_residency_key: String,
+    pub loaded_runtime_memory_estimate_bytes: u64,
+    pub runtime_load_state: WorkflowRuntimeDispatchLoadState,
+    pub runtime_instance_id: Option<String>,
     pub selected_device_ids: Vec<DeviceIntentId>,
     pub selected_model_ref: PumasModelRef,
     pub runtime_trait_settings: Vec<SchedulerTraitSetting>,
@@ -81,6 +88,16 @@ pub struct WorkflowRuntimeDispatchCandidateFact {
     pub reservations: Vec<SchedulerResourceReservation>,
     pub resource_fit_assessment: SchedulerResourceFitAssessment,
     pub batching_group_id: Option<SchedulerBatchingGroupId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowRuntimeDispatchLoadState {
+    NotLoaded,
+    Loading,
+    Loaded,
+    Busy,
+    Unloading,
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,6 +214,15 @@ pub enum WorkflowRuntimeDispatchCandidateFactBundleError {
         candidate_id: String,
         device_id: String,
     },
+    #[error("runtime dispatch candidate fact '{candidate_id}' is missing selected evidence field '{field_path}'")]
+    MissingSelectedEvidence {
+        candidate_id: String,
+        field_path: &'static str,
+    },
+    #[error("runtime dispatch candidate fact '{candidate_id}' has invalid memory estimate")]
+    InvalidMemoryEstimate { candidate_id: String },
+    #[error("runtime dispatch candidate fact '{candidate_id}' has invalid runtime instance fact")]
+    InvalidRuntimeInstanceFact { candidate_id: String },
     #[error("runtime dispatch candidate fact '{candidate_id}' has no reservations")]
     MissingReservation { candidate_id: String },
     #[error(
@@ -289,6 +315,7 @@ fn validate_candidate_fact(
             );
         }
     }
+    validate_selected_evidence(fact, candidate_id)?;
     if fact.selected_model_ref.selected_artifact_path.is_some() {
         return Err(
             WorkflowRuntimeDispatchCandidateFactBundleError::PathCarryingModelRef {
@@ -350,6 +377,74 @@ fn validate_candidate_fact(
                 },
             );
         }
+    }
+    Ok(())
+}
+
+fn validate_selected_evidence(
+    fact: &WorkflowRuntimeDispatchCandidateFact,
+    candidate_id: &str,
+) -> Result<(), WorkflowRuntimeDispatchCandidateFactBundleError> {
+    validate_required_evidence_field(
+        candidate_id,
+        "selected_backend_key",
+        &fact.selected_backend_key,
+    )?;
+    validate_required_evidence_field(candidate_id, "runtime_family", &fact.runtime_family)?;
+    validate_required_evidence_field(
+        candidate_id,
+        "resolved_load_target",
+        &fact.resolved_load_target,
+    )?;
+    validate_required_evidence_field(
+        candidate_id,
+        "runtime_residency_key",
+        &fact.runtime_residency_key,
+    )?;
+    if fact.loaded_runtime_memory_estimate_bytes == 0 {
+        return Err(
+            WorkflowRuntimeDispatchCandidateFactBundleError::InvalidMemoryEstimate {
+                candidate_id: candidate_id.to_string(),
+            },
+        );
+    }
+    if fact
+        .runtime_instance_id
+        .as_ref()
+        .is_some_and(|runtime_instance_id| runtime_instance_id.trim().is_empty())
+    {
+        return Err(
+            WorkflowRuntimeDispatchCandidateFactBundleError::InvalidRuntimeInstanceFact {
+                candidate_id: candidate_id.to_string(),
+            },
+        );
+    }
+    if matches!(
+        fact.runtime_load_state,
+        WorkflowRuntimeDispatchLoadState::Loaded | WorkflowRuntimeDispatchLoadState::Busy
+    ) && fact.runtime_instance_id.is_none()
+    {
+        return Err(
+            WorkflowRuntimeDispatchCandidateFactBundleError::InvalidRuntimeInstanceFact {
+                candidate_id: candidate_id.to_string(),
+            },
+        );
+    }
+    Ok(())
+}
+
+fn validate_required_evidence_field(
+    candidate_id: &str,
+    field_path: &'static str,
+    value: &str,
+) -> Result<(), WorkflowRuntimeDispatchCandidateFactBundleError> {
+    if value.trim().is_empty() {
+        return Err(
+            WorkflowRuntimeDispatchCandidateFactBundleError::MissingSelectedEvidence {
+                candidate_id: candidate_id.to_string(),
+                field_path,
+            },
+        );
     }
     Ok(())
 }
@@ -461,6 +556,54 @@ mod tests {
     }
 
     #[test]
+    fn candidate_fact_bundle_rejects_missing_runtime_family_evidence() {
+        let mut fact = candidate_fact();
+        fact.runtime_family.clear();
+        let bundle = candidate_fact_bundle(vec![fact]);
+
+        let error = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(bundle)
+            .expect_err("candidate facts must carry runtime family evidence");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchCandidateFactBundleError::MissingSelectedEvidence {
+                field_path: "runtime_family",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn candidate_fact_bundle_rejects_loaded_runtime_without_instance_id() {
+        let mut fact = candidate_fact();
+        fact.runtime_instance_id = None;
+        let bundle = candidate_fact_bundle(vec![fact]);
+
+        let error = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(bundle)
+            .expect_err("loaded runtime candidates must carry runtime instance evidence");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchCandidateFactBundleError::InvalidRuntimeInstanceFact { .. }
+        ));
+    }
+
+    #[test]
+    fn candidate_fact_bundle_rejects_zero_memory_estimate() {
+        let mut fact = candidate_fact();
+        fact.loaded_runtime_memory_estimate_bytes = 0;
+        let bundle = candidate_fact_bundle(vec![fact]);
+
+        let error = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(bundle)
+            .expect_err("candidate facts must carry memory estimate evidence");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchCandidateFactBundleError::InvalidMemoryEstimate { .. }
+        ));
+    }
+
+    #[test]
     fn candidate_fact_bundle_rejects_mixed_reservation_leases() {
         let mut fact = candidate_fact();
         let mut reservation = fact.reservations[0].clone();
@@ -529,6 +672,13 @@ mod tests {
             selected_runtime_variant_id: Some(
                 "diffusers-pytorch.cuda".parse().expect("variant id"),
             ),
+            selected_backend_key: "diffusers".to_string(),
+            runtime_family: "diffusers".to_string(),
+            resolved_load_target: "pumas:image/example/tiny-diffusion:diffusers".to_string(),
+            runtime_residency_key: "runtime.diffusers.diffusers-pytorch.shared".to_string(),
+            loaded_runtime_memory_estimate_bytes: 8 * 1024 * 1024,
+            runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
+            runtime_instance_id: Some("runtime.diffusers-pytorch.001".to_string()),
             selected_device_ids: vec![device_id.clone()],
             selected_model_ref: PumasModelRef {
                 model_id: "image/example/tiny-diffusion".to_string(),

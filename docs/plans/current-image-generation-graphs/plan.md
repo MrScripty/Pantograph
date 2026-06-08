@@ -1616,12 +1616,44 @@ Verification passed:
 `cargo test -p pantograph-embedded-runtime runtime_dispatch_load_target_facts --lib`,
 `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
 
-Remaining follow-up: implement intermediate sequence step 4 by extending
-`WorkflowRuntimeDispatchCandidateFact` with richer validated evidence fields
-and projecting them from the validated evidence record. Scheduler candidate
-DTOs remain ranking-only; workflow-service must consume explicit provider
-facts and must not synthesize runtime family, load target, residency, memory,
-load-state, instance, reservation, or resource-fit evidence.
+2026-06-07 workflow-service dispatch evidence fact contract slice: completed
+intermediate sequence step 4. Smallest useful vertical slice: extend
+`WorkflowRuntimeDispatchCandidateFact` with explicit validated evidence fields
+for selected backend key, runtime family, resolved load target, runtime
+residency key, loaded-runtime memory estimate, runtime load state, and runtime
+instance id; validate those fields in workflow-service before mapping to
+scheduler candidates; and project them from the embedded-runtime provider's
+validated `RuntimeDispatchEvidenceRecord`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+and this plan. No scheduler DTO, Pumas API/contract, generated, lockfile, or
+saved workflow fixture files were changed.
+
+No-fallback/no-legacy confirmation: workflow-service now rejects candidate
+fact bundles that omit canonical dispatch evidence or try to represent loaded
+or busy runtime state without an instance id. Scheduler candidate DTOs remain
+ranking-only: the richer evidence is validated at the workflow-service
+provider contract and is not synthesized by workflow-service or scheduler
+selection from runtime ids, backend keys, device ids, graph/request shape,
+trait settings, or runtime-host requests. The embedded provider projects the
+workflow-service fact fields from the already-validated evidence record.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_evidence --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+
+Remaining follow-up: implement intermediate sequence step 5 by continuing
+task-attempt fact persistence and grouped-claim/coalescing work now that
+workflow-service candidate facts carry complete validated evidence. Stop and
+re-plan if durable persistence requires changing scheduler DTOs, Pumas
+contracts, generated files, lockfiles, saved workflow fixtures, or if the
+durable owner for these facts conflicts with the planned final worker/runtime
+lifecycle migration.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable

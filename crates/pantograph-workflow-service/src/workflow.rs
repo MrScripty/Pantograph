@@ -161,8 +161,8 @@ pub use self::runtime_dispatch_selection::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
-    WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchSourceRefreshError,
-    WorkflowRuntimeDispatchSourceRefresher,
+    WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchLoadState,
+    WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 pub(crate) use self::runtime_host_task_input_mapping::{

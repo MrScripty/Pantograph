@@ -19,6 +19,7 @@ use pantograph_workflow_service::workflow::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
     WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+    WorkflowRuntimeDispatchLoadState,
 };
 use pantograph_workflow_service::WorkflowSchedulerTask;
 
@@ -284,29 +285,42 @@ fn resource_backed_candidate_set(
                     &draft.candidate_id,
                     &resource_diagnostics,
                 ));
-                if let Err(evidence_diagnostic) = runtime_dispatch_evidence_record(
+                let evidence_record = match runtime_dispatch_evidence_record(
                     &draft,
                     selected_device_id.clone(),
                     resource_facts.reservations.clone(),
                     resource_facts.fit_assessment.clone(),
                 ) {
-                    let _ = resource_facts_source.release_if_present(resource_facts.lease_id);
-                    diagnostics.push(runtime_dispatch_evidence_diagnostic(
-                        &draft.candidate_id,
-                        evidence_diagnostic,
-                    ));
-                    continue;
-                }
+                    Ok(evidence_record) => evidence_record,
+                    Err(evidence_diagnostic) => {
+                        let _ = resource_facts_source.release_if_present(resource_facts.lease_id);
+                        diagnostics.push(runtime_dispatch_evidence_diagnostic(
+                            &draft.candidate_id,
+                            evidence_diagnostic,
+                        ));
+                        continue;
+                    }
+                };
                 facts.push(WorkflowRuntimeDispatchCandidateFact {
                     candidate_id: draft.candidate_id,
-                    selected_runtime_id: draft.selected_runtime_id,
+                    selected_runtime_id: evidence_record.selected_runtime_id,
                     selected_runtime_variant_id: None,
-                    selected_device_ids: vec![selected_device_id.clone()],
-                    selected_model_ref: draft.selected_model_ref,
+                    selected_backend_key: evidence_record.selected_backend_key,
+                    runtime_family: evidence_record.runtime_family,
+                    resolved_load_target: evidence_record.resolved_load_target,
+                    runtime_residency_key: evidence_record.runtime_residency_key,
+                    loaded_runtime_memory_estimate_bytes: evidence_record
+                        .loaded_runtime_memory_estimate_bytes,
+                    runtime_load_state: workflow_runtime_dispatch_load_state(
+                        evidence_record.runtime_load_state,
+                    ),
+                    runtime_instance_id: evidence_record.runtime_instance_id,
+                    selected_device_ids: vec![evidence_record.selected_device_id],
+                    selected_model_ref: evidence_record.selected_model_ref,
                     runtime_trait_settings: task_intent.trait_settings.clone(),
                     environment_ref: environment_ref.clone(),
-                    reservations: resource_facts.reservations,
-                    resource_fit_assessment: resource_facts.fit_assessment,
+                    reservations: evidence_record.reservations,
+                    resource_fit_assessment: evidence_record.resource_fit_assessment,
                     batching_group_id: None,
                 });
             }
@@ -845,6 +859,19 @@ fn runtime_dispatch_evidence_load_state(
             RuntimeDispatchEvidenceLoadState::Failed
         }
         RuntimeRegistryStatus::Stopping => RuntimeDispatchEvidenceLoadState::Unloading,
+    }
+}
+
+fn workflow_runtime_dispatch_load_state(
+    load_state: RuntimeDispatchEvidenceLoadState,
+) -> WorkflowRuntimeDispatchLoadState {
+    match load_state {
+        RuntimeDispatchEvidenceLoadState::NotLoaded => WorkflowRuntimeDispatchLoadState::NotLoaded,
+        RuntimeDispatchEvidenceLoadState::Loading => WorkflowRuntimeDispatchLoadState::Loading,
+        RuntimeDispatchEvidenceLoadState::Loaded => WorkflowRuntimeDispatchLoadState::Loaded,
+        RuntimeDispatchEvidenceLoadState::Busy => WorkflowRuntimeDispatchLoadState::Busy,
+        RuntimeDispatchEvidenceLoadState::Unloading => WorkflowRuntimeDispatchLoadState::Unloading,
+        RuntimeDispatchEvidenceLoadState::Failed => WorkflowRuntimeDispatchLoadState::Failed,
     }
 }
 
