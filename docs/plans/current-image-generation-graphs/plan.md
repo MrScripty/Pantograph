@@ -1655,6 +1655,23 @@ contracts, generated files, lockfiles, saved workflow fixtures, or if the
 durable owner for these facts conflicts with the planned final worker/runtime
 lifecycle migration.
 
+2026-06-07 task-attempt fact persistence re-plan trigger: step 5 cannot
+continue safely without choosing the ownership path for selected candidate
+evidence retention. The step-4 contract now validates rich
+`WorkflowRuntimeDispatchCandidateFact` evidence before mapping to scheduler
+candidates, but `WorkflowRuntimeDispatchCandidateSet` currently discards the
+rich fact records and exposes only scheduler-ranking candidates plus
+diagnostics. After scheduler selection, `SelectedRuntimeTaskDispatch` carries
+only the scheduler handoff, reservation lease id, and candidate id. The
+existing durable `runtime_task_attempt_fact` contract already has the fields
+needed for selected backend, runtime family, load target, residency key,
+memory, resource fit, reservations, operation type, context shape, and
+cancellation mode, but there is no canonical path from selected scheduler
+candidate id back to the validated workflow-service candidate fact when
+runtime-host dispatch starts. Do not proceed by adding evidence to scheduler
+DTOs, re-deriving it from scheduler candidates, runtime ids, graph/request
+shape, runtime-host requests, or embedded provider internals.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
