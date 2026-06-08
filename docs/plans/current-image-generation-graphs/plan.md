@@ -1396,6 +1396,55 @@ proceed to workflow-service rich candidate facts or task-attempt persistence
 until the provider can produce one complete validated evidence record from
 backend-owned facts.
 
+2026-06-07 runtime dispatch canonical source re-plan trigger: stop before
+filling runtime family, resolved load target, and runtime residency key in the
+embedded provider. Inspection found that the current source snapshot owns Pumas
+package facts and runtime-registry capability facts, but not every remaining
+required dispatch evidence fact. Pumas package facts expose backend hints,
+logical size, task evidence, and diffusers family evidence; they do not expose
+the resolved artifact load target. Runtime-registry capability facts expose
+runtime id, backend keys, status, instance id, loaded model ids, reservations,
+and admission-budget presence; they do not expose a canonical runtime family or
+runtime residency key. The existing runtime-host load-target resolver can ask
+the Pumas owner API for a load target, but it runs at the later runtime-host
+execution boundary from a scheduler dispatch decision and currently derives
+the Pumas consumer runtime family from runtime id/variant. Reusing that as
+dispatch evidence would violate the no-fallback rule because it would infer
+canonical facts from runtime naming and a later execution request rather than
+from a first-class dispatch evidence source.
+
+Re-plan options:
+1. Extend the embedded runtime dispatch source snapshot/refresher to own
+   runtime dispatch load-target evidence before candidate construction. The
+   async refresher would call the Pumas owner load-target API from the
+   composition-root-owned Pumas access, validate the response, and store a
+   dispatch-safe load-target summary in the source snapshot. This keeps the
+   provider synchronous and fail-closed, but it still needs a separate
+   canonical owner for runtime family and residency key instead of deriving
+   them from runtime ids.
+2. Extend runtime-registry registration/snapshot capability facts with
+   first-class runtime family and residency identity. The embedded provider
+   would then combine runtime-registry runtime family/residency facts with the
+   Pumas load-target snapshot from Option 1. This keeps lifecycle/runtime
+   identity owned by the runtime registry and keeps Pumas responsible only for
+   artifact/load-target facts, but it requires serial runtime-registry
+   contract work before provider candidates can be emitted.
+3. Move this remaining evidence source directly to the durable worker/runtime
+   lifecycle records now. Worker/runtime lifecycle records would become the
+   canonical owner for runtime family, load target, residency key, memory
+   estimate, load state, and runtime instance id before workflow-service rich
+   task-attempt facts are populated. This best matches the final architecture,
+   but it is a larger sequence and would block the intermediate embedded
+   provider candidate path until lifecycle records exist.
+
+Do not continue by filling blank evidence fields, using selected backend key as
+runtime family, reusing device id as load target, constructing residency keys
+from model/runtime/device strings, or deriving any fact from `batching_key`,
+runtime id, scheduler estimate hints, graph/request shape, trait settings, or
+runtime-host execution requests. The next plan decision must choose the owner
+for the remaining canonical dispatch evidence fields before source code
+implementation resumes.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
