@@ -1445,6 +1445,67 @@ runtime-host execution requests. The next plan decision must choose the owner
 for the remaining canonical dispatch evidence fields before source code
 implementation resumes.
 
+2026-06-07 runtime dispatch canonical source re-plan decision: use Options 1
+and 2 as the intermediate implementation path, and keep Option 3 as the final
+architecture target. Runtime-registry will become the canonical source for
+runtime family and runtime residency identity in registration/snapshot/
+capability facts. Embedded-runtime will become the canonical dispatch source
+for Pumas owner API load-target evidence during the async source-refresh phase,
+before synchronous candidate construction. The provider will only combine these
+first-class facts; it must not synthesize runtime family, load target, or
+residency key from runtime ids, selected backend keys, device ids, task
+batching keys, scheduler hints, graph/request shape, trait settings, or later
+runtime-host execution requests. When durable worker/runtime lifecycle records
+land, migrate the evidence source for runtime family, load target, residency
+key, memory estimate, runtime instance id, and load state to those records
+without changing scheduler ranking semantics.
+
+Intermediate implementation sequence:
+1. Extend runtime-registry runtime registration, snapshot, and embedded-runtime
+   capability projection with explicit `runtime_family` and
+   `runtime_residency_key` facts. The registration boundary must reject blank
+   values when these fields are required for dispatch-capable runtimes, and the
+   snapshot must expose them as data fields, not derive them from `runtime_id`.
+   Allowed files for this serial contract slice: runtime-registry source/tests,
+   embedded-runtime capability projection/tests, and this plan. No
+   workflow-service contract, scheduler DTO, Pumas, generated, lockfile, or
+   saved workflow fixture edits.
+2. Add an embedded-runtime Pumas load-target evidence source for dispatch
+   source refresh. The async refresher must call the Pumas owner load-target
+   API with path-free model/artifact facts and the registry-owned runtime
+   family, validate a ready response, strip host-only paths from candidate
+   evidence, and store a dispatch-safe load-target identifier/summary in the
+   source snapshot. Missing, unavailable, stale, or path-carrying load-target
+   facts must produce typed source diagnostics and no candidate. Allowed files:
+   embedded-runtime load-target evidence/source snapshot/provider tests and
+   this plan unless a later inspection proves a shared contract change is
+   required.
+3. Wire `runtime_dispatch_candidate_provider` to build a complete
+   `RuntimeDispatchEvidenceRecord` from the runtime-registry family/residency
+   facts, Pumas load-target source facts, Pumas logical-size memory estimate,
+   runtime load state/instance facts, selected model/device facts, and resource
+   facts. Candidate production remains blocked until the evidence record
+   validates. Tests must cover missing runtime family, missing residency key,
+   missing load target, weak logical-size memory facts, loaded/busy runtime
+   without instance id, and successful complete evidence.
+4. Only after step 3 validates, extend `WorkflowRuntimeDispatchCandidateFact`
+   with richer evidence fields and project them from the validated evidence
+   record. Scheduler candidate DTOs remain ranking-only; workflow-service
+   remains strict and does not synthesize evidence.
+5. Continue task-attempt fact persistence and grouped-claim/coalescing work
+   only after workflow-service candidate facts carry complete validated
+   evidence.
+6. Final migration: replace the intermediate embedded projection sources with
+   durable worker/runtime lifecycle records as the owner for runtime family,
+   load target, residency key, memory estimate, runtime instance id, and load
+   state. The migration must delete or make unreachable the intermediate source
+   ownership path rather than preserve parallel legacy behavior.
+
+Next thin slice: implement sequence step 1 only. Stop and re-plan if adding
+first-class runtime family and residency identity cannot be done without
+changing workflow-service contracts, scheduler DTOs, Pumas, generated files,
+lockfiles, or saved workflow fixtures in the same slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
