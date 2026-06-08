@@ -1816,6 +1816,22 @@ this requires scheduler DTO changes, Pumas contracts, generated files,
 lockfiles, saved workflow fixtures, or any synthesis of selected runtime
 evidence from graph/request/runtime-host state.
 
+2026-06-07 task-attempt fact construction re-plan trigger: stop before
+implementing Option 1 sequence step 3. Inspection found that the selected
+`WorkflowRuntimeDispatchCandidateFact` now provides canonical runtime/model/
+resource evidence, and the started scheduler task provides attempt id and
+start timestamp, but `WorkflowRuntimeTaskAttemptFactRecord` also requires
+attempt generation, operation type, context shape key, cancellation mode, and
+timeout. Those fields are not owned by the scheduler dispatch selection path:
+attempt generation, timeout, operation type, context shape key, and
+cancellation mode are currently represented in runtime-branch task events and
+active-run/session state. Building a task-attempt fact in
+`session_scheduler_runner` now would require synthesizing operation/context/
+cancellation fields from graph/request/runtime-host state or reaching across
+runtime-branch ownership boundaries. Do not proceed until ownership is
+re-planned so the task-attempt fact builder consumes canonical facts from the
+same backend-owned source that owns those fields.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
