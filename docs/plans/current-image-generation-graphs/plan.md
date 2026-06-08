@@ -1884,6 +1884,40 @@ tests, and this plan. Stop and re-plan if the slice requires scheduler DTO
 changes, Pumas contracts, generated files, lockfiles, saved workflow fixtures,
 or any synthesis from graph/request/runtime-host state.
 
+2026-06-08 runtime-branch worker task-attempt source context contract slice:
+completed Option 1 sequence step 1. Smallest useful vertical slice: add
+`WorkflowRuntimeTaskAttemptSourceContextRequest` and
+`WorkflowRuntimeTaskAttemptSourceContext` in the workflow-service
+task-attempt fact contract module, grouping runtime-branch profile facts
+(`attempt_generation`, `operation_type`, `context_shape_key`,
+`cancellation_mode`, `timeout_ms`) with the selected candidate fact. The
+contract validates identity fields, attempt generation, timeout, runtime-branch
+profile required fields, and cross-fact consistency between the runtime-branch
+profile and selected candidate evidence for model artifact, runtime family,
+backend id, load target, residency key, and loaded-runtime memory estimate.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_task_attempt_fact.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the new contract does not change scheduler
+DTOs, Pumas contracts, runtime-host request fields, generated files, lockfiles,
+or saved workflow fixtures. It does not synthesize operation/context/
+cancellation facts from graph/request/runtime-host state. Missing or mismatched
+runtime-branch profile and selected candidate facts return typed diagnostics
+and fail closed.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service -- --check`,
+`cargo test -p pantograph-workflow-service runtime_task_attempt_fact --lib`,
+`cargo check -p pantograph-workflow-service`, and `git diff --check`.
+
+Next thin slice: implement Option 1 sequence step 2 by carrying selected
+candidate evidence into the runtime-branch dispatch/claim boundary as
+backend-owned evidence. Stop and re-plan if this requires scheduler DTO
+changes, Pumas contracts, generated files, lockfiles, saved workflow fixtures,
+runtime-host request fields, or synthesis from graph/request/runtime-host
+state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

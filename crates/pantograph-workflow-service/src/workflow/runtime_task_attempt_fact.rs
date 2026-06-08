@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use super::runtime_branch_task_event::WorkflowRuntimeBranchBatchEligibilityProfile;
+use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
+
 pub(super) const WORKFLOW_RUNTIME_TASK_ATTEMPT_FACT_SCHEMA_VERSION: u16 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,6 +34,30 @@ pub(super) struct WorkflowRuntimeTaskAttemptFactRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) timeout_ms: Option<u64>,
     pub(super) recorded_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeTaskAttemptSourceContextRequest {
+    pub(super) workflow_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) scheduler_task_id: String,
+    pub(super) task_attempt_generation: u64,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) runtime_branch_profile: WorkflowRuntimeBranchBatchEligibilityProfile,
+    pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeTaskAttemptSourceContext {
+    pub(super) workflow_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) scheduler_task_id: String,
+    pub(super) task_attempt_generation: u64,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) runtime_branch_profile: WorkflowRuntimeBranchBatchEligibilityProfile,
+    pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,10 +144,28 @@ pub(super) struct WorkflowRuntimeTaskAttemptFactDiagnostic {
 pub(super) enum WorkflowRuntimeTaskAttemptFactDiagnosticCode {
     MissingSelectedFact,
     InvalidAttemptIdentity,
+    InvalidSourceContext,
     InvalidMemoryEstimate,
     InvalidReservationFact,
     InvalidResourceFitFact,
     InvalidTimeoutPolicy,
+}
+
+impl WorkflowRuntimeTaskAttemptSourceContext {
+    pub(super) fn new(
+        request: WorkflowRuntimeTaskAttemptSourceContextRequest,
+    ) -> Result<Self, WorkflowRuntimeTaskAttemptFactDiagnostic> {
+        validate_source_context_request(&request)?;
+        Ok(Self {
+            workflow_id: request.workflow_id,
+            workflow_run_id: request.workflow_run_id,
+            scheduler_task_id: request.scheduler_task_id,
+            task_attempt_generation: request.task_attempt_generation,
+            timeout_ms: request.timeout_ms,
+            runtime_branch_profile: request.runtime_branch_profile,
+            selected_candidate_fact: request.selected_candidate_fact,
+        })
+    }
 }
 
 impl WorkflowRuntimeTaskAttemptFactRecord {
@@ -168,6 +213,46 @@ impl WorkflowRuntimeTaskAttemptFactDiagnostic {
             message: message.into(),
         }
     }
+}
+
+fn validate_source_context_request(
+    request: &WorkflowRuntimeTaskAttemptSourceContextRequest,
+) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    validate_non_blank(
+        WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
+        "workflow_id",
+        &request.workflow_id,
+    )?;
+    validate_non_blank(
+        WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
+        "workflow_run_id",
+        &request.workflow_run_id,
+    )?;
+    validate_non_blank(
+        WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
+        "scheduler_task_id",
+        &request.scheduler_task_id,
+    )?;
+    if request.task_attempt_generation == 0 {
+        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
+            "task_attempt_generation",
+            "runtime task-attempt generation must be greater than zero",
+        ));
+    }
+    if request.timeout_ms == Some(0) {
+        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidTimeoutPolicy,
+            "timeout_ms",
+            "runtime task-attempt timeout must be greater than zero when present",
+        ));
+    }
+    validate_runtime_branch_profile(&request.runtime_branch_profile)?;
+    validate_selected_candidate_fact_matches_profile(
+        &request.selected_candidate_fact,
+        &request.runtime_branch_profile,
+    )?;
+    Ok(())
 }
 
 fn validate_request(
@@ -241,6 +326,119 @@ fn validate_request(
             WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
             "recorded_at_ms",
             "runtime task-attempt fact timestamp must be greater than zero",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_runtime_branch_profile(
+    profile: &WorkflowRuntimeBranchBatchEligibilityProfile,
+) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    validate_required_selected_fact(
+        "runtime_branch_profile.model_artifact_id",
+        &profile.model_artifact_id,
+    )?;
+    validate_required_selected_fact(
+        "runtime_branch_profile.runtime_family",
+        &profile.runtime_family,
+    )?;
+    validate_required_selected_fact("runtime_branch_profile.backend_id", &profile.backend_id)?;
+    validate_required_selected_fact(
+        "runtime_branch_profile.device_load_target",
+        &profile.device_load_target,
+    )?;
+    validate_required_selected_fact(
+        "runtime_branch_profile.runtime_residency_key",
+        &profile.runtime_residency_key,
+    )?;
+    if profile.estimated_loaded_runtime_bytes == 0 {
+        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidMemoryEstimate,
+            "runtime_branch_profile.estimated_loaded_runtime_bytes",
+            "runtime branch loaded-runtime memory estimate must be greater than zero",
+        ));
+    }
+    validate_required_selected_fact(
+        "runtime_branch_profile.context_shape_key",
+        &profile.context_shape_key,
+    )?;
+    validate_required_selected_fact(
+        "runtime_branch_profile.operation_type",
+        &profile.operation_type,
+    )?;
+    validate_required_selected_fact(
+        "runtime_branch_profile.cancellation_mode",
+        &profile.cancellation_mode,
+    )?;
+    Ok(())
+}
+
+fn validate_selected_candidate_fact_matches_profile(
+    fact: &WorkflowRuntimeDispatchCandidateFact,
+    profile: &WorkflowRuntimeBranchBatchEligibilityProfile,
+) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    let selected_artifact_id = fact
+        .selected_model_ref
+        .selected_artifact_id
+        .as_deref()
+        .ok_or_else(|| {
+            WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+                WorkflowRuntimeTaskAttemptFactDiagnosticCode::MissingSelectedFact,
+                "selected_candidate_fact.selected_model_ref.selected_artifact_id",
+                "selected candidate fact must carry selected model artifact id",
+            )
+        })?;
+    ensure_source_context_field_matches(
+        "model artifact id",
+        "selected_candidate_fact.selected_model_ref.selected_artifact_id",
+        selected_artifact_id,
+        &profile.model_artifact_id,
+    )?;
+    ensure_source_context_field_matches(
+        "runtime family",
+        "selected_candidate_fact.runtime_family",
+        &fact.runtime_family,
+        &profile.runtime_family,
+    )?;
+    ensure_source_context_field_matches(
+        "backend id",
+        "selected_candidate_fact.selected_backend_key",
+        &fact.selected_backend_key,
+        &profile.backend_id,
+    )?;
+    ensure_source_context_field_matches(
+        "device load target",
+        "selected_candidate_fact.resolved_load_target",
+        &fact.resolved_load_target,
+        &profile.device_load_target,
+    )?;
+    ensure_source_context_field_matches(
+        "runtime residency key",
+        "selected_candidate_fact.runtime_residency_key",
+        &fact.runtime_residency_key,
+        &profile.runtime_residency_key,
+    )?;
+    if fact.loaded_runtime_memory_estimate_bytes != profile.estimated_loaded_runtime_bytes {
+        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidSourceContext,
+            "selected_candidate_fact.loaded_runtime_memory_estimate_bytes",
+            "selected candidate loaded-runtime memory estimate does not match runtime branch profile",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_source_context_field_matches(
+    label: &str,
+    field_path: &'static str,
+    left: &str,
+    right: &str,
+) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    if left != right {
+        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidSourceContext,
+            field_path,
+            format!("selected candidate {label} does not match runtime branch profile"),
         ));
     }
     Ok(())
@@ -323,6 +521,16 @@ fn validate_non_blank(
 
 #[cfg(test)]
 mod tests {
+    use pantograph_dependency_planning::{
+        DependencyEnvironmentId, DependencyEnvironmentRef, DeviceIntentId, PumasModelRef,
+    };
+    use pantograph_scheduler::{
+        SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
+        SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
+        SchedulerRuntimeVariantId, SchedulerTaskId, SchedulerWorkflowRunId,
+    };
+
+    use super::super::runtime_dispatch_selection::WorkflowRuntimeDispatchLoadState;
     use super::*;
 
     #[test]
@@ -440,6 +648,150 @@ mod tests {
             WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidTimeoutPolicy
         );
         assert_eq!(error.field_path, "timeout_ms");
+    }
+
+    #[test]
+    fn source_context_groups_runtime_branch_profile_and_selected_candidate_fact() {
+        let context = WorkflowRuntimeTaskAttemptSourceContext::new(source_context_request())
+            .expect("source context should validate");
+
+        assert_eq!(context.workflow_id, "workflow.image");
+        assert_eq!(context.workflow_run_id, "run.image.1");
+        assert_eq!(context.scheduler_task_id, "image-task");
+        assert_eq!(context.task_attempt_generation, 1);
+        assert_eq!(context.timeout_ms, Some(30_000));
+        assert_eq!(
+            context.runtime_branch_profile.context_shape_key,
+            "txt2img.1024x1024.steps30"
+        );
+        assert_eq!(
+            context.selected_candidate_fact.runtime_residency_key,
+            "runtime.diffusers.model.sdxl.cuda0"
+        );
+    }
+
+    #[test]
+    fn source_context_rejects_missing_runtime_branch_profile_field() {
+        let mut request = source_context_request();
+        request.runtime_branch_profile.operation_type = " ".to_string();
+
+        let error = WorkflowRuntimeTaskAttemptSourceContext::new(request)
+            .expect_err("missing operation type must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::MissingSelectedFact
+        );
+        assert_eq!(error.field_path, "runtime_branch_profile.operation_type");
+    }
+
+    #[test]
+    fn source_context_rejects_selected_candidate_profile_mismatch() {
+        let mut request = source_context_request();
+        request.selected_candidate_fact.runtime_family = "other-runtime".to_string();
+
+        let error = WorkflowRuntimeTaskAttemptSourceContext::new(request)
+            .expect_err("runtime family mismatch must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidSourceContext
+        );
+        assert_eq!(error.field_path, "selected_candidate_fact.runtime_family");
+    }
+
+    #[test]
+    fn source_context_rejects_zero_attempt_generation() {
+        let mut request = source_context_request();
+        request.task_attempt_generation = 0;
+
+        let error = WorkflowRuntimeTaskAttemptSourceContext::new(request)
+            .expect_err("zero attempt generation must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity
+        );
+        assert_eq!(error.field_path, "task_attempt_generation");
+    }
+
+    fn source_context_request() -> WorkflowRuntimeTaskAttemptSourceContextRequest {
+        WorkflowRuntimeTaskAttemptSourceContextRequest {
+            workflow_id: "workflow.image".to_string(),
+            workflow_run_id: "run.image.1".to_string(),
+            scheduler_task_id: "image-task".to_string(),
+            task_attempt_generation: 1,
+            timeout_ms: Some(30_000),
+            runtime_branch_profile: batch_profile(),
+            selected_candidate_fact: selected_candidate_fact(),
+        }
+    }
+
+    fn batch_profile() -> WorkflowRuntimeBranchBatchEligibilityProfile {
+        WorkflowRuntimeBranchBatchEligibilityProfile {
+            model_artifact_id: "artifact.sdxl.diffusers".to_string(),
+            runtime_family: "diffusers".to_string(),
+            backend_id: "backend.diffusers".to_string(),
+            device_load_target: "cuda:0".to_string(),
+            runtime_residency_key: "runtime.diffusers.model.sdxl.cuda0".to_string(),
+            estimated_loaded_runtime_bytes: 8_589_934_592,
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            operation_type: "image-generation.txt2img".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
+        }
+    }
+
+    fn selected_candidate_fact() -> WorkflowRuntimeDispatchCandidateFact {
+        let workflow_run_id: SchedulerWorkflowRunId = "run.image.1".parse().expect("run id");
+        let task_id: SchedulerTaskId = "image-task".parse().expect("task id");
+        let device_id: DeviceIntentId = "cuda:0".parse().expect("device id");
+        WorkflowRuntimeDispatchCandidateFact {
+            candidate_id: SchedulerDispatchCandidateId::parse("candidate.diffusers.cuda0")
+                .expect("candidate id"),
+            selected_runtime_id: "runtime.diffusers".parse().expect("runtime id"),
+            selected_runtime_variant_id: Some(
+                SchedulerRuntimeVariantId::parse("cuda").expect("runtime variant id"),
+            ),
+            selected_backend_key: "backend.diffusers".to_string(),
+            runtime_family: "diffusers".to_string(),
+            resolved_load_target: "cuda:0".to_string(),
+            runtime_residency_key: "runtime.diffusers.model.sdxl.cuda0".to_string(),
+            loaded_runtime_memory_estimate_bytes: 8_589_934_592,
+            runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
+            runtime_instance_id: Some("runtime.diffusers.001".to_string()),
+            selected_device_ids: vec![device_id.clone()],
+            selected_model_ref: PumasModelRef {
+                model_id: "model.sdxl".to_string(),
+                revision: Some("main".to_string()),
+                selected_artifact_id: Some("artifact.sdxl.diffusers".to_string()),
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            },
+            runtime_trait_settings: Vec::new(),
+            environment_ref: DependencyEnvironmentRef {
+                environment_id: DependencyEnvironmentId::parse("env.runtime")
+                    .expect("environment id"),
+                manifest_id: None,
+            },
+            reservations: vec![SchedulerResourceReservation {
+                reservation_lease_id: SchedulerReservationLeaseId::parse(
+                    "reservation-lease.runtime.1",
+                )
+                .expect("reservation lease id"),
+                workflow_run_id: workflow_run_id.clone(),
+                task_id: task_id.clone(),
+                device_id,
+                resource_kind: SchedulerResourceKind::DeviceVram,
+                reserved_bytes: 8_589_934_592,
+            }],
+            resource_fit_assessment: SchedulerResourceFitAssessment {
+                workflow_run_id,
+                task_id,
+                state: SchedulerResourceFitState::Fits,
+                diagnostics: Vec::new(),
+            },
+            batching_group_id: None,
+        }
     }
 
     fn fact_request() -> WorkflowRuntimeTaskAttemptFactRequest {
