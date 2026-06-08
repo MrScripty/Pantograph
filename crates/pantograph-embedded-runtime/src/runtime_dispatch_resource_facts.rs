@@ -67,6 +67,15 @@ impl RuntimeDispatchResourceFactsSource {
             }
         }
     }
+
+    pub(crate) fn release_if_present(
+        &self,
+        reservation_id: u64,
+    ) -> Result<(), RuntimeRegistryError> {
+        self.registry
+            .release_reservation_if_present(reservation_id)
+            .map(|_| ())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

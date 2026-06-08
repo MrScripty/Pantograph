@@ -1580,14 +1580,48 @@ Verification passed:
 `cargo test -p pantograph-embedded-runtime workflow_service_composition --lib`,
 `cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
 
-Remaining follow-up: implement intermediate sequence step 3 by wiring
-`runtime_dispatch_candidate_provider` to build a complete
-`RuntimeDispatchEvidenceRecord` from runtime-registry family/residency facts,
-Pumas load-target source facts, Pumas logical-size memory estimates, runtime
-load state/instance facts, selected model/device facts, and resource facts.
-Stop and re-plan if this requires workflow-service contracts, scheduler DTOs,
-Pumas API/contract changes, generated files, lockfiles, or saved workflow
-fixtures in the same slice.
+2026-06-07 embedded-runtime complete dispatch evidence slice: completed
+intermediate sequence step 3 inside the embedded-runtime provider boundary.
+Smallest useful vertical slice: wire `runtime_dispatch_candidate_provider` to
+compose candidate drafts from runtime-registry family/residency facts, Pumas
+load-target facts, Pumas logical-size memory estimates, runtime load-state and
+instance facts, selected model/device facts, and runtime-registry resource
+reservation facts, then validate a complete `RuntimeDispatchEvidenceRecord`
+before emitting a scheduler candidate. Allowed files touched:
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`,
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_resource_facts.rs`,
+and this plan. No workflow-service contract, scheduler DTO, Pumas
+API/contract, generated, lockfile, or saved workflow fixture files were
+changed.
+
+No-fallback/no-legacy confirmation: the provider now fails closed when any
+canonical dispatch evidence is missing or invalid. It does not infer runtime
+family, resolved load target, residency key, memory estimate, runtime
+instance, selected device, or resource fit from runtime ids, backend keys,
+device ids, scheduler hints, graph/request shape, trait settings, or
+runtime-host requests. Pumas load-target diagnostics are projected as typed
+provider diagnostics; missing load-target facts for a backend-compatible
+runtime family block that candidate. A pre-reservation evidence guard prevents
+resource acquisition for malformed selected/load-state evidence, and a
+post-reservation full evidence record validates actual reservation and
+resource-fit facts before candidate emission. If post-reservation validation
+fails, the registry reservation is released instead of preserving a leaked
+partial reservation.
+
+Verification passed:
+`cargo fmt -p pantograph-embedded-runtime -- --check`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_candidate_provider --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_evidence --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_resource_facts --lib`,
+`cargo test -p pantograph-embedded-runtime runtime_dispatch_load_target_facts --lib`,
+`cargo check -p pantograph-embedded-runtime`, and `git diff --check`.
+
+Remaining follow-up: implement intermediate sequence step 4 by extending
+`WorkflowRuntimeDispatchCandidateFact` with richer validated evidence fields
+and projecting them from the validated evidence record. Scheduler candidate
+DTOs remain ranking-only; workflow-service must consume explicit provider
+facts and must not synthesize runtime family, load target, residency, memory,
+load-state, instance, reservation, or resource-fit evidence.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable

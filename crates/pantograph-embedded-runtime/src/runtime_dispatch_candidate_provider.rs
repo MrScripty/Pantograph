@@ -11,7 +11,8 @@ use pantograph_runtime_registry::{
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerDispatchSelectionDiagnostic,
     SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionDiagnosticSeverity,
-    SchedulerEstimateHintKind, SchedulerResourceFitAssessment, SchedulerResourceFitState,
+    SchedulerEstimateHintKind, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
+    SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
     SchedulerTaskStateRecord,
 };
 use pantograph_workflow_service::workflow::{
@@ -34,6 +35,11 @@ use crate::runtime_dispatch_evidence::{
     RuntimeDispatchEvidenceDiagnostic, RuntimeDispatchEvidenceLoadState,
     RuntimeDispatchEvidenceRecord, RuntimeDispatchEvidenceRequest,
 };
+use crate::runtime_dispatch_load_target_facts::{
+    RuntimeDispatchLoadTargetFact, RuntimeDispatchLoadTargetFactsDiagnostic,
+    RuntimeDispatchLoadTargetFactsDiagnosticCode, RuntimeDispatchLoadTargetFactsOutcome,
+    RuntimeDispatchLoadTargetFactsProjection,
+};
 use crate::runtime_dispatch_resource_facts::{
     RuntimeDispatchResourceFactsDiagnostic, RuntimeDispatchResourceFactsOutcome,
     RuntimeDispatchResourceFactsRequest, RuntimeDispatchResourceFactsSource,
@@ -48,6 +54,8 @@ const MISSING_PUMAS_PACKAGE_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_pumas_package_facts";
 const MISSING_RUNTIME_CAPABILITY_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_capability_facts";
+const MISSING_RUNTIME_LOAD_TARGET_FACTS_HINT: &str =
+    "embedded_runtime_dispatch_candidate_provider.missing_runtime_load_target_facts";
 const MISSING_RUNTIME_RESOURCE_FACTS_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_resource_facts";
 const MISSING_DEPENDENCY_ENVIRONMENT_REF_HINT: &str =
@@ -93,6 +101,9 @@ struct EmbeddedRuntimeDispatchCandidateDraft {
     candidate_id: SchedulerDispatchCandidateId,
     selected_runtime_id: RuntimeIntentId,
     selected_backend_key: String,
+    runtime_family: String,
+    resolved_load_target: String,
+    runtime_residency_key: String,
     selected_model_ref: PumasModelRef,
     loaded_runtime_memory_estimate_bytes: Option<u64>,
     runtime_status: RuntimeRegistryStatus,
@@ -208,6 +219,9 @@ fn resource_backed_candidate_set(
     diagnostics.extend(runtime_capability_diagnostics(
         source_snapshot.runtime_capability_facts.as_ref(),
     ));
+    diagnostics.extend(load_target_diagnostics(
+        source_snapshot.pumas_load_target_facts.as_ref(),
+    ));
     diagnostics.extend(source_snapshot_diagnostics(&source_snapshot.diagnostics));
     let (candidate_drafts, draft_diagnostics) = candidate_drafts(source_snapshot);
     diagnostics.extend(draft_diagnostics);
@@ -270,6 +284,19 @@ fn resource_backed_candidate_set(
                     &draft.candidate_id,
                     &resource_diagnostics,
                 ));
+                if let Err(evidence_diagnostic) = runtime_dispatch_evidence_record(
+                    &draft,
+                    selected_device_id.clone(),
+                    resource_facts.reservations.clone(),
+                    resource_facts.fit_assessment.clone(),
+                ) {
+                    let _ = resource_facts_source.release_if_present(resource_facts.lease_id);
+                    diagnostics.push(runtime_dispatch_evidence_diagnostic(
+                        &draft.candidate_id,
+                        evidence_diagnostic,
+                    ));
+                    continue;
+                }
                 facts.push(WorkflowRuntimeDispatchCandidateFact {
                     candidate_id: draft.candidate_id,
                     selected_runtime_id: draft.selected_runtime_id,
@@ -334,6 +361,9 @@ fn fail_closed_diagnostics(
     ));
     diagnostics.extend(runtime_capability_diagnostics(
         source_snapshot.runtime_capability_facts.as_ref(),
+    ));
+    diagnostics.extend(load_target_diagnostics(
+        source_snapshot.pumas_load_target_facts.as_ref(),
     ));
     diagnostics.extend(source_snapshot_diagnostics(&source_snapshot.diagnostics));
     let (_candidate_drafts, draft_diagnostics) = candidate_drafts(source_snapshot);
@@ -515,6 +545,84 @@ fn runtime_capability_source_diagnostic(
     )
 }
 
+fn load_target_diagnostics(
+    outcome: Option<&RuntimeDispatchLoadTargetFactsOutcome>,
+) -> Vec<SchedulerDispatchSelectionDiagnostic> {
+    match outcome {
+        Some(RuntimeDispatchLoadTargetFactsOutcome::Projected { diagnostics, .. }) => diagnostics
+            .iter()
+            .map(load_target_source_diagnostic)
+            .collect(),
+        Some(RuntimeDispatchLoadTargetFactsOutcome::Unavailable { diagnostics }) => diagnostics
+            .iter()
+            .map(load_target_source_diagnostic)
+            .collect(),
+        None => vec![provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
+            "runtime dispatch candidate provider has no staged Pumas load-target facts",
+            MISSING_RUNTIME_LOAD_TARGET_FACTS_HINT,
+        )],
+    }
+}
+
+fn load_target_source_diagnostic(
+    diagnostic: &RuntimeDispatchLoadTargetFactsDiagnostic,
+) -> SchedulerDispatchSelectionDiagnostic {
+    provider_diagnostic(
+        load_target_diagnostic_code(diagnostic.code),
+        &diagnostic.message,
+        load_target_diagnostic_hint(diagnostic.code),
+    )
+}
+
+fn load_target_diagnostic_code(
+    code: RuntimeDispatchLoadTargetFactsDiagnosticCode,
+) -> SchedulerDispatchSelectionDiagnosticCode {
+    match code {
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::ReadyResponseMissingTarget
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
+            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingSelectorAccess
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::UnsupportedSelectorAccessRole
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingRuntimeFamily
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetLookupFailed
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetUnavailable
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped => {
+            SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+        }
+    }
+}
+
+fn load_target_diagnostic_hint(code: RuntimeDispatchLoadTargetFactsDiagnosticCode) -> &'static str {
+    match code {
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingSelectorAccess => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.missing_selector_access"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::UnsupportedSelectorAccessRole => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.unsupported_selector_access_role"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingRuntimeFamily => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.missing_runtime_family"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetLookupFailed => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.lookup_failed"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetUnavailable => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.unavailable"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::ReadyResponseMissingTarget => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.ready_response_missing_target"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.empty_load_target_path"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.path_facts_stripped"
+        }
+    }
+}
+
 fn candidate_drafts(
     source_snapshot: &EmbeddedRuntimeDispatchCandidateSourceSnapshot,
 ) -> (
@@ -535,13 +643,21 @@ fn candidate_drafts(
     else {
         return (Vec::new(), Vec::new());
     };
+    let Some(RuntimeDispatchLoadTargetFactsOutcome::Projected {
+        facts: load_target_facts,
+        ..
+    }) = source_snapshot.pumas_load_target_facts.as_ref()
+    else {
+        return (Vec::new(), Vec::new());
+    };
 
-    candidate_drafts_from_projected_facts(package_facts, capability_facts)
+    candidate_drafts_from_projected_facts(package_facts, capability_facts, load_target_facts)
 }
 
 fn candidate_drafts_from_projected_facts(
     package_facts: &PumasDispatchPackageFactsProjection,
     capability_facts: &RuntimeDispatchCapabilityFactsProjection,
+    load_target_facts: &RuntimeDispatchLoadTargetFactsProjection,
 ) -> (
     Vec<EmbeddedRuntimeDispatchCandidateDraft>,
     Vec<SchedulerDispatchSelectionDiagnostic>,
@@ -558,46 +674,64 @@ fn candidate_drafts_from_projected_facts(
         );
     }
 
-    let drafts = capability_facts
-        .runtimes
-        .iter()
-        .flat_map(|runtime| runtime_candidate_drafts(package_facts, runtime, &backend_hint_keys))
-        .collect::<Vec<_>>();
+    let mut drafts = Vec::new();
+    let mut diagnostics = Vec::new();
+    for runtime in &capability_facts.runtimes {
+        let matching_backend_keys = runtime
+            .backend_keys
+            .iter()
+            .map(|backend_key| normalize_backend_key(backend_key))
+            .filter(|backend_key| backend_hint_keys.contains(backend_key))
+            .collect::<Vec<_>>();
+        if matching_backend_keys.is_empty() {
+            continue;
+        }
+        let Some(load_target) = load_target_for_runtime(load_target_facts, &runtime.runtime_family)
+        else {
+            diagnostics.push(provider_diagnostic(
+                SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+                "runtime dispatch candidate provider has no Pumas load-target fact for a backend-compatible runtime family",
+                MISSING_RUNTIME_LOAD_TARGET_FACTS_HINT,
+            ));
+            continue;
+        };
+        drafts.extend(matching_backend_keys.into_iter().map(|backend_key| {
+            runtime_candidate_draft(package_facts, runtime, load_target, backend_key)
+        }));
+    }
 
     if drafts.is_empty() {
         return (
             drafts,
-            vec![provider_diagnostic(
-                SchedulerDispatchSelectionDiagnosticCode::IncompatibleRuntimeRequirement,
-                "no runtime registry capability facts match the Pumas package backend hints",
-                INCOMPATIBLE_RUNTIME_BACKEND_HINT,
-            )],
+            if diagnostics.is_empty() {
+                vec![provider_diagnostic(
+                    SchedulerDispatchSelectionDiagnosticCode::IncompatibleRuntimeRequirement,
+                    "no runtime registry capability facts match the Pumas package backend hints",
+                    INCOMPATIBLE_RUNTIME_BACKEND_HINT,
+                )]
+            } else {
+                diagnostics
+            },
         );
     }
 
-    (drafts, Vec::new())
+    (drafts, diagnostics)
 }
 
-fn runtime_candidate_drafts(
-    package_facts: &PumasDispatchPackageFactsProjection,
-    runtime: &RuntimeDispatchRuntimeCapabilityFacts,
-    backend_hint_keys: &BTreeSet<String>,
-) -> Vec<EmbeddedRuntimeDispatchCandidateDraft> {
-    runtime
-        .backend_keys
+fn load_target_for_runtime<'a>(
+    load_target_facts: &'a RuntimeDispatchLoadTargetFactsProjection,
+    runtime_family: &str,
+) -> Option<&'a RuntimeDispatchLoadTargetFact> {
+    load_target_facts
+        .load_targets
         .iter()
-        .filter_map(|backend_key| {
-            let normalized_backend_key = normalize_backend_key(backend_key);
-            backend_hint_keys
-                .contains(&normalized_backend_key)
-                .then(|| runtime_candidate_draft(package_facts, runtime, normalized_backend_key))
-        })
-        .collect()
+        .find(|load_target| load_target.runtime_family == runtime_family)
 }
 
 fn runtime_candidate_draft(
     package_facts: &PumasDispatchPackageFactsProjection,
     runtime: &RuntimeDispatchRuntimeCapabilityFacts,
+    load_target: &RuntimeDispatchLoadTargetFact,
     selected_backend_key: String,
 ) -> EmbeddedRuntimeDispatchCandidateDraft {
     EmbeddedRuntimeDispatchCandidateDraft {
@@ -609,7 +743,10 @@ fn runtime_candidate_draft(
         selected_runtime_id: RuntimeIntentId::parse(&runtime.runtime_id)
             .expect("runtime registry ids should be runtime-intent safe"),
         selected_backend_key,
-        selected_model_ref: package_facts.model_ref.clone(),
+        runtime_family: runtime.runtime_family.clone(),
+        resolved_load_target: load_target.resolved_load_target.clone(),
+        runtime_residency_key: runtime.runtime_residency_key.clone(),
+        selected_model_ref: load_target.model_ref.clone(),
         loaded_runtime_memory_estimate_bytes: conservative_loaded_runtime_memory_estimate_bytes(
             &package_facts.logical_size,
         ),
@@ -625,9 +762,33 @@ fn pre_reservation_evidence_check(
 ) -> Result<RuntimeDispatchEvidenceRecord, RuntimeDispatchEvidenceDiagnostic> {
     RuntimeDispatchEvidenceRecord::new(RuntimeDispatchEvidenceRequest {
         selected_backend_key: draft.selected_backend_key.clone(),
-        runtime_family: String::new(),
-        resolved_load_target: String::new(),
-        runtime_residency_key: String::new(),
+        runtime_family: draft.runtime_family.clone(),
+        resolved_load_target: draft.resolved_load_target.clone(),
+        runtime_residency_key: draft.runtime_residency_key.clone(),
+        loaded_runtime_memory_estimate_bytes: draft
+            .loaded_runtime_memory_estimate_bytes
+            .unwrap_or_default(),
+        runtime_load_state: Some(runtime_dispatch_evidence_load_state(draft.runtime_status)),
+        runtime_instance_id: draft.runtime_instance_id.clone(),
+        selected_runtime_id: draft.selected_runtime_id.clone(),
+        selected_model_ref: draft.selected_model_ref.clone(),
+        selected_device_id: selected_device_id.clone(),
+        reservations: vec![pre_reservation_placeholder(selected_device_id)],
+        resource_fit_assessment: fits_assessment(task_intent),
+    })
+}
+
+fn runtime_dispatch_evidence_record(
+    draft: &EmbeddedRuntimeDispatchCandidateDraft,
+    selected_device_id: pantograph_dependency_planning::DeviceIntentId,
+    reservations: Vec<SchedulerResourceReservation>,
+    resource_fit_assessment: SchedulerResourceFitAssessment,
+) -> Result<RuntimeDispatchEvidenceRecord, RuntimeDispatchEvidenceDiagnostic> {
+    RuntimeDispatchEvidenceRecord::new(RuntimeDispatchEvidenceRequest {
+        selected_backend_key: draft.selected_backend_key.clone(),
+        runtime_family: draft.runtime_family.clone(),
+        resolved_load_target: draft.resolved_load_target.clone(),
+        runtime_residency_key: draft.runtime_residency_key.clone(),
         loaded_runtime_memory_estimate_bytes: draft
             .loaded_runtime_memory_estimate_bytes
             .unwrap_or_default(),
@@ -636,14 +797,40 @@ fn pre_reservation_evidence_check(
         selected_runtime_id: draft.selected_runtime_id.clone(),
         selected_model_ref: draft.selected_model_ref.clone(),
         selected_device_id,
-        reservations: Vec::new(),
-        resource_fit_assessment: SchedulerResourceFitAssessment {
-            workflow_run_id: task_intent.workflow_run_id.clone(),
-            task_id: task_intent.task_id.clone(),
-            state: SchedulerResourceFitState::Fits,
-            diagnostics: Vec::new(),
-        },
+        reservations,
+        resource_fit_assessment,
     })
+}
+
+fn pre_reservation_placeholder(
+    selected_device_id: pantograph_dependency_planning::DeviceIntentId,
+) -> SchedulerResourceReservation {
+    SchedulerResourceReservation {
+        reservation_lease_id: SchedulerReservationLeaseId::parse(
+            "runtime-dispatch-evidence.pre-reservation",
+        )
+        .expect("pre-reservation lease id should be scheduler-safe"),
+        workflow_run_id: "pre-reservation.run"
+            .parse()
+            .expect("pre-reservation run id"),
+        task_id: "pre-reservation.task"
+            .parse()
+            .expect("pre-reservation task id"),
+        device_id: selected_device_id,
+        resource_kind: SchedulerResourceKind::DeviceVram,
+        reserved_bytes: 1,
+    }
+}
+
+fn fits_assessment(
+    task_intent: &pantograph_scheduler::SchedulableTaskIntent,
+) -> SchedulerResourceFitAssessment {
+    SchedulerResourceFitAssessment {
+        workflow_run_id: task_intent.workflow_run_id.clone(),
+        task_id: task_intent.task_id.clone(),
+        state: SchedulerResourceFitState::Fits,
+        diagnostics: Vec::new(),
+    }
 }
 
 fn runtime_dispatch_evidence_load_state(
@@ -809,7 +996,7 @@ mod tests {
             &path_free_model_ref(),
         );
 
-        assert_eq!(diagnostics.len(), 3);
+        assert_eq!(diagnostics.len(), 4);
         assert!(diagnostics
             .iter()
             .all(|diagnostic| diagnostic.candidate_id.is_none()));
@@ -817,6 +1004,10 @@ mod tests {
         assert!(has_hint(
             &diagnostics,
             MISSING_RUNTIME_CAPABILITY_FACTS_HINT
+        ));
+        assert!(has_hint(
+            &diagnostics,
+            MISSING_RUNTIME_LOAD_TARGET_FACTS_HINT
         ));
         assert!(has_hint(&diagnostics, MISSING_RUNTIME_RESOURCE_FACTS_HINT));
         assert!(diagnostics.iter().all(|diagnostic| {
@@ -866,11 +1057,15 @@ mod tests {
             &path_free_model_ref(),
         );
 
-        assert_eq!(diagnostics.len(), 3);
+        assert_eq!(diagnostics.len(), 4);
         assert!(!has_hint(&diagnostics, MISSING_PUMAS_PACKAGE_FACTS_HINT));
         assert!(!has_hint(
             &diagnostics,
             MISSING_RUNTIME_CAPABILITY_FACTS_HINT
+        ));
+        assert!(has_hint(
+            &diagnostics,
+            MISSING_RUNTIME_LOAD_TARGET_FACTS_HINT
         ));
         assert!(has_hint(&diagnostics, MISSING_RUNTIME_RESOURCE_FACTS_HINT));
         assert!(diagnostics
@@ -936,6 +1131,7 @@ mod tests {
         let (drafts, diagnostics) = candidate_drafts_from_projected_facts(
             &pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
             &runtime_capability_facts(vec![runtime_capability("pytorch", vec!["diffusers"])]),
+            &load_target_facts(vec![load_target("diffusers")]),
         );
 
         assert!(diagnostics.is_empty());
@@ -946,6 +1142,15 @@ mod tests {
         assert_eq!(draft.selected_backend_key, "diffusers");
         assert_eq!(draft.selected_model_ref.model_id, "pumas.model.sdxl");
         assert_eq!(draft.selected_model_ref.selected_artifact_path, None);
+        assert_eq!(draft.runtime_family, "diffusers");
+        assert_eq!(
+            draft.resolved_load_target,
+            "pumas:pumas.model.sdxl:diffusers"
+        );
+        assert_eq!(
+            draft.runtime_residency_key,
+            "runtime.diffusers.pytorch.shared"
+        );
         assert_eq!(draft.loaded_runtime_memory_estimate_bytes, Some(23_856));
     }
 
@@ -954,6 +1159,7 @@ mod tests {
         let (drafts, diagnostics) = candidate_drafts_from_projected_facts(
             &pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
             &runtime_capability_facts(vec![runtime_capability("llama.cpp", vec!["llama.cpp"])]),
+            &load_target_facts(vec![load_target("diffusers")]),
         );
 
         assert!(drafts.is_empty());
@@ -977,6 +1183,7 @@ mod tests {
         let (drafts, diagnostics) = candidate_drafts_from_projected_facts(
             &package_facts,
             &runtime_capability_facts(vec![runtime_capability("pytorch", vec!["diffusers"])]),
+            &load_target_facts(vec![load_target("diffusers")]),
         );
 
         assert!(diagnostics.is_empty());
@@ -985,7 +1192,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_fails_closed_when_runtime_dispatch_evidence_is_missing() {
+    fn provider_fails_closed_when_load_target_evidence_is_missing() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
@@ -1030,19 +1237,130 @@ mod tests {
             .expect("missing runtime dispatch evidence should be a typed diagnostic");
 
         assert!(candidate_set.candidates.is_empty());
+        assert!(has_hint(
+            &candidate_set.diagnostics,
+            MISSING_RUNTIME_LOAD_TARGET_FACTS_HINT
+        ));
+        assert_eq!(registry.snapshot().reservations.len(), 0);
+    }
+
+    #[test]
+    fn provider_fails_closed_when_loaded_runtime_has_no_instance_id() {
+        let registry = dispatch_registry();
+        let mut runtime = runtime_capability("pytorch", vec!["diffusers"]);
+        runtime.runtime_instance_id = None;
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            source_snapshot(vec![runtime], vec![load_target("diffusers")]),
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("missing loaded runtime instance should be a typed diagnostic");
+
+        assert!(candidate_set.candidates.is_empty());
         assert!(candidate_set.diagnostics.iter().any(|diagnostic| {
             diagnostic
                 .candidate_id
                 .as_ref()
                 .is_some_and(|candidate_id| candidate_id.as_str() == "runtime.pytorch")
-                && diagnostic.code
-                    == SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
                 && diagnostic
                     .hint
                     .as_deref()
-                    .is_some_and(|hint| hint.starts_with(MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT))
+                    .is_some_and(|hint| hint.ends_with(":runtime_instance_id"))
         }));
         assert_eq!(registry.snapshot().reservations.len(), 0);
+    }
+
+    #[test]
+    fn provider_fails_closed_when_runtime_family_evidence_is_missing() {
+        let registry = dispatch_registry();
+        let mut runtime = runtime_capability("pytorch", vec!["diffusers"]);
+        runtime.runtime_family.clear();
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            source_snapshot(vec![runtime], vec![load_target("")]),
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("missing runtime family should be a typed diagnostic");
+
+        assert!(candidate_set.candidates.is_empty());
+        assert!(candidate_set.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .hint
+                .as_deref()
+                .is_some_and(|hint| hint.ends_with(":runtime_family"))
+        }));
+        assert_eq!(registry.snapshot().reservations.len(), 0);
+    }
+
+    #[test]
+    fn provider_fails_closed_when_residency_key_evidence_is_missing() {
+        let registry = dispatch_registry();
+        let mut runtime = runtime_capability("pytorch", vec!["diffusers"]);
+        runtime.runtime_residency_key.clear();
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            source_snapshot(vec![runtime], vec![load_target("diffusers")]),
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("missing residency key should be a typed diagnostic");
+
+        assert!(candidate_set.candidates.is_empty());
+        assert!(candidate_set.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .hint
+                .as_deref()
+                .is_some_and(|hint| hint.ends_with(":runtime_residency_key"))
+        }));
+        assert_eq!(registry.snapshot().reservations.len(), 0);
+    }
+
+    #[test]
+    fn provider_emits_candidate_when_dispatch_evidence_is_complete() {
+        let registry = dispatch_registry();
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(source_snapshot(
+                vec![runtime_capability("pytorch", vec!["diffusers"])],
+                vec![load_target("diffusers")],
+            ))
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+
+        let candidate_set = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("complete dispatch evidence should emit a candidate");
+
+        assert_eq!(candidate_set.candidates.len(), 1);
+        let candidate = &candidate_set.candidates[0];
+        assert_eq!(candidate.candidate_id.as_str(), "runtime.pytorch");
+        assert_eq!(candidate.selected_runtime_id.as_str(), "pytorch");
+        assert_eq!(
+            candidate.selected_model_ref.selected_artifact_id.as_deref(),
+            Some("diffusers")
+        );
+        assert_eq!(candidate.selected_model_ref.selected_artifact_path, None);
+        assert_eq!(candidate.selected_device_ids.len(), 1);
+        assert_eq!(registry.snapshot().reservations.len(), 1);
     }
 
     #[test]
@@ -1167,6 +1485,69 @@ mod tests {
             active_reservation_ids: Vec::new(),
             has_admission_budget: true,
         }
+    }
+
+    fn load_target(runtime_family: &str) -> RuntimeDispatchLoadTargetFact {
+        RuntimeDispatchLoadTargetFact {
+            runtime_family: runtime_family.to_string(),
+            resolved_load_target: "pumas:pumas.model.sdxl:diffusers".to_string(),
+            model_ref: path_free_model_ref(),
+            artifact_kind: "DiffusersBundle".to_string(),
+            load_path_kind: "Directory".to_string(),
+            library_root_id: Some("default".to_string()),
+            storage_kind: "LibraryOwned".to_string(),
+            validation_state: "Valid".to_string(),
+            content_fingerprint: Some("sha256:abc".to_string()),
+            package_facts_contract_version: Some(1),
+        }
+    }
+
+    fn load_target_facts(
+        load_targets: Vec<RuntimeDispatchLoadTargetFact>,
+    ) -> RuntimeDispatchLoadTargetFactsProjection {
+        RuntimeDispatchLoadTargetFactsProjection { load_targets }
+    }
+
+    fn source_snapshot(
+        runtimes: Vec<RuntimeDispatchRuntimeCapabilityFacts>,
+        load_targets: Vec<RuntimeDispatchLoadTargetFact>,
+    ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+        EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+            pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
+                facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                diagnostics: Vec::new(),
+            }),
+            runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
+                facts: runtime_capability_facts(runtimes),
+                diagnostics: Vec::new(),
+            }),
+            pumas_load_target_facts: Some(RuntimeDispatchLoadTargetFactsOutcome::Projected {
+                facts: load_target_facts(load_targets),
+                diagnostics: Vec::new(),
+            }),
+            ..EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
+        }
+    }
+
+    fn dispatch_registry() -> Arc<RuntimeRegistry> {
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["diffusers".to_string()])
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                    RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * mib())),
+                    RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * mib())),
+                ])),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime.pytorch.001".to_string()),
+                },
+            )
+            .expect("runtime ready");
+        registry
     }
 
     fn workflow_task(requested_device_id: Option<&str>) -> WorkflowSchedulerTask {
