@@ -17,10 +17,11 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventDiagnosticCode, WorkflowRuntimeBranchTaskEventId,
     WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
 };
+use super::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
 use super::task_execution_owner::WorkflowTaskExecutionOwner;
 use super::{
-    WorkflowHost, WorkflowOutputTarget, WorkflowRunResponse, WorkflowSchedulerTaskExecutionClass,
-    WorkflowService, WorkflowServiceError,
+    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse,
+    WorkflowSchedulerTaskExecutionClass, WorkflowService, WorkflowServiceError,
 };
 
 const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
@@ -590,6 +591,71 @@ async fn claim_and_execute_runtime_branch_event(
         }
     };
 
+    let active_run_inputs = match runtime_branch_active_run_inputs(service.as_ref(), command) {
+        Ok(inputs) => inputs,
+        Err(error) => {
+            return fail_runtime_branch_preparation_error(
+                command,
+                service.as_ref(),
+                &dispatching_record.event_id,
+                &claimed.claim,
+                error,
+            );
+        }
+    };
+    let preparation_boundary = WorkflowPreDispatchPreparationBoundary::new(service.as_ref());
+    if let Err(error) = preparation_boundary.materialize_external_inputs(
+        &command.session_id,
+        &command.workflow_run_id,
+        &active_run_inputs,
+    ) {
+        return fail_runtime_branch_preparation_error(
+            command,
+            service.as_ref(),
+            &dispatching_record.event_id,
+            &claimed.claim,
+            error,
+        );
+    }
+    let preparation = match preparation_boundary
+        .prepare_runtime_dispatch(&command.session_id, &command.workflow_run_id)
+        .await
+    {
+        Ok(preparation) => preparation,
+        Err(error) if error.is_runtime_dependency_readiness_pending() => {
+            return defer_runtime_branch_dependency_readiness(
+                command,
+                service.as_ref(),
+                &dispatching_record.event_id,
+                &claimed.claim,
+                runtime_dependency_pending_task_ids(&error).unwrap_or_default(),
+                error.to_string(),
+            );
+        }
+        Err(error) => {
+            return fail_runtime_branch_preparation_error(
+                command,
+                service.as_ref(),
+                &dispatching_record.event_id,
+                &claimed.claim,
+                error,
+            );
+        }
+    };
+    if !preparation.deferred_task_ids().is_empty() {
+        return defer_runtime_branch_dependency_readiness(
+            command,
+            service.as_ref(),
+            &dispatching_record.event_id,
+            &claimed.claim,
+            preparation.deferred_task_ids().to_vec(),
+            format!(
+                "runtime dependency readiness is pending for scheduler task(s): {}",
+                preparation.deferred_task_ids().join(", ")
+            ),
+        );
+    }
+
     let rehydrated = match rehydrate_runtime_branch_execution_context(
         service.as_ref(),
         &dispatching_record,
@@ -659,35 +725,14 @@ async fn claim_and_execute_runtime_branch_event(
             let deferred_task_ids = runtime_dependency_pending_task_ids(&error)
                 .filter(|task_ids| !task_ids.is_empty())
                 .unwrap_or_else(|| vec![rehydrated.runtime_task_id.clone()]);
-            let mut diagnostics = vec![WorkflowTaskExecutionWorkerDiagnostic::new(
-                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-                error.to_string(),
-            )];
-            let deferred_at_ms = unix_timestamp_ms();
-            let retry_ready_at_ms =
-                deferred_at_ms.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS);
-            match defer_claimed_runtime_branch_task_event(
+            defer_runtime_branch_dependency_readiness(
+                command,
                 service.as_ref(),
                 &claimed.record.event_id,
                 &claimed.claim,
-                deferred_at_ms,
-                retry_ready_at_ms,
-            ) {
-                Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
-                    command,
-                    WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::DependencyReadinessPending,
-                    deferred_task_ids,
-                    diagnostics,
-                ),
-                Err(diagnostic) => {
-                    diagnostics.push(diagnostic);
-                    WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                        command,
-                        "runtime branch task event defer persistence failed",
-                        diagnostics,
-                    )
-                }
-            }
+                deferred_task_ids,
+                error.to_string(),
+            )
         }
         Err(error) => match fail_claimed_runtime_branch_task_event(
             service.as_ref(),
@@ -722,6 +767,79 @@ fn runtime_dependency_pending_task_ids(error: &WorkflowServiceError) -> Option<V
             runtime_dependency_pending_task_ids(source)
         }
         _ => None,
+    }
+}
+
+fn runtime_branch_active_run_inputs(
+    service: &WorkflowService,
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+    let store = service.session_store_guard()?;
+    Ok(store
+        .active_run_context(&command.session_id, &command.workflow_run_id)?
+        .inputs)
+}
+
+fn fail_runtime_branch_preparation_error(
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    error: WorkflowServiceError,
+) -> WorkflowTaskExecutionWorkerOutcome {
+    match fail_claimed_runtime_branch_task_event(service, event_id, claim, unix_timestamp_ms()) {
+        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            error.to_string(),
+            vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchFailed,
+                error.to_string(),
+            )],
+        ),
+        Err(diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            "runtime branch task event failure persistence failed",
+            vec![diagnostic],
+        ),
+    }
+}
+
+fn defer_runtime_branch_dependency_readiness(
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    deferred_task_ids: Vec<String>,
+    message: String,
+) -> WorkflowTaskExecutionWorkerOutcome {
+    let mut diagnostics = vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+        WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+        message,
+    )];
+    let deferred_at_ms = unix_timestamp_ms();
+    let retry_ready_at_ms =
+        deferred_at_ms.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS);
+    match defer_claimed_runtime_branch_task_event(
+        service,
+        event_id,
+        claim,
+        deferred_at_ms,
+        retry_ready_at_ms,
+    ) {
+        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
+            command,
+            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::DependencyReadinessPending,
+            deferred_task_ids,
+            diagnostics,
+        ),
+        Err(diagnostic) => {
+            diagnostics.push(diagnostic);
+            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch task event defer persistence failed",
+                diagnostics,
+            )
+        }
     }
 }
 
@@ -1146,7 +1264,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state() {
+    async fn task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state_before_running(
+    ) {
         let scheduler_lifecycle = scheduler_lifecycle();
         let service = Arc::new(WorkflowService::new());
         let session_id = prepare_active_runtime_run(service.as_ref());
@@ -1238,7 +1357,8 @@ mod tests {
         assert_eq!(persisted.state, WorkflowRuntimeBranchTaskEventState::Failed);
         assert!(persisted.claim.is_some());
         assert!(persisted.dispatching_at_ms.is_some());
-        assert!(persisted.running_at_ms.is_some());
+        assert!(persisted.running_at_ms.is_none());
+        assert!(persisted.deferred_at_ms.is_none());
         assert!(persisted.failed_at_ms.is_some());
 
         worker

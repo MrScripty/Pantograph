@@ -2313,6 +2313,57 @@ return typed deferral. Do not record selected candidate evidence, start runtime
 task attempts, change scheduler DTOs, change Pumas contracts, edit generated
 or lock files, or preserve request-scoped runner fallback in this slice.
 
+2026-06-09 worker pre-dispatch preparation slice: completed sequence step 2.
+Smallest useful vertical slice: have the task-execution worker, after claiming
+a runtime-branch event and persisting `Dispatching`, read backend-owned
+active-run input bindings, materialize external inputs through
+`WorkflowPreDispatchPreparationBoundary`, run canonical pre-dispatch
+preparation, and persist a durable deferred runtime-branch event with explicit
+retry timing when dependency readiness remains pending. Invalid scheduler
+preparation still fails closed before `Running`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: the worker now uses backend active-run
+inputs and the workflow-service preparation boundary. It does not read inputs
+from frontend/Tauri/runtime-host state, does not add runtime-host request
+fields, does not synthesize readiness from graph/request state, does not
+invoke request-scoped runner fallback, does not perform dispatch selection,
+does not record selected candidate evidence, does not start scheduler runtime
+task attempts, and does not change Pumas contracts, scheduler DTOs, generated
+files, lockfiles, or workflow fixtures.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state_before_running --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_dependency_defer_sets_retry_ready_time --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+and `cargo check -p pantograph-workflow-service`.
+
+Discovered issue resolved in slice: worker-owned runtime runs were previously
+attempting rehydration before canonical scheduler preparation had materialized
+external inputs or admitted dependency readiness, producing internal
+rehydration failures instead of typed readiness deferral. The worker now
+defers before rehydration when preparation cannot produce readiness proof.
+
+Next thin slice: implement sequence step 3. Allowed files should be limited to
+the task-execution worker runtime-branch path, runtime dispatch selection
+boundary integration from the prepared runtime task, scheduler attempt
+lifecycle start/binding code needed to produce canonical attempt identity and
+start timestamp, focused worker/session tests for selected candidate evidence
+and started attempt facts, and this plan. The slice must record the selected
+`WorkflowRuntimeDispatchCandidateFact` under the current runtime-branch event
+claim generation before rehydration and must fail closed with typed
+diagnostics when candidate selection, reservation binding, or scheduler attempt
+startup cannot produce canonical facts. Do not introduce the durable dispatch
+assignment record yet, change Pumas contracts, change runtime-host request
+fields, edit generated/lock/workflow fixture files, or preserve any
+request-scoped runtime dispatch fallback.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

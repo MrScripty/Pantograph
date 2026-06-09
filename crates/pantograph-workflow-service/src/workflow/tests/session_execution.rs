@@ -569,12 +569,12 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
         .expect("diagnostic events")
     };
     assert!(
-        diagnostic_events.iter().any(|event| {
-            event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunStarted
-                && event.workflow_run_id.as_ref().map(|id| id.as_str())
-                    == Some(workflow_run_id.as_str())
+        diagnostic_events.iter().all(|event| {
+            event.event_kind != pantograph_diagnostics_ledger::DiagnosticEventKind::RunStarted
+                || event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    != Some(workflow_run_id.as_str())
         }),
-        "readiness-pending runtime run should still have a run-started event"
+        "readiness-pending worker-owned runtime run must not record a run-started event before readiness proof exists"
     );
     assert!(
         diagnostic_events.iter().all(|event| {

@@ -121,6 +121,10 @@ impl WorkflowPreDispatchPreparationOutcome {
         &self.admitted_runtime_readiness
     }
 
+    pub(super) fn deferred_task_ids(&self) -> &[String] {
+        &self.deferred_task_ids
+    }
+
     pub(super) fn into_deferred_task_ids(self) -> Vec<String> {
         self.deferred_task_ids
     }
