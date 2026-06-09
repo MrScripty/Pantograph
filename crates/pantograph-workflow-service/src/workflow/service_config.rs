@@ -24,6 +24,7 @@ use crate::scheduler::{
 
 use super::{
     runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository,
+    runtime_dispatch_assignment::InMemoryWorkflowRuntimeDispatchAssignmentRepository,
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher, SqliteAttributionStore,
     SqliteDiagnosticsLedger, WorkflowDiagnosticsProjectionRefreshSink,
@@ -56,6 +57,9 @@ impl WorkflowService {
             ))),
             runtime_branch_task_event_repository: Arc::new(Mutex::new(
                 InMemoryWorkflowRuntimeBranchTaskEventRepository::new(),
+            )),
+            runtime_dispatch_assignment_repository: Arc::new(Mutex::new(
+                InMemoryWorkflowRuntimeDispatchAssignmentRepository::new(),
             )),
             graph_session_store: Arc::new(GraphSessionStore::new()),
             artifact_writer: None,

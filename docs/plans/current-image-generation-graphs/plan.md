@@ -2489,13 +2489,42 @@ preparation path, do not preserve request-scoped runtime dispatch as fallback,
 and do not split assignment lifecycle across frontend/Tauri/runtime-host
 state.
 
-Next thin slice: implement only sequence step 1. Allowed files should be
-limited to a new workflow-service runtime dispatch assignment contract/module,
-repository wiring on `WorkflowService`, focused unit tests for validation and
-repository state transitions, and this plan. Do not wire the worker, alter
-runtime-branch task-event schema, change Pumas contracts, change scheduler
-DTOs, edit generated/lock/workflow fixture files, start scheduler attempts, or
-invoke runtime-host dispatch in this slice.
+2026-06-09 durable dispatch assignment repository slice: completed sequence
+step 1. Smallest useful vertical slice: add a workflow-service durable runtime
+dispatch assignment contract/module and in-memory repository, then wire the
+repository into `WorkflowService` construction without worker execution
+changes. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-workflow-service/src/workflow/service_config.rs`, and this
+plan.
+
+No-fallback/no-legacy confirmation: the slice adds the canonical assignment
+record and validates claim generation, scheduler task attempt identity,
+selected candidate evidence, selected runtime handoff, readiness proof, and
+reservation binding before storing a prepared assignment. It does not wire the
+worker, alter runtime-branch task-event schema, change Pumas contracts, change
+scheduler DTOs, edit generated/lock/workflow fixture files, start scheduler
+attempts, invoke runtime-host dispatch, or preserve request-scoped runtime
+dispatch fallback.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+and `cargo check -p pantograph-workflow-service`. The focused test suite
+covers prepared assignment creation, duplicate active assignment rejection,
+terminal retry allowance, lifecycle ordering, selected candidate correlation,
+and selected handoff correlation. Worktree deviation: unrelated Pumas proposal
+documents were dirty before the slice and were left untouched.
+
+Next thin slice: implement only sequence step 2. Allowed files should be
+limited to runtime-branch task event contract/repository updates, assignment
+correlation helpers if needed, focused unit tests for event-to-assignment
+linking and stale-claim rejection, and this plan. Do not wire worker runtime
+execution, change Pumas contracts, change scheduler DTOs, edit generated/
+lock/workflow fixture files, invoke runtime-host dispatch, or remove bridge
+selected-candidate projections until the assignment-owned execution path is
+validated.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable

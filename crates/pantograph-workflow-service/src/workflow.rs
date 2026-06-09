@@ -50,6 +50,8 @@ mod preflight_api;
 mod runtime_branch_rehydration;
 #[allow(dead_code)]
 mod runtime_branch_task_event;
+#[allow(dead_code)]
+mod runtime_dispatch_assignment;
 mod runtime_dispatch_selection;
 mod runtime_host_task_input_mapping;
 mod runtime_host_task_result_mapping;
@@ -274,6 +276,10 @@ pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     runtime_branch_task_event_repository:
         Arc<Mutex<runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository>>,
+    #[allow(dead_code)]
+    runtime_dispatch_assignment_repository: Arc<
+        Mutex<runtime_dispatch_assignment::InMemoryWorkflowRuntimeDispatchAssignmentRepository>,
+    >,
     graph_session_store: Arc<GraphSessionStore>,
     artifact_writer: Option<WorkflowArtifactWriter>,
     artifact_format_settings: Arc<Mutex<ArtifactFormatSettings>>,
