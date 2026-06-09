@@ -2414,6 +2414,89 @@ dispatch execution ownership, by reconstructing handoff from evidence-only
 candidate facts, or by making `Running` acceptable to the old readiness
 preparation path.
 
+2026-06-09 durable dispatch assignment decision: use Option 2. Move the
+durable dispatch assignment record forward now instead of extending the bridge
+with another in-memory handoff. The selected architecture is a backend-owned
+assignment record that persists scheduler attempt identity, selected candidate
+evidence, selected runtime dispatch handoff/reservation binding, runtime
+branch claim generation, readiness proof identity/payload, and lifecycle state
+before rehydration. Rehydration and worker execution must consume that
+assignment record as the canonical dispatch source of truth. The old
+request-scoped runtime dispatch runner path must be removed from the
+worker-owned runtime branch path rather than preserved as a fallback.
+
+Standards alignment for this decision:
+- Plan standards: this is serial shared-contract/persistence work. Do not
+  delegate it to sub-agents and do not mix it with generated files, lockfiles,
+  saved workflow fixtures, Pumas contracts, or unrelated proposal docs. Execute
+  it in thin, committed slices with focused verification after each slice.
+- Coding standards: the assignment record separates evidence, scheduler
+  lifecycle, dispatch handoff, and worker execution ownership so maintainers do
+  not have to reason about request handling, persistence, runtime policy, and
+  execution timing in one legacy runner path. Backend-owned facts remain the
+  single source of truth.
+- Concurrency/ownership: the worker owns runtime-branch claim, assignment
+  creation, assignment lifecycle transitions, rehydration validation, and
+  execution. Claim generation and assignment state must prevent duplicate
+  dispatch, stale-claim writes, and replaying a selected handoff under a
+  different claim.
+
+Selected durable assignment implementation sequence:
+1. Add the workflow-service durable dispatch assignment contract and in-memory
+   repository. The record must include schema version, assignment id,
+   runtime-branch event id, session id, workflow id, workflow run id,
+   scheduler task id, scheduler task attempt id/start timestamp, attempt
+   generation, runtime-branch claim owner/lease/generation, persisted
+   readiness proof, selected candidate fact, selected runtime handoff /
+   reservation binding data, lifecycle state, and created/updated timestamps.
+   Repository operations must validate claim correlation, prevent duplicate
+   active assignments for the same runtime-branch event/task attempt, and
+   return typed diagnostics. This slice must not wire worker execution yet.
+2. Teach the runtime-branch task event contract/repository to link to the
+   assignment id and selected scheduler attempt id as assignment-owned facts,
+   without duplicating assignment lifecycle ownership. Existing selected
+   candidate evidence on the event may remain only as a rehydration correlation
+   projection until a later cleanup removes bridge fields.
+3. Update worker pre-dispatch flow to create the assignment after canonical
+   readiness preparation and dispatch selection, start the scheduler runtime
+   task attempt, bind the reservation, persist selected evidence/attempt facts,
+   and then rehydrate from the assignment. Selection/start/bind failures must
+   fail closed with typed diagnostics and must not call request-scoped runtime
+   dispatch.
+4. Replace `WorkflowTaskExecutionOwner::run_rehydrated_runtime_branch_until_dispatch_boundary`
+   for worker-owned runtime branches with assignment-owned runtime execution.
+   Execution must consume the selected dispatch stored in the assignment,
+   spawn the runtime supervisor, complete/cancel/fail scheduler task lifecycle,
+   apply reservation lifecycle updates, and update assignment/runtime-branch
+   terminal state.
+5. Tighten rehydration to require assignment id, selected candidate fact,
+   selected dispatch handoff/reservation binding, scheduler attempt identity,
+   readiness proof, runtime-branch profile, and matching claim generation.
+   Missing or mismatched facts must return typed diagnostics.
+6. Remove or narrow the legacy request-scoped runtime dispatch runner path so
+   worker-owned runtime branches cannot re-enter readiness/selection/startup
+   after assignment creation. Non-worker paths must either use the same
+   assignment machinery or fail closed with typed diagnostics.
+7. After the assignment path validates end to end, re-plan cleanup of bridge
+   projections such as duplicated selected candidate fields on runtime-branch
+   events and any compatibility-only helper APIs.
+
+No-fallback/no-legacy confirmation: durable assignment is now the canonical
+owner for selected runtime dispatch execution. Do not reconstruct dispatch
+from evidence-only facts, do not pass selected handoff through request-scoped
+runner inputs, do not make scheduler `Running` acceptable to the old
+preparation path, do not preserve request-scoped runtime dispatch as fallback,
+and do not split assignment lifecycle across frontend/Tauri/runtime-host
+state.
+
+Next thin slice: implement only sequence step 1. Allowed files should be
+limited to a new workflow-service runtime dispatch assignment contract/module,
+repository wiring on `WorkflowService`, focused unit tests for validation and
+repository state transitions, and this plan. Do not wire the worker, alter
+runtime-branch task-event schema, change Pumas contracts, change scheduler
+DTOs, edit generated/lock/workflow fixture files, start scheduler attempts, or
+invoke runtime-host dispatch in this slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
