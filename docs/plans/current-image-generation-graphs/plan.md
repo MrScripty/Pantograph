@@ -1953,6 +1953,47 @@ requires scheduler DTO changes, Pumas contracts, generated files, lockfiles,
 saved workflow fixtures, runtime-host request fields, request-scoped fallback
 execution, or synthesis from graph/request/runtime-host state.
 
+2026-06-08 runtime-branch task-attempt source rehydration slice: completed
+Option 1 sequence step 3. Smallest useful vertical slice: extend
+runtime-branch rehydration so a claimed/dispatching runtime-branch task event
+returns a validated `WorkflowRuntimeTaskAttemptSourceContext`, the active
+scheduler task-attempt id, and the active scheduler task-attempt start
+timestamp. Rehydration now reads scheduler attempt facts from the canonical
+session store, rejects missing or mismatched active attempt facts, rejects
+missing selected candidate evidence, rejects selected candidate resource-fit or
+reservation scope mismatches, and maps the new fail-closed diagnostics through
+the task-execution worker. The task-execution owner now asserts the returned
+source context aligns with the runtime-branch command before continuing to the
+existing dispatch-boundary runner. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not change scheduler DTOs,
+Pumas contracts, runtime-host request fields, generated files, lockfiles, or
+saved workflow fixtures. It does not synthesize attempt identity, selected
+runtime/model/resource evidence, operation type, context shape, cancellation
+mode, or timeout from graph/request/runtime-host state. Missing or mismatched
+canonical runtime-branch, selected-candidate, or scheduler-attempt facts return
+typed rehydration diagnostics and fail closed before runtime-host dispatch.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`,
+`cargo check -p pantograph-workflow-service`, and `git diff --check`.
+
+Next thin slice: implement Option 1 sequence step 4 by building
+`WorkflowRuntimeTaskAttemptFactRecord` at the worker dispatch boundary from
+the rehydrated source context, selected candidate fact, scheduler attempt id,
+scheduler attempt start timestamp, and current record timestamp before
+runtime-host dispatch starts. Allowed files should be limited to
+workflow-service task-attempt fact construction/plumbing, focused tests,
+worker/owner boundary integration, and this plan. Stop and re-plan if this
+requires scheduler DTO changes, Pumas contracts, generated files, lockfiles,
+saved workflow fixtures, runtime-host request fields, request-scoped fallback
+execution, or synthesis from graph/request/runtime-host state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

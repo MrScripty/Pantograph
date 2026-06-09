@@ -127,6 +127,22 @@ impl WorkflowTaskExecutionOwner {
             .task_records
             .iter()
             .any(|record| record.task_id.as_str() == rehydrated.runtime_task_id));
+        debug_assert_eq!(
+            rehydrated.task_attempt_source_context.workflow_id,
+            command.workflow_id
+        );
+        debug_assert_eq!(
+            rehydrated.task_attempt_source_context.workflow_run_id,
+            command.workflow_run_id
+        );
+        debug_assert_eq!(
+            rehydrated.task_attempt_source_context.scheduler_task_id,
+            rehydrated.runtime_task_id
+        );
+        debug_assert!(
+            !rehydrated.scheduler_task_attempt_id.as_str().is_empty()
+                && rehydrated.scheduler_task_attempt_started_at_ms > 0
+        );
         let workflow_run_id = WorkflowRunId::try_from(command.workflow_run_id.clone())?;
         let run_snapshot =
             service.workflow_run_snapshot_for_execution_resume_if_configured(&workflow_run_id)?;
