@@ -2198,6 +2198,68 @@ request state, or allowing runtime-host/request-scoped dispatch to run when
 canonical pre-dispatch preparation has not produced a ready scheduler task and
 persisted proof.
 
+2026-06-09 pre-dispatch readiness/progress ownership decision: use Option 1.
+Extract a worker-callable backend boundary from `session_scheduler_runner` for
+pre-dispatch scheduler preparation, then resume worker-owned dispatch
+selection once that boundary can produce a ready runtime scheduler task and
+persisted runtime dispatch readiness proof before rehydration.
+
+Selected implementation sequence:
+1. Extract the existing scheduler pre-dispatch preparation from
+   `session_scheduler_runner` into a workflow-service-owned boundary that can
+   be called by the task-execution worker. The boundary owns materializing
+   external inputs, running scheduler progress for already-admitted
+   non-runtime/source tasks, retrying deferred runtime dependency readiness,
+   admitting runtime dependency readiness, persisting the runtime dispatch
+   readiness proof, and returning typed pending/deferred diagnostics when
+   readiness is incomplete. This boundary must not invoke runtime-host
+   dispatch, perform runtime dispatch selection, or record selected candidate
+   evidence.
+2. Have the worker call that boundary after claiming the runtime-branch event
+   and marking it `Dispatching`, before invoking
+   `WorkflowRuntimeDispatchSelectionBoundary`. If the boundary returns
+   dependency-readiness pending/deferred diagnostics, the worker must persist a
+   durable deferred runtime-branch event with explicit retry timing rather than
+   falling back to request-scoped runner execution.
+3. Once the boundary returns a ready runtime task and persisted readiness
+   proof, invoke `WorkflowRuntimeDispatchSelectionBoundary`, start the
+   scheduler runtime task attempt through the canonical scheduler lifecycle,
+   bind the selected reservation, and record the selected
+   `WorkflowRuntimeDispatchCandidateFact` on the runtime-branch task event
+   under the current claim generation before rehydration.
+4. Rehydrate only after scheduler attempt identity/start timestamp, selected
+   candidate fact, runtime-branch profile, and readiness proof are all present
+   as backend-owned facts. Missing or mismatched facts must keep returning
+   typed diagnostics.
+5. Narrow `session_scheduler_runner` so it consumes the worker-prepared state
+   for the worker-owned runtime-branch path and no longer owns runtime
+   dispatch readiness/progress as a request-scoped legacy path. Any remaining
+   non-worker path must be explicitly canonical and fail closed if it cannot
+   produce the same facts.
+6. Keep the durable dispatch assignment record as the later target
+   architecture. After the worker-owned bridge path validates end to end,
+   re-plan the pre-dispatch preparation output, selected candidate fact,
+   scheduler attempt identity, reservation binding, claim generation, and
+   lifecycle state into that durable assignment record rather than preserving
+   bridge fields as a parallel owner.
+
+No-fallback/no-legacy confirmation for this decision: scheduler progress and
+readiness proof preparation move to a backend-owned worker-callable boundary,
+not to frontend/Tauri state, graph/request inference, runtime-host inputs, or
+request-scoped runner fallback. The worker must fail closed or persist typed
+deferred state when pre-dispatch preparation cannot produce canonical ready
+facts. Scheduler DTOs, Pumas contracts, runtime-host request fields, generated
+files, lockfiles, and saved workflow fixtures remain out of scope unless a
+future re-plan explicitly makes them serial shared-contract work.
+
+Next thin slice: implement only sequence step 1. Allowed files should be
+limited to extracting the workflow-service pre-dispatch preparation boundary,
+focused tests for materialization/progress/readiness-proof outcomes, minimal
+module wiring, and this plan. Do not wire the worker, change scheduler DTOs,
+change Pumas contracts, edit generated/lock/workflow fixture files, change
+runtime-host request fields, record selected candidate evidence, start runtime
+task attempts, or build `WorkflowRuntimeTaskAttemptFactRecord` in this slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
