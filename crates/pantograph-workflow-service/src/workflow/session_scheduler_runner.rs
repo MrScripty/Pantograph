@@ -46,7 +46,7 @@ pub(super) struct WorkflowSchedulerSessionRunner<'a> {
     service: &'a WorkflowService,
 }
 
-struct AdmittedRuntimeTaskReadiness {
+pub(super) struct AdmittedRuntimeTaskReadiness {
     task_id: String,
     readiness_proof: DependencyReadinessProofEnvelope,
 }
@@ -54,6 +54,76 @@ struct AdmittedRuntimeTaskReadiness {
 struct RuntimeDependencyReadinessAdmissionResult {
     admitted: Vec<AdmittedRuntimeTaskReadiness>,
     deferred_task_ids: Vec<String>,
+}
+
+pub(super) struct WorkflowPreDispatchPreparationOutcome {
+    admitted_runtime_readiness: Vec<AdmittedRuntimeTaskReadiness>,
+    deferred_task_ids: Vec<String>,
+}
+
+pub(super) struct WorkflowPreDispatchPreparationBoundary<'a> {
+    service: &'a WorkflowService,
+}
+
+impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
+    pub(super) fn new(service: &'a WorkflowService) -> Self {
+        Self { service }
+    }
+
+    pub(super) fn materialize_external_inputs(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        inputs: &[WorkflowPortBinding],
+    ) -> Result<(), WorkflowServiceError> {
+        self.runner()
+            .materialize_external_inputs(session_id, workflow_run_id, inputs)
+    }
+
+    pub(super) async fn run_progress_loop(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        self.runner()
+            .run_progress_loop(session_id, workflow_run_id)
+            .await
+    }
+
+    pub(super) async fn prepare_runtime_dispatch(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<WorkflowPreDispatchPreparationOutcome, WorkflowServiceError> {
+        let runner = self.runner();
+        runner
+            .run_progress_loop(session_id, workflow_run_id)
+            .await?;
+        runner.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
+        let readiness_admission =
+            runner.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
+        if readiness_admission.deferred_task_ids.is_empty() {
+            runner.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
+        }
+        Ok(WorkflowPreDispatchPreparationOutcome {
+            admitted_runtime_readiness: readiness_admission.admitted,
+            deferred_task_ids: readiness_admission.deferred_task_ids,
+        })
+    }
+
+    fn runner(&self) -> WorkflowSchedulerSessionRunner<'a> {
+        WorkflowSchedulerSessionRunner::new(self.service)
+    }
+}
+
+impl WorkflowPreDispatchPreparationOutcome {
+    pub(super) fn admitted_runtime_readiness(&self) -> &[AdmittedRuntimeTaskReadiness] {
+        &self.admitted_runtime_readiness
+    }
+
+    pub(super) fn into_deferred_task_ids(self) -> Vec<String> {
+        self.deferred_task_ids
+    }
 }
 
 struct ReadyRuntimeDispatchContext {
@@ -98,8 +168,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 "scheduler session runner received a runtime-containing run".to_string(),
             ));
         }
-        self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
-        self.run_progress_loop(session_id, workflow_run_id).await?;
+        let preparation = WorkflowPreDispatchPreparationBoundary::new(self.service);
+        preparation.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
+        preparation
+            .run_progress_loop(session_id, workflow_run_id)
+            .await?;
 
         let (task_graph, records) =
             active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
@@ -142,7 +215,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             ));
         }
 
-        self.materialize_external_inputs(session_id, workflow_run_id, inputs)?;
+        WorkflowPreDispatchPreparationBoundary::new(self.service).materialize_external_inputs(
+            session_id,
+            workflow_run_id,
+            inputs,
+        )?;
         self.continue_runtime_dependency_readiness(
             host,
             session_id,
@@ -191,7 +268,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         session_id: &str,
         workflow_run_id: &str,
     ) -> Result<(), WorkflowServiceError> {
-        self.run_progress_loop(session_id, workflow_run_id).await
+        WorkflowPreDispatchPreparationBoundary::new(self.service)
+            .run_progress_loop(session_id, workflow_run_id)
+            .await
     }
 
     async fn continue_runtime_dependency_readiness(
@@ -205,20 +284,19 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         started_at: Instant,
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.run_progress_loop(session_id, workflow_run_id).await?;
-        self.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
-        let readiness_admission =
-            self.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
-        if !readiness_admission.deferred_task_ids.is_empty() {
+        let preparation = WorkflowPreDispatchPreparationBoundary::new(self.service)
+            .prepare_runtime_dispatch(session_id, workflow_run_id)
+            .await?;
+        if !preparation.deferred_task_ids.is_empty() {
+            let deferred_task_ids = preparation.into_deferred_task_ids();
             return Err(WorkflowServiceError::RuntimeDependencyReadinessPending {
                 message: format!(
                     "runtime dependency readiness is pending for scheduler task(s): {}",
-                    readiness_admission.deferred_task_ids.join(", ")
+                    deferred_task_ids.join(", ")
                 ),
-                task_ids: readiness_admission.deferred_task_ids,
+                task_ids: deferred_task_ids,
             });
         }
-        self.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
         self.run_runtime_dispatch_ready_tasks(
             host,
             session_id,
@@ -227,7 +305,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             output_targets,
             summary,
             started_at,
-            &readiness_admission.admitted,
+            preparation.admitted_runtime_readiness(),
             attempt_start_transition,
         )
         .await

@@ -2260,6 +2260,59 @@ change Pumas contracts, edit generated/lock/workflow fixture files, change
 runtime-host request fields, record selected candidate evidence, start runtime
 task attempts, or build `WorkflowRuntimeTaskAttemptFactRecord` in this slice.
 
+2026-06-09 pre-dispatch preparation boundary extraction slice: completed
+sequence step 1 as a behavior-preserving extraction. Smallest useful vertical
+slice: add `WorkflowPreDispatchPreparationBoundary` and
+`WorkflowPreDispatchPreparationOutcome` in the workflow-service scheduler
+runner module, route non-runtime input materialization/progress, runtime-run
+external input materialization, resume progress, and runtime dependency
+readiness preparation through that boundary, and keep runtime dispatch
+selection/host execution outside the boundary. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the boundary only wraps canonical
+workflow-service scheduler preparation steps. It does not synthesize readiness
+from graph/request/frontend/Tauri state, does not invoke runtime-host
+dispatch, does not perform runtime dispatch selection, does not record selected
+candidate evidence, does not start scheduler runtime task attempts, and does
+not add compatibility DTOs, Pumas contract changes, generated files,
+lockfiles, or workflow fixtures.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+`cargo check -p pantograph-workflow-service`, and `git diff --check -- crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs docs/plans/current-image-generation-graphs/plan.md`.
+
+Verification failures recorded for the next planned worker-preparation slice:
+`cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch --lib`
+still returns an `InternalError` from the worker-owned runtime branch path
+before typed dependency-readiness deferral because the worker has not yet
+called the new pre-dispatch preparation boundary. `cargo test -p
+pantograph-workflow-service task_execution_worker --lib` still fails
+`task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state`
+with `runtime branch execution context rehydration failed` for the same
+missing worker-side preparation/rehydration facts. These failures are not fixed
+in this slice because wiring the worker, selected candidate evidence, scheduler
+attempt start, and rehydration facts are explicitly sequence steps 2-4.
+
+Deviation: no test source or fixture was changed in this extraction slice. The
+existing focused readiness and dispatch-selection tests were rerun instead
+because changing test fixtures would have crossed into the worker wiring and
+rehydration behavior that the slice explicitly forbids.
+
+Next thin slice: implement sequence step 2. Allowed files should be limited to
+the task-execution worker runtime-branch path, the pre-dispatch preparation
+boundary surface needed by that worker, focused worker tests for typed
+dependency-readiness deferral, and this plan. The worker must call
+`WorkflowPreDispatchPreparationBoundary` after claiming the runtime-branch
+event and marking it `Dispatching`, before dispatch selection. If preparation
+returns dependency-readiness pending/deferred diagnostics, the worker must
+persist a durable deferred runtime-branch event with explicit retry timing and
+return typed deferral. Do not record selected candidate evidence, start runtime
+task attempts, change scheduler DTOs, change Pumas contracts, edit generated
+or lock files, or preserve request-scoped runner fallback in this slice.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
