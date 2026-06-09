@@ -1994,6 +1994,31 @@ requires scheduler DTO changes, Pumas contracts, generated files, lockfiles,
 saved workflow fixtures, runtime-host request fields, request-scoped fallback
 execution, or synthesis from graph/request/runtime-host state.
 
+2026-06-08 task-attempt fact construction re-plan trigger: stop before
+implementing Option 1 sequence step 4. Worker rehydration now correctly
+requires selected candidate evidence, but the current worker path has no
+canonical source for that evidence at the point where it rehydrates the
+runtime-branch task event. The selected candidate fact is produced later in
+`session_scheduler_runner` during runtime dispatch selection. Building the
+task-attempt fact in `WorkflowTaskExecutionOwner` before the existing dispatch
+runner would therefore require either synthesizing selected runtime/model/
+resource facts, preserving request-scoped fallback behavior, or changing the
+boundary so the selected dispatch fact is produced/carried before fact
+construction.
+
+Discovered issue: the previous selected-evidence boundary slices established
+validated storage and rehydration contracts, but did not yet define the
+production handoff that records selected candidate evidence onto the
+runtime-branch task event before worker rehydration. Existing worker tests that
+exercise runtime-branch dispatch fail closed at rehydration without that
+handoff. Do not proceed by weakening rehydration, making selected evidence
+optional, copying scheduler DTO fields, or deriving selected facts from graph,
+request, active-run, or runtime-host state.
+
+Re-plan options must decide where canonical runtime dispatch selection occurs
+relative to runtime-branch worker claim/rehydration and task-attempt fact
+construction.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
