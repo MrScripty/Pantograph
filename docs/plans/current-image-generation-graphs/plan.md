@@ -2364,6 +2364,56 @@ assignment record yet, change Pumas contracts, change runtime-host request
 fields, edit generated/lock/workflow fixture files, or preserve any
 request-scoped runtime dispatch fallback.
 
+2026-06-09 sequence step 3 re-plan trigger: do not begin the selected
+candidate evidence / scheduler attempt start slice as currently written. The
+existing worker-owned path rehydrates and then calls
+`WorkflowTaskExecutionOwner::run_rehydrated_runtime_branch_until_dispatch_boundary`,
+which re-enters `WorkflowSchedulerSessionRunner::run_until_runtime_dispatch_boundary_with_attempt_transition`.
+That runner path repeats materialization, dependency-readiness preparation,
+dispatch selection, and scheduler runtime task startup and still expects the
+runtime scheduler task to be `Ready`. If the worker starts and binds the
+runtime task before rehydration as sequence step 3 requires, the old owner path
+will see the task as `Running` and fail closed. Preserving the old runner path
+as a fallback would violate the no-fallback/no-legacy rule.
+
+Additional blocker: the runtime-branch task event already stores the selected
+`WorkflowRuntimeDispatchCandidateFact`, but it does not store the scheduler
+runtime handoff / `SelectedRuntimeTaskDispatch` needed to spawn the runtime
+supervisor after rehydration. That dispatch object cannot be reconstructed
+from the selected candidate fact alone because the selected handoff and
+reservation lease are scheduler-owned execution facts, not just evidence
+metadata. Step 3 therefore needs an explicit owner/execution-path decision
+before code changes continue.
+
+Standards-aligned options:
+1. Expand the bridge plan so sequence step 3 also extracts a worker-owned
+   runtime dispatch execution boundary from the runner. The worker would
+   prepare selection, start the scheduler attempt, bind the reservation, record
+   selected candidate evidence under the current claim, rehydrate to validate
+   backend-owned facts, then execute the already-selected in-memory
+   `SelectedRuntimeTaskDispatch` through the new boundary. This keeps the
+   durable assignment record deferred, avoids request-scoped fallback, and is
+   the smallest end-to-end vertical bridge slice, but it is larger than the
+   current step 3 wording.
+2. Move the durable dispatch assignment record forward now. Persist the
+   scheduler attempt identity, selected candidate fact, selected runtime
+   handoff/reservation binding, claim generation, readiness proof, and
+   lifecycle state as one canonical assignment before rehydration. This is the
+   cleanest final architecture and best recovery model, but it is a serial
+   shared-contract/persistence slice and larger than the current bridge step.
+3. Split step 3 into a facts-only slice and a follow-up execution-boundary
+   slice. The first slice would start/bind/record selected evidence and verify
+   facts without completing runtime execution. This reduces immediate code
+   volume, but it is not a useful end-to-end vertical slice by itself and
+   risks leaving the system in a partially promoted bridge state unless the
+   follow-up is done immediately.
+
+Do not proceed by letting the worker start a scheduler attempt and then
+falling back to the old request-scoped runner, by rehydrating without selected
+dispatch execution ownership, by reconstructing handoff from evidence-only
+candidate facts, or by making `Running` acceptable to the old readiness
+preparation path.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
