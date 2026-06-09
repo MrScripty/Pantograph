@@ -2157,6 +2157,47 @@ Stop and re-plan if this requires scheduler DTO changes, Pumas contract
 changes, generated/lock/workflow fixture edits, runtime-host request-field
 changes, request-scoped fallback execution, or synthetic selected evidence.
 
+2026-06-09 worker-owned pre-dispatch selection step 2 re-plan trigger: stop
+before wiring the worker. A thin attempt to invoke
+`WorkflowRuntimeDispatchSelectionBoundary` immediately after worker claim and
+`Dispatching` proved that the worker can claim a runtime-branch event while
+the active scheduler task is still `AwaitingInputs` and before a persisted
+runtime dispatch readiness proof exists. The old `session_scheduler_runner`
+materialized external inputs, advanced scheduler progress, admitted runtime
+dependency readiness, and persisted the readiness proof after rehydration. The
+new selected-evidence invariant requires selected candidate evidence before
+rehydration, so step 2 cannot be implemented as a simple worker insertion
+point without moving ownership of scheduler progress/readiness preparation.
+
+Re-plan options must decide which backend boundary owns pre-dispatch scheduler
+progress before selected candidate evidence is recorded:
+1. Extract a worker-callable pre-dispatch readiness/progress boundary from
+   `session_scheduler_runner`. The worker would claim the runtime-branch
+   event, mark `Dispatching`, invoke this boundary to materialize inputs,
+   advance non-runtime scheduler progress, admit runtime dependency readiness,
+   and persist the readiness proof, then invoke
+   `WorkflowRuntimeDispatchSelectionBoundary`, start the scheduler runtime
+   task attempt, bind the reservation, and record selected evidence before
+   rehydration. This aligns best with the selected worker-owned path, but it
+   is a larger slice than step 2 and must preserve typed diagnostics for
+   dependency-readiness pending/deferred outcomes.
+2. Move the runtime-branch task-event claim until after the existing runner has
+   progressed the active run to `Ready`. This is smaller, but it keeps the
+   runner as the owner of request-scoped pre-dispatch progress and delays the
+   worker-owned architecture. It risks preserving legacy runner ownership
+   unless the plan explicitly narrows it immediately afterward.
+3. Introduce the durable dispatch assignment record now and make scheduler
+   progress/readiness preparation part of assignment creation. This matches the
+   later target architecture, but it expands the current bridge slice into a
+   durable contract and persistence change that must be planned as serial
+   shared-contract work.
+
+Do not proceed by making rehydration tolerate missing selected evidence,
+making scheduler readiness proof optional, synthesizing readiness from graph or
+request state, or allowing runtime-host/request-scoped dispatch to run when
+canonical pre-dispatch preparation has not produced a ready scheduler task and
+persisted proof.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
