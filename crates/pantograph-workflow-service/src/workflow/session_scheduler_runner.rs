@@ -34,9 +34,9 @@ use super::validation::{
     validate_requested_outputs_produced,
 };
 use super::{
-    project_scheduler_task_results_to_outputs, runtime_dispatch_selection_request,
-    selected_runtime_dispatch_candidate_fact, WorkflowHost, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTask,
+    project_scheduler_task_results_to_outputs, WorkflowHost, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeDispatchPreselectionError,
+    WorkflowRuntimeDispatchSelectionBoundary, WorkflowSchedulerTask,
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskRunSummary, WorkflowService,
     WorkflowServiceError,
@@ -691,6 +691,8 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
                 kind == SchedulerTaskStateKind::Ready
             })?;
+        let runtime_dispatch_selection_boundary =
+            WorkflowRuntimeDispatchSelectionBoundary::from_service(self.service);
         for task_id in &runtime_task_ids {
             let readiness_proof = runtime_dispatch_readiness_proof(
                 self.service,
@@ -701,44 +703,14 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             )?;
             let dispatch_context =
                 ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
-            self.service
-                .runtime_dispatch_source_refresher
-                .refresh_runtime_dispatch_sources(
+            let prepared_dispatch_selection = runtime_dispatch_selection_boundary
+                .prepare_ready_runtime_task_dispatch(
                     &dispatch_context.task,
                     &dispatch_context.ready_record,
-                    &readiness_proof,
+                    readiness_proof,
                 )
                 .await
-                .map_err(|error| {
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "runtime dispatch source refresh failed: {error}"
-                    ))
-                })?;
-            let candidate_set = self
-                .service
-                .runtime_dispatch_candidate_provider
-                .runtime_dispatch_candidates(
-                    &dispatch_context.task,
-                    &dispatch_context.ready_record,
-                    &readiness_proof,
-                )
-                .map_err(|error| {
-                    WorkflowServiceError::InvalidRequest(format!(
-                        "runtime dispatch candidate collection failed: {error}"
-                    ))
-                })?;
-            let dispatch_selection_request = runtime_dispatch_selection_request(
-                &dispatch_context.task,
-                readiness_proof,
-                candidate_set,
-            )
-            .map_err(|error| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "runtime dispatch selection request failed: {error}"
-                ))
-            })?;
-            let selection_request = dispatch_selection_request.selection_request;
-            let candidate_evidence_context = dispatch_selection_request.candidate_evidence_context;
+                .map_err(runtime_dispatch_preselection_invalid_request)?;
             let started_runtime_task = {
                 let mut store = self.service.session_store_guard()?;
                 self.service
@@ -757,31 +729,35 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 started_runtime_task.started_at_ms(),
                 attempt_start_transition,
             )?;
-            let selected_dispatch = self
-                .service
-                .scheduler_task_orchestrator
-                .select_runtime_task_dispatch(&started_runtime_task.task, selection_request)
+            let preselection = runtime_dispatch_selection_boundary
+                .select_prepared_started_runtime_task_dispatch(
+                    &started_runtime_task,
+                    prepared_dispatch_selection,
+                )
                 .await;
-            let selected_dispatch = match selected_dispatch {
-                Ok(selected_dispatch) => selected_dispatch,
+            let preselection = match preselection {
+                Ok(preselection) => preselection,
                 Err(error) => {
-                    if let crate::scheduler::WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection) = &error {
+                    let Some(scheduler_error) = error.scheduler_selection_error() else {
+                        return Err(runtime_dispatch_preselection_invalid_request(error));
+                    };
+                    if let crate::scheduler::WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection) = scheduler_error {
                         let terminal_mutation = {
                             let mut store = self.service.session_store_guard()?;
-                        self.service
-                            .scheduler_task_orchestrator
-                            .fail_started_runtime_task_dispatch_selection_terminal_mutation(
-                                &mut store,
-                                session_id,
-                                workflow_run_id,
-                                &started_runtime_task,
-                                selection,
-                            )
-                            .map_err(|error| {
-                                WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler runtime dispatch no-selection transition failed: {error}"
-                                ))
-                            })?
+                            self.service
+                                .scheduler_task_orchestrator
+                                .fail_started_runtime_task_dispatch_selection_terminal_mutation(
+                                    &mut store,
+                                    session_id,
+                                    workflow_run_id,
+                                    &started_runtime_task,
+                                    selection,
+                                )
+                                .map_err(|error| {
+                                    WorkflowServiceError::InvalidRequest(format!(
+                                        "scheduler runtime dispatch no-selection transition failed: {error}"
+                                    ))
+                                })?
                         };
                         self.record_scheduler_task_attempt_terminal(
                             session_id,
@@ -790,7 +766,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             started_runtime_task.started_at_ms(),
                             SchedulerTaskAttemptLifecycleTransition::Failed,
                             "scheduler runtime dispatch selection failed",
-                            Some(error.to_string()),
+                            Some(scheduler_error.to_string()),
                             None,
                             Some(&terminal_mutation),
                         )?;
@@ -804,7 +780,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 session_id,
                                 workflow_run_id,
                                 &started_runtime_task,
-                                &error,
+                                scheduler_error,
                             )
                             .map_err(|error| {
                                 WorkflowServiceError::InvalidRequest(format!(
@@ -819,26 +795,19 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             started_runtime_task.started_at_ms(),
                             SchedulerTaskAttemptLifecycleTransition::Failed,
                             "scheduler runtime dispatch failed",
-                            Some(error.to_string()),
+                            Some(scheduler_error.to_string()),
                             None,
                             Some(&terminal_mutation),
                         )?;
                     }
                     return Err(WorkflowServiceError::CapabilityViolation(format!(
-                        "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
+                        "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {scheduler_error}",
                         count = summary.runtime_inference_tasks
                     )));
                 }
             };
-            let _selected_candidate_fact = selected_runtime_dispatch_candidate_fact(
-                selected_dispatch.candidate_id(),
-                &candidate_evidence_context,
-            )
-            .map_err(|error| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "runtime dispatch selected candidate evidence failed: {error}"
-                ))
-            })?;
+            let selected_dispatch = preselection.selected_dispatch;
+            let _selected_candidate_fact = preselection.selected_candidate_fact;
             {
                 let mut store = self.service.session_store_guard()?;
                 self.service
@@ -1296,6 +1265,12 @@ fn scheduler_task_result_status_label(status: WorkflowSchedulerTaskResultStatus)
         WorkflowSchedulerTaskResultStatus::Unavailable => "unavailable",
         WorkflowSchedulerTaskResultStatus::Invalid => "invalid",
     }
+}
+
+fn runtime_dispatch_preselection_invalid_request(
+    error: WorkflowRuntimeDispatchPreselectionError,
+) -> WorkflowServiceError {
+    WorkflowServiceError::InvalidRequest(error.to_string())
 }
 
 fn scheduler_task_attempt_execution_class(

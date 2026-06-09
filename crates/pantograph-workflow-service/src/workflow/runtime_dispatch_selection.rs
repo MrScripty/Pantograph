@@ -14,7 +14,12 @@ use pantograph_scheduler::{
 };
 use thiserror::Error;
 
-use super::{WorkflowSchedulerTask, WorkflowServiceError};
+use crate::scheduler::task_orchestrator::{
+    SelectedRuntimeTaskDispatch, StartedRuntimeTaskExecution,
+};
+use crate::scheduler::{WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError};
+
+use super::{WorkflowSchedulerTask, WorkflowService, WorkflowServiceError};
 
 pub const WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION: u16 = 2;
 
@@ -250,6 +255,84 @@ pub(crate) struct WorkflowRuntimeDispatchSelectionRequest {
     pub(crate) candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext,
 }
 
+pub(crate) struct WorkflowRuntimeDispatchSelectionBoundary<'a> {
+    source_refresher: &'a dyn WorkflowRuntimeDispatchSourceRefresher,
+    candidate_provider: &'a dyn WorkflowRuntimeDispatchCandidateProvider,
+    scheduler_task_orchestrator: &'a WorkflowSchedulerTaskOrchestrator,
+}
+
+impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
+    pub(crate) fn from_service(service: &'a WorkflowService) -> Self {
+        Self {
+            source_refresher: service.runtime_dispatch_source_refresher.as_ref(),
+            candidate_provider: service.runtime_dispatch_candidate_provider.as_ref(),
+            scheduler_task_orchestrator: &service.scheduler_task_orchestrator,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(
+        source_refresher: &'a dyn WorkflowRuntimeDispatchSourceRefresher,
+        candidate_provider: &'a dyn WorkflowRuntimeDispatchCandidateProvider,
+        scheduler_task_orchestrator: &'a WorkflowSchedulerTaskOrchestrator,
+    ) -> Self {
+        Self {
+            source_refresher,
+            candidate_provider,
+            scheduler_task_orchestrator,
+        }
+    }
+
+    pub(crate) async fn prepare_ready_runtime_task_dispatch(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: DependencyReadinessProofEnvelope,
+    ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
+    {
+        self.source_refresher
+            .refresh_runtime_dispatch_sources(task, ready_record, &readiness_proof)
+            .await
+            .map_err(WorkflowRuntimeDispatchPreselectionError::SourceRefresh)?;
+        let candidate_set = self
+            .candidate_provider
+            .runtime_dispatch_candidates(task, ready_record, &readiness_proof)
+            .map_err(WorkflowRuntimeDispatchPreselectionError::CandidateCollection)?;
+        runtime_dispatch_selection_request(task, readiness_proof, candidate_set)
+            .map_err(WorkflowRuntimeDispatchPreselectionError::SelectionRequest)
+    }
+
+    pub(crate) async fn select_prepared_started_runtime_task_dispatch(
+        &self,
+        started_runtime_task: &StartedRuntimeTaskExecution,
+        prepared_selection: WorkflowRuntimeDispatchSelectionRequest,
+    ) -> Result<WorkflowRuntimeDispatchPreselection, WorkflowRuntimeDispatchPreselectionError> {
+        let selection_request = prepared_selection.selection_request;
+        let candidate_evidence_context = prepared_selection.candidate_evidence_context;
+        let selected_dispatch = self
+            .scheduler_task_orchestrator
+            .select_runtime_task_dispatch(started_runtime_task.task(), selection_request)
+            .await
+            .map_err(WorkflowRuntimeDispatchPreselectionError::SchedulerSelection)?;
+        let selected_candidate_fact = selected_runtime_dispatch_candidate_fact(
+            selected_dispatch.candidate_id(),
+            &candidate_evidence_context,
+        )
+        .map_err(WorkflowRuntimeDispatchPreselectionError::SelectedCandidateEvidence)?;
+        Ok(WorkflowRuntimeDispatchPreselection {
+            selected_dispatch,
+            selected_candidate_fact,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[must_use]
+pub(crate) struct WorkflowRuntimeDispatchPreselection {
+    pub(crate) selected_dispatch: SelectedRuntimeTaskDispatch,
+    pub(crate) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+}
+
 pub(crate) fn selected_runtime_dispatch_candidate_fact(
     candidate_id: Option<&SchedulerDispatchCandidateId>,
     candidate_evidence_context: &WorkflowRuntimeDispatchCandidateEvidenceContext,
@@ -348,6 +431,32 @@ pub(crate) enum WorkflowRuntimeDispatchSelectionError {
     MissingSelectedCandidateId,
     #[error("scheduler selected candidate '{candidate_id}' has no retained workflow-service candidate fact")]
     MissingSelectedCandidateFact { candidate_id: String },
+}
+
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub(crate) enum WorkflowRuntimeDispatchPreselectionError {
+    #[error("runtime dispatch source refresh failed: {0}")]
+    SourceRefresh(WorkflowRuntimeDispatchSourceRefreshError),
+    #[error("runtime dispatch candidate collection failed: {0}")]
+    CandidateCollection(WorkflowRuntimeDispatchCandidateProviderError),
+    #[error("runtime dispatch selection request failed: {0}")]
+    SelectionRequest(WorkflowRuntimeDispatchSelectionError),
+    #[error("scheduler runtime dispatch selection failed: {0}")]
+    SchedulerSelection(WorkflowSchedulerTaskOrchestratorError),
+    #[error("runtime dispatch selected candidate evidence failed: {0}")]
+    SelectedCandidateEvidence(WorkflowRuntimeDispatchSelectionError),
+}
+
+impl WorkflowRuntimeDispatchPreselectionError {
+    pub(crate) fn scheduler_selection_error(
+        &self,
+    ) -> Option<&WorkflowSchedulerTaskOrchestratorError> {
+        match self {
+            Self::SchedulerSelection(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 fn validate_candidate_fact_bundle(
@@ -575,15 +684,96 @@ fn dispatch_candidate(fact: WorkflowRuntimeDispatchCandidateFact) -> SchedulerDi
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
     use pantograph_dependency_planning::{DependencyEnvironmentId, DependencyEnvironmentRef};
+    use pantograph_runtime_host_contracts::{
+        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+        RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+        SchedulerRuntimeHostDispatcher,
+    };
     use pantograph_scheduler::{
         SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionDiagnosticSeverity,
-        SchedulerReservationLeaseId, SchedulerResourceFitAssessment, SchedulerResourceFitState,
-        SchedulerResourceKind, SchedulerResourceReservation, SchedulerTaskId,
-        SchedulerWorkflowRunId,
+        SchedulerNodeId, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
+        SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
+        SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateRecord,
+        SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
 
     use super::*;
+
+    #[tokio::test]
+    async fn preselection_boundary_prepares_request_with_retained_candidate_evidence() {
+        let candidate_fact = candidate_fact();
+        let candidate_id = candidate_fact.candidate_id.clone();
+        let task = runtime_task_fixture();
+        let ready_record = ready_record_fixture(&task);
+        let readiness_proof = runtime_dispatch_readiness_proof_fixture();
+        let boundary = preselection_boundary(
+            RecordingRuntimeDispatchSourceRefresher,
+            StaticRuntimeDispatchCandidateProvider::from_facts(vec![candidate_fact]),
+        );
+
+        let prepared = boundary
+            .prepare_ready_runtime_task_dispatch(&task, &ready_record, readiness_proof)
+            .await
+            .expect("selection request should prepare");
+
+        assert!(prepared
+            .candidate_evidence_context
+            .contains_candidate_id(&candidate_id));
+        assert_eq!(prepared.selection_request.as_ref().candidates.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn preselection_boundary_returns_typed_refresh_diagnostic() {
+        let task = runtime_task_fixture();
+        let ready_record = ready_record_fixture(&task);
+        let readiness_proof = runtime_dispatch_readiness_proof_fixture();
+        let boundary = preselection_boundary(
+            FailingRuntimeDispatchSourceRefresher,
+            StaticRuntimeDispatchCandidateProvider::from_facts(vec![candidate_fact()]),
+        );
+
+        let error = boundary
+            .prepare_ready_runtime_task_dispatch(&task, &ready_record, readiness_proof)
+            .await
+            .expect_err("source refresh failure should fail closed");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchPreselectionError::SourceRefresh(_)
+        ));
+        assert!(error
+            .to_string()
+            .contains("runtime dispatch source refresh failed"));
+    }
+
+    #[tokio::test]
+    async fn preselection_boundary_returns_typed_candidate_collection_diagnostic() {
+        let task = runtime_task_fixture();
+        let ready_record = ready_record_fixture(&task);
+        let readiness_proof = runtime_dispatch_readiness_proof_fixture();
+        let boundary = preselection_boundary(
+            RecordingRuntimeDispatchSourceRefresher,
+            FailingRuntimeDispatchCandidateProvider,
+        );
+
+        let error = boundary
+            .prepare_ready_runtime_task_dispatch(&task, &ready_record, readiness_proof)
+            .await
+            .expect_err("candidate collection failure should fail closed");
+
+        assert!(matches!(
+            error,
+            WorkflowRuntimeDispatchPreselectionError::CandidateCollection(_)
+        ));
+        assert!(error
+            .to_string()
+            .contains("runtime dispatch candidate collection failed"));
+    }
 
     #[test]
     fn candidate_fact_bundle_validates_path_free_dispatch_facts() {
@@ -858,8 +1048,8 @@ mod tests {
 
     fn candidate_fact() -> WorkflowRuntimeDispatchCandidateFact {
         let workflow_run_id: SchedulerWorkflowRunId =
-            "run.dispatch-facts".parse().expect("workflow run id");
-        let task_id: SchedulerTaskId = "infer".parse().expect("task id");
+            "run.2026-05-22.001".parse().expect("workflow run id");
+        let task_id: SchedulerTaskId = "task.image_generation.001".parse().expect("task id");
         let device_id: DeviceIntentId = "cuda:0".parse().expect("device id");
         WorkflowRuntimeDispatchCandidateFact {
             candidate_id: "candidate.diffusers.cuda0".parse().expect("candidate id"),
@@ -876,9 +1066,9 @@ mod tests {
             runtime_instance_id: Some("runtime.diffusers-pytorch.001".to_string()),
             selected_device_ids: vec![device_id.clone()],
             selected_model_ref: PumasModelRef {
-                model_id: "image/example/tiny-diffusion".to_string(),
+                model_id: "pumas://models/juggernaut-xl-v10".to_string(),
                 revision: Some("main".to_string()),
-                selected_artifact_id: Some("diffusers".to_string()),
+                selected_artifact_id: Some("diffusers-bundle".to_string()),
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
             },
@@ -906,6 +1096,175 @@ mod tests {
                 diagnostics: Vec::new(),
             },
             batching_group_id: None,
+        }
+    }
+
+    fn preselection_boundary<
+        R: WorkflowRuntimeDispatchSourceRefresher + 'static,
+        P: WorkflowRuntimeDispatchCandidateProvider + 'static,
+    >(
+        source_refresher: R,
+        candidate_provider: P,
+    ) -> WorkflowRuntimeDispatchSelectionBoundary<'static> {
+        let source_refresher = Box::leak(Box::new(source_refresher));
+        let candidate_provider = Box::leak(Box::new(candidate_provider));
+        let scheduler_task_orchestrator =
+            Box::leak(Box::new(WorkflowSchedulerTaskOrchestrator::new(
+                SchedulerRuntimeHostDispatcher::new(Arc::new(UnusedRuntimeHostPort)),
+            )));
+        WorkflowRuntimeDispatchSelectionBoundary::new(
+            source_refresher,
+            candidate_provider,
+            scheduler_task_orchestrator,
+        )
+    }
+
+    fn runtime_task_fixture() -> WorkflowSchedulerTask {
+        let request = runtime_host_request_fixture();
+        let workflow_id: SchedulerWorkflowId =
+            "workflow.image_generation".parse().expect("workflow id");
+        let workflow_run_id: SchedulerWorkflowRunId =
+            "run.2026-05-22.001".parse().expect("workflow run id");
+        WorkflowSchedulerTask {
+            workflow_id,
+            workflow_run_id,
+            node_id: SchedulerNodeId::parse("node.image_generation").expect("node id"),
+            task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
+            node_type: "image.generate".to_string(),
+            execution_class: super::super::WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: Some(request.handoff.task_intent),
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn ready_record_fixture(task: &WorkflowSchedulerTask) -> SchedulerTaskStateRecord {
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: task.workflow_id.clone(),
+            workflow_run_id: task.workflow_run_id.clone(),
+            node_id: task.node_id.clone(),
+            task_id: task.task_id.clone(),
+            state: SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            },
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse(
+                "initial:task.image_generation.001",
+            )
+            .expect("transition id"),
+        }
+    }
+
+    fn runtime_dispatch_readiness_proof_fixture() -> DependencyReadinessProofEnvelope {
+        runtime_host_request_fixture().handoff.readiness_proof
+    }
+
+    fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
+        serde_json::from_str(include_str!(
+            "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        ))
+        .expect("runtime host request fixture")
+    }
+
+    struct RecordingRuntimeDispatchSourceRefresher;
+
+    #[async_trait]
+    impl WorkflowRuntimeDispatchSourceRefresher for RecordingRuntimeDispatchSourceRefresher {
+        async fn refresh_runtime_dispatch_sources(
+            &self,
+            _task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            _readiness_proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+            Ok(())
+        }
+    }
+
+    struct FailingRuntimeDispatchSourceRefresher;
+
+    #[async_trait]
+    impl WorkflowRuntimeDispatchSourceRefresher for FailingRuntimeDispatchSourceRefresher {
+        async fn refresh_runtime_dispatch_sources(
+            &self,
+            _task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            _readiness_proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+            Err(WorkflowRuntimeDispatchSourceRefreshError::Failed {
+                message: "source ledger unavailable".to_string(),
+            })
+        }
+    }
+
+    struct StaticRuntimeDispatchCandidateProvider {
+        candidate_set: WorkflowRuntimeDispatchCandidateSet,
+    }
+
+    impl StaticRuntimeDispatchCandidateProvider {
+        fn from_facts(facts: Vec<WorkflowRuntimeDispatchCandidateFact>) -> Self {
+            let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+                candidate_fact_bundle(facts),
+            )
+            .expect("candidate fact bundle");
+            Self {
+                candidate_set: WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(
+                    bundle,
+                ),
+            }
+        }
+    }
+
+    impl WorkflowRuntimeDispatchCandidateProvider for StaticRuntimeDispatchCandidateProvider {
+        fn runtime_dispatch_candidates(
+            &self,
+            _task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            _readiness_proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<
+            WorkflowRuntimeDispatchCandidateSet,
+            WorkflowRuntimeDispatchCandidateProviderError,
+        > {
+            Ok(self.candidate_set.clone())
+        }
+    }
+
+    struct FailingRuntimeDispatchCandidateProvider;
+
+    impl WorkflowRuntimeDispatchCandidateProvider for FailingRuntimeDispatchCandidateProvider {
+        fn runtime_dispatch_candidates(
+            &self,
+            _task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            _readiness_proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<
+            WorkflowRuntimeDispatchCandidateSet,
+            WorkflowRuntimeDispatchCandidateProviderError,
+        > {
+            Err(WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: "candidate provider unavailable".to_string(),
+            })
+        }
+    }
+
+    struct UnusedRuntimeHostPort;
+
+    #[async_trait]
+    impl RuntimeHostExecutionPort for UnusedRuntimeHostPort {
+        async fn execute_runtime_host_request(
+            &self,
+            _request: RuntimeHostExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+            Err(RuntimeHostExecutionPortError::ExecutionFailed {
+                message: "runtime host should not be used by preselection boundary tests"
+                    .to_string(),
+            })
         }
     }
 }

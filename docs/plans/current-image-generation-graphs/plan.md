@@ -2101,6 +2101,62 @@ wire the worker, change scheduler DTOs, change runtime-host request fields,
 change Pumas contracts, edit generated/lock/workflow fixture files, or build
 `WorkflowRuntimeTaskAttemptFactRecord` in the same slice.
 
+2026-06-09 worker-owned pre-dispatch selection boundary slice: completed
+sequence step 1. Smallest useful vertical slice: introduced
+`WorkflowRuntimeDispatchSelectionBoundary` in workflow-service as the
+backend-owned dispatch-selection handoff. The boundary prepares dispatch
+selection from the ready runtime task, readiness proof, runtime dispatch source
+refresher, and canonical candidate provider; then resolves a started scheduler
+runtime task into both `SelectedRuntimeTaskDispatch` reservation-binding
+evidence and the retained `WorkflowRuntimeDispatchCandidateFact`. The existing
+session scheduler runner now delegates its inline refresh/candidate/request/
+selected-fact plumbing to the boundary while preserving its current scheduler
+start order and terminal mutation handling. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_selection.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`, and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not wire the worker, does
+not change scheduler DTOs, Pumas contracts, runtime-host request fields,
+generated files, lockfiles, or saved workflow fixtures, and does not build
+`WorkflowRuntimeTaskAttemptFactRecord`. The boundary preserves fail-closed
+typed diagnostics for source refresh, candidate collection, scheduler request
+construction, scheduler selection, and selected-candidate evidence resolution;
+it does not synthesize selected runtime/model/resource facts from graph,
+request, runtime-host, or active-run state.
+
+Focused tests added:
+`preselection_boundary_prepares_request_with_retained_candidate_evidence`,
+`preselection_boundary_returns_typed_refresh_diagnostic`, and
+`preselection_boundary_returns_typed_candidate_collection_diagnostic`.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_selection --lib`,
+and `cargo check -p pantograph-workflow-service`.
+
+Discovered issue retained for the next slice:
+`cargo test -p pantograph-workflow-service
+workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`
+still fails with `runtime branch rehydration diagnostic (TaskAttemptUnavailable):
+runtime branch scheduler task has no active attempt fact`. This is the
+previously known worker-ordering gap: the runtime-branch worker marks
+`Dispatching` and rehydrates before starting the scheduler runtime task and
+recording selected evidence. Do not fix this by weakening rehydration or
+making selected evidence/attempt facts optional.
+
+Next thin slice: implement worker-owned pre-dispatch selection sequence step
+2. After the worker claims a due runtime-branch task event and marks it
+`Dispatching`, it must start or otherwise bind the active scheduler runtime
+task attempt through the canonical scheduler lifecycle, invoke
+`WorkflowRuntimeDispatchSelectionBoundary`, and record the selected candidate
+fact on the runtime-branch task event under the current claim generation before
+rehydration. Allowed files should be limited to worker dispatch ordering,
+runtime-branch selected-evidence repository use, focused tests, and this plan.
+Stop and re-plan if this requires scheduler DTO changes, Pumas contract
+changes, generated/lock/workflow fixture edits, runtime-host request-field
+changes, request-scoped fallback execution, or synthetic selected evidence.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
