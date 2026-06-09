@@ -1918,6 +1918,41 @@ changes, Pumas contracts, generated files, lockfiles, saved workflow fixtures,
 runtime-host request fields, or synthesis from graph/request/runtime-host
 state.
 
+2026-06-08 runtime-branch selected candidate evidence boundary slice:
+completed Option 1 sequence step 2. Smallest useful vertical slice: extend the
+workflow-service runtime-branch task-event contract to carry a selected
+`WorkflowRuntimeDispatchCandidateFact` under the current task-event claim,
+validate that fact with the canonical dispatch-candidate fact bundle validator,
+and reject selected evidence that does not match the runtime-branch batch
+eligibility profile. The in-memory runtime-branch repository now persists the
+selected candidate fact through a claim-bound method, and reclaims clear any
+previous selected evidence so stale runtime/model/resource facts cannot carry
+forward into a replayed attempt. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the slice keeps selected evidence as
+backend-owned runtime dispatch evidence at the runtime-branch claim boundary.
+It does not expand scheduler DTOs, change Pumas contracts, add runtime-host
+request fields, touch generated/lock/workflow fixture files, or synthesize
+selected runtime/model/resource facts from graph/request/runtime-host state.
+Missing, stale, invalid, or batch-profile-mismatched selected evidence returns
+typed runtime-branch diagnostics and fails closed before worker dispatch.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo check -p pantograph-workflow-service`, and `git diff --check`.
+
+Next thin slice: implement Option 1 sequence step 3 by extending
+runtime-branch worker rehydration to return the validated task-attempt source
+context plus scheduler attempt id/start timestamp. Allowed files should be
+limited to workflow-service runtime-branch rehydration, task-attempt source
+context plumbing, focused tests, and this plan. Stop and re-plan if this
+requires scheduler DTO changes, Pumas contracts, generated files, lockfiles,
+saved workflow fixtures, runtime-host request fields, request-scoped fallback
+execution, or synthesis from graph/request/runtime-host state.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to

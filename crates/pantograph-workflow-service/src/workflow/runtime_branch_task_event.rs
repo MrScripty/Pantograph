@@ -2,6 +2,11 @@ use std::collections::BTreeMap;
 
 use uuid::Uuid;
 
+use super::runtime_dispatch_selection::{
+    ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
+    WorkflowRuntimeDispatchCandidateFactBundle,
+    WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+};
 use super::WorkflowOutputTarget;
 
 pub(super) const WORKFLOW_RUNTIME_BRANCH_TASK_EVENT_SCHEMA_VERSION: u16 = 2;
@@ -52,6 +57,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRecord {
     pub(super) timeout_ms: Option<u64>,
     pub(super) batching_key: Option<String>,
     pub(super) batch_eligibility: Option<WorkflowRuntimeBranchBatchEligibilityProfile>,
+    pub(super) selected_candidate_fact: Option<WorkflowRuntimeDispatchCandidateFact>,
     pub(super) state: WorkflowRuntimeBranchTaskEventState,
     pub(super) claim: Option<WorkflowRuntimeBranchTaskEventClaim>,
     pub(super) ready_at_ms: u64,
@@ -196,6 +202,13 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         dispatching_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
+
+    fn record_selected_candidate_fact(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn mark_running(
@@ -402,6 +415,20 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         Ok(updated)
     }
 
+    fn record_selected_candidate_fact(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
+    {
+        let record = self.record(event_id)?;
+        let updated = record.record_selected_candidate_fact(claim, selected_candidate_fact)?;
+        self.records
+            .insert(event_id.as_str().to_string(), updated.clone());
+        Ok(updated)
+    }
+
     fn mark_running(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -563,6 +590,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             timeout_ms: request.timeout_ms,
             batching_key: request.batching_key,
             batch_eligibility: request.batch_eligibility,
+            selected_candidate_fact: None,
             state: WorkflowRuntimeBranchTaskEventState::Ready,
             claim: None,
             ready_at_ms: request.ready_at_ms,
@@ -648,6 +676,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         };
         self.state = WorkflowRuntimeBranchTaskEventState::Claimed;
         self.claim = Some(claim.clone());
+        self.selected_candidate_fact = None;
         self.dispatching_at_ms = None;
         self.running_at_ms = None;
         Ok(WorkflowRuntimeBranchTaskEventClaimOutcome {
@@ -706,6 +735,40 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         )?;
         self.state = WorkflowRuntimeBranchTaskEventState::Dispatching;
         self.dispatching_at_ms = Some(dispatching_at_ms);
+        Ok(self)
+    }
+
+    pub(super) fn record_selected_candidate_fact(
+        mut self,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+    ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
+        self.validate_current_claim_for_state(
+            claim,
+            &[
+                WorkflowRuntimeBranchTaskEventState::Claimed,
+                WorkflowRuntimeBranchTaskEventState::Dispatching,
+            ],
+            "runtime branch task event must be claimed before recording selected candidate evidence",
+        )?;
+        validate_selected_candidate_fact(&selected_candidate_fact)?;
+        if let Some(batch_eligibility) = &self.batch_eligibility {
+            ensure_selected_candidate_matches_batch_profile(
+                &selected_candidate_fact,
+                batch_eligibility,
+            )?;
+        }
+        if self
+            .selected_candidate_fact
+            .as_ref()
+            .is_some_and(|existing| existing != &selected_candidate_fact)
+        {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+                "runtime branch task event already carries different selected candidate evidence",
+            ));
+        }
+        self.selected_candidate_fact = Some(selected_candidate_fact);
         Ok(self)
     }
 
@@ -804,6 +867,33 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             ],
             "runtime branch task event must be active before terminal transition",
         )
+    }
+
+    fn validate_current_claim_for_state(
+        &self,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        allowed_states: &[WorkflowRuntimeBranchTaskEventState],
+        invalid_message: &'static str,
+    ) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+        if !allowed_states.contains(&self.state) {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
+                invalid_message,
+            ));
+        }
+        let current = self.claim.as_ref().ok_or_else(|| {
+            WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::MissingClaim,
+                "claimed runtime branch task event is missing claim details",
+            )
+        })?;
+        if current != claim {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim,
+                "runtime branch task event claim does not match the current lease",
+            ));
+        }
+        Ok(())
     }
 
     fn validate_active_claim_for_state(
@@ -1018,6 +1108,89 @@ fn validate_batch_eligibility_profile(
     Ok(())
 }
 
+fn validate_selected_candidate_fact(
+    fact: &WorkflowRuntimeDispatchCandidateFact,
+) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+    let bundle = WorkflowRuntimeDispatchCandidateFactBundle {
+        contract_version: WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+        facts: vec![fact.clone()],
+        diagnostics: Vec::new(),
+    };
+
+    ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(bundle)
+        .map(|_| ())
+        .map_err(|error| {
+            WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+                format!("runtime branch selected candidate fact is invalid: {error}"),
+            )
+        })
+}
+
+fn ensure_selected_candidate_matches_batch_profile(
+    fact: &WorkflowRuntimeDispatchCandidateFact,
+    profile: &WorkflowRuntimeBranchBatchEligibilityProfile,
+) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+    let selected_artifact_id = fact
+        .selected_model_ref
+        .selected_artifact_id
+        .as_deref()
+        .ok_or_else(|| {
+            WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+                "runtime branch selected candidate fact is missing selected artifact id",
+            )
+        })?;
+    ensure_selected_candidate_field_matches(
+        "model artifact id",
+        selected_artifact_id,
+        &profile.model_artifact_id,
+    )?;
+    ensure_selected_candidate_field_matches(
+        "runtime family",
+        &fact.runtime_family,
+        &profile.runtime_family,
+    )?;
+    ensure_selected_candidate_field_matches(
+        "backend id",
+        &fact.selected_backend_key,
+        &profile.backend_id,
+    )?;
+    ensure_selected_candidate_field_matches(
+        "device load target",
+        &fact.resolved_load_target,
+        &profile.device_load_target,
+    )?;
+    ensure_selected_candidate_field_matches(
+        "runtime residency key",
+        &fact.runtime_residency_key,
+        &profile.runtime_residency_key,
+    )?;
+    if fact.loaded_runtime_memory_estimate_bytes != profile.estimated_loaded_runtime_bytes {
+        return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+            "runtime branch selected candidate fact loaded-runtime memory estimate does not match batch eligibility profile",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_selected_candidate_field_matches(
+    label: &str,
+    selected: &str,
+    profile: &str,
+) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+    if selected != profile {
+        return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+            format!(
+                "runtime branch selected candidate fact {label} does not match batch eligibility profile"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn ensure_batch_field_matches(
     label: &str,
     left: &str,
@@ -1057,6 +1230,16 @@ fn validate_non_blank(
 
 #[cfg(test)]
 mod tests {
+    use pantograph_dependency_planning::{
+        DependencyEnvironmentId, DependencyEnvironmentRef, DeviceIntentId, PumasModelRef,
+    };
+    use pantograph_scheduler::{
+        SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
+        SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
+        SchedulerRuntimeVariantId, SchedulerTaskId, SchedulerWorkflowRunId,
+    };
+
+    use super::super::runtime_dispatch_selection::WorkflowRuntimeDispatchLoadState;
     use super::*;
 
     #[test]
@@ -1214,6 +1397,94 @@ mod tests {
             "unexpected error: {}",
             error.message
         );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_records_selected_candidate_fact_under_current_claim() {
+        let claimed = ready_record_with_batch_profile(batch_profile())
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("event claims");
+        let selected_candidate_fact = selected_candidate_fact();
+
+        let recorded = claimed
+            .record
+            .record_selected_candidate_fact(&claimed.claim, selected_candidate_fact.clone())
+            .expect("selected candidate fact records");
+
+        assert_eq!(
+            recorded.selected_candidate_fact.as_ref(),
+            Some(&selected_candidate_fact)
+        );
+        let recorded_again = recorded
+            .clone()
+            .record_selected_candidate_fact(&claimed.claim, selected_candidate_fact.clone())
+            .expect("recording identical selected evidence is idempotent");
+        assert_eq!(
+            recorded_again.selected_candidate_fact.as_ref(),
+            Some(&selected_candidate_fact)
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_rejects_selected_candidate_fact_for_stale_claim() {
+        let first_claimed = ready_record_with_batch_profile(batch_profile())
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("event claims");
+        let replay_claimed = first_claimed
+            .record
+            .claim(owner_id("worker.beta"), 150, 50)
+            .expect("expired event reclaims");
+
+        let error = replay_claimed
+            .record
+            .record_selected_candidate_fact(&first_claimed.claim, selected_candidate_fact())
+            .expect_err("stale claim cannot record selected evidence");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_rejects_selected_candidate_fact_profile_mismatch() {
+        let claimed = ready_record_with_batch_profile(batch_profile())
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("event claims");
+        let mut selected_candidate_fact = selected_candidate_fact();
+        selected_candidate_fact.selected_backend_key = "backend.other".to_string();
+
+        let error = claimed
+            .record
+            .record_selected_candidate_fact(&claimed.claim, selected_candidate_fact)
+            .expect_err("candidate profile mismatch must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent
+        );
+        assert!(
+            error.message.contains("backend id"),
+            "unexpected diagnostic: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_reclaim_clears_selected_candidate_fact() {
+        let claimed = ready_record_with_batch_profile(batch_profile())
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("event claims");
+        let recorded = claimed
+            .record
+            .record_selected_candidate_fact(&claimed.claim, selected_candidate_fact())
+            .expect("selected candidate fact records");
+
+        let replay = recorded
+            .claim(owner_id("worker.beta"), 150, 50)
+            .expect("expired event reclaims");
+
+        assert!(replay.record.selected_candidate_fact.is_none());
     }
 
     #[test]
@@ -1738,6 +2009,40 @@ mod tests {
     }
 
     #[test]
+    fn runtime_branch_task_event_repository_records_selected_candidate_fact() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        let event_id = event_id("runtime-branch-task-event.test");
+        repository
+            .enqueue(ready_record_with_batch_profile(batch_profile()))
+            .expect("event enqueues");
+        let claimed = repository
+            .claim_event(&event_id, owner_id("worker.alpha"), 100, 80)
+            .expect("event claims");
+        let selected_candidate_fact = selected_candidate_fact();
+
+        let recorded = repository
+            .record_selected_candidate_fact(
+                &event_id,
+                &claimed.claim,
+                selected_candidate_fact.clone(),
+            )
+            .expect("repository records selected candidate fact");
+
+        assert_eq!(
+            recorded.selected_candidate_fact.as_ref(),
+            Some(&selected_candidate_fact)
+        );
+        assert_eq!(
+            repository
+                .get(&event_id)
+                .expect("stored event")
+                .selected_candidate_fact
+                .as_ref(),
+            Some(&selected_candidate_fact)
+        );
+    }
+
+    #[test]
     fn runtime_branch_task_event_repository_does_not_mutate_on_stale_terminal_claim() {
         let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
         let event_id = event_id("runtime-branch-task-event.test");
@@ -1905,6 +2210,59 @@ mod tests {
             context_shape_key: "txt2img.1024x1024.steps30".to_string(),
             operation_type: "image-generation.txt2img".to_string(),
             cancellation_mode: "per-run-fanout".to_string(),
+        }
+    }
+
+    fn selected_candidate_fact() -> WorkflowRuntimeDispatchCandidateFact {
+        let workflow_run_id: SchedulerWorkflowRunId = "run.test".parse().expect("run id");
+        let task_id: SchedulerTaskId = "image-task".parse().expect("task id");
+        let device_id: DeviceIntentId = "cuda:0".parse().expect("device id");
+        WorkflowRuntimeDispatchCandidateFact {
+            candidate_id: SchedulerDispatchCandidateId::parse("candidate.diffusers.cuda0")
+                .expect("candidate id"),
+            selected_runtime_id: "runtime.diffusers".parse().expect("runtime id"),
+            selected_runtime_variant_id: Some(
+                SchedulerRuntimeVariantId::parse("cuda").expect("runtime variant id"),
+            ),
+            selected_backend_key: "backend.cuda".to_string(),
+            runtime_family: "diffusers".to_string(),
+            resolved_load_target: "cuda:0".to_string(),
+            runtime_residency_key: "runtime.diffusers.loaded-model-0".to_string(),
+            loaded_runtime_memory_estimate_bytes: 8_589_934_592,
+            runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
+            runtime_instance_id: Some("runtime.diffusers.001".to_string()),
+            selected_device_ids: vec![device_id.clone()],
+            selected_model_ref: PumasModelRef {
+                model_id: "model.sdxl".to_string(),
+                revision: Some("main".to_string()),
+                selected_artifact_id: Some("artifact.stable-diffusion-xl".to_string()),
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            },
+            runtime_trait_settings: Vec::new(),
+            environment_ref: DependencyEnvironmentRef {
+                environment_id: DependencyEnvironmentId::parse("env.runtime")
+                    .expect("environment id"),
+                manifest_id: None,
+            },
+            reservations: vec![SchedulerResourceReservation {
+                reservation_lease_id: SchedulerReservationLeaseId::parse(
+                    "reservation-lease.runtime.1",
+                )
+                .expect("reservation lease id"),
+                workflow_run_id: workflow_run_id.clone(),
+                task_id: task_id.clone(),
+                device_id,
+                resource_kind: SchedulerResourceKind::DeviceVram,
+                reserved_bytes: 8_589_934_592,
+            }],
+            resource_fit_assessment: SchedulerResourceFitAssessment {
+                workflow_run_id,
+                task_id,
+                state: SchedulerResourceFitState::Fits,
+                diagnostics: Vec::new(),
+            },
+            batching_group_id: None,
         }
     }
 
