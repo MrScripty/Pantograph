@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use uuid::Uuid;
 
+use super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId;
 use super::runtime_dispatch_selection::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle,
@@ -9,7 +10,7 @@ use super::runtime_dispatch_selection::{
 };
 use super::WorkflowOutputTarget;
 
-pub(super) const WORKFLOW_RUNTIME_BRANCH_TASK_EVENT_SCHEMA_VERSION: u16 = 2;
+pub(super) const WORKFLOW_RUNTIME_BRANCH_TASK_EVENT_SCHEMA_VERSION: u16 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
@@ -58,6 +59,8 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRecord {
     pub(super) batching_key: Option<String>,
     pub(super) batch_eligibility: Option<WorkflowRuntimeBranchBatchEligibilityProfile>,
     pub(super) selected_candidate_fact: Option<WorkflowRuntimeDispatchCandidateFact>,
+    pub(super) dispatch_assignment_link:
+        Option<WorkflowRuntimeBranchTaskEventDispatchAssignmentLink>,
     pub(super) state: WorkflowRuntimeBranchTaskEventState,
     pub(super) claim: Option<WorkflowRuntimeBranchTaskEventClaim>,
     pub(super) ready_at_ms: u64,
@@ -76,6 +79,15 @@ pub(super) struct WorkflowRuntimeBranchTaskEventClaim {
     pub(super) attempt_generation: u64,
     pub(super) claimed_at_ms: u64,
     pub(super) lease_expires_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeBranchTaskEventDispatchAssignmentLink {
+    pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    pub(super) scheduler_task_attempt_id: String,
+    pub(super) claim_attempt_generation: u64,
+    pub(super) linked_at_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -209,6 +221,15 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
+
+    fn link_dispatch_assignment(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        assignment_id: WorkflowRuntimeDispatchAssignmentId,
+        scheduler_task_attempt_id: String,
+        linked_at_ms: u64,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn mark_running(
@@ -429,6 +450,27 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         Ok(updated)
     }
 
+    fn link_dispatch_assignment(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        assignment_id: WorkflowRuntimeDispatchAssignmentId,
+        scheduler_task_attempt_id: String,
+        linked_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
+    {
+        let record = self.record(event_id)?;
+        let updated = record.link_dispatch_assignment(
+            claim,
+            assignment_id,
+            scheduler_task_attempt_id,
+            linked_at_ms,
+        )?;
+        self.records
+            .insert(event_id.as_str().to_string(), updated.clone());
+        Ok(updated)
+    }
+
     fn mark_running(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -591,6 +633,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             batching_key: request.batching_key,
             batch_eligibility: request.batch_eligibility,
             selected_candidate_fact: None,
+            dispatch_assignment_link: None,
             state: WorkflowRuntimeBranchTaskEventState::Ready,
             claim: None,
             ready_at_ms: request.ready_at_ms,
@@ -676,7 +719,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         };
         self.state = WorkflowRuntimeBranchTaskEventState::Claimed;
         self.claim = Some(claim.clone());
+        self.scheduler_task_attempt_id = None;
         self.selected_candidate_fact = None;
+        self.dispatch_assignment_link = None;
         self.dispatching_at_ms = None;
         self.running_at_ms = None;
         Ok(WorkflowRuntimeBranchTaskEventClaimOutcome {
@@ -772,6 +817,59 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         Ok(self)
     }
 
+    pub(super) fn link_dispatch_assignment(
+        mut self,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        assignment_id: WorkflowRuntimeDispatchAssignmentId,
+        scheduler_task_attempt_id: String,
+        linked_at_ms: u64,
+    ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
+        self.validate_active_claim_for_state(
+            claim,
+            linked_at_ms,
+            &[
+                WorkflowRuntimeBranchTaskEventState::Claimed,
+                WorkflowRuntimeBranchTaskEventState::Dispatching,
+            ],
+            "runtime branch task event must be claimed or dispatching before linking dispatch assignment",
+        )?;
+        validate_non_blank("scheduler task attempt id", &scheduler_task_attempt_id)?;
+        if linked_at_ms < claim.claimed_at_ms {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
+                "runtime branch dispatch assignment link time cannot precede claim time",
+            ));
+        }
+        let link = WorkflowRuntimeBranchTaskEventDispatchAssignmentLink {
+            assignment_id,
+            scheduler_task_attempt_id,
+            claim_attempt_generation: claim.attempt_generation,
+            linked_at_ms,
+        };
+        if let Some(existing) = &self.dispatch_assignment_link {
+            if existing != &link {
+                return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                    WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+                    "runtime branch task event already carries different dispatch assignment facts",
+                ));
+            }
+            return Ok(self);
+        }
+        if self
+            .scheduler_task_attempt_id
+            .as_ref()
+            .is_some_and(|existing| existing != &link.scheduler_task_attempt_id)
+        {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent,
+                "runtime branch task event scheduler attempt projection does not match dispatch assignment",
+            ));
+        }
+        self.scheduler_task_attempt_id = Some(link.scheduler_task_attempt_id.clone());
+        self.dispatch_assignment_link = Some(link);
+        Ok(self)
+    }
+
     pub(super) fn mark_running(
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
@@ -822,6 +920,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         }
         self.state = WorkflowRuntimeBranchTaskEventState::Deferred;
         self.claim = None;
+        self.scheduler_task_attempt_id = None;
+        self.selected_candidate_fact = None;
+        self.dispatch_assignment_link = None;
         self.ready_at_ms = ready_at_ms;
         self.deferred_at_ms = Some(deferred_at_ms);
         Ok(self)
@@ -846,6 +947,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         self.validate_active_claim(claim, ready_at_ms)?;
         self.state = WorkflowRuntimeBranchTaskEventState::Ready;
         self.claim = None;
+        self.scheduler_task_attempt_id = None;
+        self.selected_candidate_fact = None;
+        self.dispatch_assignment_link = None;
         self.ready_at_ms = ready_at_ms;
         self.dispatching_at_ms = None;
         self.running_at_ms = None;
@@ -1239,6 +1343,7 @@ mod tests {
         SchedulerRuntimeVariantId, SchedulerTaskId, SchedulerWorkflowRunId,
     };
 
+    use super::super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId;
     use super::super::runtime_dispatch_selection::WorkflowRuntimeDispatchLoadState;
     use super::*;
 
@@ -1268,6 +1373,7 @@ mod tests {
         );
         assert_eq!(record.state, WorkflowRuntimeBranchTaskEventState::Ready);
         assert!(record.claim.is_none());
+        assert!(record.dispatch_assignment_link.is_none());
         assert_eq!(record.dispatching_at_ms, None);
         assert_eq!(record.running_at_ms, None);
     }
@@ -1485,6 +1591,130 @@ mod tests {
             .expect("expired event reclaims");
 
         assert!(replay.record.selected_candidate_fact.is_none());
+    }
+
+    #[test]
+    fn runtime_branch_task_event_links_dispatch_assignment_under_current_claim() {
+        let claimed = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 80)
+            .expect("ready event claims");
+        let assignment_id = dispatch_assignment_id("runtime-dispatch-assignment.1");
+
+        let linked = claimed
+            .record
+            .link_dispatch_assignment(
+                &claimed.claim,
+                assignment_id.clone(),
+                "scheduler-task-attempt.1".to_string(),
+                110,
+            )
+            .expect("dispatch assignment links");
+
+        assert_eq!(
+            linked.scheduler_task_attempt_id.as_deref(),
+            Some("scheduler-task-attempt.1")
+        );
+        let link = linked
+            .dispatch_assignment_link
+            .clone()
+            .expect("assignment link");
+        assert_eq!(link.assignment_id, assignment_id);
+        assert_eq!(link.scheduler_task_attempt_id, "scheduler-task-attempt.1");
+        assert_eq!(
+            link.claim_attempt_generation,
+            claimed.claim.attempt_generation
+        );
+        assert_eq!(link.linked_at_ms, 110);
+
+        let linked_again = linked
+            .link_dispatch_assignment(
+                &claimed.claim,
+                dispatch_assignment_id("runtime-dispatch-assignment.1"),
+                "scheduler-task-attempt.1".to_string(),
+                110,
+            )
+            .expect("identical dispatch assignment link is idempotent");
+        assert_eq!(linked_again.dispatch_assignment_link, Some(link));
+    }
+
+    #[test]
+    fn runtime_branch_task_event_rejects_dispatch_assignment_for_stale_claim() {
+        let first_claimed = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("event claims");
+        let replay_claimed = first_claimed
+            .record
+            .claim(owner_id("worker.beta"), 150, 50)
+            .expect("expired event reclaims");
+
+        let error = replay_claimed
+            .record
+            .link_dispatch_assignment(
+                &first_claimed.claim,
+                dispatch_assignment_id("runtime-dispatch-assignment.1"),
+                "scheduler-task-attempt.1".to_string(),
+                160,
+            )
+            .expect_err("stale claim cannot link dispatch assignment");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_rejects_different_dispatch_assignment_link() {
+        let claimed = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 80)
+            .expect("ready event claims");
+        let linked = claimed
+            .record
+            .link_dispatch_assignment(
+                &claimed.claim,
+                dispatch_assignment_id("runtime-dispatch-assignment.1"),
+                "scheduler-task-attempt.1".to_string(),
+                110,
+            )
+            .expect("dispatch assignment links");
+
+        let error = linked
+            .link_dispatch_assignment(
+                &claimed.claim,
+                dispatch_assignment_id("runtime-dispatch-assignment.2"),
+                "scheduler-task-attempt.1".to_string(),
+                110,
+            )
+            .expect_err("different assignment link must fail");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidEvent
+        );
+        assert!(error.message.contains("different dispatch assignment"));
+    }
+
+    #[test]
+    fn runtime_branch_task_event_reclaim_clears_dispatch_assignment_link() {
+        let claimed = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 50)
+            .expect("ready event claims");
+        let linked = claimed
+            .record
+            .link_dispatch_assignment(
+                &claimed.claim,
+                dispatch_assignment_id("runtime-dispatch-assignment.1"),
+                "scheduler-task-attempt.1".to_string(),
+                110,
+            )
+            .expect("dispatch assignment links");
+
+        let replay = linked
+            .claim(owner_id("worker.beta"), 150, 50)
+            .expect("expired event reclaims");
+
+        assert!(replay.record.dispatch_assignment_link.is_none());
+        assert_eq!(replay.record.scheduler_task_attempt_id, None);
     }
 
     #[test]
@@ -2043,6 +2273,42 @@ mod tests {
     }
 
     #[test]
+    fn runtime_branch_task_event_repository_persists_dispatch_assignment_link() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        let event_id = event_id("runtime-branch-task-event.test");
+        repository.enqueue(ready_record()).expect("event enqueues");
+        let claimed = repository
+            .claim_event(&event_id, owner_id("worker.alpha"), 100, 80)
+            .expect("event claims");
+        let assignment_id = dispatch_assignment_id("runtime-dispatch-assignment.1");
+
+        let linked = repository
+            .link_dispatch_assignment(
+                &event_id,
+                &claimed.claim,
+                assignment_id.clone(),
+                "scheduler-task-attempt.1".to_string(),
+                110,
+            )
+            .expect("repository links dispatch assignment");
+
+        assert_eq!(
+            linked.dispatch_assignment_link.as_ref().map(|link| (
+                link.assignment_id.clone(),
+                link.scheduler_task_attempt_id.as_str(),
+            )),
+            Some((assignment_id, "scheduler-task-attempt.1"))
+        );
+        assert_eq!(
+            repository
+                .get(&event_id)
+                .expect("stored event")
+                .dispatch_assignment_link,
+            linked.dispatch_assignment_link
+        );
+    }
+
+    #[test]
     fn runtime_branch_task_event_repository_does_not_mutate_on_stale_terminal_claim() {
         let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
         let event_id = event_id("runtime-branch-task-event.test");
@@ -2272,5 +2538,9 @@ mod tests {
 
     fn event_id(value: &str) -> WorkflowRuntimeBranchTaskEventId {
         WorkflowRuntimeBranchTaskEventId::parse(value).expect("event id")
+    }
+
+    fn dispatch_assignment_id(value: &str) -> WorkflowRuntimeDispatchAssignmentId {
+        WorkflowRuntimeDispatchAssignmentId::parse(value).expect("assignment id")
     }
 }

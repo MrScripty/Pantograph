@@ -2517,14 +2517,44 @@ terminal retry allowance, lifecycle ordering, selected candidate correlation,
 and selected handoff correlation. Worktree deviation: unrelated Pumas proposal
 documents were dirty before the slice and were left untouched.
 
-Next thin slice: implement only sequence step 2. Allowed files should be
-limited to runtime-branch task event contract/repository updates, assignment
-correlation helpers if needed, focused unit tests for event-to-assignment
-linking and stale-claim rejection, and this plan. Do not wire worker runtime
-execution, change Pumas contracts, change scheduler DTOs, edit generated/
-lock/workflow fixture files, invoke runtime-host dispatch, or remove bridge
-selected-candidate projections until the assignment-owned execution path is
-validated.
+2026-06-09 runtime-branch event assignment-link slice: completed sequence
+step 2. Smallest useful vertical slice: bump the runtime-branch task-event
+record schema, add a typed dispatch-assignment link carrying assignment id,
+selected scheduler task attempt id, claim generation, and link timestamp, and
+add repository support for linking that data under the current active claim.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the event link is only a correlation
+projection for assignment-owned execution. It does not own assignment
+lifecycle, wire worker runtime execution, change Pumas contracts, change
+scheduler DTOs, edit generated/lock/workflow fixture files, invoke
+runtime-host dispatch, remove bridge selected-candidate projections, or
+restore request-scoped runtime dispatch. Reclaim, defer, and release now clear
+per-attempt selected candidate, scheduler attempt, and assignment-link facts so
+retry/replay cannot carry facts from a previous claim.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+and `cargo check -p pantograph-workflow-service`. The focused tests cover
+current-claim assignment linking, idempotent same-link writes, stale-claim
+rejection, different-link rejection, replay clearing, repository persistence,
+and adjacent rehydration compatibility. Worktree deviation: unrelated Pumas
+proposal documents remained dirty and were left untouched.
+
+Next thin slice: implement only sequence step 3. Allowed files should be
+limited to task-execution worker pre-dispatch flow, assignment repository
+usage, focused worker/session tests for assignment creation and fail-closed
+selection/start/bind diagnostics, and this plan. The worker may create and
+link assignments after canonical readiness preparation and dispatch selection,
+but must not yet replace assignment-owned runtime execution, change Pumas
+contracts, change scheduler DTOs, edit generated/lock/workflow fixture files,
+or remove bridge selected-candidate projections until the assignment-owned
+execution path is validated.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
