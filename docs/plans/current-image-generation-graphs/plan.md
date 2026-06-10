@@ -2604,6 +2604,49 @@ lock/workflow fixture files, preserve request-scoped runtime dispatch fallback,
 or remove bridge selected-candidate projections until assignment-owned
 execution is validated.
 
+2026-06-10 assignment-owned execution re-plan trigger: stop before wiring the
+worker-owned assignment execution slice. An exploratory implementation proved
+the worker can prepare readiness, start/select/bind a scheduler runtime task,
+create a dispatch assignment, record selected candidate evidence, and link the
+assignment before rehydration. The next fail-closed boundary is now the
+runtime-branch task-attempt source context: production runtime-branch task
+events are still admitted with `batch_eligibility: None`, while rehydration
+requires the runtime-branch profile fields (`operation_type`,
+`context_shape_key`, `cancellation_mode`, timeout correlation, and the selected
+runtime/model/resource compatibility profile) before assignment-owned runtime
+execution may continue. Filling those fields inside the worker from the
+selected candidate, graph shape, provisional `batching_key`, request data, or
+runtime-host inputs would synthesize canonical source-context facts and
+violate the no-fallback/no-legacy rule.
+
+Re-plan options:
+1. Populate the runtime-branch task-attempt source profile at runtime-branch
+   event admission/recovery from a backend-owned planning snapshot that
+   explicitly owns operation type, context shape, cancellation mode, timeout,
+   and selected runtime/model/resource compatibility facts. This is the
+   strictest assignment path, but it requires identifying or adding that
+   backend-owned planning snapshot before worker execution can proceed.
+2. Move the profile into the durable dispatch assignment record and make
+   assignment creation the source-context owner. This keeps profile ownership
+   with the new assignment lifecycle and avoids duplicating it on
+   runtime-branch events, but it requires changing rehydration to consume the
+   assignment profile instead of `batch_eligibility` on the event.
+3. Narrow the current task-attempt source context contract so runtime-branch
+   events own only operation/context/cancellation/timeout, while selected
+   candidate evidence owns runtime/model/resource compatibility. This reduces
+   duplication, but it must be done as a contract slice with tests proving the
+   worker does not synthesize operation/context/cancellation facts and does not
+   treat candidate evidence as a replacement for run-scoped source context.
+
+Do not continue by making `batch_eligibility` optional in rehydration, deriving
+context shape from `batching_key`, deriving operation/cancellation policy from
+graph/request/runtime-host state, or letting assignment-owned execution fall
+back to the old request-scoped runner. The next plan decision must choose the
+canonical owner for runtime-branch operation/context/cancellation profile facts
+before source implementation resumes. Exploratory source edits for the failed
+assignment-owned execution attempt were reverted; no unverified code slice was
+kept.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
