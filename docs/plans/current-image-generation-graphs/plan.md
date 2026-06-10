@@ -2546,15 +2546,63 @@ rejection, different-link rejection, replay clearing, repository persistence,
 and adjacent rehydration compatibility. Worktree deviation: unrelated Pumas
 proposal documents remained dirty and were left untouched.
 
-Next thin slice: implement only sequence step 3. Allowed files should be
-limited to task-execution worker pre-dispatch flow, assignment repository
-usage, focused worker/session tests for assignment creation and fail-closed
-selection/start/bind diagnostics, and this plan. The worker may create and
-link assignments after canonical readiness preparation and dispatch selection,
-but must not yet replace assignment-owned runtime execution, change Pumas
-contracts, change scheduler DTOs, edit generated/lock/workflow fixture files,
-or remove bridge selected-candidate projections until the assignment-owned
-execution path is validated.
+2026-06-09 worker assignment execution re-plan trigger: sequence step 3 cannot
+stop at assignment creation. Creating a durable assignment requires starting
+and binding the scheduler runtime task attempt, but the remaining worker path
+still re-enters the old runner that expects the runtime task to be `Ready` and
+would attempt readiness/selection/startup again. Proceeding with assignment
+creation only would either strand a `Running` attempt, preserve request-scoped
+runner fallback, or split lifecycle ownership across the worker and old runner.
+That violates the no-fallback/no-legacy rule, the single-owner stateful-flow
+standard, and the Rust async cancellation-safety rule against splitting a
+multi-step durable lifecycle across cancellation points without an explicit
+state machine.
+
+Decision: use Option 2 now. The next implementation path is a direct
+worker-owned runtime dispatch slice that creates the durable assignment and
+replaces the old worker call to
+`WorkflowTaskExecutionOwner::run_rehydrated_runtime_branch_until_dispatch_boundary`
+in the same vertical path. The worker must own the sequence from canonical
+pre-dispatch readiness through scheduler start/select/bind, assignment
+creation/linking, runtime supervisor execution, scheduler terminal mutation,
+reservation lifecycle release, assignment terminal state, and runtime-branch
+terminal/deferred state. Do not introduce a temporary compatibility shim or
+call the old request-scoped runner after a scheduler runtime attempt has been
+started.
+
+Standards alignment for Option 2:
+- Plan standards: this is one larger but coherent vertical slice because the
+  smaller assignment-only slice would be invalid. It remains serial
+  integration-owner work; do not delegate it to sub-agents and do not mix it
+  with generated files, lockfiles, saved workflow fixtures, Pumas contracts,
+  scheduler DTO changes, or unrelated proposal docs.
+- Coding standards: the worker becomes the single owner of the runtime branch
+  stateful flow. Scheduler policy remains inside backend workflow-service /
+  scheduler boundaries; frontend/Tauri/runtime-host code must not infer or
+  persist business state.
+- Rust async standards: durable transitions must be ordered so cancellation
+  cannot leave an unobservable half-started task. Every spawned runtime
+  supervisor remains tracked by the scheduler lifecycle owner and terminal or
+  cancellation outcomes must be observed before assignment/runtime-branch
+  terminalization.
+
+Option 3 is recorded as a later promotion, not the current path. After Option
+2 validates end to end, re-plan a dedicated runtime-dispatch lifecycle API only
+if a second real caller needs the same lifecycle, recovery/replay/batching
+starts duplicating phase logic, or worker code becomes a broad phase coordinator
+that would be simpler as an explicit lifecycle subsystem. Until one of those
+triggers exists, extracting that subsystem now is treated as overengineering.
+
+Next thin slice: implement the smallest useful Option 2 vertical slice.
+Allowed files should be limited to task-execution worker runtime-branch flow,
+assignment repository usage, the minimal workflow-service/scheduler helper
+accessors needed to reuse existing canonical start/select/bind and supervisor
+logic, focused worker/session tests for assignment creation, event linking,
+runtime execution, terminal/failure/defer behavior, and this plan. The slice
+must not change Pumas contracts, change scheduler DTOs, edit generated/
+lock/workflow fixture files, preserve request-scoped runtime dispatch fallback,
+or remove bridge selected-candidate projections until assignment-owned
+execution is validated.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
