@@ -5307,6 +5307,38 @@ assignment-owned evidence; then update rehydration/worker tests to consume the
 assignment-backed fact path. Do not add a standalone fact store or bridge-field
 fact persistence unless the plan explicitly chooses that ownership model.
 
+2026-06-11 durable dispatch-assignment worker persistence slice: completed.
+Smallest useful vertical slice: make the task-execution worker create a real
+`WorkflowRuntimeDispatchAssignmentRecord` after selected candidate evidence is
+recorded and before linking the runtime-branch event to the assignment id.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not add a standalone
+runtime task-attempt fact store, does not persist task-attempt facts on
+runtime-branch bridge events, does not change scheduler DTOs, Pumas contracts,
+runtime-host request fields, generated files, lockfiles, saved workflow
+fixtures, or runtime execution behavior, and does not infer device placement
+from runtime/model/load-target names. The assignment records the dispatch-level
+reservation lease while retaining the selected candidate fact's full
+reservation list for reservation-level device/resource evidence.
+
+Focused test update: the session execution scheduler-selection test now proves
+the runtime-branch dispatch-assignment link resolves to a persisted durable
+assignment record with matching event id, scheduler attempt id, selected
+candidate id, and reservation lease.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

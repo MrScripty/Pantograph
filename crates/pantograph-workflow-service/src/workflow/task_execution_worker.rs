@@ -17,7 +17,11 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventDiagnosticCode, WorkflowRuntimeBranchTaskEventId,
     WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
 };
-use super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId;
+use super::runtime_dispatch_assignment::{
+    WorkflowRuntimeDispatchAssignmentDiagnostic, WorkflowRuntimeDispatchAssignmentDiagnosticCode,
+    WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
+    WorkflowRuntimeDispatchAssignmentRepository, WorkflowRuntimeDispatchAssignmentRequest,
+};
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
 use super::task_execution_owner::WorkflowTaskExecutionOwner;
@@ -693,12 +697,27 @@ async fn claim_and_execute_runtime_branch_event(
             );
         }
     };
-    let dispatch_assignment_id = WorkflowRuntimeDispatchAssignmentId::new();
+    let dispatch_assignment = match create_runtime_branch_dispatch_assignment(
+        service.as_ref(),
+        &evidence_record,
+        &claimed.claim,
+        &started_dispatch,
+        unix_timestamp_ms(),
+    ) {
+        Ok(record) => record,
+        Err(diagnostic) => {
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch dispatch-assignment persistence failed",
+                vec![diagnostic],
+            );
+        }
+    };
     let linked_record = match link_runtime_branch_dispatch_assignment(
         service.as_ref(),
         &evidence_record.event_id,
         &claimed.claim,
-        dispatch_assignment_id,
+        dispatch_assignment.assignment_id,
         started_dispatch
             .started_runtime_task
             .attempt_id()
@@ -1038,6 +1057,56 @@ fn record_runtime_branch_selected_candidate_fact(
         .map_err(runtime_branch_event_diagnostic)
 }
 
+fn create_runtime_branch_dispatch_assignment(
+    service: &WorkflowService,
+    record: &WorkflowRuntimeBranchTaskEventRecord,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    started_dispatch: &super::session_scheduler_runner::WorkflowStartedRuntimeDispatchAttempt,
+    created_at_ms: u64,
+) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let request = WorkflowRuntimeDispatchAssignmentRequest {
+        assignment_id: WorkflowRuntimeDispatchAssignmentId::new(),
+        runtime_branch_event_id: record.event_id.clone(),
+        session_id: record.session_id.clone(),
+        workflow_id: record.workflow_id.clone(),
+        workflow_run_id: record.workflow_run_id.clone(),
+        scheduler_task_id: record.scheduler_task_id.clone(),
+        scheduler_task_attempt_id: started_dispatch
+            .started_runtime_task
+            .attempt_id()
+            .as_str()
+            .to_string(),
+        scheduler_task_attempt_started_at_ms: started_dispatch.started_runtime_task.started_at_ms(),
+        task_attempt_generation: record.attempt_generation,
+        runtime_branch_claim: claim.clone(),
+        readiness_proof: started_dispatch
+            .selected_dispatch
+            .runtime_handoff()
+            .readiness_proof
+            .clone(),
+        selected_candidate_fact: started_dispatch.selected_candidate_fact.clone(),
+        selected_runtime_handoff: started_dispatch.selected_dispatch.runtime_handoff().clone(),
+        reservation_lease_id: started_dispatch
+            .selected_dispatch
+            .reservation_lease_id()
+            .clone(),
+        selected_candidate_id: started_dispatch.selected_dispatch.candidate_id().cloned(),
+        created_at_ms,
+    };
+    let mut repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime dispatch-assignment repository lock poisoned",
+            )
+        })?;
+    repository
+        .create(request)
+        .map_err(runtime_dispatch_assignment_diagnostic)
+}
+
 fn link_runtime_branch_dispatch_assignment(
     service: &WorkflowService,
     event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -1064,6 +1133,27 @@ fn link_runtime_branch_dispatch_assignment(
             linked_at_ms,
         )
         .map_err(runtime_branch_event_diagnostic)
+}
+
+fn runtime_dispatch_assignment_diagnostic(
+    diagnostic: WorkflowRuntimeDispatchAssignmentDiagnostic,
+) -> WorkflowTaskExecutionWorkerDiagnostic {
+    let code = match diagnostic.code {
+        WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidAssignment
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::DuplicateAssignment
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::DuplicateActiveAssignment
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotFound
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidTransition => {
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable
+        }
+    };
+    WorkflowTaskExecutionWorkerDiagnostic::new(
+        code,
+        format!(
+            "runtime dispatch-assignment diagnostic ({:?}): {}",
+            diagnostic.code, diagnostic.message
+        ),
+    )
 }
 
 fn mark_claimed_runtime_branch_task_event_running(

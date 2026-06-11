@@ -151,6 +151,10 @@ impl SelectedRuntimeTaskDispatch {
     pub(crate) fn candidate_id(&self) -> Option<&SchedulerDispatchCandidateId> {
         self.candidate_id.as_ref()
     }
+
+    pub(crate) fn runtime_handoff(&self) -> &SchedulerRuntimeHandoff {
+        &self.handoff
+    }
 }
 
 impl StartedNonRuntimeTaskExecution {

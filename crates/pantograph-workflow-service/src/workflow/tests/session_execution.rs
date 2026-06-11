@@ -904,13 +904,40 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         .runtime_branch_task_event_for_test(&event_id)
         .expect("runtime branch event should persist worker dispatch facts");
     assert!(event.selected_candidate_fact.is_some());
-    assert!(event.dispatch_assignment_link.is_some());
+    let assignment_link = event
+        .dispatch_assignment_link
+        .as_ref()
+        .expect("runtime branch event should link durable dispatch assignment");
     assert_eq!(
         event.scheduler_task_attempt_id.as_deref(),
+        Some(assignment_link.scheduler_task_attempt_id.as_str())
+    );
+    let assignment = service
+        .runtime_dispatch_assignment_for_test(&assignment_link.assignment_id)
+        .expect("runtime dispatch assignment should be persisted");
+    assert_eq!(
+        assignment.runtime_branch_event_id.as_str(),
+        event.event_id.as_str()
+    );
+    assert_eq!(assignment.session_id, session_id);
+    assert_eq!(assignment.workflow_id, workflow_id);
+    assert_eq!(assignment.workflow_run_id, response.workflow_run_id);
+    assert_eq!(assignment.scheduler_task_id, "infer");
+    assert_eq!(
+        assignment.scheduler_task_attempt_id,
+        assignment_link.scheduler_task_attempt_id.as_str()
+    );
+    assert_eq!(
+        assignment.selected_candidate_fact.candidate_id,
         event
-            .dispatch_assignment_link
+            .selected_candidate_fact
             .as_ref()
-            .map(|link| link.scheduler_task_attempt_id.as_str())
+            .expect("selected candidate fact")
+            .candidate_id
+    );
+    assert_eq!(
+        assignment.reservation_lease_id.as_str(),
+        "reservation.runtime_session_test"
     );
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     let work_item = dependency_readiness_work_queue

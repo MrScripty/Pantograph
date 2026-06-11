@@ -41,6 +41,11 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventRepository, WorkflowRuntimeBranchTaskEventRequest,
     WorkflowRuntimeBranchTaskEventState,
 };
+#[cfg(test)]
+use super::runtime_dispatch_assignment::{
+    WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
+    WorkflowRuntimeDispatchAssignmentRepository,
+};
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
 use super::task_execution_owner::WorkflowTaskExecutionOwner;
@@ -2512,6 +2517,17 @@ impl WorkflowService {
             .lock()
             .expect("runtime branch event repository lock")
             .get(event_id)
+    }
+
+    #[cfg(test)]
+    pub(super) fn runtime_dispatch_assignment_for_test(
+        &self,
+        assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+    ) -> Option<WorkflowRuntimeDispatchAssignmentRecord> {
+        self.runtime_dispatch_assignment_repository
+            .lock()
+            .expect("runtime dispatch assignment repository lock")
+            .get(assignment_id)
     }
 }
 
