@@ -841,8 +841,8 @@ fn batch_compatibility_error(
 #[cfg(test)]
 mod tests {
     use pantograph_dependency_planning::{
-        DependencyEnvironmentId, DependencyEnvironmentRef, DependencyTaskId, DeviceIntentId,
-        PumasModelRef,
+        DependencyEnvironmentId, DependencyEnvironmentRef, DependencyReadinessProofId,
+        DependencyReadinessWorkflowRunId, DependencyTaskId, DeviceIntentId, PumasModelRef,
     };
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,
@@ -925,6 +925,35 @@ mod tests {
                 .recorded_at_ms,
             130
         );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_multi_run_fixture_builder_produces_consistent_readiness_facts() {
+        let first_member = DispatchAssignmentFixtureMember::first();
+        let second_member = DispatchAssignmentFixtureMember::second();
+
+        let first = assignment_request_for_member(&first_member);
+        let second = assignment_request_for_member(&second_member);
+
+        assert_ne!(first.workflow_run_id, second.workflow_run_id);
+        assert_member_facts_match(&first, &first_member);
+        assert_member_facts_match(&second, &second_member);
+        first.readiness_proof.validate().expect("first proof");
+        second.readiness_proof.validate().expect("second proof");
+        let _first_handoff =
+            ValidatedSchedulerRuntimeHandoff::try_from(first.selected_runtime_handoff.clone())
+                .expect("first handoff");
+        let _second_handoff =
+            ValidatedSchedulerRuntimeHandoff::try_from(second.selected_runtime_handoff.clone())
+                .expect("second handoff");
+
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let first_record = repository.create(first).expect("first assignment");
+        let second_record = repository.create(second).expect("second assignment");
+
+        assert_ne!(first_record.workflow_run_id, second_record.workflow_run_id);
+        assert!(first_record.task_attempt_fact.is_none());
+        assert!(second_record.task_attempt_fact.is_none());
     }
 
     #[test]
@@ -1248,31 +1277,75 @@ mod tests {
         );
     }
 
+    #[derive(Debug, Clone, Copy)]
+    struct DispatchAssignmentFixtureMember<'a> {
+        assignment_id: &'a str,
+        runtime_branch_event_id: &'a str,
+        workflow_run_id: &'a str,
+        scheduler_task_attempt_id: &'a str,
+        reservation_lease_id: &'a str,
+    }
+
+    impl DispatchAssignmentFixtureMember<'_> {
+        fn first() -> Self {
+            Self {
+                assignment_id: "assignment.1",
+                runtime_branch_event_id:
+                    "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.001",
+                workflow_run_id: "run.2026-05-22.001",
+                scheduler_task_attempt_id: "attempt.image.1",
+                reservation_lease_id: "reservation-lease.runtime.1",
+            }
+        }
+
+        fn second() -> Self {
+            Self {
+                assignment_id: "assignment.2",
+                runtime_branch_event_id:
+                    "runtime-branch-task-event.run.2026-05-22.002.task.image_generation.001",
+                workflow_run_id: "run.2026-05-22.002",
+                scheduler_task_attempt_id: "attempt.image.2",
+                reservation_lease_id: "reservation-lease.runtime.2",
+            }
+        }
+    }
+
     fn assignment_request(assignment_id: &str) -> WorkflowRuntimeDispatchAssignmentRequest {
-        let readiness_proof = readiness_proof();
-        let selected_candidate_fact = selected_candidate_fact();
+        let member = DispatchAssignmentFixtureMember {
+            assignment_id,
+            ..DispatchAssignmentFixtureMember::first()
+        };
+        assignment_request_for_member(&member)
+    }
+
+    fn assignment_request_for_member(
+        member: &DispatchAssignmentFixtureMember<'_>,
+    ) -> WorkflowRuntimeDispatchAssignmentRequest {
+        let readiness_proof = readiness_proof_for_member(member);
+        let selected_candidate_fact = selected_candidate_fact_for_member(member);
         let reservation_lease_id = selected_candidate_fact.reservations[0]
             .reservation_lease_id
             .clone();
         let selected_candidate_id = Some(selected_candidate_fact.candidate_id.clone());
         WorkflowRuntimeDispatchAssignmentRequest {
-            assignment_id: WorkflowRuntimeDispatchAssignmentId::parse(assignment_id)
+            assignment_id: WorkflowRuntimeDispatchAssignmentId::parse(member.assignment_id)
                 .expect("assignment id"),
             runtime_branch_event_id: WorkflowRuntimeBranchTaskEventId::parse(
-                "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.001",
+                member.runtime_branch_event_id,
             )
             .expect("event id"),
             session_id: "session.image.1".to_string(),
             workflow_id: "workflow.image_generation".to_string(),
-            workflow_run_id: "run.2026-05-22.001".to_string(),
+            workflow_run_id: member.workflow_run_id.to_string(),
             scheduler_task_id: "task.image_generation.001".to_string(),
-            scheduler_task_attempt_id: "attempt.image.1".to_string(),
+            scheduler_task_attempt_id: member.scheduler_task_attempt_id.to_string(),
             scheduler_task_attempt_started_at_ms: 100,
             task_attempt_generation: 1,
             timeout_ms: Some(30_000),
             runtime_source_context: runtime_source_context(),
             runtime_branch_claim: runtime_branch_claim(),
-            selected_runtime_handoff: selected_runtime_handoff(
+            selected_runtime_handoff: selected_runtime_handoff_for_member(
+                member,
                 readiness_proof.clone(),
                 reservation_lease_id.clone(),
             ),
@@ -1291,33 +1364,13 @@ mod tests {
         scheduler_task_attempt_id: &str,
         reservation_lease_id: &str,
     ) -> WorkflowRuntimeDispatchAssignmentRequest {
-        let mut request = assignment_request(assignment_id);
-        let workflow_run_id =
-            SchedulerWorkflowRunId::parse(workflow_run_id).expect("workflow run id");
-        let reservation_lease_id =
-            SchedulerReservationLeaseId::parse(reservation_lease_id).expect("reservation lease id");
-        request.runtime_branch_event_id =
-            WorkflowRuntimeBranchTaskEventId::parse(runtime_branch_event_id).expect("event id");
-        request.workflow_run_id = workflow_run_id.as_str().to_string();
-        request.scheduler_task_attempt_id = scheduler_task_attempt_id.to_string();
-        request.reservation_lease_id = reservation_lease_id.clone();
-        request
-            .selected_candidate_fact
-            .resource_fit_assessment
-            .workflow_run_id = workflow_run_id.clone();
-        for reservation in &mut request.selected_candidate_fact.reservations {
-            reservation.workflow_run_id = workflow_run_id.clone();
-            reservation.reservation_lease_id = reservation_lease_id.clone();
-        }
-        request.selected_runtime_handoff.workflow_run_id = workflow_run_id.clone();
-        request.selected_runtime_handoff.task_intent.workflow_run_id = workflow_run_id.clone();
-        if let Some(dispatch_decision) = &mut request.selected_runtime_handoff.dispatch_decision {
-            dispatch_decision.workflow_run_id = workflow_run_id.clone();
-            dispatch_decision.task_intent.workflow_run_id = workflow_run_id.clone();
-            dispatch_decision.reservation_lease_id = reservation_lease_id;
-            dispatch_decision.reservations = request.selected_candidate_fact.reservations.clone();
-        }
-        request
+        assignment_request_for_member(&DispatchAssignmentFixtureMember {
+            assignment_id,
+            runtime_branch_event_id,
+            workflow_run_id,
+            scheduler_task_attempt_id,
+            reservation_lease_id,
+        })
     }
 
     fn batch_owner_id() -> WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId {
@@ -1347,17 +1400,20 @@ mod tests {
         }
     }
 
-    fn selected_runtime_handoff(
+    fn selected_runtime_handoff_for_member(
+        member: &DispatchAssignmentFixtureMember<'_>,
         readiness_proof: DependencyReadinessProofEnvelope,
         reservation_lease_id: SchedulerReservationLeaseId,
     ) -> SchedulerRuntimeHandoff {
-        let intent = task_intent();
+        let intent = task_intent_for_member(member);
         let environment_ref = environment_ref();
+        let workflow_run_id =
+            SchedulerWorkflowRunId::parse(member.workflow_run_id).expect("run id");
         SchedulerRuntimeHandoff {
             contract_version: SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
             workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
                 .expect("workflow id"),
-            workflow_run_id: SchedulerWorkflowRunId::parse("run.2026-05-22.001").expect("run id"),
+            workflow_run_id: workflow_run_id.clone(),
             node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
             task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
             task_intent: intent.clone(),
@@ -1368,8 +1424,7 @@ mod tests {
                 contract_version: SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION,
                 workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
                     .expect("workflow id"),
-                workflow_run_id: SchedulerWorkflowRunId::parse("run.2026-05-22.001")
-                    .expect("run id"),
+                workflow_run_id,
                 node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
                 task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
                 task_intent: intent,
@@ -1383,7 +1438,7 @@ mod tests {
                 environment_ref,
                 batching_group_id: None,
                 reservation_lease_id,
-                reservations: selected_candidate_fact().reservations,
+                reservations: selected_candidate_fact_for_member(member).reservations,
                 runtime_trait_settings: Vec::new(),
                 diagnostics: vec![SchedulerDispatchDiagnostic {
                     severity: SchedulerDispatchDiagnosticSeverity::Info,
@@ -1396,12 +1451,15 @@ mod tests {
         }
     }
 
-    fn task_intent() -> SchedulableTaskIntent {
+    fn task_intent_for_member(
+        member: &DispatchAssignmentFixtureMember<'_>,
+    ) -> SchedulableTaskIntent {
         SchedulableTaskIntent {
             contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
             workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
                 .expect("workflow id"),
-            workflow_run_id: SchedulerWorkflowRunId::parse("run.2026-05-22.001").expect("run id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(member.workflow_run_id)
+                .expect("workflow run id"),
             node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
             task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
             fairness_key: None,
@@ -1417,8 +1475,11 @@ mod tests {
         }
     }
 
-    fn selected_candidate_fact() -> WorkflowRuntimeDispatchCandidateFact {
-        let workflow_run_id: SchedulerWorkflowRunId = "run.2026-05-22.001".parse().expect("run id");
+    fn selected_candidate_fact_for_member(
+        member: &DispatchAssignmentFixtureMember<'_>,
+    ) -> WorkflowRuntimeDispatchCandidateFact {
+        let workflow_run_id: SchedulerWorkflowRunId =
+            member.workflow_run_id.parse().expect("run id");
         let task_id: SchedulerTaskId = "task.image_generation.001".parse().expect("task id");
         let device_id: DeviceIntentId = "cuda:0".parse().expect("device id");
         WorkflowRuntimeDispatchCandidateFact {
@@ -1441,7 +1502,7 @@ mod tests {
             environment_ref: environment_ref(),
             reservations: vec![SchedulerResourceReservation {
                 reservation_lease_id: SchedulerReservationLeaseId::parse(
-                    "reservation-lease.runtime.1",
+                    member.reservation_lease_id,
                 )
                 .expect("reservation lease id"),
                 workflow_run_id: workflow_run_id.clone(),
@@ -1484,5 +1545,93 @@ mod tests {
         ))
         .expect("runtime handoff");
         handoff.readiness_proof
+    }
+
+    fn readiness_proof_for_member(
+        member: &DispatchAssignmentFixtureMember<'_>,
+    ) -> DependencyReadinessProofEnvelope {
+        let mut proof = readiness_proof();
+        proof.execution_context.workflow_run_id =
+            DependencyReadinessWorkflowRunId::parse(member.workflow_run_id)
+                .expect("readiness workflow run id");
+        proof.readiness_proof_id =
+            DependencyReadinessProofId::parse(format!("readiness-proof.{}", member.assignment_id))
+                .expect("readiness proof id");
+        proof.validate().expect("readiness proof");
+        proof
+    }
+
+    fn assert_member_facts_match(
+        request: &WorkflowRuntimeDispatchAssignmentRequest,
+        member: &DispatchAssignmentFixtureMember<'_>,
+    ) {
+        assert_eq!(request.assignment_id.as_str(), member.assignment_id);
+        assert_eq!(
+            request.runtime_branch_event_id.as_str(),
+            member.runtime_branch_event_id
+        );
+        assert_eq!(request.workflow_run_id, member.workflow_run_id);
+        assert_eq!(
+            request.scheduler_task_attempt_id,
+            member.scheduler_task_attempt_id
+        );
+        assert_eq!(
+            request.reservation_lease_id.as_str(),
+            member.reservation_lease_id
+        );
+        assert_eq!(
+            request
+                .readiness_proof
+                .execution_context
+                .workflow_run_id
+                .as_str(),
+            member.workflow_run_id
+        );
+        assert_eq!(
+            request.selected_runtime_handoff.workflow_run_id.as_str(),
+            member.workflow_run_id
+        );
+        assert_eq!(
+            request
+                .selected_runtime_handoff
+                .task_intent
+                .workflow_run_id
+                .as_str(),
+            member.workflow_run_id
+        );
+        assert_eq!(
+            request
+                .selected_candidate_fact
+                .resource_fit_assessment
+                .workflow_run_id
+                .as_str(),
+            member.workflow_run_id
+        );
+        assert!(request
+            .selected_candidate_fact
+            .reservations
+            .iter()
+            .all(
+                |reservation| reservation.workflow_run_id.as_str() == member.workflow_run_id
+                    && reservation.reservation_lease_id.as_str() == member.reservation_lease_id
+            ));
+        let dispatch_decision = request
+            .selected_runtime_handoff
+            .dispatch_decision
+            .as_ref()
+            .expect("dispatch decision");
+        assert_eq!(
+            dispatch_decision.workflow_run_id.as_str(),
+            member.workflow_run_id
+        );
+        assert_eq!(
+            dispatch_decision.task_intent.workflow_run_id.as_str(),
+            member.workflow_run_id
+        );
+        assert_eq!(
+            dispatch_decision.reservation_lease_id.as_str(),
+            member.reservation_lease_id
+        );
+        assert_eq!(dispatch_decision.readiness_proof, request.readiness_proof);
     }
 }

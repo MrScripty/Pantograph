@@ -5783,6 +5783,45 @@ and re-plan if fixture construction requires scheduler DTO changes, generated
 contract changes, lockfile updates, saved workflow fixture updates, runtime
 host API changes, or physical-device/runtime-residency tables.
 
+2026-06-11 multi-run dispatch-assignment fixture builder slice: completed
+sequence step 1. Smallest useful vertical slice: add a workflow-service-owned
+dispatch-assignment test fixture builder that derives assignment, runtime
+branch event, workflow run, task-attempt, readiness-proof, handoff, dispatch
+decision, candidate, and reservation facts from one member definition. Allowed
+files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not change production
+grouping behavior, does not add coalesced runtime execution, does not mutate
+saved scheduler fixture JSON, does not introduce runtime-host APIs, and does
+not derive cross-run identity from `batching_key`, reservation lease id, or a
+run that first loaded a runtime. The builder validates member-specific
+readiness proofs and scheduler handoffs before repository insertion.
+
+Focused test update:
+`runtime_dispatch_assignment_multi_run_fixture_builder_produces_consistent_readiness_facts`
+now proves two distinct workflow-run members carry internally consistent
+readiness proof execution context, selected handoff, task intent, dispatch
+decision, candidate resource-fit, and reservation facts.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
+Next thin slice: implement sequence step 2 only by adding cross-run grouped
+claim acceptance coverage using the new dispatch-assignment fixture builder.
+Allowed files should remain limited to
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`
+and this plan unless the existing repository diagnostics cannot express the
+fail-closed case. The slice must prove compatible assignment-owned
+task-attempt facts from distinct workflow runs can be claimed under one batch
+lease, while incompatible facts and missing task-attempt facts fail closed. Do
+not add runtime-host batch execution, scheduler DTO changes, generated
+contracts, lockfile updates, saved workflow fixture updates, runtime
+residency/device inventory tables, or worker grouped execution in this slice.
+
 ## Standards Rule
 
 The standards constraints in
