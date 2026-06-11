@@ -5098,6 +5098,41 @@ Verification passed:
 and
 `cargo test -p pantograph-workflow-service workflow::session_execution_api::tests::runtime_branch_admission_rejects_duplicate_claimable_task_event --lib -- --exact`.
 
+2026-06-11 bootstrap recovery deferred runtime-branch event slice:
+completed. Smallest useful vertical slice: keep the worker-owned bootstrap
+dependency-readiness recovery path canonical by making an already-deferred
+runtime-branch task event due when bootstrap recovery rechecks dependency
+readiness after a fresh snapshot is available. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+Discovered issue resolved in-slice: an initial readiness-pending runtime run
+creates and defers the durable runtime-branch task event. Bootstrap recovery
+correctly ensured the event existed, but treated a deferred event as already
+claimable, so the worker had no due event to claim even after dependency
+readiness became fresh. The recovery path now uses a first-class
+runtime-branch event repository transition to mark the deferred event due, then
+the task-execution worker reclaims it and re-evaluates dependency readiness
+through the existing typed proof path.
+
+No-fallback/no-legacy confirmation: this slice does not bypass dependency
+readiness, dispatch selection, runtime-branch claiming, selected-candidate
+evidence, task-attempt start, runtime-host execution, or worker ownership. It
+does not restore request-scoped runtime execution or synthesize successful
+recovery. Recovery only makes the durable event claimable so the canonical
+worker path can evaluate the fresh typed readiness proof and fail closed if
+canonical planning still cannot dispatch.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::runtime_branch_task_event::tests::runtime_branch_task_event_marks_deferred_event_ready_for_recovery --lib -- --exact`;
+`cargo test -p pantograph-workflow-service workflow::runtime_branch_task_event::tests::runtime_branch_task_event_rejects_mark_ready_for_non_deferred_event --lib -- --exact`;
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_ready_runtime_task_fails_closed_without_dispatch_candidate --lib -- --exact`;
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan --lib -- --exact`;
+`cargo test -p pantograph-workflow-service session_execution --lib`; and
+`cargo test -p pantograph-workflow-service workflow::runtime_branch_task_event::tests --lib`.
+
 ## Standards Rule
 
 The standards constraints in

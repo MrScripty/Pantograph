@@ -2351,10 +2351,16 @@ impl WorkflowService {
             if let Some(record) = repository.get(&event_id) {
                 match record.state {
                     WorkflowRuntimeBranchTaskEventState::Ready
-                    | WorkflowRuntimeBranchTaskEventState::Deferred
                     | WorkflowRuntimeBranchTaskEventState::Claimed
                     | WorkflowRuntimeBranchTaskEventState::Dispatching
                     | WorkflowRuntimeBranchTaskEventState::Running => {
+                        ensured += 1;
+                        continue;
+                    }
+                    WorkflowRuntimeBranchTaskEventState::Deferred => {
+                        let _record = repository
+                            .mark_deferred_ready(&event_id, ready_at_ms)
+                            .map_err(runtime_branch_task_event_diagnostic_error)?;
                         ensured += 1;
                         continue;
                     }

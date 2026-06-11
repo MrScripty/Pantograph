@@ -257,6 +257,12 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         ready_at_ms: u64,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
+    fn mark_deferred_ready(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        ready_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
+
     fn release_claim(
         &mut self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -512,6 +518,19 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
     {
         let record = self.record(event_id)?;
         let updated = record.defer_until(claim, deferred_at_ms, ready_at_ms)?;
+        self.records
+            .insert(event_id.as_str().to_string(), updated.clone());
+        Ok(updated)
+    }
+
+    fn mark_deferred_ready(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        ready_at_ms: u64,
+    ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
+    {
+        let record = self.record(event_id)?;
+        let updated = record.mark_deferred_ready(ready_at_ms)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -929,6 +948,20 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         self.dispatch_assignment_link = None;
         self.ready_at_ms = ready_at_ms;
         self.deferred_at_ms = Some(deferred_at_ms);
+        Ok(self)
+    }
+
+    pub(super) fn mark_deferred_ready(
+        mut self,
+        ready_at_ms: u64,
+    ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
+        if self.state != WorkflowRuntimeBranchTaskEventState::Deferred {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
+                "only deferred runtime branch task events can be marked ready",
+            ));
+        }
+        self.ready_at_ms = ready_at_ms;
         Ok(self)
     }
 
@@ -1978,6 +2011,37 @@ mod tests {
             .record
             .defer_until(&invalid_claimed.claim, 220, 219)
             .expect_err("retry ready time cannot precede deferred time");
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_marks_deferred_event_ready_for_recovery() {
+        let deferred_claim = ready_record()
+            .claim(owner_id("worker.alpha"), 100, 80)
+            .expect("ready event claims");
+        let deferred = deferred_claim
+            .record
+            .defer_until(&deferred_claim.claim, 120, 180)
+            .expect("current claim defers until retry time");
+
+        let ready = deferred
+            .mark_deferred_ready(130)
+            .expect("deferred event marks ready");
+
+        assert_eq!(ready.state, WorkflowRuntimeBranchTaskEventState::Deferred);
+        assert_eq!(ready.ready_at_ms, 130);
+        assert!(ready.is_due_for_claim(130));
+    }
+
+    #[test]
+    fn runtime_branch_task_event_rejects_mark_ready_for_non_deferred_event() {
+        let error = ready_record()
+            .mark_deferred_ready(130)
+            .expect_err("ready event cannot be marked deferred-ready");
+
         assert_eq!(
             error.code,
             WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition

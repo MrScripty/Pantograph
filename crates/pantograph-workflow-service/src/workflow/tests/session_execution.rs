@@ -675,8 +675,7 @@ async fn workflow_execution_session_runtime_run_defers_pending_dependency_readin
 }
 
 #[tokio::test]
-async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at_dispatch_boundary()
-{
+async fn workflow_execution_session_ready_runtime_task_fails_closed_without_dispatch_candidate() {
     let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
@@ -741,13 +740,13 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
             priority: None,
         })
         .await
-        .expect_err("ready dependency proof should still stop before dispatch wiring");
+        .expect_err("ready runtime task should fail closed without dispatch candidate wiring");
 
     assert_eq!(error.code(), WorkflowErrorCode::InternalError);
     assert!(
         error
             .message()
-            .contains("runtime scheduler dispatch selection failed closed"),
+            .contains("scheduler dispatch selection did not select a runtime task"),
         "unexpected error: {error}"
     );
     let queue = service
@@ -756,7 +755,11 @@ async fn workflow_execution_session_fresh_dependency_readiness_snapshot_stops_at
         })
         .await
         .expect("list queue after dispatch fail-closed runtime inference run");
-    assert!(queue.items.is_empty());
+    assert_eq!(queue.items.len(), 1);
+    assert_eq!(
+        queue.items[0].status,
+        WorkflowExecutionSessionQueueItemStatus::Running
+    );
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     let work_item = dependency_readiness_work_queue
         .pop_next()
