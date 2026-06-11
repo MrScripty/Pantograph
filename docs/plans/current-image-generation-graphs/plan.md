@@ -5215,6 +5215,26 @@ must not hard-link models to runtimes, make workflows owners of persistent
 runtimes, collapse multi-device placement into a single device, or fabricate
 device facts from runtime/model names.
 
+2026-06-11 runtime task-attempt reservation-level device fact contract slice:
+completed. Smallest useful vertical slice: remove the singular
+`resolved_device_id` from the workflow-service runtime task-attempt fact
+request/record and require each reservation fact to carry its scheduler
+reservation lease id, device id, resource kind, and reserved bytes. Allowed
+files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_task_attempt_fact.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not build task-attempt
+facts yet, does not infer a primary device, does not change scheduler DTOs,
+runtime-host request fields, Pumas contracts, generated files, lockfiles,
+saved workflow fixtures, or worker dispatch behavior, and does not link runtime
+residency ownership to the workflow that requested persistence.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::runtime_task_attempt_fact::tests --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

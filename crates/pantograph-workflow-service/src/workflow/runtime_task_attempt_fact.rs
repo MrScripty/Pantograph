@@ -21,7 +21,6 @@ pub(super) struct WorkflowRuntimeTaskAttemptFactRequest {
     pub(super) selected_runtime_variant_id: Option<String>,
     pub(super) backend_id: String,
     pub(super) runtime_family: String,
-    pub(super) resolved_device_id: String,
     pub(super) load_target: String,
     pub(super) runtime_residency_key: String,
     pub(super) loaded_runtime_memory_estimate_bytes: u64,
@@ -77,7 +76,6 @@ pub(super) struct WorkflowRuntimeTaskAttemptFactRecord {
     pub(super) selected_runtime_variant_id: Option<String>,
     pub(super) backend_id: String,
     pub(super) runtime_family: String,
-    pub(super) resolved_device_id: String,
     pub(super) load_target: String,
     pub(super) runtime_residency_key: String,
     pub(super) loaded_runtime_memory_estimate_bytes: u64,
@@ -116,6 +114,7 @@ pub(super) enum WorkflowRuntimeTaskAttemptResourceFitState {
 #[must_use]
 pub(super) struct WorkflowRuntimeTaskAttemptReservationFact {
     pub(super) reservation_lease_id: String,
+    pub(super) device_id: String,
     pub(super) resource_kind: WorkflowRuntimeTaskAttemptResourceKind,
     pub(super) reserved_bytes: u64,
 }
@@ -185,7 +184,6 @@ impl WorkflowRuntimeTaskAttemptFactRecord {
             selected_runtime_variant_id: request.selected_runtime_variant_id,
             backend_id: request.backend_id,
             runtime_family: request.runtime_family,
-            resolved_device_id: request.resolved_device_id,
             load_target: request.load_target,
             runtime_residency_key: request.runtime_residency_key,
             loaded_runtime_memory_estimate_bytes: request.loaded_runtime_memory_estimate_bytes,
@@ -293,7 +291,6 @@ fn validate_request(
     }
     validate_required_selected_fact("backend_id", &request.backend_id)?;
     validate_required_selected_fact("runtime_family", &request.runtime_family)?;
-    validate_required_selected_fact("resolved_device_id", &request.resolved_device_id)?;
     validate_required_selected_fact("load_target", &request.load_target)?;
     validate_required_selected_fact("runtime_residency_key", &request.runtime_residency_key)?;
     if request.loaded_runtime_memory_estimate_bytes == 0 {
@@ -433,6 +430,11 @@ fn validate_reservation(
         format!("reservations[{index}].reservation_lease_id"),
         &reservation.reservation_lease_id,
     )?;
+    validate_non_blank(
+        WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact,
+        format!("reservations[{index}].device_id"),
+        &reservation.device_id,
+    )?;
     if reservation.reserved_bytes == 0 {
         return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
             WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact,
@@ -493,7 +495,6 @@ mod tests {
         assert_eq!(record.selected_runtime_variant_id.as_deref(), Some("cuda"));
         assert_eq!(record.backend_id, "backend.diffusers");
         assert_eq!(record.runtime_family, "diffusers");
-        assert_eq!(record.resolved_device_id, "cuda:0");
         assert_eq!(record.load_target, "cuda:0");
         assert_eq!(
             record.runtime_residency_key,
@@ -505,6 +506,11 @@ mod tests {
             WorkflowRuntimeTaskAttemptResourceFitState::Fits
         );
         assert_eq!(record.reservations.len(), 1);
+        assert_eq!(
+            record.reservations[0].reservation_lease_id,
+            "reservation-lease.runtime.1"
+        );
+        assert_eq!(record.reservations[0].device_id, "cuda:0");
         assert_eq!(record.operation_type, "image-generation.txt2img");
         assert_eq!(record.context_shape_key, "txt2img.1024x1024.steps30");
         assert_eq!(record.cancellation_mode, "per-run-fanout");
@@ -573,6 +579,21 @@ mod tests {
             WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact
         );
         assert_eq!(error.field_path, "reservations[0].reserved_bytes");
+    }
+
+    #[test]
+    fn runtime_task_attempt_fact_rejects_reservation_without_device() {
+        let mut request = fact_request();
+        request.reservations[0].device_id = " ".to_string();
+
+        let error = WorkflowRuntimeTaskAttemptFactRecord::new(request)
+            .expect_err("blank reservation device must fail");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact
+        );
+        assert_eq!(error.field_path, "reservations[0].device_id");
     }
 
     #[test]
@@ -741,7 +762,6 @@ mod tests {
             selected_runtime_variant_id: Some("cuda".to_string()),
             backend_id: "backend.diffusers".to_string(),
             runtime_family: "diffusers".to_string(),
-            resolved_device_id: "cuda:0".to_string(),
             load_target: "cuda:0".to_string(),
             runtime_residency_key: "runtime.diffusers.model.sdxl.cuda0".to_string(),
             loaded_runtime_memory_estimate_bytes: 8_589_934_592,
@@ -751,6 +771,7 @@ mod tests {
             },
             reservations: vec![WorkflowRuntimeTaskAttemptReservationFact {
                 reservation_lease_id: "reservation-lease.runtime.1".to_string(),
+                device_id: "cuda:0".to_string(),
                 resource_kind: WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
                 reserved_bytes: 8_589_934_592,
             }],
