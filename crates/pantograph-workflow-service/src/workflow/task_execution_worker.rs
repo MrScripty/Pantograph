@@ -1078,6 +1078,8 @@ fn create_runtime_branch_dispatch_assignment(
             .to_string(),
         scheduler_task_attempt_started_at_ms: started_dispatch.started_runtime_task.started_at_ms(),
         task_attempt_generation: record.attempt_generation,
+        timeout_ms: record.timeout_ms,
+        runtime_source_context: record.runtime_source_context.clone(),
         runtime_branch_claim: claim.clone(),
         readiness_proof: started_dispatch
             .selected_dispatch

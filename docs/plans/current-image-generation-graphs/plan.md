@@ -5339,6 +5339,37 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 durable dispatch-assignment source-context slice: completed.
+Smallest useful vertical slice: extend
+`WorkflowRuntimeDispatchAssignmentRecord` and its create request to own the
+run-scoped runtime source context and timeout needed for later task-attempt
+fact derivation from assignment-owned evidence. The worker now copies those
+facts from the already-claimed runtime-branch task event into the assignment
+at creation time. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not build or persist
+runtime task-attempt facts, does not derive source context from graph shape,
+request payloads, batching keys, selected candidate evidence, runtime-host
+inputs, or runtime/model/load-target names, and does not change scheduler DTOs,
+Pumas contracts, generated files, lockfiles, or saved workflow fixtures.
+Runtime source context remains required and invalid assignment requests fail
+closed through typed diagnostics.
+
+Focused test update: dispatch-assignment repository tests now reject missing
+source context, and the session execution scheduler-selection test proves the
+worker-created assignment carries the admitted source context and timeout.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

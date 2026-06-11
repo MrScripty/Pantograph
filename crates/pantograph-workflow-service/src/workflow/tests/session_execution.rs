@@ -923,6 +923,19 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     assert_eq!(assignment.workflow_id, workflow_id);
     assert_eq!(assignment.workflow_run_id, response.workflow_run_id);
     assert_eq!(assignment.scheduler_task_id, "infer");
+    assert_eq!(assignment.timeout_ms, None);
+    assert_eq!(
+        assignment.runtime_source_context.operation_type,
+        "image-generation.txt2img"
+    );
+    assert_eq!(
+        assignment.runtime_source_context.context_shape_key,
+        "txt2img.1024x1024.steps30"
+    );
+    assert_eq!(
+        assignment.runtime_source_context.cancellation_mode,
+        "per-run-fanout"
+    );
     assert_eq!(
         assignment.scheduler_task_attempt_id,
         assignment_link.scheduler_task_attempt_id.as_str()

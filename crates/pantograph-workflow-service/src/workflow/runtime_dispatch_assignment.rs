@@ -7,6 +7,8 @@ use pantograph_scheduler::{
 };
 use uuid::Uuid;
 
+use crate::graph::WorkflowRuntimeSourceContext;
+
 use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventId,
 };
@@ -30,6 +32,8 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentRequest {
     pub(super) scheduler_task_attempt_id: String,
     pub(super) scheduler_task_attempt_started_at_ms: u64,
     pub(super) task_attempt_generation: u64,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) runtime_branch_claim: WorkflowRuntimeBranchTaskEventClaim,
     pub(super) readiness_proof: DependencyReadinessProofEnvelope,
     pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
@@ -52,6 +56,8 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) scheduler_task_attempt_id: String,
     pub(super) scheduler_task_attempt_started_at_ms: u64,
     pub(super) task_attempt_generation: u64,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) runtime_branch_claim: WorkflowRuntimeBranchTaskEventClaim,
     pub(super) readiness_proof: DependencyReadinessProofEnvelope,
     pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
@@ -197,6 +203,8 @@ impl WorkflowRuntimeDispatchAssignmentRepository
             scheduler_task_attempt_id: request.scheduler_task_attempt_id,
             scheduler_task_attempt_started_at_ms: request.scheduler_task_attempt_started_at_ms,
             task_attempt_generation: request.task_attempt_generation,
+            timeout_ms: request.timeout_ms,
+            runtime_source_context: request.runtime_source_context,
             runtime_branch_claim: request.runtime_branch_claim,
             readiness_proof: request.readiness_proof,
             selected_candidate_fact: request.selected_candidate_fact,
@@ -361,6 +369,12 @@ fn validate_assignment_request(
             "runtime dispatch assignment created timestamp must be greater than zero",
         );
     }
+    if request.timeout_ms == Some(0) {
+        return invalid_assignment(
+            "runtime dispatch assignment timeout must be greater than zero when present",
+        );
+    }
+    validate_runtime_source_context(&request.runtime_source_context)?;
     if request.runtime_branch_claim.attempt_generation != request.task_attempt_generation {
         return invalid_assignment(
             "runtime branch claim generation must match task attempt generation",
@@ -368,6 +382,24 @@ fn validate_assignment_request(
     }
     validate_candidate_correlation(request)?;
     validate_selected_runtime_handoff(request)?;
+    Ok(())
+}
+
+fn validate_runtime_source_context(
+    context: &WorkflowRuntimeSourceContext,
+) -> Result<(), WorkflowRuntimeDispatchAssignmentDiagnostic> {
+    validate_non_blank(
+        "runtime source context operation type",
+        &context.operation_type,
+    )?;
+    validate_non_blank(
+        "runtime source context context shape key",
+        &context.context_shape_key,
+    )?;
+    validate_non_blank(
+        "runtime source context cancellation mode",
+        &context.cancellation_mode,
+    )?;
     Ok(())
 }
 
@@ -533,6 +565,11 @@ mod tests {
             record.state,
             WorkflowRuntimeDispatchAssignmentState::Prepared
         );
+        assert_eq!(record.timeout_ms, Some(30_000));
+        assert_eq!(
+            record.runtime_source_context.context_shape_key,
+            "txt2img.1024x1024.steps30"
+        );
         assert_eq!(record.updated_at_ms, request.created_at_ms);
         assert_eq!(
             repository
@@ -644,6 +681,26 @@ mod tests {
         assert!(error.message.contains("selected runtime handoff"));
     }
 
+    #[test]
+    fn runtime_dispatch_assignment_rejects_missing_source_context() {
+        let mut request = assignment_request("assignment.1");
+        request.runtime_source_context.operation_type = " ".to_string();
+
+        let error = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new()
+            .create(request)
+            .expect_err("source context is required");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidAssignment
+        );
+        assert!(
+            error.message.contains("runtime source context"),
+            "unexpected error message: {}",
+            error.message
+        );
+    }
+
     fn assignment_request(assignment_id: &str) -> WorkflowRuntimeDispatchAssignmentRequest {
         let readiness_proof = readiness_proof();
         let selected_candidate_fact = selected_candidate_fact();
@@ -665,6 +722,8 @@ mod tests {
             scheduler_task_attempt_id: "attempt.image.1".to_string(),
             scheduler_task_attempt_started_at_ms: 100,
             task_attempt_generation: 1,
+            timeout_ms: Some(30_000),
+            runtime_source_context: runtime_source_context(),
             runtime_branch_claim: runtime_branch_claim(),
             selected_runtime_handoff: selected_runtime_handoff(
                 readiness_proof.clone(),
@@ -675,6 +734,14 @@ mod tests {
             reservation_lease_id,
             selected_candidate_id,
             created_at_ms: 120,
+        }
+    }
+
+    fn runtime_source_context() -> WorkflowRuntimeSourceContext {
+        WorkflowRuntimeSourceContext {
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
         }
     }
 
