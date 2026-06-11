@@ -5080,6 +5080,24 @@ and `cargo check -p pantograph-workflow-service`. Formatting was applied with
 `cargo fmt -p pantograph-workflow-service`; the final format check is part of
 the slice commit gate.
 
+2026-06-11 runtime-branch admission source-context fixture slice: completed.
+Smallest useful vertical slice: update the workflow-service
+`runtime_task_graph()` unit-test fixture used by runtime-branch admission tests
+so its runtime inference scheduler task carries the explicit
+`WorkflowRuntimeSourceContext` now required by admission. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: the fixture now supplies the same typed
+source-context contract production admission requires. The test does not
+relax admission validation, synthesize source context inside admission, or
+restore batch-profile/request-scoped fallback behavior.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::session_execution_api::tests::runtime_branch_admission_persists_claimable_task_event --lib -- --exact`;
+and
+`cargo test -p pantograph-workflow-service workflow::session_execution_api::tests::runtime_branch_admission_rejects_duplicate_claimable_task_event --lib -- --exact`.
+
 ## Standards Rule
 
 The standards constraints in

@@ -2537,6 +2537,7 @@ fn missing_runtime_source_context_error(task_id: &str) -> WorkflowServiceError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::WorkflowRuntimeSourceContext;
     use crate::workflow::{
         WorkflowSchedulerTask, WorkflowSchedulerTaskInputBinding,
         WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
@@ -2551,6 +2552,14 @@ mod tests {
             required_models: Vec::new(),
             required_backends: Vec::new(),
             required_extensions: Vec::new(),
+        }
+    }
+
+    fn runtime_source_context() -> WorkflowRuntimeSourceContext {
+        WorkflowRuntimeSourceContext {
+            operation_type: "image_generation".to_string(),
+            context_shape_key: "image_generation.default".to_string(),
+            cancellation_mode: "cooperative".to_string(),
         }
     }
 
@@ -2598,7 +2607,7 @@ mod tests {
                     non_runtime_task_template: None,
                     source_input_task_template: None,
                     inference_descriptor_fingerprint: None,
-                    runtime_source_context: None,
+                    runtime_source_context: Some(runtime_source_context()),
                     diagnostics: Vec::new(),
                 },
             ],
