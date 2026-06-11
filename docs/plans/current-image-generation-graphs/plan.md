@@ -5235,6 +5235,34 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 runtime task-attempt source-context projection slice: completed.
+Smallest useful vertical slice: add a pure workflow-service constructor that
+builds `WorkflowRuntimeTaskAttemptFactRecord` from validated
+`WorkflowRuntimeTaskAttemptSourceContext`, scheduler task-attempt id, scheduler
+task-attempt start timestamp, and fact record timestamp by projecting selected
+candidate model/runtime/resource-fit facts and reservation-level scheduler
+reservation evidence. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_task_attempt_fact.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not persist facts, does
+not wire the worker, does not infer devices from load target/runtime/model
+names, does not synthesize a primary device for split placements, and does not
+change scheduler DTOs, Pumas contracts, runtime-host request fields, generated
+files, lockfiles, or saved workflow fixtures. Future scheduler resource-fit
+states or resource kinds fail closed through typed diagnostics until the fact
+contract explicitly supports them.
+
+Focused tests added:
+`runtime_task_attempt_fact_builds_from_source_context_selected_candidate_reservations`
+and
+`runtime_task_attempt_fact_build_rejects_missing_scheduler_attempt_start`.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::runtime_task_attempt_fact::tests --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use pantograph_scheduler::{SchedulerResourceFitState, SchedulerResourceKind};
+
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use crate::graph::WorkflowRuntimeSourceContext;
 
@@ -57,6 +59,15 @@ pub(super) struct WorkflowRuntimeTaskAttemptSourceContext {
     pub(super) timeout_ms: Option<u64>,
     pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeTaskAttemptFactBuildRequest {
+    pub(super) source_context: WorkflowRuntimeTaskAttemptSourceContext,
+    pub(super) scheduler_task_attempt_id: String,
+    pub(super) scheduler_task_attempt_started_at_ms: u64,
+    pub(super) recorded_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -195,6 +206,134 @@ impl WorkflowRuntimeTaskAttemptFactRecord {
             timeout_ms: request.timeout_ms,
             recorded_at_ms: request.recorded_at_ms,
         })
+    }
+
+    pub(super) fn from_source_context(
+        request: WorkflowRuntimeTaskAttemptFactBuildRequest,
+    ) -> Result<Self, WorkflowRuntimeTaskAttemptFactDiagnostic> {
+        validate_non_blank(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
+            "scheduler_task_attempt_id",
+            &request.scheduler_task_attempt_id,
+        )?;
+        if request.scheduler_task_attempt_started_at_ms == 0 {
+            return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+                WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity,
+                "scheduler_task_attempt_started_at_ms",
+                "runtime task-attempt scheduler start timestamp must be greater than zero",
+            ));
+        }
+
+        let source_context = request.source_context;
+        let selected_candidate_fact = source_context.selected_candidate_fact;
+        let selected_artifact_id = selected_candidate_fact
+            .selected_model_ref
+            .selected_artifact_id
+            .clone()
+            .ok_or_else(|| {
+                WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+                    WorkflowRuntimeTaskAttemptFactDiagnosticCode::MissingSelectedFact,
+                    "selected_candidate_fact.selected_model_ref.selected_artifact_id",
+                    "selected candidate fact must carry selected model artifact id",
+                )
+            })?;
+        let reservations = selected_candidate_fact
+            .reservations
+            .iter()
+            .enumerate()
+            .map(|(index, reservation)| {
+                Ok(WorkflowRuntimeTaskAttemptReservationFact {
+                    reservation_lease_id: reservation.reservation_lease_id.as_str().to_string(),
+                    device_id: reservation.device_id.as_str().to_string(),
+                    resource_kind: task_attempt_resource_kind(index, &reservation.resource_kind)?,
+                    reserved_bytes: reservation.reserved_bytes,
+                })
+            })
+            .collect::<Result<Vec<_>, WorkflowRuntimeTaskAttemptFactDiagnostic>>()?;
+
+        Self::new(WorkflowRuntimeTaskAttemptFactRequest {
+            workflow_id: source_context.workflow_id,
+            workflow_run_id: source_context.workflow_run_id,
+            scheduler_task_id: source_context.scheduler_task_id,
+            scheduler_task_attempt_id: request.scheduler_task_attempt_id,
+            task_attempt_generation: source_context.task_attempt_generation,
+            selected_model_id: selected_candidate_fact.selected_model_ref.model_id,
+            selected_artifact_id,
+            selected_runtime_id: selected_candidate_fact
+                .selected_runtime_id
+                .as_str()
+                .to_string(),
+            selected_runtime_variant_id: selected_candidate_fact
+                .selected_runtime_variant_id
+                .as_ref()
+                .map(|variant_id| variant_id.as_str().to_string()),
+            backend_id: selected_candidate_fact.selected_backend_key,
+            runtime_family: selected_candidate_fact.runtime_family,
+            load_target: selected_candidate_fact.resolved_load_target,
+            runtime_residency_key: selected_candidate_fact.runtime_residency_key,
+            loaded_runtime_memory_estimate_bytes: selected_candidate_fact
+                .loaded_runtime_memory_estimate_bytes,
+            resource_fit: task_attempt_resource_fit(
+                selected_candidate_fact.resource_fit_assessment.state,
+                &selected_candidate_fact.resource_fit_assessment.diagnostics,
+            )?,
+            reservations,
+            operation_type: source_context.runtime_source_context.operation_type,
+            context_shape_key: source_context.runtime_source_context.context_shape_key,
+            cancellation_mode: source_context.runtime_source_context.cancellation_mode,
+            timeout_ms: source_context.timeout_ms,
+            recorded_at_ms: request.recorded_at_ms,
+        })
+    }
+}
+
+fn task_attempt_resource_fit(
+    state: SchedulerResourceFitState,
+    diagnostics: &[pantograph_scheduler::SchedulerResourceDiagnostic],
+) -> Result<WorkflowRuntimeTaskAttemptResourceFitFacts, WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    Ok(WorkflowRuntimeTaskAttemptResourceFitFacts {
+        state: match state {
+            SchedulerResourceFitState::Fits => WorkflowRuntimeTaskAttemptResourceFitState::Fits,
+            SchedulerResourceFitState::WaitingForResources => {
+                WorkflowRuntimeTaskAttemptResourceFitState::WaitingForResources
+            }
+            SchedulerResourceFitState::ImpossibleFit => {
+                WorkflowRuntimeTaskAttemptResourceFitState::ImpossibleFit
+            }
+            SchedulerResourceFitState::Unknown => {
+                WorkflowRuntimeTaskAttemptResourceFitState::Unknown
+            }
+            _ => {
+                return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+                    WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidResourceFitFact,
+                    "resource_fit.state",
+                    "runtime task-attempt resource-fit state is not supported by the fact contract",
+                ));
+            }
+        },
+        diagnostic_codes: diagnostics
+            .iter()
+            .map(|diagnostic| format!("{:?}", diagnostic.code))
+            .collect(),
+    })
+}
+
+fn task_attempt_resource_kind(
+    index: usize,
+    resource_kind: &SchedulerResourceKind,
+) -> Result<WorkflowRuntimeTaskAttemptResourceKind, WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    match resource_kind {
+        SchedulerResourceKind::SystemRam => Ok(WorkflowRuntimeTaskAttemptResourceKind::SystemRam),
+        SchedulerResourceKind::SystemSwap => Ok(WorkflowRuntimeTaskAttemptResourceKind::SystemSwap),
+        SchedulerResourceKind::DeviceVram => Ok(WorkflowRuntimeTaskAttemptResourceKind::DeviceVram),
+        SchedulerResourceKind::DeviceSharedMemory => {
+            Ok(WorkflowRuntimeTaskAttemptResourceKind::DeviceSharedMemory)
+        }
+        _ => Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact,
+            format!("reservations[{index}].resource_kind"),
+            "runtime task-attempt reservation resource kind is not supported by the fact contract",
+        )),
     }
 }
 
@@ -516,6 +655,83 @@ mod tests {
         assert_eq!(record.cancellation_mode, "per-run-fanout");
         assert_eq!(record.timeout_ms, Some(30_000));
         assert_eq!(record.recorded_at_ms, 1_000);
+    }
+
+    #[test]
+    fn runtime_task_attempt_fact_builds_from_source_context_selected_candidate_reservations() {
+        let source_context = WorkflowRuntimeTaskAttemptSourceContext::new(source_context_request())
+            .expect("valid source context");
+
+        let record = WorkflowRuntimeTaskAttemptFactRecord::from_source_context(
+            WorkflowRuntimeTaskAttemptFactBuildRequest {
+                source_context,
+                scheduler_task_attempt_id: "attempt.image.1".to_string(),
+                scheduler_task_attempt_started_at_ms: 900,
+                recorded_at_ms: 1_000,
+            },
+        )
+        .expect("valid projected fact record");
+
+        assert_eq!(record.workflow_id, "workflow.image");
+        assert_eq!(record.workflow_run_id, "run.image.1");
+        assert_eq!(record.scheduler_task_id, "image-task");
+        assert_eq!(record.scheduler_task_attempt_id, "attempt.image.1");
+        assert_eq!(record.task_attempt_generation, 1);
+        assert_eq!(record.selected_model_id, "model.sdxl");
+        assert_eq!(record.selected_artifact_id, "artifact.sdxl.diffusers");
+        assert_eq!(record.selected_runtime_id, "runtime.diffusers");
+        assert_eq!(record.selected_runtime_variant_id.as_deref(), Some("cuda"));
+        assert_eq!(record.backend_id, "backend.diffusers");
+        assert_eq!(record.runtime_family, "diffusers");
+        assert_eq!(record.load_target, "cuda:0");
+        assert_eq!(
+            record.runtime_residency_key,
+            "runtime.diffusers.model.sdxl.cuda0"
+        );
+        assert_eq!(record.loaded_runtime_memory_estimate_bytes, 8_589_934_592);
+        assert_eq!(
+            record.resource_fit.state,
+            WorkflowRuntimeTaskAttemptResourceFitState::Fits
+        );
+        assert_eq!(record.resource_fit.diagnostic_codes, Vec::<String>::new());
+        assert_eq!(record.reservations.len(), 1);
+        assert_eq!(
+            record.reservations[0].reservation_lease_id,
+            "reservation-lease.runtime.1"
+        );
+        assert_eq!(record.reservations[0].device_id, "cuda:0");
+        assert_eq!(
+            record.reservations[0].resource_kind,
+            WorkflowRuntimeTaskAttemptResourceKind::DeviceVram
+        );
+        assert_eq!(record.reservations[0].reserved_bytes, 8_589_934_592);
+        assert_eq!(record.operation_type, "image-generation.txt2img");
+        assert_eq!(record.context_shape_key, "txt2img.1024x1024.steps30");
+        assert_eq!(record.cancellation_mode, "per-run-fanout");
+        assert_eq!(record.timeout_ms, Some(30_000));
+        assert_eq!(record.recorded_at_ms, 1_000);
+    }
+
+    #[test]
+    fn runtime_task_attempt_fact_build_rejects_missing_scheduler_attempt_start() {
+        let source_context = WorkflowRuntimeTaskAttemptSourceContext::new(source_context_request())
+            .expect("valid source context");
+
+        let error = WorkflowRuntimeTaskAttemptFactRecord::from_source_context(
+            WorkflowRuntimeTaskAttemptFactBuildRequest {
+                source_context,
+                scheduler_task_attempt_id: "attempt.image.1".to_string(),
+                scheduler_task_attempt_started_at_ms: 0,
+                recorded_at_ms: 1_000,
+            },
+        )
+        .expect_err("missing scheduler attempt start must fail");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidAttemptIdentity
+        );
+        assert_eq!(error.field_path, "scheduler_task_attempt_started_at_ms");
     }
 
     #[test]
