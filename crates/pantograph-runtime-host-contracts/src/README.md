@@ -15,8 +15,8 @@ to release or retain runtime-registry leases acquired for dispatch candidates.
 | `reservation_lifecycle_tests.rs` | Fixture-backed reservation lifecycle contract tests. |
 | `runtime_host_execution.rs` | Runtime-host single-task and batch execution request/response DTOs, typed materialized input values, typed output values, diagnostics, validation, and typed contract errors. |
 | `runtime_host_execution_tests.rs` | Fixture-backed runtime-host execution contract tests. |
-| `runtime_host_dispatch.rs` | Runtime-host execution port trait, scheduler dispatcher, response correlation checks, and typed dispatch errors. |
-| `runtime_host_dispatch_tests.rs` | Focused dispatcher tests using a fake runtime-host port. |
+| `runtime_host_dispatch.rs` | Runtime-host single-task and batch execution port traits, scheduler dispatchers, response correlation checks, and typed dispatch errors. |
+| `runtime_host_dispatch_tests.rs` | Focused dispatcher tests using fake runtime-host ports. |
 | `runtime_session_load.rs` | Path-free backend-owned runtime session load-proof DTO, readiness state, diagnostic phase, validation wrapper, and typed contract errors. |
 | `runtime_session_load_tests.rs` | Runtime session load-proof contract tests for validation, path-field rejection, and ready-state invariants. |
 | `../tests/fixtures/` | Serialized request/response contract fixtures. |

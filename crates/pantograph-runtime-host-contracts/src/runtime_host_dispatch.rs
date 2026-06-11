@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoff;
 use thiserror::Error;
 
-#[cfg(test)]
-use crate::{RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse};
 use crate::{
+    RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
     RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationSnapshot,
     RuntimeHostExecutionCancellationState, RuntimeHostExecutionContractError,
     RuntimeHostExecutionInput, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostBatchExecutionResponse,
     ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
@@ -22,6 +22,16 @@ pub trait RuntimeHostExecutionPort: Send + Sync {
         request: RuntimeHostExecutionRequest,
         cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError>;
+}
+
+/// Runtime-host batch execution port called by scheduler dispatch.
+#[async_trait]
+pub trait RuntimeHostBatchExecutionPort: Send + Sync {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError>;
 }
 
 pub trait RuntimeHostExecutionCancellationSignal: Send + Sync {
@@ -125,6 +135,44 @@ impl SchedulerRuntimeHostDispatcher {
     }
 }
 
+/// Scheduler-side dispatcher for runtime-host batch execution requests.
+#[derive(Clone)]
+#[must_use]
+pub struct SchedulerRuntimeHostBatchDispatcher {
+    port: Arc<dyn RuntimeHostBatchExecutionPort>,
+}
+
+impl SchedulerRuntimeHostBatchDispatcher {
+    pub fn new(port: Arc<dyn RuntimeHostBatchExecutionPort>) -> Self {
+        Self { port }
+    }
+
+    pub async fn dispatch_batch(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+    ) -> Result<ValidatedRuntimeHostBatchExecutionResponse, RuntimeHostDispatchError> {
+        let cancellation =
+            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+        self.dispatch_batch_with_cancellation(request, cancellation)
+            .await
+    }
+
+    pub async fn dispatch_batch_with_cancellation(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<ValidatedRuntimeHostBatchExecutionResponse, RuntimeHostDispatchError> {
+        let validated_request = ValidatedRuntimeHostBatchExecutionRequest::try_from(request)?;
+        let response = self
+            .port
+            .execute_runtime_host_batch_request(validated_request.as_ref().clone(), cancellation)
+            .await?;
+        validate_batch_response_matches_request(validated_request.as_ref(), &response)?;
+        ValidatedRuntimeHostBatchExecutionResponse::try_from(response)
+            .map_err(RuntimeHostDispatchError::ResponseContract)
+    }
+}
+
 fn validate_response_matches_request(
     request: &RuntimeHostExecutionRequest,
     response: &RuntimeHostExecutionResponse,
@@ -163,7 +211,6 @@ fn validate_response_matches_request(
     Ok(())
 }
 
-#[cfg(test)]
 fn validate_batch_response_matches_request(
     request: &RuntimeHostBatchExecutionRequest,
     response: &RuntimeHostBatchExecutionResponse,

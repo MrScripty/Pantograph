@@ -4,9 +4,10 @@ use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoffState;
 
 use super::{
-    validate_batch_response_matches_request, RuntimeHostDispatchError,
-    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, SchedulerRuntimeHostDispatcher,
+    validate_batch_response_matches_request, RuntimeHostBatchExecutionPort,
+    RuntimeHostDispatchError, RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+    RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
+    SchedulerRuntimeHostDispatcher,
 };
 use crate::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
@@ -26,6 +27,34 @@ struct RecordingRuntimeHostPort {
     requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
     cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
     response: Mutex<Option<RuntimeHostExecutionResponse>>,
+}
+
+#[derive(Default)]
+struct RecordingRuntimeHostBatchPort {
+    requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+    cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
+    response: Mutex<Option<RuntimeHostBatchExecutionResponse>>,
+}
+
+impl RecordingRuntimeHostBatchPort {
+    fn with_response(response: RuntimeHostBatchExecutionResponse) -> Self {
+        Self {
+            requests: Mutex::new(Vec::new()),
+            cancellation_snapshots: Mutex::new(Vec::new()),
+            response: Mutex::new(Some(response)),
+        }
+    }
+
+    fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
+        self.requests.lock().expect("request lock").clone()
+    }
+
+    fn cancellation_snapshots(&self) -> Vec<RuntimeHostExecutionCancellationSnapshot> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("cancellation snapshot lock")
+            .clone()
+    }
 }
 
 impl RecordingRuntimeHostPort {
@@ -67,6 +96,28 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
             .clone()
             .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
                 message: "missing test response".to_string(),
+            })
+    }
+}
+
+#[async_trait]
+impl RuntimeHostBatchExecutionPort for RecordingRuntimeHostBatchPort {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("cancellation snapshot lock")
+            .push(cancellation.snapshot());
+        self.requests.lock().expect("request lock").push(request);
+        self.response
+            .lock()
+            .expect("response lock")
+            .clone()
+            .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
+                message: "missing test batch response".to_string(),
             })
     }
 }
@@ -213,6 +264,89 @@ fn dispatcher_batch_response_correlation_rejects_member_workflow_run_mismatch() 
         error,
         RuntimeHostDispatchError::InvalidResponseCorrelation {
             field: "members.workflow_run_id",
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn batch_dispatcher_passes_valid_batch_request_to_runtime_host_port() {
+    let request = runtime_host_batch_request_fixture();
+    let response = runtime_host_batch_response_fixture(&request);
+    let port = Arc::new(RecordingRuntimeHostBatchPort::with_response(response));
+    let dispatcher = SchedulerRuntimeHostBatchDispatcher::new(port.clone());
+
+    let validated = dispatcher
+        .dispatch_batch(request.clone())
+        .await
+        .expect("valid batch request should reach runtime host batch port");
+
+    assert_eq!(
+        validated.as_ref().state,
+        RuntimeHostBatchExecutionState::PartiallyCompleted
+    );
+    let recorded = port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].batch_execution_request_id,
+        request.batch_execution_request_id
+    );
+    assert_eq!(recorded[0].members.len(), 2);
+    let cancellation_snapshots = port.cancellation_snapshots();
+    assert_eq!(cancellation_snapshots.len(), 1);
+    assert_eq!(
+        cancellation_snapshots[0].cancellation_context_id,
+        request.cancellation_context.cancellation_context_id
+    );
+    assert_eq!(
+        cancellation_snapshots[0].state,
+        RuntimeHostExecutionCancellationState::Running
+    );
+}
+
+#[tokio::test]
+async fn batch_dispatcher_rejects_invalid_batch_request_before_port_call() {
+    let mut request = runtime_host_batch_request_fixture();
+    request.members[0].handoff.state = SchedulerRuntimeHandoffState::ReadinessAdmitted;
+    request.members[0].handoff.dispatch_decision = None;
+    let response = runtime_host_batch_response_fixture(&runtime_host_batch_request_fixture());
+    let port = Arc::new(RecordingRuntimeHostBatchPort::with_response(response));
+    let dispatcher = SchedulerRuntimeHostBatchDispatcher::new(port.clone());
+
+    let error = dispatcher
+        .dispatch_batch(request)
+        .await
+        .expect_err("invalid batch request must not reach port");
+
+    assert!(matches!(
+        error,
+        RuntimeHostDispatchError::RequestContract(
+            RuntimeHostExecutionContractError::InvalidField {
+                field: "member.handoff.state",
+                ..
+            }
+        )
+    ));
+    assert!(port.requests().is_empty());
+}
+
+#[tokio::test]
+async fn batch_dispatcher_rejects_mismatched_batch_response_correlation() {
+    let request = runtime_host_batch_request_fixture();
+    let mut response = runtime_host_batch_response_fixture(&request);
+    response.members[1].assignment_id = "assignment.mismatched".to_string();
+    let port = Arc::new(RecordingRuntimeHostBatchPort::with_response(response));
+    let dispatcher = SchedulerRuntimeHostBatchDispatcher::new(port);
+
+    let error = dispatcher
+        .dispatch_batch(request)
+        .await
+        .expect_err("batch response must correlate to request members");
+
+    assert!(matches!(
+        error,
+        RuntimeHostDispatchError::InvalidResponseCorrelation {
+            field: "members.assignment_id",
             ..
         }
     ));

@@ -23,9 +23,10 @@ pub use reservation_lifecycle::{
     ValidatedReservationLifecycleEvent, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
 pub use runtime_host_dispatch::{
-    RuntimeHostDispatchError, RuntimeHostExecutionCancellationHandle,
-    RuntimeHostExecutionCancellationSignal, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, SchedulerRuntimeHostDispatcher,
+    RuntimeHostBatchExecutionPort, RuntimeHostDispatchError,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionCancellationSignal,
+    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
+    SchedulerRuntimeHostDispatcher,
 };
 pub use runtime_host_execution::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,

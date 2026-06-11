@@ -5962,6 +5962,51 @@ runtime batch execution, and stop/re-plan if this requires generated contract
 updates, frontend/Tauri DTOs, lockfile updates, saved fixture changes, or
 physical-device/runtime-residency tables.
 
+2026-06-11 runtime-host batch dispatcher API slice: completed the inserted
+API-only prerequisite before worker grouped execution. Smallest useful
+vertical slice: add an explicit `RuntimeHostBatchExecutionPort` trait and
+`SchedulerRuntimeHostBatchDispatcher` operation that validates batch requests
+before the port call, passes a batch cancellation handle, validates
+response/request member correlation, and validates the batch response
+contract. Allowed files touched:
+`crates/pantograph-runtime-host-contracts/src/runtime_host_dispatch.rs`,
+`crates/pantograph-runtime-host-contracts/src/runtime_host_dispatch_tests.rs`,
+`crates/pantograph-runtime-host-contracts/src/lib.rs`,
+`crates/pantograph-runtime-host-contracts/src/README.md`, and this plan.
+
+No-fallback/no-legacy confirmation: this slice adds a separate batch port
+trait instead of changing the existing single-execution port trait or adding a
+default fallback implementation. It does not wire task-execution worker
+grouped execution, does not implement embedded-runtime batch execution, does
+not call single-task execution as a batch substitute, and does not change
+generated contracts, scheduler DTOs, frontend/Tauri DTOs, lockfiles, saved
+fixtures, or runtime residency/device inventory tables.
+
+Focused test updates: dispatcher tests now prove a valid batch request reaches
+the batch port with the correct cancellation context, invalid readiness-only
+member handoffs fail before the port call, and mismatched batch response
+member correlation is rejected.
+
+Verification passed:
+`cargo test -p pantograph-runtime-host-contracts runtime_host_dispatch --lib`;
+`cargo check -p pantograph-runtime-host-contracts`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-runtime-host-contracts -- --check`; and
+`git diff --check`.
+
+Next thin slice: inspect task-execution worker and composition ownership before
+worker grouped execution. If the existing embedded runtime cannot provide a
+real `RuntimeHostBatchExecutionPort` without looping through the single-task
+runtime-host path or otherwise preserving single-member behavior, stop and
+re-plan. If implementation is possible without fallback behavior, the next
+worker slice may wire the task-execution worker to claim a compatible
+assignment group and call `SchedulerRuntimeHostBatchDispatcher` once, while
+persisting and notifying each member independently. Allowed files for that
+worker slice must be identified after inspection and must not include
+generated contracts, scheduler DTOs, frontend/Tauri DTOs, lockfiles, saved
+fixtures, or physical-device/runtime-residency tables unless explicitly
+replanned.
+
 ## Standards Rule
 
 The standards constraints in
