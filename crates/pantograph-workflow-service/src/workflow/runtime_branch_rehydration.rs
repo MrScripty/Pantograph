@@ -4,7 +4,9 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventRecord,
     WorkflowRuntimeBranchTaskEventState,
 };
-use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
+use super::runtime_dispatch_assignment::{
+    WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentRepository,
+};
 use super::runtime_task_attempt_fact::{
     WorkflowRuntimeTaskAttemptFactDiagnostic, WorkflowRuntimeTaskAttemptSourceContext,
     WorkflowRuntimeTaskAttemptSourceContextRequest,
@@ -50,6 +52,7 @@ pub(super) enum WorkflowRuntimeBranchRehydrationDiagnosticCode {
     RuntimeTaskUnavailable,
     TaskAttemptUnavailable,
     TaskAttemptSourceContextInvalid,
+    DispatchAssignmentUnavailable,
     CorrelationMismatch,
 }
 
@@ -121,7 +124,8 @@ pub(super) fn rehydrate_runtime_branch_execution_context(
             )
         })?;
     validate_scheduler_task_attempt_correlation(record, task_attempt)?;
-    let task_attempt_source_context = rehydrate_task_attempt_source_context(record)?;
+    let assignment = rehydrate_dispatch_assignment(service, record, task_attempt)?;
+    let task_attempt_source_context = rehydrate_task_attempt_source_context(&assignment)?;
 
     Ok(WorkflowRuntimeBranchRehydratedContext {
         session,
@@ -242,57 +246,88 @@ fn validate_scheduler_task_attempt_correlation(
 }
 
 fn rehydrate_task_attempt_source_context(
-    record: &WorkflowRuntimeBranchTaskEventRecord,
+    assignment: &WorkflowRuntimeDispatchAssignmentRecord,
 ) -> Result<WorkflowRuntimeTaskAttemptSourceContext, WorkflowRuntimeBranchRehydrationDiagnostic> {
-    let selected_candidate_fact = record.selected_candidate_fact.clone().ok_or_else(|| {
-        WorkflowRuntimeBranchRehydrationDiagnostic::new(
-            WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptSourceContextInvalid,
-            "runtime branch task event is missing selected candidate evidence for task-attempt facts",
-        )
-    })?;
-    validate_selected_candidate_correlation(record, &selected_candidate_fact)?;
-
     WorkflowRuntimeTaskAttemptSourceContext::new(WorkflowRuntimeTaskAttemptSourceContextRequest {
-        workflow_id: record.workflow_id.clone(),
-        workflow_run_id: record.workflow_run_id.clone(),
-        scheduler_task_id: record.scheduler_task_id.clone(),
-        task_attempt_generation: record.attempt_generation,
-        timeout_ms: record.timeout_ms,
-        runtime_source_context: record.runtime_source_context.clone(),
-        selected_candidate_fact,
+        workflow_id: assignment.workflow_id.clone(),
+        workflow_run_id: assignment.workflow_run_id.clone(),
+        scheduler_task_id: assignment.scheduler_task_id.clone(),
+        task_attempt_generation: assignment.task_attempt_generation,
+        timeout_ms: assignment.timeout_ms,
+        runtime_source_context: assignment.runtime_source_context.clone(),
+        selected_candidate_fact: assignment.selected_candidate_fact.clone(),
     })
     .map_err(task_attempt_source_context_diagnostic)
 }
 
-fn validate_selected_candidate_correlation(
+fn rehydrate_dispatch_assignment(
+    service: &WorkflowService,
     record: &WorkflowRuntimeBranchTaskEventRecord,
-    fact: &WorkflowRuntimeDispatchCandidateFact,
+    task_attempt: &WorkflowSchedulerTaskAttemptReadFact,
+) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeBranchRehydrationDiagnostic> {
+    let link = record.dispatch_assignment_link.as_ref().ok_or_else(|| {
+        WorkflowRuntimeBranchRehydrationDiagnostic::new(
+            WorkflowRuntimeBranchRehydrationDiagnosticCode::DispatchAssignmentUnavailable,
+            "runtime branch task event is missing dispatch assignment link",
+        )
+    })?;
+    if link.scheduler_task_attempt_id.as_str() != task_attempt.attempt_id.as_str() {
+        return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
+            WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch,
+            "runtime branch dispatch assignment link scheduler attempt does not match active scheduler attempt",
+        ));
+    }
+
+    let repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowRuntimeBranchRehydrationDiagnostic::new(
+                WorkflowRuntimeBranchRehydrationDiagnosticCode::DispatchAssignmentUnavailable,
+                "runtime dispatch assignment repository lock poisoned",
+            )
+        })?;
+    let assignment = repository.get(&link.assignment_id).ok_or_else(|| {
+        WorkflowRuntimeBranchRehydrationDiagnostic::new(
+            WorkflowRuntimeBranchRehydrationDiagnosticCode::DispatchAssignmentUnavailable,
+            "runtime branch dispatch assignment record is unavailable",
+        )
+    })?;
+    validate_dispatch_assignment_correlation(record, task_attempt, &assignment)?;
+    Ok(assignment)
+}
+
+fn validate_dispatch_assignment_correlation(
+    record: &WorkflowRuntimeBranchTaskEventRecord,
+    task_attempt: &WorkflowSchedulerTaskAttemptReadFact,
+    assignment: &WorkflowRuntimeDispatchAssignmentRecord,
 ) -> Result<(), WorkflowRuntimeBranchRehydrationDiagnostic> {
-    if fact.resource_fit_assessment.workflow_run_id.as_str() != record.workflow_run_id {
+    if assignment.runtime_branch_event_id != record.event_id {
         return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
             WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch,
-            "runtime branch selected candidate resource-fit workflow run does not match task event",
+            "runtime branch dispatch assignment event id does not match task event",
         ));
     }
-    if fact.resource_fit_assessment.task_id.as_str() != record.scheduler_task_id {
+    if assignment.session_id != record.session_id
+        || assignment.workflow_id != record.workflow_id
+        || assignment.workflow_run_id != record.workflow_run_id
+        || assignment.scheduler_task_id != record.scheduler_task_id
+        || assignment.task_attempt_generation != record.attempt_generation
+        || assignment.timeout_ms != record.timeout_ms
+        || assignment.runtime_source_context != record.runtime_source_context
+    {
         return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
             WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch,
-            "runtime branch selected candidate resource-fit task id does not match task event",
+            "runtime branch dispatch assignment source facts do not match task event",
         ));
     }
-    for reservation in &fact.reservations {
-        if reservation.workflow_run_id.as_str() != record.workflow_run_id {
-            return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
-                WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch,
-                "runtime branch selected candidate reservation workflow run does not match task event",
-            ));
-        }
-        if reservation.task_id.as_str() != record.scheduler_task_id {
-            return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
-                WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch,
-                "runtime branch selected candidate reservation task id does not match task event",
-            ));
-        }
+    if assignment.scheduler_task_attempt_id != task_attempt.attempt_id.as_str()
+        || assignment.scheduler_task_attempt_started_at_ms != task_attempt.started_at_ms
+    {
+        return Err(WorkflowRuntimeBranchRehydrationDiagnostic::new(
+            WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch,
+            "runtime branch dispatch assignment scheduler attempt does not match active attempt",
+        ));
     }
     Ok(())
 }
@@ -312,17 +347,26 @@ fn task_attempt_source_context_diagnostic(
 #[cfg(test)]
 mod tests {
     use pantograph_dependency_planning::{
-        DependencyEnvironmentId, DependencyEnvironmentRef, DependencyTaskId, DeviceIntentId,
-        PumasModelRef,
+        DependencyEnvironmentId, DependencyEnvironmentReadinessState, DependencyEnvironmentRef,
+        DependencyPlanningCallerContext, DependencyPlanningIdentityKey, DependencyPlanningRequest,
+        DependencyReadinessCorrelationId, DependencyReadinessDescriptorFingerprint,
+        DependencyReadinessExecutionContext, DependencyReadinessGraphRevision,
+        DependencyReadinessNodeId, DependencyReadinessProofEnvelope, DependencyReadinessProofId,
+        DependencyReadinessProofVersion, DependencyReadinessSchedulerTaskId,
+        DependencyReadinessValidationSessionId, DependencyReadinessWorkflowId,
+        DependencyReadinessWorkflowRunId, DependencyRequirementsId, DependencyTaskId,
+        DeviceIntentId, PumasModelRef, SchedulerIntent,
     };
     use pantograph_scheduler::{
-        SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerNodeId,
-        SchedulerReservationLeaseId, SchedulerResourceFitAssessment, SchedulerResourceFitState,
-        SchedulerResourceKind, SchedulerResourceReservation, SchedulerRuntimeDeviceConstraints,
+        SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerDispatchDecision,
+        SchedulerNodeId, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
+        SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
+        SchedulerRuntimeDeviceConstraints, SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState,
         SchedulerRuntimeVariantId, SchedulerTaskExecutionIntent, SchedulerTaskId,
         SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
         SchedulerTaskStateTransition, SchedulerTaskStateTransitionId, SchedulerWorkflowId,
         SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+        SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION, SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
         SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
 
@@ -333,7 +377,12 @@ mod tests {
         WorkflowRuntimeBranchTaskEventId, WorkflowRuntimeBranchTaskEventRecord,
         WorkflowRuntimeBranchTaskEventRequest,
     };
-    use super::super::runtime_dispatch_selection::WorkflowRuntimeDispatchLoadState;
+    use super::super::runtime_dispatch_assignment::{
+        WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRequest,
+    };
+    use super::super::runtime_dispatch_selection::{
+        WorkflowRuntimeDispatchCandidateFact, WorkflowRuntimeDispatchLoadState,
+    };
     use super::super::{
         WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowPortBinding,
         WorkflowSchedulerTask, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
@@ -344,7 +393,8 @@ mod tests {
     fn runtime_branch_rehydration_loads_backend_active_run_context() {
         let service = WorkflowService::new();
         let session_id = prepare_active_runtime_run(&service, "run.rehydrate", Some(750));
-        let claimed = claimed_runtime_branch_record(&session_id, "run.rehydrate", Some(750), 100);
+        let claimed =
+            claimed_runtime_branch_record(&service, &session_id, "run.rehydrate", Some(750), 100);
         let mut record = claimed.record;
         let claim = claimed.claim;
 
@@ -401,7 +451,8 @@ mod tests {
     fn runtime_branch_rehydration_accepts_dispatching_task_event() {
         let service = WorkflowService::new();
         let session_id = prepare_active_runtime_run(&service, "run.dispatching", Some(750));
-        let claimed = claimed_runtime_branch_record(&session_id, "run.dispatching", Some(750), 100);
+        let claimed =
+            claimed_runtime_branch_record(&service, &session_id, "run.dispatching", Some(750), 100);
         let dispatching = claimed
             .record
             .mark_dispatching(&claimed.claim, 110)
@@ -439,23 +490,23 @@ mod tests {
     }
 
     #[test]
-    fn runtime_branch_rehydration_rejects_missing_selected_candidate_evidence() {
+    fn runtime_branch_rehydration_rejects_missing_dispatch_assignment() {
         let service = WorkflowService::new();
-        let session_id = prepare_active_runtime_run(&service, "run.no-evidence", Some(750));
-        let claimed = ready_runtime_branch_record(&session_id, "run.no-evidence", Some(750))
+        let session_id = prepare_active_runtime_run(&service, "run.no-assignment", Some(750));
+        let claimed = ready_runtime_branch_record(&session_id, "run.no-assignment", Some(750))
             .claim(owner_id(), 100, 1_000)
             .expect("event claims");
 
         let diagnostic =
             rehydrate_runtime_branch_execution_context(&service, &claimed.record, &claimed.claim)
-                .expect_err("missing selected candidate evidence fails");
+                .expect_err("missing dispatch assignment fails");
 
         assert_eq!(
             diagnostic.code,
-            WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptSourceContextInvalid
+            WorkflowRuntimeBranchRehydrationDiagnosticCode::DispatchAssignmentUnavailable
         );
         assert!(
-            diagnostic.message.contains("selected candidate evidence"),
+            diagnostic.message.contains("dispatch assignment"),
             "unexpected diagnostic: {}",
             diagnostic.message
         );
@@ -465,8 +516,13 @@ mod tests {
     fn runtime_branch_rehydration_rejects_mismatched_scheduler_attempt_id() {
         let service = WorkflowService::new();
         let session_id = prepare_active_runtime_run(&service, "run.attempt-mismatch", Some(750));
-        let claimed =
-            claimed_runtime_branch_record(&session_id, "run.attempt-mismatch", Some(750), 100);
+        let claimed = claimed_runtime_branch_record(
+            &service,
+            &session_id,
+            "run.attempt-mismatch",
+            Some(750),
+            100,
+        );
         let mut record = claimed.record;
         record.scheduler_task_attempt_id = Some("scheduler-task-attempt.other".to_string());
 
@@ -486,32 +542,34 @@ mod tests {
     }
 
     #[test]
-    fn runtime_branch_rehydration_rejects_mismatched_selected_candidate_task_scope() {
+    fn runtime_branch_rehydration_uses_assignment_over_bridge_candidate_projection() {
         let service = WorkflowService::new();
-        let session_id = prepare_active_runtime_run(&service, "run.candidate-mismatch", Some(750));
-        let claimed = ready_runtime_branch_record(&session_id, "run.candidate-mismatch", Some(750))
-            .claim(owner_id(), 100, 1_000)
-            .expect("event claims");
+        let session_id = prepare_active_runtime_run(&service, "run.bridge-mismatch", Some(750));
+        let claimed = claimed_runtime_branch_record(
+            &service,
+            &session_id,
+            "run.bridge-mismatch",
+            Some(750),
+            100,
+        );
+        let claim = claimed.claim;
+        let mut record = claimed.record;
         let mut selected_candidate_fact = selected_candidate_fact("run.other");
         selected_candidate_fact.resource_fit_assessment.task_id =
             SchedulerTaskId::parse("image-task").expect("task id");
-        let record = claimed
-            .record
-            .record_selected_candidate_fact(&claimed.claim, selected_candidate_fact)
-            .expect("profile-compatible candidate evidence records");
+        record.selected_candidate_fact = Some(selected_candidate_fact);
 
-        let diagnostic =
-            rehydrate_runtime_branch_execution_context(&service, &record, &claimed.claim)
-                .expect_err("candidate workflow run mismatch fails");
+        let context = rehydrate_runtime_branch_execution_context(&service, &record, &claim)
+            .expect("assignment-backed rehydration should ignore bridge projection");
 
         assert_eq!(
-            diagnostic.code,
-            WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch
-        );
-        assert!(
-            diagnostic.message.contains("resource-fit workflow run"),
-            "unexpected diagnostic: {}",
-            diagnostic.message
+            context
+                .task_attempt_source_context
+                .selected_candidate_fact
+                .resource_fit_assessment
+                .workflow_run_id
+                .as_str(),
+            "run.bridge-mismatch"
         );
     }
 
@@ -647,6 +705,7 @@ mod tests {
     }
 
     fn claimed_runtime_branch_record(
+        service: &WorkflowService,
         session_id: &str,
         workflow_run_id: &str,
         timeout_ms: Option<u64>,
@@ -660,6 +719,63 @@ mod tests {
             .record
             .record_selected_candidate_fact(&claimed.claim, selected_candidate_fact)
             .expect("selected candidate fact records");
+        let task_attempt = service
+            .session_store_guard()
+            .expect("session store")
+            .active_run_scheduler_task_attempt_read_facts(session_id, workflow_run_id)
+            .expect("task attempt facts")
+            .get("image-task")
+            .expect("image task attempt")
+            .clone();
+        let assignment_id = WorkflowRuntimeDispatchAssignmentId::parse(format!(
+            "assignment.{workflow_run_id}.image-task"
+        ))
+        .expect("assignment id");
+        let readiness_proof = readiness_proof_for_run(workflow_run_id);
+        let selected_candidate_fact = record
+            .selected_candidate_fact
+            .clone()
+            .expect("selected candidate fact");
+        let reservation_lease_id = selected_candidate_fact.reservations[0]
+            .reservation_lease_id
+            .clone();
+        let assignment = service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .expect("assignment repository")
+            .create(WorkflowRuntimeDispatchAssignmentRequest {
+                assignment_id,
+                runtime_branch_event_id: record.event_id.clone(),
+                session_id: record.session_id.clone(),
+                workflow_id: record.workflow_id.clone(),
+                workflow_run_id: record.workflow_run_id.clone(),
+                scheduler_task_id: record.scheduler_task_id.clone(),
+                scheduler_task_attempt_id: task_attempt.attempt_id.as_str().to_string(),
+                scheduler_task_attempt_started_at_ms: task_attempt.started_at_ms,
+                task_attempt_generation: record.attempt_generation,
+                timeout_ms: record.timeout_ms,
+                runtime_source_context: record.runtime_source_context.clone(),
+                runtime_branch_claim: claimed.claim.clone(),
+                readiness_proof: readiness_proof.clone(),
+                selected_candidate_fact: selected_candidate_fact.clone(),
+                selected_runtime_handoff: selected_runtime_handoff(
+                    workflow_run_id,
+                    readiness_proof,
+                    reservation_lease_id.clone(),
+                ),
+                reservation_lease_id,
+                selected_candidate_id: Some(selected_candidate_fact.candidate_id.clone()),
+                created_at_ms: claimed_at_ms + 1,
+            })
+            .expect("assignment creates");
+        let record = record
+            .link_dispatch_assignment(
+                &claimed.claim,
+                assignment.assignment_id,
+                task_attempt.attempt_id.as_str().to_string(),
+                claimed_at_ms + 2,
+            )
+            .expect("assignment links");
         super::super::runtime_branch_task_event::WorkflowRuntimeBranchTaskEventClaimOutcome {
             record,
             claim: claimed.claim,
@@ -740,8 +856,8 @@ mod tests {
             fairness_key: None,
             task_type: DependencyTaskId::parse("image_generation").expect("task type"),
             model_ref: PumasModelRef {
-                model_id: "image/example/tiny-diffusion".to_string(),
-                revision: None,
+                model_id: "pumas://models/juggernaut-xl-v10".to_string(),
+                revision: Some("main".to_string()),
                 selected_artifact_id: Some("diffusers-bundle".to_string()),
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
@@ -755,7 +871,7 @@ mod tests {
 
     fn batch_profile() -> WorkflowRuntimeBranchBatchEligibilityProfile {
         WorkflowRuntimeBranchBatchEligibilityProfile {
-            model_artifact_id: "artifact.stable-diffusion-xl".to_string(),
+            model_artifact_id: "diffusers-bundle".to_string(),
             runtime_family: "diffusers".to_string(),
             backend_id: "backend.cuda".to_string(),
             device_load_target: "cuda:0".to_string(),
@@ -796,9 +912,9 @@ mod tests {
             runtime_instance_id: Some("runtime.diffusers.001".to_string()),
             selected_device_ids: vec![device_id.clone()],
             selected_model_ref: PumasModelRef {
-                model_id: "model.sdxl".to_string(),
+                model_id: "pumas://models/juggernaut-xl-v10".to_string(),
                 revision: Some("main".to_string()),
-                selected_artifact_id: Some("artifact.stable-diffusion-xl".to_string()),
+                selected_artifact_id: Some("diffusers-bundle".to_string()),
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
             },
@@ -827,6 +943,127 @@ mod tests {
             },
             batching_group_id: None,
         }
+    }
+
+    fn selected_runtime_handoff(
+        workflow_run_id: &str,
+        readiness_proof: pantograph_dependency_planning::DependencyReadinessProofEnvelope,
+        reservation_lease_id: SchedulerReservationLeaseId,
+    ) -> SchedulerRuntimeHandoff {
+        let task_intent = task_intent(workflow_run_id);
+        let selected_candidate_fact = selected_candidate_fact(workflow_run_id);
+        let environment_ref = selected_candidate_fact.environment_ref.clone();
+        SchedulerRuntimeHandoff {
+            contract_version: SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow-image-plan").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+            task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+            task_intent: task_intent.clone(),
+            state: SchedulerRuntimeHandoffState::DispatchSelected,
+            readiness_proof: readiness_proof.clone(),
+            environment_ref: environment_ref.clone(),
+            dispatch_decision: Some(SchedulerDispatchDecision {
+                contract_version: SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION,
+                workflow_id: SchedulerWorkflowId::parse("workflow-image-plan")
+                    .expect("workflow id"),
+                workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+                node_id: SchedulerNodeId::parse("image-task").expect("node id"),
+                task_id: SchedulerTaskId::parse("image-task").expect("task id"),
+                task_intent,
+                selected_runtime_id: selected_candidate_fact.selected_runtime_id.clone(),
+                selected_runtime_variant_id: selected_candidate_fact
+                    .selected_runtime_variant_id
+                    .clone(),
+                selected_device_ids: selected_candidate_fact.selected_device_ids.clone(),
+                selected_model_ref: selected_candidate_fact.selected_model_ref.clone(),
+                readiness_proof,
+                environment_ref,
+                batching_group_id: None,
+                reservation_lease_id,
+                reservations: selected_candidate_fact.reservations,
+                runtime_trait_settings: selected_candidate_fact.runtime_trait_settings,
+                diagnostics: Vec::new(),
+            }),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn readiness_proof_for_run(workflow_run_id: &str) -> DependencyReadinessProofEnvelope {
+        let task_intent = task_intent(workflow_run_id);
+        let selected_binding_ids = Vec::new();
+        let dependency_requirements_id =
+            DependencyRequirementsId::parse("requirements.diffusers.txt2img")
+                .expect("requirements id");
+        let identity_key =
+            DependencyPlanningIdentityKey::from_planning_request(&DependencyPlanningRequest {
+                model_ref: task_intent.model_ref.clone(),
+                task_id: task_intent.task_type.clone(),
+                task_type: Some(task_intent.task_type.clone()),
+                expected_artifact_kind: None,
+                scheduler_intent: SchedulerIntent {
+                    requested_runtime_id: task_intent.constraints.requested_runtime_id.clone(),
+                    requested_device_id: task_intent.constraints.requested_device_id.clone(),
+                },
+                platform_context: None,
+                selected_binding_ids: selected_binding_ids.clone(),
+                dependency_override_patches: task_intent.dependency_override_patches.clone(),
+                trait_intents: Vec::new(),
+                caller_context: DependencyPlanningCallerContext {
+                    source_node_type: None,
+                    workflow_id: Some(task_intent.workflow_id.as_str().to_string()),
+                    node_id: Some(task_intent.node_id.as_str().to_string()),
+                    port_id: None,
+                    run_id: Some(task_intent.workflow_run_id.as_str().to_string()),
+                },
+            })
+            .expect("identity key");
+        DependencyReadinessProofEnvelope::new(
+            DependencyReadinessExecutionContext::new(
+                DependencyReadinessWorkflowId::parse(task_intent.workflow_id.as_str())
+                    .expect("workflow id"),
+                DependencyReadinessWorkflowRunId::parse(task_intent.workflow_run_id.as_str())
+                    .expect("workflow run id"),
+                DependencyReadinessSchedulerTaskId::parse(task_intent.task_id.as_str())
+                    .expect("scheduler task id"),
+                DependencyReadinessNodeId::parse(task_intent.node_id.as_str()).expect("node id"),
+                DependencyReadinessGraphRevision::parse("graph.revision.runtime-branch")
+                    .expect("graph revision"),
+                Some(
+                    DependencyReadinessValidationSessionId::parse("validation.session.rehydrate")
+                        .expect("validation session id"),
+                ),
+                None,
+                DependencyReadinessDescriptorFingerprint::parse(
+                    "descriptor.diffusers.txt2img.rehydrate",
+                )
+                .expect("descriptor fingerprint"),
+                dependency_requirements_id.clone(),
+                selected_binding_ids,
+                None,
+                DependencyReadinessCorrelationId::parse(format!(
+                    "correlation.{workflow_run_id}.image-task"
+                ))
+                .expect("correlation id"),
+            )
+            .expect("execution context"),
+            pantograph_dependency_planning::DependencyPreflightResult {
+                contract_version: 1,
+                identity_key,
+                readiness_state: DependencyEnvironmentReadinessState::Ready,
+                dependency_requirements_id: Some(dependency_requirements_id),
+                environment_ref: Some(DependencyEnvironmentRef {
+                    environment_id: DependencyEnvironmentId::parse("env.runtime")
+                        .expect("environment id"),
+                    manifest_id: None,
+                }),
+                diagnostics: Vec::new(),
+            },
+            DependencyReadinessProofId::parse(format!("readiness-proof.{workflow_run_id}"))
+                .expect("readiness proof id"),
+            DependencyReadinessProofVersion::parse(1).expect("readiness proof version"),
+        )
+        .expect("readiness proof")
     }
 
     fn owner_id() -> WorkflowRuntimeBranchTaskEventClaimOwnerId {

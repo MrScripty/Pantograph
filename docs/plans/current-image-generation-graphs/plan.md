@@ -5397,6 +5397,38 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 assignment-backed runtime-branch rehydration slice: completed.
+Smallest useful vertical slice: make runtime-branch worker rehydration require
+the persisted dispatch-assignment link and build task-attempt source context
+from the assignment-owned selected candidate/source facts instead of the
+runtime-branch event's bridge-only selected candidate projection. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`, and
+this plan.
+
+No-fallback/no-legacy confirmation: this slice does not fall back to
+runtime-branch selected-candidate bridge fields, does not recreate
+request-scoped runtime execution, does not add a standalone task-attempt fact
+repository, does not persist task-attempt facts on runtime-branch events, and
+does not infer devices from graph/request/batching/runtime-host state,
+runtime/model ids, or load-target strings. Missing or stale dispatch
+assignments now fail closed through typed runtime-branch rehydration
+diagnostics.
+
+Focused test updates: runtime-branch rehydration tests now create
+assignment-backed scheduler handoff evidence, reject missing dispatch
+assignments with `DispatchAssignmentUnavailable`, and prove that stale
+bridge-only selected candidate projections are ignored in favor of the
+persisted assignment evidence.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`;
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

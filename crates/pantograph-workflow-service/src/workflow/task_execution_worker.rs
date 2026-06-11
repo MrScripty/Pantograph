@@ -935,6 +935,7 @@ fn runtime_branch_rehydration_diagnostic(
         | WorkflowRuntimeBranchRehydrationDiagnosticCode::RuntimeTaskUnavailable
         | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptUnavailable
         | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptSourceContextInvalid
+        | WorkflowRuntimeBranchRehydrationDiagnosticCode::DispatchAssignmentUnavailable
         | WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch => {
             WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchRehydrationFailed
         }
