@@ -5463,6 +5463,60 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 batch-eligibility task-attempt derivation re-plan trigger:
+stop before deriving the existing runtime-branch
+`WorkflowRuntimeBranchBatchEligibilityProfile` from persisted task-attempt
+facts. The newly canonical task-attempt fact records reservation-level device
+evidence and can represent split placement across CPU/GPU/NPU/system-memory
+resources, but the legacy batch profile still carries a singular
+`device_load_target`. Populating that field from task-attempt facts would
+collapse multi-device placement into one compatibility value or treat the
+resolved load target string as a substitute for reservation evidence. That
+would violate the reservation-level device decision, backend-owned data
+ownership, and the no-fallback/no-legacy rule. Additionally, scheduler
+reservation lease ids are per-attempt ownership facts; they must remain
+attached to the task attempt and must not become the equality key that decides
+whether two different workflow runs can batch together.
+
+Standards-aligned re-plan options:
+1. Replace the legacy batch profile with a reservation-level compatibility
+   profile derived from `WorkflowRuntimeTaskAttemptFactRecord`. The profile
+   should compare model artifact, runtime family, backend, runtime residency,
+   loaded-runtime memory estimate, operation type, context shape, cancellation
+   mode, timeout policy, and normalized reservation requirements such as
+   device ids/resource kinds/reserved bytes. It must not compare
+   per-attempt reservation lease ids as batching identity. This is the best
+   match for multi-device support and keeps task-attempt facts as the
+   canonical compatibility source, but it requires a focused contract update
+   and migration of existing batch-eligibility tests.
+2. Remove the event-owned `batch_eligibility` bridge field now and defer
+   grouped claims until the grouped-claim repository compares
+   assignment-owned task-attempt facts directly. This is the cleanest bridge
+   removal, but it blocks intermediate batch-compatibility assertions and
+   makes the next grouped-claim slice larger because it must introduce the
+   compatibility comparator at the same time.
+3. Keep the existing singular-load-target profile only for explicitly
+   single-device runtimes and reject multi-device task-attempt facts as
+   ineligible for batching. This can be standards-aligned only if the product
+   intentionally limits batching to single-placement tasks for the immediate
+   milestone; it is not suitable as the target architecture because it would
+   exclude valid split-placement and multi-device workflows.
+4. Introduce the later physical-device/runtime-residency inventory and derive
+   compatibility from residency plus task-attempt facts. This is the most
+   complete architecture for future scheduling, but it is broader than the
+   immediate grouped-claim unblocker and should be selected only if
+   reservation-level task-attempt facts cannot express enough compatibility
+   without a first-class residency/device store.
+
+Recommended direction: Option 1. It preserves the current plan's intent to
+derive batch compatibility from durable task-attempt facts, avoids carrying
+forward bridge event ownership, supports multi-device placement, and keeps the
+next slice contract-focused before durable grouped claiming. Do not implement
+Option 1 by reusing `device_load_target` as a primary device, by comparing
+reservation lease ids across runs, by deriving compatibility from runtime ids
+or batching keys, or by adding grouped claims before the compatibility
+contract is updated and tested.
+
 ## Standards Rule
 
 The standards constraints in
