@@ -28,6 +28,11 @@ pub use runtime_host_dispatch::{
     RuntimeHostExecutionPortError, SchedulerRuntimeHostDispatcher,
 };
 pub use runtime_host_execution::{
+    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
+    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionRequest,
+    RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
+    RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationDisposition,
+    RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
     RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationOwner,
     RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
     RuntimeHostExecutionContractError, RuntimeHostExecutionDiagnostic,
@@ -36,6 +41,7 @@ pub use runtime_host_execution::{
     RuntimeHostExecutionMediaArtifactRef, RuntimeHostExecutionOutput,
     RuntimeHostExecutionOutputValue, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
     RuntimeHostExecutionState, RuntimeHostExecutionTerminalMetadata,
+    ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostBatchExecutionResponse,
     ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };

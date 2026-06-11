@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use pantograph_scheduler::{
     SchedulerContractError, SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState,
     ValidatedSchedulerRuntimeHandoff,
@@ -10,6 +12,7 @@ const MAX_TEXT_LEN: usize = 1024;
 const MAX_RUNTIME_HOST_INPUTS: usize = 128;
 const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
+const MAX_RUNTIME_HOST_BATCH_MEMBERS: usize = 32;
 
 /// Current contract version for runtime-host execution requests and responses.
 pub const RUNTIME_HOST_EXECUTION_CONTRACT_VERSION: u16 = 2;
@@ -406,6 +409,367 @@ impl TryFrom<RuntimeHostExecutionResponse> for ValidatedRuntimeHostExecutionResp
     }
 }
 
+/// Host-owned request to execute a scheduler-approved runtime batch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostBatchExecutionRequest {
+    #[serde(default = "default_runtime_host_execution_contract_version")]
+    pub contract_version: u16,
+    pub batch_execution_request_id: String,
+    pub anchor_execution_request_id: String,
+    pub cancellation_context: RuntimeHostExecutionCancellationContext,
+    pub members: Vec<RuntimeHostBatchExecutionMemberRequest>,
+}
+
+impl RuntimeHostBatchExecutionRequest {
+    pub fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_contract_version(self.contract_version)?;
+        validate_identifier(
+            "batch_execution_request_id",
+            &self.batch_execution_request_id,
+        )?;
+        validate_identifier(
+            "anchor_execution_request_id",
+            &self.anchor_execution_request_id,
+        )?;
+        self.cancellation_context.validate()?;
+        if self.members.is_empty() {
+            return Err(RuntimeHostExecutionContractError::MissingField { field: "members" });
+        }
+        if self.members.len() > MAX_RUNTIME_HOST_BATCH_MEMBERS {
+            return Err(RuntimeHostExecutionContractError::TooManyBatchMembers {
+                actual: self.members.len(),
+                max: MAX_RUNTIME_HOST_BATCH_MEMBERS,
+            });
+        }
+
+        let mut execution_request_ids = BTreeSet::new();
+        let mut assignment_ids = BTreeSet::new();
+        let mut anchor_found = false;
+        for member in &self.members {
+            member.validate()?;
+            if !execution_request_ids.insert(member.execution_request_id.as_str()) {
+                return Err(RuntimeHostExecutionContractError::InvalidField {
+                    field: "members.execution_request_id",
+                    reason: "batch member execution request ids must be unique",
+                });
+            }
+            if !assignment_ids.insert(member.assignment_id.as_str()) {
+                return Err(RuntimeHostExecutionContractError::InvalidField {
+                    field: "members.assignment_id",
+                    reason: "batch member assignment ids must be unique",
+                });
+            }
+            if member.execution_request_id == self.anchor_execution_request_id {
+                anchor_found = true;
+            }
+        }
+        if !anchor_found {
+            return Err(RuntimeHostExecutionContractError::InvalidField {
+                field: "anchor_execution_request_id",
+                reason: "batch anchor must identify one member execution request",
+            });
+        }
+        Ok(())
+    }
+}
+
+/// One scheduler-dispatched member inside a runtime-host batch request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostBatchExecutionMemberRequest {
+    pub execution_request_id: String,
+    pub assignment_id: String,
+    pub handoff: SchedulerRuntimeHandoff,
+    pub materialized_inputs: Vec<RuntimeHostExecutionInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    pub failure_policy: RuntimeHostBatchMemberFailurePolicy,
+    pub reservation_policy: RuntimeHostBatchMemberReservationPolicy,
+}
+
+impl RuntimeHostBatchExecutionMemberRequest {
+    fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_identifier("member.execution_request_id", &self.execution_request_id)?;
+        validate_identifier("member.assignment_id", &self.assignment_id)?;
+        if self.materialized_inputs.len() > MAX_RUNTIME_HOST_INPUTS {
+            return Err(RuntimeHostExecutionContractError::TooManyInputs {
+                actual: self.materialized_inputs.len(),
+                max: MAX_RUNTIME_HOST_INPUTS,
+            });
+        }
+        if self.timeout_ms == Some(0) {
+            return Err(RuntimeHostExecutionContractError::InvalidField {
+                field: "member.timeout_ms",
+                reason: "batch member timeout must be greater than zero when present",
+            });
+        }
+        for input in &self.materialized_inputs {
+            input.validate()?;
+        }
+        let validated_handoff = ValidatedSchedulerRuntimeHandoff::try_from(self.handoff.clone())?;
+        if validated_handoff.as_ref().state != SchedulerRuntimeHandoffState::DispatchSelected {
+            return Err(RuntimeHostExecutionContractError::InvalidField {
+                field: "member.handoff.state",
+                reason: "runtime host batch members require dispatch-selected scheduler handoffs",
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Scheduler-owned instruction for how a failed batch member may be completed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostBatchMemberFailurePolicy {
+    TerminalOnly,
+    Retryable,
+    Deferrable,
+}
+
+/// Scheduler-owned instruction for reservation handling after member terminality.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostBatchMemberReservationPolicy {
+    ReleaseOnTerminal,
+    RetainForRuntimeReuse,
+    DeferToScheduler,
+}
+
+/// Host-owned response for one runtime-host batch request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostBatchExecutionResponse {
+    #[serde(default = "default_runtime_host_execution_contract_version")]
+    pub contract_version: u16,
+    pub batch_execution_request_id: String,
+    pub state: RuntimeHostBatchExecutionState,
+    pub members: Vec<RuntimeHostBatchExecutionMemberResponse>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<RuntimeHostExecutionDiagnostic>,
+}
+
+impl RuntimeHostBatchExecutionResponse {
+    pub fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_contract_version(self.contract_version)?;
+        validate_identifier(
+            "batch_execution_request_id",
+            &self.batch_execution_request_id,
+        )?;
+        if self.members.is_empty() {
+            return Err(RuntimeHostExecutionContractError::MissingField { field: "members" });
+        }
+        if self.members.len() > MAX_RUNTIME_HOST_BATCH_MEMBERS {
+            return Err(RuntimeHostExecutionContractError::TooManyBatchMembers {
+                actual: self.members.len(),
+                max: MAX_RUNTIME_HOST_BATCH_MEMBERS,
+            });
+        }
+        if self.diagnostics.len() > MAX_RUNTIME_HOST_DIAGNOSTICS {
+            return Err(RuntimeHostExecutionContractError::TooManyDiagnostics {
+                actual: self.diagnostics.len(),
+                max: MAX_RUNTIME_HOST_DIAGNOSTICS,
+            });
+        }
+        if matches!(
+            self.state,
+            RuntimeHostBatchExecutionState::Rejected | RuntimeHostBatchExecutionState::Failed
+        ) && self.diagnostics.is_empty()
+        {
+            return Err(RuntimeHostExecutionContractError::MissingField {
+                field: "diagnostics",
+            });
+        }
+
+        let mut execution_request_ids = BTreeSet::new();
+        let mut assignment_ids = BTreeSet::new();
+        for member in &self.members {
+            member.validate()?;
+            if !execution_request_ids.insert(member.execution_request_id.as_str()) {
+                return Err(RuntimeHostExecutionContractError::InvalidField {
+                    field: "members.execution_request_id",
+                    reason: "batch member execution request ids must be unique",
+                });
+            }
+            if !assignment_ids.insert(member.assignment_id.as_str()) {
+                return Err(RuntimeHostExecutionContractError::InvalidField {
+                    field: "members.assignment_id",
+                    reason: "batch member assignment ids must be unique",
+                });
+            }
+        }
+        for diagnostic in &self.diagnostics {
+            diagnostic.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostBatchExecutionState {
+    Accepted,
+    Completed,
+    PartiallyCompleted,
+    Rejected,
+    Failed,
+    Deferred,
+    Cancelled,
+}
+
+/// Per-member response fan-out for a runtime-host batch request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RuntimeHostBatchExecutionMemberResponse {
+    pub execution_request_id: String,
+    pub assignment_id: String,
+    pub workflow_id: pantograph_scheduler::SchedulerWorkflowId,
+    pub workflow_run_id: pantograph_scheduler::SchedulerWorkflowRunId,
+    pub node_id: pantograph_scheduler::SchedulerNodeId,
+    pub task_id: pantograph_scheduler::SchedulerTaskId,
+    pub state: RuntimeHostBatchExecutionMemberState,
+    pub retry_disposition: RuntimeHostBatchMemberRetryDisposition,
+    pub reservation_disposition: RuntimeHostBatchMemberReservationDisposition,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<RuntimeHostExecutionOutput>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<RuntimeHostExecutionDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_metadata: Option<RuntimeHostExecutionTerminalMetadata>,
+}
+
+impl RuntimeHostBatchExecutionMemberResponse {
+    fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
+        validate_identifier("member.execution_request_id", &self.execution_request_id)?;
+        validate_identifier("member.assignment_id", &self.assignment_id)?;
+        if self.outputs.len() > MAX_RUNTIME_HOST_OUTPUTS {
+            return Err(RuntimeHostExecutionContractError::TooManyOutputs {
+                actual: self.outputs.len(),
+                max: MAX_RUNTIME_HOST_OUTPUTS,
+            });
+        }
+        if !matches!(self.state, RuntimeHostBatchExecutionMemberState::Completed)
+            && !self.outputs.is_empty()
+        {
+            return Err(RuntimeHostExecutionContractError::InvalidField {
+                field: "member.outputs",
+                reason: "runtime-host batch member outputs are valid only on completed members",
+            });
+        }
+        if self.diagnostics.len() > MAX_RUNTIME_HOST_DIAGNOSTICS {
+            return Err(RuntimeHostExecutionContractError::TooManyDiagnostics {
+                actual: self.diagnostics.len(),
+                max: MAX_RUNTIME_HOST_DIAGNOSTICS,
+            });
+        }
+        if matches!(
+            self.state,
+            RuntimeHostBatchExecutionMemberState::Rejected
+                | RuntimeHostBatchExecutionMemberState::Failed
+                | RuntimeHostBatchExecutionMemberState::Deferred
+                | RuntimeHostBatchExecutionMemberState::Cancelled
+        ) && self.diagnostics.is_empty()
+        {
+            return Err(RuntimeHostExecutionContractError::MissingField {
+                field: "member.diagnostics",
+            });
+        }
+        for output in &self.outputs {
+            output.validate()?;
+        }
+        for diagnostic in &self.diagnostics {
+            diagnostic.validate()?;
+        }
+        if let Some(metadata) = self.terminal_metadata.as_ref() {
+            metadata.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostBatchExecutionMemberState {
+    Accepted,
+    Completed,
+    Rejected,
+    Failed,
+    Deferred,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostBatchMemberRetryDisposition {
+    NotRetryable,
+    Retryable,
+    Deferred,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeHostBatchMemberReservationDisposition {
+    Released,
+    RetainedForRuntimeReuse,
+    DeferredToScheduler,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub struct ValidatedRuntimeHostBatchExecutionRequest(RuntimeHostBatchExecutionRequest);
+
+impl ValidatedRuntimeHostBatchExecutionRequest {
+    #[must_use]
+    pub fn as_ref(&self) -> &RuntimeHostBatchExecutionRequest {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_inner(self) -> RuntimeHostBatchExecutionRequest {
+        self.0
+    }
+}
+
+impl TryFrom<RuntimeHostBatchExecutionRequest> for ValidatedRuntimeHostBatchExecutionRequest {
+    type Error = RuntimeHostExecutionContractError;
+
+    fn try_from(value: RuntimeHostBatchExecutionRequest) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub struct ValidatedRuntimeHostBatchExecutionResponse(RuntimeHostBatchExecutionResponse);
+
+impl ValidatedRuntimeHostBatchExecutionResponse {
+    #[must_use]
+    pub fn as_ref(&self) -> &RuntimeHostBatchExecutionResponse {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_inner(self) -> RuntimeHostBatchExecutionResponse {
+        self.0
+    }
+}
+
+impl TryFrom<RuntimeHostBatchExecutionResponse> for ValidatedRuntimeHostBatchExecutionResponse {
+    type Error = RuntimeHostExecutionContractError;
+
+    fn try_from(value: RuntimeHostBatchExecutionResponse) -> Result<Self, Self::Error> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+}
+
 /// Runtime-host execution DTO validation error.
 #[derive(Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
@@ -429,6 +793,8 @@ pub enum RuntimeHostExecutionContractError {
     TooManyOutputs { actual: usize, max: usize },
     #[error("runtime-host response has {actual} diagnostics, maximum is {max}")]
     TooManyDiagnostics { actual: usize, max: usize },
+    #[error("runtime-host batch has {actual} members, maximum is {max}")]
+    TooManyBatchMembers { actual: usize, max: usize },
     #[error(transparent)]
     Scheduler(#[from] SchedulerContractError),
 }

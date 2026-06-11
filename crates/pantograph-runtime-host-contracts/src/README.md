@@ -13,7 +13,7 @@ to release or retain runtime-registry leases acquired for dispatch candidates.
 | `lib.rs` | Crate-level contract documentation and public re-exports. |
 | `reservation_lifecycle.rs` | Runtime dispatch reservation lifecycle event/application DTOs, validation wrappers, lifecycle port trait, and typed contract/port errors. |
 | `reservation_lifecycle_tests.rs` | Fixture-backed reservation lifecycle contract tests. |
-| `runtime_host_execution.rs` | Runtime-host execution request/response DTOs, typed materialized input values, typed output values, diagnostics, validation, and typed contract errors. |
+| `runtime_host_execution.rs` | Runtime-host single-task and batch execution request/response DTOs, typed materialized input values, typed output values, diagnostics, validation, and typed contract errors. |
 | `runtime_host_execution_tests.rs` | Fixture-backed runtime-host execution contract tests. |
 | `runtime_host_dispatch.rs` | Runtime-host execution port trait, scheduler dispatcher, response correlation checks, and typed dispatch errors. |
 | `runtime_host_dispatch_tests.rs` | Focused dispatcher tests using a fake runtime-host port. |
@@ -32,10 +32,18 @@ to release or retain runtime-registry leases acquired for dispatch candidates.
   values. The request contract rejects missing `materialized_inputs` and bounds
   the number and size of values; runtime-specific validation can still decide
   whether an explicit empty input set is valid for a task family.
+- Batch execution requests must explicitly carry one anchor execution request
+  id and a bounded set of member requests. Each member owns its handoff,
+  materialized inputs, timeout, failure policy, and reservation policy; batch
+  contracts must not carry workflow inputs forward from the run that first
+  loaded a runtime.
 - Responses must correlate to the request and scheduler handoff ids.
 - Response outputs must be typed, bounded, and path-free. They are runtime-host
   contract values that workflow-service maps into scheduler task results; this
   crate must not depend on workflow-service DTOs.
+- Batch responses must fan out per-member state, outputs, diagnostics,
+  retry/defer disposition, and reservation disposition so workflow-service can
+  persist each assignment independently.
 - Runtime session load proofs carry workflow/task correlation, backend/runtime
   identity, model/artifact/load-target identity, readiness state, diagnostic
   phase, and requested-model-active state without exposing executable paths.

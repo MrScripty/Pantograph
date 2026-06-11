@@ -5864,6 +5864,53 @@ contract updates, frontend/Tauri DTO changes, lockfile updates, saved workflow
 fixture changes, physical-device/runtime-residency tables, or wiring the
 task-execution worker to execute grouped batches in the same slice.
 
+2026-06-11 runtime-host batch execution contract slice: completed sequence
+step 3. Smallest useful vertical slice: define contract-only runtime-host
+batch execution request/response DTOs, validation wrappers, member policy and
+disposition enums, public exports, and README traceability in
+`pantograph-runtime-host-contracts`. Allowed files touched:
+`crates/pantograph-runtime-host-contracts/src/runtime_host_execution.rs`,
+`crates/pantograph-runtime-host-contracts/src/runtime_host_execution_tests.rs`,
+`crates/pantograph-runtime-host-contracts/src/lib.rs`,
+`crates/pantograph-runtime-host-contracts/src/README.md`, and this plan.
+
+No-fallback/no-legacy confirmation: this slice defines the composition-root
+runtime-host batch boundary before worker use, but does not add a runtime-host
+port method, does not wire task-execution worker grouped execution, does not
+change scheduler DTOs, generated contracts, lockfiles, frontend/Tauri DTOs, or
+saved workflow/runtime-host fixture JSON, and does not introduce runtime
+residency/device inventory tables. The contract keeps each member's handoff,
+materialized inputs, timeout, failure policy, reservation policy, outputs,
+diagnostics, retry/defer disposition, and reservation disposition member-owned
+instead of carrying workflow inputs forward from the run that first loaded a
+runtime.
+
+Focused test updates:
+runtime-host contract tests now validate a grouped request with an anchor and
+two members, reject empty member sets, reject anchors that do not identify a
+member, validate a partial member-failure fan-out response, and reject outputs
+on failed batch members.
+
+Verification passed:
+`cargo test -p pantograph-runtime-host-contracts runtime_host_execution --lib`;
+`cargo check -p pantograph-runtime-host-contracts`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-runtime-host-contracts -- --check`; and
+`git diff --check`.
+
+Next thin slice: implement sequence step 4 as boundary-test-only coverage for
+the runtime-host batch contract and dispatcher boundary. Allowed files should
+remain limited to `pantograph-runtime-host-contracts` contract/dispatcher
+tests, any minimal contract validation refinements those tests expose, and this
+plan. Cover missing member inputs at serde boundary, stale or readiness-only
+handoff rejection, response/request member correlation, cancellation context
+propagation shape for future batch dispatch, partial failure fan-out, and
+duplicate member identity rejection. Do not add a runtime-host batch port
+method, do not wire task-execution worker execution, and stop/re-plan if these
+tests require generated contract changes, frontend/Tauri DTOs, lockfile
+updates, saved workflow fixture updates, physical-device/runtime-residency
+tables, or embedded-runtime implementation changes.
+
 ## Standards Rule
 
 The standards constraints in
