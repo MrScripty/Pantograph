@@ -5054,13 +5054,31 @@ Verification passed:
 `cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
 and `cargo fmt -p pantograph-workflow-service -- --check`.
 
-Discovered issue:
+Discovered issue resolved by the 2026-06-11 session-admission test migration
+slice:
 `cargo test -p pantograph-workflow-service workflow::tests::session_admission::workflow_execution_session_run_waits_for_runtime_admission_before_dequeue --lib -- --exact`
-still fails at `session_admission.rs:185` with `left: 0` and `right: 1`.
-This failure is not the runtime-worker ordering gap fixed by this slice; it
-uses the generic admission/session fixture path and remains a separate
-session-admission test/fixture migration follow-up. Do not reintroduce
-request-scoped runtime execution or fallback event handling to satisfy it.
+failed at `session_admission.rs:185` with `left: 0` and `right: 1` because the
+test still expected the retired host-level runtime-load admission gate to keep
+a non-runtime run queued. The follow-up slice removed the obsolete
+host-`run_workflow` blocking fixture, added the explicit in-memory workflow I/O
+contract to the admission-gated fixture, and migrated the remaining admission
+coverage to assert canonical cold-start behavior: a non-runtime run is admitted
+and completed without opening the legacy runtime gate, emits a `RunStarted`
+diagnostic with `cold_start_required`, and does not fabricate
+`SchedulerRunDelayed` diagnostics.
+
+No-fallback/no-legacy confirmation: this migration does not reintroduce
+request-scoped runtime execution, host-level blocking hooks, synthetic
+runtime-admission waits, or fallback delayed-run events. Capacity and scheduler
+snapshot diagnostics remain covered by their focused session-capacity and
+scheduler-snapshot test modules.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::tests::session_admission --lib`;
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
+and `cargo check -p pantograph-workflow-service`. Formatting was applied with
+`cargo fmt -p pantograph-workflow-service`; the final format check is part of
+the slice commit gate.
 
 ## Standards Rule
 
