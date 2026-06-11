@@ -144,10 +144,10 @@ pub(super) struct WorkflowRuntimeBranchBatchEligibilityDiagnostic {
 #[must_use]
 pub(super) enum WorkflowRuntimeBranchBatchEligibilityDiagnosticCode {
     MissingEligibilityProfile,
+    MissingTaskAttemptFact,
     ModelArtifactMismatch,
     RuntimeFamilyMismatch,
     BackendMismatch,
-    DeviceLoadTargetMismatch,
     RuntimeResidencyMismatch,
     MemoryEstimateMismatch,
     ContextShapeMismatch,
@@ -781,43 +781,6 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         })
     }
 
-    pub(super) fn ensure_batch_compatible_with(
-        &self,
-        other: &Self,
-    ) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
-        let left = self.batch_eligibility.as_ref().ok_or_else(|| {
-            WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
-                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingEligibilityProfile,
-                format!(
-                    "runtime branch task event '{}' is missing batch eligibility profile",
-                    self.event_id.as_str()
-                ),
-            )
-        })?;
-        let right = other.batch_eligibility.as_ref().ok_or_else(|| {
-            WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
-                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingEligibilityProfile,
-                format!(
-                    "runtime branch task event '{}' is missing batch eligibility profile",
-                    other.event_id.as_str()
-                ),
-            )
-        })?;
-
-        left.ensure_compatible_with(right)?;
-        if self.timeout_ms != other.timeout_ms {
-            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
-                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch,
-                format!(
-                    "runtime branch task events '{}' and '{}' have incompatible timeout policies",
-                    self.event_id.as_str(),
-                    other.event_id.as_str()
-                ),
-            ));
-        }
-        Ok(())
-    }
-
     pub(super) fn mark_dispatching(
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
@@ -1128,6 +1091,27 @@ impl WorkflowRuntimeBranchTaskEventRecord {
 }
 
 impl WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile {
+    pub(super) fn ensure_task_attempt_facts_compatible(
+        left_fact: Option<&WorkflowRuntimeTaskAttemptFactRecord>,
+        right_fact: Option<&WorkflowRuntimeTaskAttemptFactRecord>,
+    ) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
+        let left_fact = left_fact.ok_or_else(|| {
+            WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingTaskAttemptFact,
+                "left runtime branch candidate is missing task-attempt facts",
+            )
+        })?;
+        let right_fact = right_fact.ok_or_else(|| {
+            WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingTaskAttemptFact,
+                "right runtime branch candidate is missing task-attempt facts",
+            )
+        })?;
+        let left = Self::from_task_attempt_fact(left_fact)?;
+        let right = Self::from_task_attempt_fact(right_fact)?;
+        left.ensure_compatible_with(&right)
+    }
+
     pub(super) fn from_task_attempt_fact(
         fact: &WorkflowRuntimeTaskAttemptFactRecord,
     ) -> Result<Self, WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
@@ -1236,69 +1220,6 @@ impl WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile {
                 "runtime branch task attempts have incompatible reservation profiles",
             ));
         }
-        Ok(())
-    }
-}
-
-impl WorkflowRuntimeBranchBatchEligibilityProfile {
-    fn ensure_compatible_with(
-        &self,
-        other: &Self,
-    ) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
-        ensure_batch_field_matches(
-            "model artifact",
-            &self.model_artifact_id,
-            &other.model_artifact_id,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ModelArtifactMismatch,
-        )?;
-        ensure_batch_field_matches(
-            "runtime family",
-            &self.runtime_family,
-            &other.runtime_family,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeFamilyMismatch,
-        )?;
-        ensure_batch_field_matches(
-            "backend",
-            &self.backend_id,
-            &other.backend_id,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::BackendMismatch,
-        )?;
-        ensure_batch_field_matches(
-            "device load target",
-            &self.device_load_target,
-            &other.device_load_target,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::DeviceLoadTargetMismatch,
-        )?;
-        ensure_batch_field_matches(
-            "runtime residency",
-            &self.runtime_residency_key,
-            &other.runtime_residency_key,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeResidencyMismatch,
-        )?;
-        if self.estimated_loaded_runtime_bytes != other.estimated_loaded_runtime_bytes {
-            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
-                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MemoryEstimateMismatch,
-                "runtime branch task events have incompatible loaded-runtime memory estimates",
-            ));
-        }
-        ensure_batch_field_matches(
-            "context shape",
-            &self.context_shape_key,
-            &other.context_shape_key,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ContextShapeMismatch,
-        )?;
-        ensure_batch_field_matches(
-            "operation type",
-            &self.operation_type,
-            &other.operation_type,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::OperationTypeMismatch,
-        )?;
-        ensure_batch_field_matches(
-            "cancellation mode",
-            &self.cancellation_mode,
-            &other.cancellation_mode,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::CancellationModeMismatch,
-        )?;
         Ok(())
     }
 }
@@ -1604,17 +1525,15 @@ mod tests {
     }
 
     #[test]
-    fn runtime_branch_task_event_batch_eligibility_compares_canonical_facts() {
-        let left = ready_record_with_batch_profile(batch_profile());
-        let mut right_profile = batch_profile();
-        right_profile.runtime_residency_key = "runtime.diffusers.loaded-model-1".to_string();
-        let right = ready_record_with_id_and_batch_profile(
-            "runtime-branch-task-event.other",
-            right_profile,
-        );
+    fn runtime_branch_task_attempt_batch_compatibility_compares_canonical_facts() {
+        let left = task_attempt_fact(default_reservation_facts());
+        let mut right = task_attempt_fact(default_reservation_facts());
+        right.runtime_residency_key = "runtime.diffusers.loaded-model-1".to_string();
 
-        let error = left
-            .ensure_batch_compatible_with(&right)
+        let error = WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+            Some(&left),
+            Some(&right),
+        )
             .expect_err("runtime residency mismatch must fail");
 
         assert_eq!(
@@ -1622,45 +1541,40 @@ mod tests {
             WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeResidencyMismatch
         );
 
-        let right = ready_record_with_id_and_batch_profile(
-            "runtime-branch-task-event.compatible",
-            batch_profile(),
-        );
-        left.ensure_batch_compatible_with(&right)
+        let right = task_attempt_fact(default_reservation_facts());
+        WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+            Some(&left),
+            Some(&right),
+        )
             .expect("matching canonical facts are batch compatible");
     }
 
     #[test]
-    fn runtime_branch_task_event_batch_eligibility_rejects_missing_profile() {
-        let left = ready_record();
-        let right = ready_record_with_id_and_batch_profile(
-            "runtime-branch-task-event.profiled",
-            batch_profile(),
-        );
+    fn runtime_branch_task_attempt_batch_compatibility_rejects_missing_fact() {
+        let right = task_attempt_fact(default_reservation_facts());
 
-        let error = left
-            .ensure_batch_compatible_with(&right)
-            .expect_err("missing canonical profile must fail closed");
+        let error = WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+            None,
+            Some(&right),
+        )
+        .expect_err("missing canonical task-attempt fact must fail closed");
 
         assert_eq!(
             error.code,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingEligibilityProfile
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingTaskAttemptFact
         );
     }
 
     #[test]
-    fn runtime_branch_task_event_batch_eligibility_rejects_timeout_mismatch() {
-        let left = ready_record_with_batch_profile(batch_profile());
-        let mut request = ready_request();
-        request.event_id =
-            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.timeout-mismatch")
-                .expect("event id");
-        request.timeout_ms = Some(60_000);
-        request.batch_eligibility = Some(batch_profile());
-        let right = WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("right record");
+    fn runtime_branch_task_attempt_batch_compatibility_rejects_timeout_mismatch() {
+        let left = task_attempt_fact(default_reservation_facts());
+        let mut right = task_attempt_fact(default_reservation_facts());
+        right.timeout_ms = Some(60_000);
 
-        let error = left
-            .ensure_batch_compatible_with(&right)
+        let error = WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+            Some(&left),
+            Some(&right),
+        )
             .expect_err("timeout mismatch must fail");
 
         assert_eq!(
@@ -1670,20 +1584,18 @@ mod tests {
     }
 
     #[test]
-    fn runtime_branch_task_event_batch_eligibility_ignores_matching_provisional_key() {
-        let left = ready_record_with_batch_profile(batch_profile());
-        let mut request = ready_request();
-        let mut profile = batch_profile();
-        profile.backend_id = "backend.other".to_string();
-        request.event_id =
-            WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.other")
-                .expect("event id");
-        request.batch_eligibility = Some(profile);
-        let right = WorkflowRuntimeBranchTaskEventRecord::ready(request).expect("right record");
+    fn runtime_branch_task_attempt_batch_compatibility_ignores_matching_provisional_key() {
+        let left_event = ready_record();
+        let right_event = ready_record_with_id("runtime-branch-task-event.other");
+        let left_fact = task_attempt_fact(default_reservation_facts());
+        let mut right_fact = task_attempt_fact(default_reservation_facts());
+        right_fact.backend_id = "backend.other".to_string();
 
-        assert_eq!(left.batching_key, right.batching_key);
-        let error = left
-            .ensure_batch_compatible_with(&right)
+        assert_eq!(left_event.batching_key, right_event.batching_key);
+        let error = WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+            Some(&left_fact),
+            Some(&right_fact),
+        )
             .expect_err("matching provisional batching key must not authorize batching");
 
         assert_eq!(
@@ -2904,6 +2816,23 @@ mod tests {
             recorded_at_ms: 200,
         })
         .expect("task-attempt fact")
+    }
+
+    fn default_reservation_facts() -> Vec<WorkflowRuntimeTaskAttemptReservationFact> {
+        vec![
+            reservation_fact(
+                "reservation.gpu",
+                "cuda:0",
+                WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                6_442_450_944,
+            ),
+            reservation_fact(
+                "reservation.ram",
+                "system",
+                WorkflowRuntimeTaskAttemptResourceKind::SystemRam,
+                2_147_483_648,
+            ),
+        ]
     }
 
     fn reservation_fact(

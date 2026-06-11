@@ -5601,6 +5601,46 @@ module owns the call site. Do not change Pumas contracts, scheduler DTOs,
 generated files, lockfiles, saved workflow fixtures, runtime-host APIs, or
 durable grouped-claim execution in this slice.
 
+2026-06-11 task-attempt batch compatibility check migration slice: completed
+sequence step 2. Smallest useful vertical slice: remove the legacy
+runtime-branch event-owned `ensure_batch_compatible_with` comparison over
+`WorkflowRuntimeBranchBatchEligibilityProfile` and replace the compatibility
+entry point with
+`WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible`,
+which derives both sides from `WorkflowRuntimeTaskAttemptFactRecord`.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: compatibility checks no longer compare
+the legacy event-owned `device_load_target` batch profile, no longer use
+runtime-branch event admission data as the compatibility authority, and still
+ignore provisional `batching_key` values. Missing task-attempt facts fail
+closed through `MissingTaskAttemptFact`; missing reservation evidence and
+reservation mismatch continue to fail closed through the reservation-level
+diagnostics added in the previous slice.
+
+Focused test updates: runtime-branch task-event tests now compare canonical
+batch facts through persisted task-attempt facts, reject missing task-attempt
+facts, reject timeout mismatches, and prove that matching provisional
+`batching_key` values do not authorize grouping when task-attempt facts differ.
+The legacy profile-field validation test remains only as admission-field
+validation while the field still exists and is not used as a compatibility
+authority.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
+Next thin slice: implement sequence step 3 by adding any remaining focused
+fail-closed compatibility cases that are not already covered, especially
+runtime residency, context shape, operation type, cancellation mode, timeout,
+reservation device/resource/bytes, missing task-attempt facts, and the positive
+split-placement case. Keep the slice to workflow-service runtime-branch/
+task-attempt lifecycle tests and this plan unless a missing diagnostic requires
+a small runtime-branch contract change.
+
 ## Standards Rule
 
 The standards constraints in
