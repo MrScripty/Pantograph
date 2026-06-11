@@ -5560,6 +5560,47 @@ generated files, lockfiles, saved workflow fixtures, runtime-host APIs, or
 grouped-claim execution. Stop and re-plan if compatibility requires facts not
 owned by `WorkflowRuntimeTaskAttemptFactRecord`.
 
+2026-06-11 reservation-level batch compatibility contract slice: completed
+sequence step 1. Smallest useful vertical slice: add the
+workflow-service-owned
+`WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile` contract that is
+derived directly from `WorkflowRuntimeTaskAttemptFactRecord` and carries model
+artifact id, runtime family, backend id, runtime residency key, loaded-runtime
+memory estimate, operation type, context shape, cancellation mode, timeout
+policy, and normalized reservation compatibility entries with device id,
+resource kind, and reserved bytes. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not wire grouped claims,
+does not migrate production batch checks yet, does not derive compatibility
+from `batching_key`, selected-candidate side fields, runtime id strings, graph
+shape, request state, previous workflow inputs, or runtime-host state, and
+does not carry `reservation_lease_id` or the legacy singular
+`device_load_target` in the new task-attempt-derived profile. Missing
+reservation evidence fails closed through a typed
+`ReservationProfileMissing` diagnostic; reservation incompatibility fails
+closed through `ReservationProfileMismatch`.
+
+Focused test updates: runtime-branch task-event tests now prove the new
+profile preserves split-placement reservation facts, ignores per-attempt
+reservation lease ids, rejects missing reservation evidence, and rejects
+reservation mismatches across device id/resource kind/reserved bytes.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
+Next thin slice: implement sequence step 2 by replacing or narrowing legacy
+`WorkflowRuntimeBranchBatchEligibilityProfile` usage so compatibility checks
+consume the new task-attempt-derived profile. Allowed files should remain
+limited to workflow-service runtime-branch/task-attempt lifecycle modules,
+focused tests, and this plan unless the diff proves another workflow-service
+module owns the call site. Do not change Pumas contracts, scheduler DTOs,
+generated files, lockfiles, saved workflow fixtures, runtime-host APIs, or
+durable grouped-claim execution in this slice.
+
 ## Standards Rule
 
 The standards constraints in

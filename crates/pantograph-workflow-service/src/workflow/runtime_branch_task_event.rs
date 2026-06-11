@@ -8,6 +8,9 @@ use super::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchCandidateFactBundle,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
+use super::runtime_task_attempt_fact::{
+    WorkflowRuntimeTaskAttemptFactRecord, WorkflowRuntimeTaskAttemptResourceKind,
+};
 use super::WorkflowOutputTarget;
 use crate::graph::WorkflowRuntimeSourceContext;
 
@@ -109,6 +112,29 @@ pub(super) struct WorkflowRuntimeBranchBatchEligibilityProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub(super) struct WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile {
+    pub(super) model_artifact_id: String,
+    pub(super) runtime_family: String,
+    pub(super) backend_id: String,
+    pub(super) runtime_residency_key: String,
+    pub(super) loaded_runtime_memory_estimate_bytes: u64,
+    pub(super) operation_type: String,
+    pub(super) context_shape_key: String,
+    pub(super) cancellation_mode: String,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) reservations: Vec<WorkflowRuntimeBranchTaskAttemptReservationCompatibilityEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeBranchTaskAttemptReservationCompatibilityEntry {
+    pub(super) device_id: String,
+    pub(super) resource_kind: WorkflowRuntimeTaskAttemptResourceKind,
+    pub(super) reserved_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchEligibilityDiagnostic {
     pub(super) code: WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
     pub(super) message: String,
@@ -128,6 +154,8 @@ pub(super) enum WorkflowRuntimeBranchBatchEligibilityDiagnosticCode {
     OperationTypeMismatch,
     CancellationModeMismatch,
     TimeoutMismatch,
+    ReservationProfileMissing,
+    ReservationProfileMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1099,6 +1127,119 @@ impl WorkflowRuntimeBranchTaskEventRecord {
     }
 }
 
+impl WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile {
+    pub(super) fn from_task_attempt_fact(
+        fact: &WorkflowRuntimeTaskAttemptFactRecord,
+    ) -> Result<Self, WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
+        if fact.reservations.is_empty() {
+            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMissing,
+                "runtime task-attempt fact has no reservation compatibility evidence",
+            ));
+        }
+        let mut reservations = fact
+            .reservations
+            .iter()
+            .map(
+                |reservation| WorkflowRuntimeBranchTaskAttemptReservationCompatibilityEntry {
+                    device_id: reservation.device_id.clone(),
+                    resource_kind: reservation.resource_kind,
+                    reserved_bytes: reservation.reserved_bytes,
+                },
+            )
+            .collect::<Vec<_>>();
+        reservations.sort_by(|left, right| {
+            left.device_id
+                .cmp(&right.device_id)
+                .then_with(|| {
+                    task_attempt_resource_kind_rank(left.resource_kind)
+                        .cmp(&task_attempt_resource_kind_rank(right.resource_kind))
+                })
+                .then_with(|| left.reserved_bytes.cmp(&right.reserved_bytes))
+        });
+
+        Ok(Self {
+            model_artifact_id: fact.selected_artifact_id.clone(),
+            runtime_family: fact.runtime_family.clone(),
+            backend_id: fact.backend_id.clone(),
+            runtime_residency_key: fact.runtime_residency_key.clone(),
+            loaded_runtime_memory_estimate_bytes: fact.loaded_runtime_memory_estimate_bytes,
+            operation_type: fact.operation_type.clone(),
+            context_shape_key: fact.context_shape_key.clone(),
+            cancellation_mode: fact.cancellation_mode.clone(),
+            timeout_ms: fact.timeout_ms,
+            reservations,
+        })
+    }
+
+    pub(super) fn ensure_compatible_with(
+        &self,
+        other: &Self,
+    ) -> Result<(), WorkflowRuntimeBranchBatchEligibilityDiagnostic> {
+        ensure_batch_field_matches(
+            "model artifact",
+            &self.model_artifact_id,
+            &other.model_artifact_id,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ModelArtifactMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "runtime family",
+            &self.runtime_family,
+            &other.runtime_family,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeFamilyMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "backend",
+            &self.backend_id,
+            &other.backend_id,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::BackendMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "runtime residency",
+            &self.runtime_residency_key,
+            &other.runtime_residency_key,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeResidencyMismatch,
+        )?;
+        if self.loaded_runtime_memory_estimate_bytes != other.loaded_runtime_memory_estimate_bytes {
+            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MemoryEstimateMismatch,
+                "runtime branch task attempts have incompatible loaded-runtime memory estimates",
+            ));
+        }
+        ensure_batch_field_matches(
+            "operation type",
+            &self.operation_type,
+            &other.operation_type,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::OperationTypeMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "context shape",
+            &self.context_shape_key,
+            &other.context_shape_key,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ContextShapeMismatch,
+        )?;
+        ensure_batch_field_matches(
+            "cancellation mode",
+            &self.cancellation_mode,
+            &other.cancellation_mode,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::CancellationModeMismatch,
+        )?;
+        if self.timeout_ms != other.timeout_ms {
+            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch,
+                "runtime branch task attempts have incompatible timeout policies",
+            ));
+        }
+        if self.reservations != other.reservations {
+            return Err(WorkflowRuntimeBranchBatchEligibilityDiagnostic::new(
+                WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMismatch,
+                "runtime branch task attempts have incompatible reservation profiles",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl WorkflowRuntimeBranchBatchEligibilityProfile {
     fn ensure_compatible_with(
         &self,
@@ -1366,6 +1507,15 @@ fn ensure_batch_field_matches(
     Ok(())
 }
 
+fn task_attempt_resource_kind_rank(kind: WorkflowRuntimeTaskAttemptResourceKind) -> u8 {
+    match kind {
+        WorkflowRuntimeTaskAttemptResourceKind::SystemRam => 0,
+        WorkflowRuntimeTaskAttemptResourceKind::SystemSwap => 1,
+        WorkflowRuntimeTaskAttemptResourceKind::DeviceVram => 2,
+        WorkflowRuntimeTaskAttemptResourceKind::DeviceSharedMemory => 3,
+    }
+}
+
 fn parse_non_blank(
     value: impl Into<String>,
     label: &str,
@@ -1401,6 +1551,10 @@ mod tests {
 
     use super::super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId;
     use super::super::runtime_dispatch_selection::WorkflowRuntimeDispatchLoadState;
+    use super::super::runtime_task_attempt_fact::{
+        WorkflowRuntimeTaskAttemptFactRequest, WorkflowRuntimeTaskAttemptReservationFact,
+        WorkflowRuntimeTaskAttemptResourceFitFacts, WorkflowRuntimeTaskAttemptResourceFitState,
+    };
     use super::*;
 
     #[test]
@@ -1558,6 +1712,151 @@ mod tests {
                 .contains("loaded-runtime memory estimate must be greater than zero"),
             "unexpected error: {}",
             error.message
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_attempt_batch_profile_derives_reservation_level_facts() {
+        let fact = task_attempt_fact(vec![
+            reservation_fact(
+                "reservation.gpu",
+                "cuda:0",
+                WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                6_442_450_944,
+            ),
+            reservation_fact(
+                "reservation.ram",
+                "system",
+                WorkflowRuntimeTaskAttemptResourceKind::SystemRam,
+                2_147_483_648,
+            ),
+        ]);
+
+        let profile =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::from_task_attempt_fact(
+                &fact,
+            )
+            .expect("compatibility profile derives");
+
+        assert_eq!(profile.model_artifact_id, "artifact.stable-diffusion-xl");
+        assert_eq!(profile.runtime_family, "diffusers");
+        assert_eq!(profile.backend_id, "backend.cuda");
+        assert_eq!(
+            profile.runtime_residency_key,
+            "runtime.diffusers.loaded-model-0"
+        );
+        assert_eq!(profile.loaded_runtime_memory_estimate_bytes, 8_589_934_592);
+        assert_eq!(profile.operation_type, "image-generation.txt2img");
+        assert_eq!(profile.context_shape_key, "txt2img.1024x1024.steps30");
+        assert_eq!(profile.cancellation_mode, "per-run-fanout");
+        assert_eq!(profile.timeout_ms, Some(30_000));
+        assert_eq!(
+            profile.reservations,
+            vec![
+                WorkflowRuntimeBranchTaskAttemptReservationCompatibilityEntry {
+                    device_id: "cuda:0".to_string(),
+                    resource_kind: WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                    reserved_bytes: 6_442_450_944,
+                },
+                WorkflowRuntimeBranchTaskAttemptReservationCompatibilityEntry {
+                    device_id: "system".to_string(),
+                    resource_kind: WorkflowRuntimeTaskAttemptResourceKind::SystemRam,
+                    reserved_bytes: 2_147_483_648,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_attempt_batch_profile_ignores_reservation_lease_ids() {
+        let left =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::from_task_attempt_fact(
+                &task_attempt_fact(vec![
+                    reservation_fact(
+                        "reservation.left.gpu",
+                        "cuda:0",
+                        WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                        6_442_450_944,
+                    ),
+                    reservation_fact(
+                        "reservation.left.ram",
+                        "system",
+                        WorkflowRuntimeTaskAttemptResourceKind::SystemRam,
+                        2_147_483_648,
+                    ),
+                ]),
+            )
+            .expect("left profile");
+        let right =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::from_task_attempt_fact(
+                &task_attempt_fact(vec![
+                    reservation_fact(
+                        "reservation.right.ram",
+                        "system",
+                        WorkflowRuntimeTaskAttemptResourceKind::SystemRam,
+                        2_147_483_648,
+                    ),
+                    reservation_fact(
+                        "reservation.right.gpu",
+                        "cuda:0",
+                        WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                        6_442_450_944,
+                    ),
+                ]),
+            )
+            .expect("right profile");
+
+        assert_eq!(left, right);
+        left.ensure_compatible_with(&right)
+            .expect("matching reservation requirements are compatible");
+    }
+
+    #[test]
+    fn runtime_branch_task_attempt_batch_profile_rejects_missing_reservations() {
+        let fact = task_attempt_fact(Vec::new());
+
+        let error =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::from_task_attempt_fact(
+                &fact,
+            )
+            .expect_err("reservation evidence is required");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMissing
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_attempt_batch_profile_rejects_reservation_mismatch() {
+        let left =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::from_task_attempt_fact(
+                &task_attempt_fact(vec![reservation_fact(
+                    "reservation.left.gpu",
+                    "cuda:0",
+                    WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                    6_442_450_944,
+                )]),
+            )
+            .expect("left profile");
+        let right =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::from_task_attempt_fact(
+                &task_attempt_fact(vec![reservation_fact(
+                    "reservation.right.gpu",
+                    "cuda:1",
+                    WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+                    6_442_450_944,
+                )]),
+            )
+            .expect("right profile");
+
+        let error = left
+            .ensure_compatible_with(&right)
+            .expect_err("different device reservation must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMismatch
         );
     }
 
@@ -2572,6 +2871,52 @@ mod tests {
             context_shape_key: "txt2img.1024x1024.steps30".to_string(),
             operation_type: "image-generation.txt2img".to_string(),
             cancellation_mode: "per-run-fanout".to_string(),
+        }
+    }
+
+    fn task_attempt_fact(
+        reservations: Vec<WorkflowRuntimeTaskAttemptReservationFact>,
+    ) -> WorkflowRuntimeTaskAttemptFactRecord {
+        WorkflowRuntimeTaskAttemptFactRecord::new(WorkflowRuntimeTaskAttemptFactRequest {
+            workflow_id: "workflow.image".to_string(),
+            workflow_run_id: "run.test".to_string(),
+            scheduler_task_id: "image-task".to_string(),
+            scheduler_task_attempt_id: "attempt.1".to_string(),
+            task_attempt_generation: 1,
+            selected_model_id: "model.stable-diffusion-xl".to_string(),
+            selected_artifact_id: "artifact.stable-diffusion-xl".to_string(),
+            selected_runtime_id: "runtime.diffusers".to_string(),
+            selected_runtime_variant_id: Some("cuda".to_string()),
+            backend_id: "backend.cuda".to_string(),
+            runtime_family: "diffusers".to_string(),
+            load_target: "cuda:0".to_string(),
+            runtime_residency_key: "runtime.diffusers.loaded-model-0".to_string(),
+            loaded_runtime_memory_estimate_bytes: 8_589_934_592,
+            resource_fit: WorkflowRuntimeTaskAttemptResourceFitFacts {
+                state: WorkflowRuntimeTaskAttemptResourceFitState::Fits,
+                diagnostic_codes: Vec::new(),
+            },
+            reservations,
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
+            timeout_ms: Some(30_000),
+            recorded_at_ms: 200,
+        })
+        .expect("task-attempt fact")
+    }
+
+    fn reservation_fact(
+        reservation_lease_id: &str,
+        device_id: &str,
+        resource_kind: WorkflowRuntimeTaskAttemptResourceKind,
+        reserved_bytes: u64,
+    ) -> WorkflowRuntimeTaskAttemptReservationFact {
+        WorkflowRuntimeTaskAttemptReservationFact {
+            reservation_lease_id: reservation_lease_id.to_string(),
+            device_id: device_id.to_string(),
+            resource_kind,
+            reserved_bytes,
         }
     }
 
