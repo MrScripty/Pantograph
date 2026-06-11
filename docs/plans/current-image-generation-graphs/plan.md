@@ -5177,6 +5177,44 @@ Verification passed:
 `cargo fmt -p pantograph-workflow-service -- --check`; and
 `git diff --check`.
 
+2026-06-11 runtime task-attempt device placement re-plan decision: use the
+reservation-level device evidence option. The next task-attempt fact
+construction slice must not keep or populate a singular `resolved_device_id`.
+The scheduler may select CPU, GPU, NPU, system RAM, device VRAM, shared
+memory, or a split placement across multiple physical devices/resources. A
+single resolved device would either discard scheduler evidence or force the
+worker to synthesize a primary device. Instead, runtime task-attempt facts must
+record per-reservation evidence from the selected candidate's canonical
+scheduler reservations.
+
+Updated immediate sequence:
+1. Extend `WorkflowRuntimeTaskAttemptReservationFact` to carry
+   `reservation_lease_id`, `device_id`, `resource_kind`, and `reserved_bytes`;
+   remove the top-level `resolved_device_id` from
+   `WorkflowRuntimeTaskAttemptFactRecord` and its request contract. Validation
+   must require nonblank reservation lease id and device id plus
+   `reserved_bytes > 0`.
+2. Build `WorkflowRuntimeTaskAttemptFactRecord` from the rehydrated source
+   context and selected candidate fact by projecting
+   `selected_candidate_fact.reservations` into reservation-level facts. Do not
+   infer devices from workflow input, graph path, runtime-host state, request
+   DTOs, batching keys, or runtime/model identifiers.
+3. Keep runtime/model residency separate from workflow ownership. A workflow
+   may request persistence/keep-alive, but the scheduler owns whether a
+   runtime/model remains loaded, where it is loaded, when it is unloaded, and
+   which later workflow runs may reuse it. The workflow run records usage
+   evidence for its attempt; it does not own the resident runtime.
+4. Defer any separate physical-device inventory, runtime-residency table, or
+   durable dispatch-assignment ownership expansion to a later serial
+   architecture slice unless the immediate task-attempt fact construction
+   cannot validate reservation-level evidence without it.
+
+No-fallback/no-legacy confirmation: the worker-owned bridge may record only
+reservation facts already selected by scheduler-owned dispatch evidence. It
+must not hard-link models to runtimes, make workflows owners of persistent
+runtimes, collapse multi-device placement into a single device, or fabricate
+device facts from runtime/model names.
+
 ## Standards Rule
 
 The standards constraints in
