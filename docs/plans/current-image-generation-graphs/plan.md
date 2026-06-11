@@ -5370,6 +5370,33 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 dispatch-assignment task-attempt fact derivation slice:
+completed. Smallest useful vertical slice: add a pure
+`WorkflowRuntimeDispatchAssignmentRecord::task_attempt_fact_record` derivation
+that builds `WorkflowRuntimeTaskAttemptFactRecord` from assignment-owned
+source context, selected candidate evidence, scheduler attempt identity,
+scheduler attempt start timestamp, timeout, and reservation facts. Allowed
+files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not add a standalone
+task-attempt fact repository, does not persist task-attempt facts on
+runtime-branch bridge events, does not wire worker-side fact persistence, does
+not derive source context or devices from graph/request/batching/runtime-host
+state, and does not change scheduler DTOs, Pumas contracts, generated files,
+lockfiles, or saved workflow fixtures. The derivation reuses the existing
+typed task-attempt fact validator so missing or inconsistent assignment-owned
+facts fail closed.
+
+Focused test added:
+`runtime_dispatch_assignment_derives_task_attempt_fact_from_assignment_owned_evidence`.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

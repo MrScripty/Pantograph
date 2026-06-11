@@ -13,6 +13,11 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventId,
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
+use super::runtime_task_attempt_fact::{
+    WorkflowRuntimeTaskAttemptFactBuildRequest, WorkflowRuntimeTaskAttemptFactDiagnostic,
+    WorkflowRuntimeTaskAttemptFactRecord, WorkflowRuntimeTaskAttemptSourceContext,
+    WorkflowRuntimeTaskAttemptSourceContextRequest,
+};
 
 pub(super) const WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_SCHEMA_VERSION: u16 = 1;
 
@@ -325,6 +330,34 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
     }
 }
 
+impl WorkflowRuntimeDispatchAssignmentRecord {
+    pub(super) fn task_attempt_fact_record(
+        &self,
+        recorded_at_ms: u64,
+    ) -> Result<WorkflowRuntimeTaskAttemptFactRecord, WorkflowRuntimeTaskAttemptFactDiagnostic>
+    {
+        let source_context = WorkflowRuntimeTaskAttemptSourceContext::new(
+            WorkflowRuntimeTaskAttemptSourceContextRequest {
+                workflow_id: self.workflow_id.clone(),
+                workflow_run_id: self.workflow_run_id.clone(),
+                scheduler_task_id: self.scheduler_task_id.clone(),
+                task_attempt_generation: self.task_attempt_generation,
+                timeout_ms: self.timeout_ms,
+                runtime_source_context: self.runtime_source_context.clone(),
+                selected_candidate_fact: self.selected_candidate_fact.clone(),
+            },
+        )?;
+        WorkflowRuntimeTaskAttemptFactRecord::from_source_context(
+            WorkflowRuntimeTaskAttemptFactBuildRequest {
+                source_context,
+                scheduler_task_attempt_id: self.scheduler_task_attempt_id.clone(),
+                scheduler_task_attempt_started_at_ms: self.scheduler_task_attempt_started_at_ms,
+                recorded_at_ms,
+            },
+        )
+    }
+}
+
 impl WorkflowRuntimeDispatchAssignmentState {
     fn is_terminal(self) -> bool {
         matches!(
@@ -578,6 +611,44 @@ mod tests {
                 .selected_candidate_fact,
             request.selected_candidate_fact
         );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_derives_task_attempt_fact_from_assignment_owned_evidence() {
+        let record = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new()
+            .create(assignment_request("assignment.1"))
+            .expect("assignment");
+
+        let fact = record
+            .task_attempt_fact_record(130)
+            .expect("task attempt fact");
+
+        assert_eq!(fact.workflow_id, "workflow.image_generation");
+        assert_eq!(fact.workflow_run_id, "run.2026-05-22.001");
+        assert_eq!(fact.scheduler_task_id, "task.image_generation.001");
+        assert_eq!(fact.scheduler_task_attempt_id, "attempt.image.1");
+        assert_eq!(fact.task_attempt_generation, 1);
+        assert_eq!(fact.selected_model_id, "pumas://models/juggernaut-xl-v10");
+        assert_eq!(fact.selected_runtime_id, "diffusers-pytorch");
+        assert_eq!(fact.selected_runtime_variant_id.as_deref(), Some("cuda"));
+        assert_eq!(fact.backend_id, "backend.diffusers");
+        assert_eq!(fact.runtime_family, "diffusers");
+        assert_eq!(fact.load_target, "cuda:0");
+        assert_eq!(
+            fact.runtime_residency_key,
+            "runtime.diffusers.model.sdxl.cuda0"
+        );
+        assert_eq!(fact.timeout_ms, Some(30_000));
+        assert_eq!(fact.operation_type, "image-generation.txt2img");
+        assert_eq!(fact.context_shape_key, "txt2img.1024x1024.steps30");
+        assert_eq!(fact.cancellation_mode, "per-run-fanout");
+        assert_eq!(fact.reservations.len(), 1);
+        assert_eq!(
+            fact.reservations[0].reservation_lease_id,
+            "reservation-lease.runtime.1"
+        );
+        assert_eq!(fact.reservations[0].device_id, "cuda:0");
+        assert_eq!(fact.recorded_at_ms, 130);
     }
 
     #[test]
