@@ -57,6 +57,7 @@ fn ready_inference_projection(
                     selected_artifact_path: None,
                     migration_diagnostics: Vec::new(),
                 },
+                runtime_source_context: runtime_source_context(),
                 constraints: SchedulerRuntimeDeviceConstraints {
                     requested_runtime_id: Some(
                         RuntimeIntentId::parse("pytorch").expect("runtime id"),
@@ -73,6 +74,14 @@ fn ready_inference_projection(
         ),
     ])
     .expect("projection")
+}
+
+fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+    crate::graph::WorkflowRuntimeSourceContext {
+        operation_type: "image-generation.txt2img".to_string(),
+        context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+        cancellation_mode: "per-run-fanout".to_string(),
+    }
 }
 
 fn resource_estimate_hints() -> Vec<SchedulerEstimateHint> {
@@ -151,6 +160,11 @@ fn graph_with_inline_inference_ref() -> WorkflowGraph {
                     "runtime": "wrong-runtime-is-resolver-only",
                     "device": "wrong-device-is-resolver-only",
                     "denoising_scheduler": "wrong-trait-is-resolver-only",
+                    "runtime_source_context": {
+                        "operation_type": "image-generation.txt2img",
+                        "context_shape_key": "txt2img.1024x1024.steps30",
+                        "cancellation_mode": "per-run-fanout"
+                    },
                     "pumas_model_ref": {
                         "model_id": "wrong/graph/ref",
                         "revision": "raw-graph-values-are-not-scheduler-authority",
@@ -432,7 +446,7 @@ fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
     });
     graph.nodes.push(GraphNode {
         id: "settings".to_string(),
-        node_type: "expand-settings".to_string(),
+        node_type: "image-output".to_string(),
         position: Position { x: 100.0, y: 200.0 },
         data: json!({}),
     });

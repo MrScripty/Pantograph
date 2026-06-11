@@ -5,7 +5,10 @@ use pantograph_dependency_planning::{
 };
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
-use pantograph_scheduler::{SchedulerNodeId, SchedulerRuntimeDeviceConstraints};
+use pantograph_scheduler::{
+    SchedulerEstimateHint, SchedulerEstimateHintKind, SchedulerNodeId,
+    SchedulerRuntimeDeviceConstraints,
+};
 use serde_json::json;
 
 use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
@@ -37,6 +40,7 @@ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
                     .expect("fingerprint"),
                 task_type: DependencyTaskId::parse("image_generation").expect("task kind"),
                 model_ref: pumas_model_ref(),
+                runtime_source_context: runtime_source_context(),
                 constraints: SchedulerRuntimeDeviceConstraints {
                     requested_runtime_id: Some(
                         RuntimeIntentId::parse("pytorch").expect("runtime id"),
@@ -44,12 +48,33 @@ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
                     requested_device_id: None,
                 },
                 trait_settings: Vec::new(),
-                estimate_hints: Vec::new(),
+                estimate_hints: resource_estimate_hints(),
                 dependency_readiness_source: dependency_readiness_source("iface.binding.v1"),
             },
         ),
     ])
     .expect("projection")
+}
+
+fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+    crate::graph::WorkflowRuntimeSourceContext {
+        operation_type: "image-generation.txt2img".to_string(),
+        context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+        cancellation_mode: "per-run-fanout".to_string(),
+    }
+}
+
+fn resource_estimate_hints() -> Vec<SchedulerEstimateHint> {
+    vec![
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakRamBytes,
+            value: 2_147_483_648,
+        },
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakVramBytes,
+            value: 4_294_967_296,
+        },
+    ]
 }
 
 fn dependency_readiness_source(
@@ -97,6 +122,11 @@ fn graph_with_bound_model_ref() -> WorkflowGraph {
                     "runtime": "pytorch",
                     "device": "cuda:0",
                     "denoising_scheduler": "euler_discrete",
+                    "runtime_source_context": {
+                        "operation_type": "image-generation.txt2img",
+                        "context_shape_key": "txt2img.1024x1024.steps30",
+                        "cancellation_mode": "per-run-fanout"
+                    },
                     "model_path": "/tmp/legacy-model"
                 }),
             },

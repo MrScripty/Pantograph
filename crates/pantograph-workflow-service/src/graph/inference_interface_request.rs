@@ -15,6 +15,7 @@ const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
 const PORT_TASK_KIND: &str = "task_kind";
 const PORT_RUNTIME: &str = "runtime";
 const PORT_DEVICE: &str = "device";
+const PORT_RUNTIME_SOURCE_CONTEXT: &str = "runtime_source_context";
 const NODE_TYPE_PUMA_LIB: &str = "puma-lib";
 const INFERENCE_INTERFACE_SNAPSHOT_FIELD: &str = "inference_interface_snapshot";
 
@@ -23,8 +24,17 @@ const INFERENCE_INTERFACE_SNAPSHOT_FIELD: &str = "inference_interface_snapshot";
 pub struct InferenceInterfaceGraphResolutionInput {
     pub node_id: String,
     pub request: ResolveInferenceInterfaceRequest,
+    pub runtime_source_context: WorkflowRuntimeSourceContext,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_snapshot: Option<AuthoredInferenceInterfaceSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct WorkflowRuntimeSourceContext {
+    pub operation_type: String,
+    pub context_shape_key: String,
+    pub cancellation_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -59,6 +69,8 @@ pub enum InferenceInterfaceGraphResolutionDiagnosticCode {
     InvalidRuntimeConstraint,
     InvalidDeviceConstraint,
     InvalidAuthoredSnapshot,
+    MissingRuntimeSourceContext,
+    InvalidRuntimeSourceContext,
 }
 
 pub fn inference_interface_resolution_inputs_from_graph(
@@ -105,6 +117,11 @@ pub fn inference_interface_resolution_inputs_from_graph(
         else {
             continue;
         };
+        let Some(runtime_source_context) =
+            runtime_source_context(&node.id, &node.data, &mut diagnostics)
+        else {
+            continue;
+        };
         let request = ResolveInferenceInterfaceRequest {
             contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
             model_ref,
@@ -124,6 +141,7 @@ pub fn inference_interface_resolution_inputs_from_graph(
         requests.push(InferenceInterfaceGraphResolutionInput {
             node_id: node.id.clone(),
             request,
+            runtime_source_context,
             authored_snapshot,
         });
     }
@@ -287,6 +305,65 @@ fn parse_model_ref(
             None
         }
     }
+}
+
+fn runtime_source_context(
+    node_id: &str,
+    data: &Value,
+    diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
+) -> Option<WorkflowRuntimeSourceContext> {
+    let Some(value) = data.get(PORT_RUNTIME_SOURCE_CONTEXT) else {
+        diagnostics.push(diagnostic(
+            node_id,
+            Some(PORT_RUNTIME_SOURCE_CONTEXT),
+            InferenceInterfaceGraphResolutionDiagnosticCode::MissingRuntimeSourceContext,
+            "inference nodes require explicit runtime_source_context",
+        ));
+        return None;
+    };
+    if value.is_null() {
+        diagnostics.push(diagnostic(
+            node_id,
+            Some(PORT_RUNTIME_SOURCE_CONTEXT),
+            InferenceInterfaceGraphResolutionDiagnosticCode::MissingRuntimeSourceContext,
+            "inference nodes require explicit runtime_source_context",
+        ));
+        return None;
+    }
+    let Ok(context) = serde_json::from_value::<WorkflowRuntimeSourceContext>(value.clone()) else {
+        diagnostics.push(diagnostic(
+            node_id,
+            Some(PORT_RUNTIME_SOURCE_CONTEXT),
+            InferenceInterfaceGraphResolutionDiagnosticCode::InvalidRuntimeSourceContext,
+            "runtime_source_context must match the canonical workflow-service contract",
+        ));
+        return None;
+    };
+    validate_runtime_source_context(node_id, &context, diagnostics).then_some(context)
+}
+
+fn validate_runtime_source_context(
+    node_id: &str,
+    context: &WorkflowRuntimeSourceContext,
+    diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
+) -> bool {
+    let mut valid = true;
+    for (field, value) in [
+        ("operation_type", context.operation_type.as_str()),
+        ("context_shape_key", context.context_shape_key.as_str()),
+        ("cancellation_mode", context.cancellation_mode.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            diagnostics.push(diagnostic(
+                node_id,
+                Some(PORT_RUNTIME_SOURCE_CONTEXT),
+                InferenceInterfaceGraphResolutionDiagnosticCode::InvalidRuntimeSourceContext,
+                format!("runtime_source_context.{field} must be non-empty"),
+            ));
+            valid = false;
+        }
+    }
+    valid
 }
 
 fn optional_authored_snapshot(
@@ -695,6 +772,59 @@ mod tests {
         assert!(request.device_constraint.is_none());
     }
 
+    #[test]
+    fn graph_resolution_inputs_preserve_runtime_source_context() {
+        let result =
+            inference_interface_resolution_inputs_from_graph(&graph_with_connected_model());
+
+        assert!(result.diagnostics.is_empty());
+        let source_context = &result.requests[0].runtime_source_context;
+        assert_eq!(source_context.operation_type.as_str(), "image_generation");
+        assert_eq!(
+            source_context.context_shape_key.as_str(),
+            "image.1024.square"
+        );
+        assert_eq!(source_context.cancellation_mode.as_str(), "run_scoped");
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_missing_runtime_source_context() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1]
+            .data
+            .as_object_mut()
+            .expect("node data object")
+            .remove(PORT_RUNTIME_SOURCE_CONTEXT);
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::MissingRuntimeSourceContext
+                && diagnostic.port_id.as_deref() == Some(PORT_RUNTIME_SOURCE_CONTEXT)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_invalid_runtime_source_context() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data[PORT_RUNTIME_SOURCE_CONTEXT] = json!({
+            "operation_type": "image_generation",
+            "context_shape_key": "",
+            "cancellation_mode": "run_scoped"
+        });
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.requests.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code
+                == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidRuntimeSourceContext
+                && diagnostic.port_id.as_deref() == Some(PORT_RUNTIME_SOURCE_CONTEXT)
+        }));
+    }
+
     fn graph_with_connected_model() -> WorkflowGraph {
         WorkflowGraph {
             nodes: vec![
@@ -717,7 +847,12 @@ mod tests {
                     data: json!({
                         "task_kind": "image_generation",
                         "runtime": "pytorch",
-                        "device": "cuda.0"
+                        "device": "cuda.0",
+                        "runtime_source_context": {
+                            "operation_type": "image_generation",
+                            "context_shape_key": "image.1024.square",
+                            "cancellation_mode": "run_scoped"
+                        }
                     }),
                 },
             ],

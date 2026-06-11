@@ -5012,6 +5012,56 @@ Verification passed:
 `cargo fmt -p pantograph-workflow-service -- --check`, and `git diff --check`
 for the slice files.
 
+2026-06-10 workflow-service runtime source-context and worker dispatch fact
+slice: completed. Smallest useful vertical slice: introduce explicit
+workflow-service-owned runtime source context and carry it from graph inference
+nodes through inference publication, executable validation snapshots,
+scheduler-ready inference projections, scheduler task graph records,
+runtime-branch task events, runtime-branch rehydration, and task-attempt source
+context; then resolve the re-plan trigger by moving canonical runtime dispatch
+selection and scheduler task-attempt start ahead of runtime-branch rehydration
+inside the worker. Allowed files touched:
+`crates/pantograph-workflow-service/src/graph/*`,
+`crates/pantograph-workflow-service/src/scheduler/*` fixture/test literals,
+`crates/pantograph-workflow-service/src/workflow/*`, focused workflow-service
+tests, and this plan.
+
+No-fallback/no-legacy confirmation: the implementation does not derive
+`operation_type`, `context_shape_key`, or `cancellation_mode` from task kind,
+node type, runtime/backend keys, batching keys, request inputs, or
+runtime-host state. Valid inference nodes must provide the explicit
+`runtime_source_context` graph data contract; missing or malformed values
+produce typed graph-resolution diagnostics. Runtime branch event admission
+rejects runtime scheduler tasks without propagated source context instead of
+fabricating defaults. The worker now claims the durable branch event, marks it
+dispatching, prepares dependency-readiness and runtime dispatch selection,
+starts the canonical scheduler runtime task attempt, records selected-candidate
+evidence, links the dispatch assignment to the scheduler attempt id, and only
+then rehydrates from durable facts. Task-attempt source context groups the
+run-scoped runtime source context with durable selected-candidate evidence
+rather than using batch-eligibility profile facts or request-scoped runtime
+state as substitutes.
+
+Verification passed:
+`cargo check -p pantograph-workflow-service`;
+`cargo test -p pantograph-workflow-service graph::inference_interface_request::tests --lib`;
+`cargo test -p pantograph-workflow-service graph::inference_interface_publication::tests --lib`;
+`cargo test -p pantograph-workflow-service workflow::tests::task_graph --lib`;
+`cargo test -p pantograph-workflow-service workflow::tests::task_binding_resolution --lib`;
+`cargo test -p pantograph-workflow-service workflow::runtime_branch_rehydration::tests --lib`;
+`cargo test -p pantograph-workflow-service workflow::runtime_task_attempt_fact::tests --lib`;
+`cargo test -p pantograph-workflow-service workflow::runtime_branch_task_event::tests --lib`;
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
+and `cargo fmt -p pantograph-workflow-service -- --check`.
+
+Discovered issue:
+`cargo test -p pantograph-workflow-service workflow::tests::session_admission::workflow_execution_session_run_waits_for_runtime_admission_before_dequeue --lib -- --exact`
+still fails at `session_admission.rs:185` with `left: 0` and `right: 1`.
+This failure is not the runtime-worker ordering gap fixed by this slice; it
+uses the generic admission/session fixture path and remains a separate
+session-admission test/fixture migration follow-up. Do not reintroduce
+request-scoped runtime execution or fallback event handling to satisfy it.
+
 ## Standards Rule
 
 The standards constraints in

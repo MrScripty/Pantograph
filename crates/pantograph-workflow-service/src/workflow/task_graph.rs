@@ -22,7 +22,7 @@ use super::task_graph_contracts::{
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 use super::WorkflowServiceError;
-use crate::graph::{workflow_executable_topology, WorkflowGraph};
+use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeSourceContext};
 
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
@@ -83,6 +83,7 @@ pub struct WorkflowSchedulerReadyInferenceTaskProjection {
     pub descriptor_fingerprint: InferenceInterfaceFingerprint,
     pub task_type: DependencyTaskId,
     pub model_ref: PumasModelRef,
+    pub runtime_source_context: WorkflowRuntimeSourceContext,
     pub constraints: SchedulerRuntimeDeviceConstraints,
     pub trait_settings: Vec<SchedulerTraitSetting>,
     pub estimate_hints: Vec<SchedulerEstimateHint>,
@@ -151,6 +152,7 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
             schedulable_intent,
             schedulable_intent_template,
             inference_descriptor_fingerprint,
+            runtime_source_context,
             diagnostics,
         ) = schedulable_intent_for_node(
             &workflow_id,
@@ -187,6 +189,7 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
             non_runtime_task_template,
             source_input_task_template,
             inference_descriptor_fingerprint,
+            runtime_source_context,
             diagnostics,
         });
     }
@@ -269,14 +272,16 @@ fn schedulable_intent_for_node(
     Option<SchedulableTaskIntent>,
     Option<WorkflowSchedulerTaskIntentTemplate>,
     Option<InferenceInterfaceFingerprint>,
+    Option<WorkflowRuntimeSourceContext>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 ) {
     if execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
-        return (None, None, None, Vec::new());
+        return (None, None, None, None, Vec::new());
     }
 
     let Some(inference_task_projection) = inference_task_projection else {
         return (
+            None,
             None,
             None,
             None,
@@ -296,6 +301,7 @@ fn schedulable_intent_for_node(
                     None,
                     None,
                     Some(projection.descriptor_fingerprint.clone()),
+                    None,
                     vec![diagnostic(
                         node_id,
                         None,
@@ -330,6 +336,7 @@ fn schedulable_intent_for_node(
                 }),
                 Some(template),
                 Some(projection.descriptor_fingerprint.clone()),
+                Some(projection.runtime_source_context.clone()),
                 Vec::new(),
             )
         }
@@ -337,6 +344,7 @@ fn schedulable_intent_for_node(
             None,
             None,
             projection.descriptor_fingerprint.clone(),
+            None,
             vec![diagnostic(
                 node_id,
                 None,

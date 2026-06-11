@@ -86,7 +86,7 @@ pub use inference_interface_publication::{
 pub use inference_interface_request::{
     inference_interface_resolution_inputs_from_graph, InferenceInterfaceGraphResolutionDiagnostic,
     InferenceInterfaceGraphResolutionDiagnosticCode, InferenceInterfaceGraphResolutionInput,
-    InferenceInterfaceGraphResolutionInputs,
+    InferenceInterfaceGraphResolutionInputs, WorkflowRuntimeSourceContext,
 };
 pub use inference_interface_resolver::{
     resolve_inference_interface_from_facts, InferenceCapabilityFacts,

@@ -12,6 +12,8 @@ use pantograph_scheduler::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::graph::WorkflowRuntimeSourceContext;
+
 pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 7;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -47,6 +49,8 @@ pub struct WorkflowSchedulerTask {
     pub source_input_task_template: Option<WorkflowSchedulerSourceInputTemplate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inference_descriptor_fingerprint: Option<InferenceInterfaceFingerprint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_source_context: Option<WorkflowRuntimeSourceContext>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
 }

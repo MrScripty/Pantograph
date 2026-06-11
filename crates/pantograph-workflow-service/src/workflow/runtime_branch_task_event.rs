@@ -9,6 +9,7 @@ use super::runtime_dispatch_selection::{
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 use super::WorkflowOutputTarget;
+use crate::graph::WorkflowRuntimeSourceContext;
 
 pub(super) const WORKFLOW_RUNTIME_BRANCH_TASK_EVENT_SCHEMA_VERSION: u16 = 3;
 
@@ -38,6 +39,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRequest {
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(super) timeout_ms: Option<u64>,
     pub(super) batching_key: Option<String>,
+    pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) batch_eligibility: Option<WorkflowRuntimeBranchBatchEligibilityProfile>,
     pub(super) ready_at_ms: u64,
 }
@@ -57,6 +59,7 @@ pub(super) struct WorkflowRuntimeBranchTaskEventRecord {
     pub(super) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(super) timeout_ms: Option<u64>,
     pub(super) batching_key: Option<String>,
+    pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) batch_eligibility: Option<WorkflowRuntimeBranchBatchEligibilityProfile>,
     pub(super) selected_candidate_fact: Option<WorkflowRuntimeDispatchCandidateFact>,
     pub(super) dispatch_assignment_link:
@@ -631,6 +634,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
             output_targets: request.output_targets,
             timeout_ms: request.timeout_ms,
             batching_key: request.batching_key,
+            runtime_source_context: request.runtime_source_context,
             batch_eligibility: request.batch_eligibility,
             selected_candidate_fact: None,
             dispatch_assignment_link: None,
@@ -1165,6 +1169,25 @@ fn validate_request(
     if let Some(batch_eligibility) = &request.batch_eligibility {
         validate_batch_eligibility_profile(batch_eligibility)?;
     }
+    validate_runtime_source_context(&request.runtime_source_context)?;
+    Ok(())
+}
+
+fn validate_runtime_source_context(
+    context: &WorkflowRuntimeSourceContext,
+) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+    validate_non_blank(
+        "runtime branch source context operation type",
+        &context.operation_type,
+    )?;
+    validate_non_blank(
+        "runtime branch source context shape key",
+        &context.context_shape_key,
+    )?;
+    validate_non_blank(
+        "runtime branch source context cancellation mode",
+        &context.cancellation_mode,
+    )?;
     Ok(())
 }
 
@@ -2460,8 +2483,17 @@ mod tests {
             }]),
             timeout_ms: Some(30_000),
             batching_key: Some("runtime.diffusers.cuda0".to_string()),
+            runtime_source_context: runtime_source_context(),
             batch_eligibility: None,
             ready_at_ms: 42,
+        }
+    }
+
+    fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+        crate::graph::WorkflowRuntimeSourceContext {
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
         }
     }
 

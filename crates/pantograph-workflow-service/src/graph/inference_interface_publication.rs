@@ -23,6 +23,7 @@ use super::inference_interface_projection::{
 };
 use super::inference_interface_request::{
     InferenceInterfaceGraphResolutionDiagnostic, InferenceInterfaceGraphResolutionInputs,
+    WorkflowRuntimeSourceContext,
 };
 use super::inference_interface_resolver::InferenceInterfaceResolverFacts;
 use super::inference_interface_validation::{
@@ -84,6 +85,7 @@ pub struct InferenceInterfaceNodeProjectionRecord {
     pub node_id: WorkflowNodeId,
     pub descriptor: InferenceInterfaceDescriptor,
     pub authored_snapshot: AuthoredInferenceInterfaceSnapshot,
+    pub runtime_source_context: WorkflowRuntimeSourceContext,
     pub validation_summary: DraftGraphValidationSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_report: Option<InferenceInterfaceDriftReport>,
@@ -258,6 +260,7 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
             node_id,
             descriptor: projection.descriptor,
             authored_snapshot: projection.authored_snapshot,
+            runtime_source_context: input.runtime_source_context.clone(),
             validation_summary: projection.validation_summary,
             drift_report: projection.drift_report,
             update_proposal,
@@ -738,7 +741,12 @@ mod tests {
                     position: Position { x: 200.0, y: 0.0 },
                     data: json!({
                         "task_kind": "image_generation",
-                        "runtime": "pytorch"
+                        "runtime": "pytorch",
+                        "runtime_source_context": {
+                            "operation_type": "image_generation",
+                            "context_shape_key": "image.1024.square",
+                            "cancellation_mode": "run_scoped"
+                        }
                     }),
                 },
             ],
@@ -790,7 +798,12 @@ mod tests {
                 },
                 data: json!({
                     "task_kind": "image_generation",
-                    "runtime": "pytorch"
+                    "runtime": "pytorch",
+                    "runtime_source_context": {
+                        "operation_type": "image_generation",
+                        "context_shape_key": "image.1024.square",
+                        "cancellation_mode": "run_scoped"
+                    }
                 }),
             });
             graph.edges.push(GraphEdge {

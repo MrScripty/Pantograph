@@ -1276,6 +1276,7 @@ pub(crate) struct CurrentInferenceValidationNodeRecord {
     pub availability_status: InferenceAvailabilityStatus,
     pub validation_status: DraftGraphValidationStatus,
     pub pumas_model_ref: PumasModelRef,
+    pub runtime_source_context: crate::graph::WorkflowRuntimeSourceContext,
     pub runtime_constraint: Option<RuntimeIntentId>,
     pub device_constraint: Option<DeviceIntentId>,
     pub estimate_hints: Vec<SchedulerEstimateHint>,
@@ -1291,6 +1292,7 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
         let availability_status = record.descriptor.availability.status;
         let validation_status = record.validation_summary.status;
         let pumas_model_ref = record.descriptor.model_ref.clone();
+        let runtime_source_context = record.runtime_source_context.clone();
         let runtime_constraint = record.runtime_constraint.clone();
         let device_constraint = record.device_constraint.clone();
         let estimate_hints = record.estimate_hints.clone();
@@ -1301,6 +1303,7 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
             availability_status,
             validation_status,
             pumas_model_ref,
+            runtime_source_context,
             runtime_constraint,
             device_constraint,
             estimate_hints,
@@ -1481,6 +1484,7 @@ impl CurrentInferenceValidationNodeRecord {
                         },
                     )?,
                     model_ref: self.pumas_model_ref.clone(),
+                    runtime_source_context: self.runtime_source_context.clone(),
                     constraints: pantograph_scheduler::SchedulerRuntimeDeviceConstraints {
                         requested_runtime_id: self.runtime_constraint.clone(),
                         requested_device_id: self.device_constraint.clone(),
@@ -3011,6 +3015,7 @@ mod tests {
                 inputs: Vec::new(),
                 outputs: Vec::new(),
             },
+            runtime_source_context: runtime_source_context(),
             validation_summary: DraftGraphValidationSummary {
                 status: validation_status,
                 executable: validation_status == DraftGraphValidationStatus::Executable,
@@ -3037,5 +3042,13 @@ mod tests {
                 value: 4_294_967_296,
             },
         ]
+    }
+
+    fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+        crate::graph::WorkflowRuntimeSourceContext {
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
+        }
     }
 }

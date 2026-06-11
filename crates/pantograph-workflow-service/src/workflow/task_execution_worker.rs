@@ -17,6 +17,8 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventDiagnosticCode, WorkflowRuntimeBranchTaskEventId,
     WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
 };
+use super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId;
+use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
 use super::task_execution_owner::WorkflowTaskExecutionOwner;
 use super::{
@@ -655,10 +657,68 @@ async fn claim_and_execute_runtime_branch_event(
             ),
         );
     }
+    let started_dispatch = match preparation_boundary
+        .start_runtime_branch_dispatch_attempt(
+            &command.session_id,
+            &command.workflow_run_id,
+            &dispatching_record.scheduler_task_id,
+            preparation.admitted_runtime_readiness(),
+            scheduler_transition_from_runtime_branch_start_reason(command.start_reason),
+        )
+        .await
+    {
+        Ok(started_dispatch) => started_dispatch,
+        Err(error) => {
+            return fail_runtime_branch_preparation_error(
+                command,
+                service.as_ref(),
+                &dispatching_record.event_id,
+                &claimed.claim,
+                error,
+            );
+        }
+    };
+    let evidence_record = match record_runtime_branch_selected_candidate_fact(
+        service.as_ref(),
+        &dispatching_record.event_id,
+        &claimed.claim,
+        started_dispatch.selected_candidate_fact.clone(),
+    ) {
+        Ok(record) => record,
+        Err(diagnostic) => {
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch selected-candidate evidence persistence failed",
+                vec![diagnostic],
+            );
+        }
+    };
+    let dispatch_assignment_id = WorkflowRuntimeDispatchAssignmentId::new();
+    let linked_record = match link_runtime_branch_dispatch_assignment(
+        service.as_ref(),
+        &evidence_record.event_id,
+        &claimed.claim,
+        dispatch_assignment_id,
+        started_dispatch
+            .started_runtime_task
+            .attempt_id()
+            .as_str()
+            .to_string(),
+        unix_timestamp_ms(),
+    ) {
+        Ok(record) => record,
+        Err(diagnostic) => {
+            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch dispatch-assignment link persistence failed",
+                vec![diagnostic],
+            );
+        }
+    };
 
     let rehydrated = match rehydrate_runtime_branch_execution_context(
         service.as_ref(),
-        &dispatching_record,
+        &linked_record,
         &claimed.claim,
     ) {
         Ok(context) => context,
@@ -695,11 +755,13 @@ async fn claim_and_execute_runtime_branch_event(
 
     let host = environment.host();
     let run_result =
-        WorkflowTaskExecutionOwner::run_rehydrated_runtime_branch_until_dispatch_boundary(
+        WorkflowTaskExecutionOwner::run_rehydrated_started_runtime_branch_to_completion(
             service.as_ref(),
             host.as_ref(),
             command,
             &rehydrated,
+            &started_dispatch.started_runtime_task,
+            &started_dispatch.selected_dispatch,
         )
         .await;
 
@@ -956,6 +1018,54 @@ fn mark_claimed_runtime_branch_task_event_dispatching(
         .map_err(runtime_branch_event_diagnostic)
 }
 
+fn record_runtime_branch_selected_candidate_fact(
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .record_selected_candidate_fact(event_id, claim, selected_candidate_fact)
+        .map_err(runtime_branch_event_diagnostic)
+}
+
+fn link_runtime_branch_dispatch_assignment(
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    scheduler_task_attempt_id: String,
+    linked_at_ms: u64,
+) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_branch_task_event_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventClaimFailed,
+                "runtime branch task-event repository lock poisoned",
+            )
+        })?;
+    repository
+        .link_dispatch_assignment(
+            event_id,
+            claim,
+            assignment_id,
+            scheduler_task_attempt_id,
+            linked_at_ms,
+        )
+        .map_err(runtime_branch_event_diagnostic)
+}
+
 fn mark_claimed_runtime_branch_task_event_running(
     service: &WorkflowService,
     event_id: &WorkflowRuntimeBranchTaskEventId,
@@ -1041,6 +1151,19 @@ fn runtime_branch_event_diagnostic(
             diagnostic.code, diagnostic.message
         ),
     )
+}
+
+fn scheduler_transition_from_runtime_branch_start_reason(
+    start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
+) -> pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition {
+    match start_reason {
+        WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started => {
+            pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition::Started
+        }
+        WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched => {
+            pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition::Redispatched
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1285,6 +1408,7 @@ mod tests {
                 output_targets: None,
                 timeout_ms: Some(500),
                 batching_key: Some("runtime-branch-task.workflow-1.image-task".to_string()),
+                runtime_source_context: runtime_source_context(),
                 batch_eligibility: None,
                 ready_at_ms: unix_timestamp_ms().saturating_sub(1),
             })
@@ -1386,6 +1510,7 @@ mod tests {
                 output_targets: None,
                 timeout_ms: Some(500),
                 batching_key: Some("runtime-branch-task.workflow-1.image-task".to_string()),
+                runtime_source_context: runtime_source_context(),
                 batch_eligibility: None,
                 ready_at_ms: 100,
             })
@@ -1499,6 +1624,7 @@ mod tests {
                 non_runtime_task_template: None,
                 source_input_task_template: None,
                 inference_descriptor_fingerprint: None,
+                runtime_source_context: None,
                 diagnostics: Vec::new(),
             }],
         }
@@ -1770,6 +1896,14 @@ mod tests {
             output_targets: None,
             timeout_ms: Some(500),
             start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched,
+        }
+    }
+
+    fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+        crate::graph::WorkflowRuntimeSourceContext {
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
         }
     }
 }

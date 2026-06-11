@@ -1,12 +1,13 @@
 use std::time::Duration;
 
+use crate::scheduler::task_orchestrator::{
+    SelectedRuntimeTaskDispatch, StartedRuntimeTaskExecution,
+};
 use crate::scheduler::WorkflowExecutionSessionDequeuedRun;
-use pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition;
 use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRecord};
 
 use super::runtime_branch_rehydration::WorkflowRuntimeBranchRehydratedContext;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
-use super::task_execution_worker::WorkflowTaskExecutionWorkerRuntimeBranchStartReason;
 use super::{
     WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionSummary, WorkflowHost,
     WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTaskRunSummary, WorkflowService,
@@ -110,13 +111,15 @@ impl WorkflowTaskExecutionOwner {
         run_result
     }
 
-    pub(super) async fn run_rehydrated_runtime_branch_until_dispatch_boundary<
+    pub(super) async fn run_rehydrated_started_runtime_branch_to_completion<
         H: WorkflowHost + ?Sized,
     >(
         service: &WorkflowService,
         host: &H,
         command: &super::task_execution_worker::WorkflowTaskExecutionWorkerRuntimeBranchCommand,
         rehydrated: &WorkflowRuntimeBranchRehydratedContext,
+        started_runtime_task: &StartedRuntimeTaskExecution,
+        selected_dispatch: &SelectedRuntimeTaskDispatch,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         debug_assert!(rehydrated
             .task_graph
@@ -139,9 +142,13 @@ impl WorkflowTaskExecutionOwner {
             rehydrated.task_attempt_source_context.scheduler_task_id,
             rehydrated.runtime_task_id
         );
-        debug_assert!(
-            !rehydrated.scheduler_task_attempt_id.as_str().is_empty()
-                && rehydrated.scheduler_task_attempt_started_at_ms > 0
+        debug_assert_eq!(
+            started_runtime_task.attempt_id().as_str(),
+            rehydrated.scheduler_task_attempt_id.as_str()
+        );
+        debug_assert_eq!(
+            started_runtime_task.started_at_ms(),
+            rehydrated.scheduler_task_attempt_started_at_ms
         );
         let workflow_run_id = WorkflowRunId::try_from(command.workflow_run_id.clone())?;
         let run_snapshot =
@@ -154,16 +161,16 @@ impl WorkflowTaskExecutionOwner {
         )?;
         let run_started_at = std::time::Instant::now();
         let runner = WorkflowSchedulerSessionRunner::new(service);
-        let run_future = runner.run_until_runtime_dispatch_boundary_with_attempt_transition(
+        let run_future = runner.run_started_runtime_dispatch_task_to_completion(
             host,
             &command.session_id,
             &command.workflow_run_id,
             &command.workflow_id,
-            &rehydrated.active_run.inputs,
             command.output_targets.as_deref(),
             &rehydrated.task_run_summary,
             run_started_at,
-            scheduler_transition_from_runtime_branch_start_reason(command.start_reason),
+            started_runtime_task,
+            selected_dispatch,
         );
         let run_result = if let Some(timeout_ms) = command.timeout_ms {
             match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
@@ -236,18 +243,5 @@ impl WorkflowTaskExecutionOwner {
             return Err(record_error);
         }
         run_result
-    }
-}
-
-fn scheduler_transition_from_runtime_branch_start_reason(
-    start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason,
-) -> SchedulerTaskAttemptLifecycleTransition {
-    match start_reason {
-        WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started => {
-            SchedulerTaskAttemptLifecycleTransition::Started
-        }
-        WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched => {
-            SchedulerTaskAttemptLifecycleTransition::Redispatched
-        }
     }
 }

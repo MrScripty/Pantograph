@@ -891,6 +891,24 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             .as_str(),
         "pytorch"
     );
+    let event_id =
+        super::super::runtime_branch_task_event::WorkflowRuntimeBranchTaskEventId::parse(format!(
+            "runtime-branch-task-event.{}.infer",
+            response.workflow_run_id
+        ))
+        .expect("runtime branch event id");
+    let event = service
+        .runtime_branch_task_event_for_test(&event_id)
+        .expect("runtime branch event should persist worker dispatch facts");
+    assert!(event.selected_candidate_fact.is_some());
+    assert!(event.dispatch_assignment_link.is_some());
+    assert_eq!(
+        event.scheduler_task_attempt_id.as_deref(),
+        event
+            .dispatch_assignment_link
+            .as_ref()
+            .map(|link| link.scheduler_task_attempt_id.as_str())
+    );
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     let work_item = dependency_readiness_work_queue
         .pop_next()
@@ -1747,6 +1765,7 @@ async fn workflow_execution_session_resume_rejects_inactive_and_non_runtime_runs
             non_runtime_task_template: None,
             source_input_task_template: None,
             inference_descriptor_fingerprint: None,
+            runtime_source_context: None,
             diagnostics: Vec::new(),
         }],
     };
@@ -3982,6 +4001,11 @@ fn runtime_inference_session_graph() -> WorkflowGraph {
                     "task_kind": "image_generation",
                     "runtime": "pytorch",
                     "device": "cuda:0",
+                    "runtime_source_context": {
+                        "operation_type": "image-generation.txt2img",
+                        "context_shape_key": "txt2img.1024x1024.steps30",
+                        "cancellation_mode": "per-run-fanout"
+                    },
                     "inference_interface_snapshot": runtime_inference_interface_snapshot_json(),
                     "pumas_model_ref": {
                         "model_id": "image/example/tiny-diffusion",
@@ -4088,6 +4112,7 @@ fn runtime_executable_validation_snapshot(
             .expect("valid descriptor fingerprint"),
             task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
             model_ref,
+            runtime_source_context: runtime_source_context(),
             constraints: pantograph_scheduler::SchedulerRuntimeDeviceConstraints {
                 requested_runtime_id: Some(
                     RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
@@ -4200,6 +4225,14 @@ fn runtime_dependency_planning_request(
             port_id: None,
             run_id: None,
         },
+    }
+}
+
+fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+    crate::graph::WorkflowRuntimeSourceContext {
+        operation_type: "image-generation.txt2img".to_string(),
+        context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+        cancellation_mode: "per-run-fanout".to_string(),
     }
 }
 

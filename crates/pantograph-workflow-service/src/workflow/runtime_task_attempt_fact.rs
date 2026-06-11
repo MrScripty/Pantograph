@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use super::runtime_branch_task_event::WorkflowRuntimeBranchBatchEligibilityProfile;
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
+use crate::graph::WorkflowRuntimeSourceContext;
 
 pub(super) const WORKFLOW_RUNTIME_TASK_ATTEMPT_FACT_SCHEMA_VERSION: u16 = 1;
 
@@ -44,7 +44,7 @@ pub(super) struct WorkflowRuntimeTaskAttemptSourceContextRequest {
     pub(super) scheduler_task_id: String,
     pub(super) task_attempt_generation: u64,
     pub(super) timeout_ms: Option<u64>,
-    pub(super) runtime_branch_profile: WorkflowRuntimeBranchBatchEligibilityProfile,
+    pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
 }
 
@@ -56,7 +56,7 @@ pub(super) struct WorkflowRuntimeTaskAttemptSourceContext {
     pub(super) scheduler_task_id: String,
     pub(super) task_attempt_generation: u64,
     pub(super) timeout_ms: Option<u64>,
-    pub(super) runtime_branch_profile: WorkflowRuntimeBranchBatchEligibilityProfile,
+    pub(super) runtime_source_context: WorkflowRuntimeSourceContext,
     pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
 }
 
@@ -162,7 +162,7 @@ impl WorkflowRuntimeTaskAttemptSourceContext {
             scheduler_task_id: request.scheduler_task_id,
             task_attempt_generation: request.task_attempt_generation,
             timeout_ms: request.timeout_ms,
-            runtime_branch_profile: request.runtime_branch_profile,
+            runtime_source_context: request.runtime_source_context,
             selected_candidate_fact: request.selected_candidate_fact,
         })
     }
@@ -247,11 +247,8 @@ fn validate_source_context_request(
             "runtime task-attempt timeout must be greater than zero when present",
         ));
     }
-    validate_runtime_branch_profile(&request.runtime_branch_profile)?;
-    validate_selected_candidate_fact_matches_profile(
-        &request.selected_candidate_fact,
-        &request.runtime_branch_profile,
-    )?;
+    validate_runtime_source_context(&request.runtime_source_context)?;
+    validate_selected_candidate_fact(&request.selected_candidate_fact)?;
     Ok(())
 }
 
@@ -331,52 +328,50 @@ fn validate_request(
     Ok(())
 }
 
-fn validate_runtime_branch_profile(
-    profile: &WorkflowRuntimeBranchBatchEligibilityProfile,
+fn validate_runtime_source_context(
+    context: &WorkflowRuntimeSourceContext,
 ) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
     validate_required_selected_fact(
-        "runtime_branch_profile.model_artifact_id",
-        &profile.model_artifact_id,
+        "runtime_source_context.operation_type",
+        &context.operation_type,
     )?;
     validate_required_selected_fact(
-        "runtime_branch_profile.runtime_family",
-        &profile.runtime_family,
-    )?;
-    validate_required_selected_fact("runtime_branch_profile.backend_id", &profile.backend_id)?;
-    validate_required_selected_fact(
-        "runtime_branch_profile.device_load_target",
-        &profile.device_load_target,
+        "runtime_source_context.context_shape_key",
+        &context.context_shape_key,
     )?;
     validate_required_selected_fact(
-        "runtime_branch_profile.runtime_residency_key",
-        &profile.runtime_residency_key,
-    )?;
-    if profile.estimated_loaded_runtime_bytes == 0 {
-        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
-            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidMemoryEstimate,
-            "runtime_branch_profile.estimated_loaded_runtime_bytes",
-            "runtime branch loaded-runtime memory estimate must be greater than zero",
-        ));
-    }
-    validate_required_selected_fact(
-        "runtime_branch_profile.context_shape_key",
-        &profile.context_shape_key,
-    )?;
-    validate_required_selected_fact(
-        "runtime_branch_profile.operation_type",
-        &profile.operation_type,
-    )?;
-    validate_required_selected_fact(
-        "runtime_branch_profile.cancellation_mode",
-        &profile.cancellation_mode,
+        "runtime_source_context.cancellation_mode",
+        &context.cancellation_mode,
     )?;
     Ok(())
 }
 
-fn validate_selected_candidate_fact_matches_profile(
+fn validate_selected_candidate_fact(
     fact: &WorkflowRuntimeDispatchCandidateFact,
-    profile: &WorkflowRuntimeBranchBatchEligibilityProfile,
 ) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
+    validate_required_selected_fact(
+        "selected_candidate_fact.runtime_family",
+        &fact.runtime_family,
+    )?;
+    validate_required_selected_fact(
+        "selected_candidate_fact.selected_backend_key",
+        &fact.selected_backend_key,
+    )?;
+    validate_required_selected_fact(
+        "selected_candidate_fact.resolved_load_target",
+        &fact.resolved_load_target,
+    )?;
+    validate_required_selected_fact(
+        "selected_candidate_fact.runtime_residency_key",
+        &fact.runtime_residency_key,
+    )?;
+    if fact.loaded_runtime_memory_estimate_bytes == 0 {
+        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidMemoryEstimate,
+            "selected_candidate_fact.loaded_runtime_memory_estimate_bytes",
+            "selected candidate loaded-runtime memory estimate must be greater than zero",
+        ));
+    }
     let selected_artifact_id = fact
         .selected_model_ref
         .selected_artifact_id
@@ -388,59 +383,10 @@ fn validate_selected_candidate_fact_matches_profile(
                 "selected candidate fact must carry selected model artifact id",
             )
         })?;
-    ensure_source_context_field_matches(
-        "model artifact id",
+    validate_required_selected_fact(
         "selected_candidate_fact.selected_model_ref.selected_artifact_id",
         selected_artifact_id,
-        &profile.model_artifact_id,
     )?;
-    ensure_source_context_field_matches(
-        "runtime family",
-        "selected_candidate_fact.runtime_family",
-        &fact.runtime_family,
-        &profile.runtime_family,
-    )?;
-    ensure_source_context_field_matches(
-        "backend id",
-        "selected_candidate_fact.selected_backend_key",
-        &fact.selected_backend_key,
-        &profile.backend_id,
-    )?;
-    ensure_source_context_field_matches(
-        "device load target",
-        "selected_candidate_fact.resolved_load_target",
-        &fact.resolved_load_target,
-        &profile.device_load_target,
-    )?;
-    ensure_source_context_field_matches(
-        "runtime residency key",
-        "selected_candidate_fact.runtime_residency_key",
-        &fact.runtime_residency_key,
-        &profile.runtime_residency_key,
-    )?;
-    if fact.loaded_runtime_memory_estimate_bytes != profile.estimated_loaded_runtime_bytes {
-        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
-            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidSourceContext,
-            "selected_candidate_fact.loaded_runtime_memory_estimate_bytes",
-            "selected candidate loaded-runtime memory estimate does not match runtime branch profile",
-        ));
-    }
-    Ok(())
-}
-
-fn ensure_source_context_field_matches(
-    label: &str,
-    field_path: &'static str,
-    left: &str,
-    right: &str,
-) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
-    if left != right {
-        return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
-            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidSourceContext,
-            field_path,
-            format!("selected candidate {label} does not match runtime branch profile"),
-        ));
-    }
     Ok(())
 }
 
@@ -651,7 +597,7 @@ mod tests {
     }
 
     #[test]
-    fn source_context_groups_runtime_branch_profile_and_selected_candidate_fact() {
+    fn source_context_groups_runtime_source_context_and_selected_candidate_fact() {
         let context = WorkflowRuntimeTaskAttemptSourceContext::new(source_context_request())
             .expect("source context should validate");
 
@@ -661,7 +607,7 @@ mod tests {
         assert_eq!(context.task_attempt_generation, 1);
         assert_eq!(context.timeout_ms, Some(30_000));
         assert_eq!(
-            context.runtime_branch_profile.context_shape_key,
+            context.runtime_source_context.context_shape_key,
             "txt2img.1024x1024.steps30"
         );
         assert_eq!(
@@ -671,9 +617,9 @@ mod tests {
     }
 
     #[test]
-    fn source_context_rejects_missing_runtime_branch_profile_field() {
+    fn source_context_rejects_missing_runtime_source_context_field() {
         let mut request = source_context_request();
-        request.runtime_branch_profile.operation_type = " ".to_string();
+        request.runtime_source_context.operation_type = " ".to_string();
 
         let error = WorkflowRuntimeTaskAttemptSourceContext::new(request)
             .expect_err("missing operation type must fail closed");
@@ -682,20 +628,20 @@ mod tests {
             error.code,
             WorkflowRuntimeTaskAttemptFactDiagnosticCode::MissingSelectedFact
         );
-        assert_eq!(error.field_path, "runtime_branch_profile.operation_type");
+        assert_eq!(error.field_path, "runtime_source_context.operation_type");
     }
 
     #[test]
-    fn source_context_rejects_selected_candidate_profile_mismatch() {
+    fn source_context_rejects_missing_selected_candidate_fact_field() {
         let mut request = source_context_request();
-        request.selected_candidate_fact.runtime_family = "other-runtime".to_string();
+        request.selected_candidate_fact.runtime_family = " ".to_string();
 
         let error = WorkflowRuntimeTaskAttemptSourceContext::new(request)
-            .expect_err("runtime family mismatch must fail closed");
+            .expect_err("missing selected runtime family must fail closed");
 
         assert_eq!(
             error.code,
-            WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidSourceContext
+            WorkflowRuntimeTaskAttemptFactDiagnosticCode::MissingSelectedFact
         );
         assert_eq!(error.field_path, "selected_candidate_fact.runtime_family");
     }
@@ -722,19 +668,13 @@ mod tests {
             scheduler_task_id: "image-task".to_string(),
             task_attempt_generation: 1,
             timeout_ms: Some(30_000),
-            runtime_branch_profile: batch_profile(),
+            runtime_source_context: runtime_source_context(),
             selected_candidate_fact: selected_candidate_fact(),
         }
     }
 
-    fn batch_profile() -> WorkflowRuntimeBranchBatchEligibilityProfile {
-        WorkflowRuntimeBranchBatchEligibilityProfile {
-            model_artifact_id: "artifact.sdxl.diffusers".to_string(),
-            runtime_family: "diffusers".to_string(),
-            backend_id: "backend.diffusers".to_string(),
-            device_load_target: "cuda:0".to_string(),
-            runtime_residency_key: "runtime.diffusers.model.sdxl.cuda0".to_string(),
-            estimated_loaded_runtime_bytes: 8_589_934_592,
+    fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+        crate::graph::WorkflowRuntimeSourceContext {
             context_shape_key: "txt2img.1024x1024.steps30".to_string(),
             operation_type: "image-generation.txt2img".to_string(),
             cancellation_mode: "per-run-fanout".to_string(),

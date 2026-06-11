@@ -2378,6 +2378,10 @@ impl WorkflowService {
                     )
                 })
                 .collect::<Vec<_>>();
+            let runtime_source_context = task
+                .runtime_source_context
+                .clone()
+                .ok_or_else(|| missing_runtime_source_context_error(task.task_id.as_str()))?;
             let record = WorkflowRuntimeBranchTaskEventRecord::ready(
                 WorkflowRuntimeBranchTaskEventRequest {
                     event_id,
@@ -2395,6 +2399,7 @@ impl WorkflowService {
                         workflow_id,
                         task.task_id.as_str()
                     )),
+                    runtime_source_context,
                     batch_eligibility: None,
                     ready_at_ms,
                 },
@@ -2452,6 +2457,10 @@ impl WorkflowService {
                     )
                 })
                 .collect::<Vec<_>>();
+            let runtime_source_context = task
+                .runtime_source_context
+                .clone()
+                .ok_or_else(|| missing_runtime_source_context_error(task.task_id.as_str()))?;
             let record = WorkflowRuntimeBranchTaskEventRecord::ready(
                 WorkflowRuntimeBranchTaskEventRequest {
                     event_id,
@@ -2469,6 +2478,7 @@ impl WorkflowService {
                         workflow_id,
                         task.task_id.as_str()
                     )),
+                    runtime_source_context,
                     batch_eligibility: None,
                     ready_at_ms,
                 },
@@ -2488,7 +2498,7 @@ impl WorkflowService {
     }
 
     #[cfg(test)]
-    fn runtime_branch_task_event_for_test(
+    pub(super) fn runtime_branch_task_event_for_test(
         &self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
     ) -> Option<WorkflowRuntimeBranchTaskEventRecord> {
@@ -2516,6 +2526,12 @@ fn workflow_execution_session_retention_policy(
     } else {
         WORKFLOW_SESSION_RETENTION_EPHEMERAL
     }
+}
+
+fn missing_runtime_source_context_error(task_id: &str) -> WorkflowServiceError {
+    WorkflowServiceError::Internal(format!(
+        "runtime inference scheduler task '{task_id}' is missing workflow runtime source context"
+    ))
 }
 
 #[cfg(test)]
@@ -2560,6 +2576,7 @@ mod tests {
                     non_runtime_task_template: None,
                     source_input_task_template: None,
                     inference_descriptor_fingerprint: None,
+                    runtime_source_context: None,
                     diagnostics: Vec::new(),
                 },
                 WorkflowSchedulerTask {
@@ -2581,6 +2598,7 @@ mod tests {
                     non_runtime_task_template: None,
                     source_input_task_template: None,
                     inference_descriptor_fingerprint: None,
+                    runtime_source_context: None,
                     diagnostics: Vec::new(),
                 },
             ],

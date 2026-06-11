@@ -752,6 +752,7 @@ fn orchestrator_initializes_awaiting_inputs_for_pre_intent_task() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -785,6 +786,7 @@ fn orchestrator_initializes_source_input_state_as_awaiting_inputs() {
             port_id: "text".to_string(),
         }),
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -815,6 +817,7 @@ fn orchestrator_rejects_non_runtime_task_without_typed_template() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -851,6 +854,7 @@ fn orchestrator_initializes_awaiting_inputs_for_dependent_non_runtime_task() {
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -881,6 +885,7 @@ fn orchestrator_initializes_invalid_state_for_unsupported_task_class() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -915,6 +920,7 @@ fn orchestrator_initializes_pumas_materialization_as_awaiting_inputs() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
 
@@ -949,6 +955,7 @@ fn orchestrator_marks_unhandled_task_classes_terminal_failed() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -989,6 +996,7 @@ fn orchestrator_initializes_invalid_state_for_projection_diagnostics() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: vec![WorkflowSchedulerTaskProjectionDiagnostic {
             severity: WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error,
             code: WorkflowSchedulerTaskProjectionDiagnosticCode::MissingInferenceDescriptor,
@@ -1044,6 +1052,7 @@ fn orchestrator_persists_initial_task_state_for_active_run() {
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -1758,6 +1767,7 @@ async fn orchestrator_marks_non_runtime_adapter_failure_terminal_without_result(
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }]);
     let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
@@ -2109,6 +2119,7 @@ fn task_from_intent(task_intent: SchedulableTaskIntent) -> WorkflowSchedulerTask
         non_runtime_task_template: None,
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }
 }
@@ -2147,6 +2158,7 @@ fn text_input_task(task_id: &str, _value: &str) -> WorkflowSchedulerTask {
             port_id: "text".to_string(),
         }),
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }
 }
@@ -2176,6 +2188,7 @@ fn text_output_task() -> WorkflowSchedulerTask {
         non_runtime_task_template: Some(WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput),
         source_input_task_template: None,
         inference_descriptor_fingerprint: None,
+        runtime_source_context: None,
         diagnostics: Vec::new(),
     }
 }

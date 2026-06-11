@@ -179,6 +179,7 @@ mod tests {
                 non_runtime_task_template: None,
                 source_input_task_template: None,
                 inference_descriptor_fingerprint: None,
+                runtime_source_context: None,
                 diagnostics: Vec::new(),
             }],
         }

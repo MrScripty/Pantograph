@@ -392,6 +392,7 @@ fn executable_validation_snapshot(
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
             },
+            runtime_source_context: runtime_source_context(),
             constraints: Default::default(),
             availability_status: InferenceAvailabilityStatus::Available,
             validation_status: DraftGraphValidationStatus::Executable,
@@ -463,6 +464,7 @@ fn executable_validation_publication(
                 outputs: Vec::new(),
             },
             descriptor,
+            runtime_source_context: runtime_source_context(),
             validation_summary: summary,
             drift_report: None,
             update_proposal: None,
@@ -471,5 +473,13 @@ fn executable_validation_publication(
             estimate_hints: Vec::new(),
         }],
         request_diagnostics: Vec::new(),
+    }
+}
+
+fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+    crate::graph::WorkflowRuntimeSourceContext {
+        operation_type: "image-generation.txt2img".to_string(),
+        context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+        cancellation_mode: "per-run-fanout".to_string(),
     }
 }

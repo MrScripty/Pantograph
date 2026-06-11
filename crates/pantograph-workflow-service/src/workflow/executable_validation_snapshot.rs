@@ -35,7 +35,7 @@ use super::task_graph_contracts::WorkflowSchedulerDependencyReadinessSource;
 use crate::graph::{
     CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
     InferenceInterfaceNodeProjectionRecord, WorkflowGraph,
-    WorkflowGraphInferenceValidationPublication,
+    WorkflowGraphInferenceValidationPublication, WorkflowRuntimeSourceContext,
 };
 
 pub const WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_SCHEMA_VERSION: u16 = 2;
@@ -314,6 +314,7 @@ pub struct WorkflowExecutableValidationSnapshotNode {
     pub descriptor_fingerprint: InferenceInterfaceFingerprint,
     pub task_kind: InferenceTaskKind,
     pub model_ref: PumasModelRef,
+    pub runtime_source_context: WorkflowRuntimeSourceContext,
     #[serde(default)]
     pub constraints: SchedulerRuntimeDeviceConstraints,
     pub availability_status: InferenceAvailabilityStatus,
@@ -354,6 +355,7 @@ impl WorkflowExecutableValidationSnapshotNode {
             descriptor_fingerprint: record.descriptor.descriptor_fingerprint.clone(),
             task_kind: record.descriptor.task_kind.clone(),
             model_ref: record.descriptor.model_ref.clone(),
+            runtime_source_context: record.runtime_source_context.clone(),
             constraints: SchedulerRuntimeDeviceConstraints {
                 requested_runtime_id: record.runtime_constraint.clone(),
                 requested_device_id: record.device_constraint.clone(),
@@ -460,6 +462,7 @@ impl WorkflowExecutableValidationSnapshotNode {
                 descriptor_fingerprint: self.descriptor_fingerprint.clone(),
                 task_type,
                 model_ref: self.model_ref.clone(),
+                runtime_source_context: self.runtime_source_context.clone(),
                 constraints: self.constraints.clone(),
                 trait_settings: self.trait_settings.clone(),
                 estimate_hints: self.estimate_hints.clone(),
@@ -1342,6 +1345,7 @@ mod tests {
                     selected_artifact_path: None,
                     migration_diagnostics: Vec::new(),
                 },
+                runtime_source_context: runtime_source_context(),
                 constraints: SchedulerRuntimeDeviceConstraints {
                     requested_runtime_id: Some(
                         RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
@@ -1488,6 +1492,7 @@ mod tests {
                     inputs: Vec::new(),
                     outputs: Vec::new(),
                 },
+                runtime_source_context: runtime_source_context(),
                 validation_summary: summary,
                 drift_report: None,
                 update_proposal: None,
@@ -1510,5 +1515,13 @@ mod tests {
                 value: 4_294_967_296,
             },
         ]
+    }
+
+    fn runtime_source_context() -> WorkflowRuntimeSourceContext {
+        WorkflowRuntimeSourceContext {
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
+        }
     }
 }

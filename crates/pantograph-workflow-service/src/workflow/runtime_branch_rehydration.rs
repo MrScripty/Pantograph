@@ -244,12 +244,6 @@ fn validate_scheduler_task_attempt_correlation(
 fn rehydrate_task_attempt_source_context(
     record: &WorkflowRuntimeBranchTaskEventRecord,
 ) -> Result<WorkflowRuntimeTaskAttemptSourceContext, WorkflowRuntimeBranchRehydrationDiagnostic> {
-    let runtime_branch_profile = record.batch_eligibility.clone().ok_or_else(|| {
-        WorkflowRuntimeBranchRehydrationDiagnostic::new(
-            WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptSourceContextInvalid,
-            "runtime branch task event is missing batch eligibility profile for task-attempt facts",
-        )
-    })?;
     let selected_candidate_fact = record.selected_candidate_fact.clone().ok_or_else(|| {
         WorkflowRuntimeBranchRehydrationDiagnostic::new(
             WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptSourceContextInvalid,
@@ -264,7 +258,7 @@ fn rehydrate_task_attempt_source_context(
         scheduler_task_id: record.scheduler_task_id.clone(),
         task_attempt_generation: record.attempt_generation,
         timeout_ms: record.timeout_ms,
-        runtime_branch_profile,
+        runtime_source_context: record.runtime_source_context.clone(),
         selected_candidate_fact,
     })
     .map_err(task_attempt_source_context_diagnostic)
@@ -645,6 +639,7 @@ mod tests {
             }]),
             timeout_ms,
             batching_key: Some("runtime-branch-task.workflow-image-plan.image-task".to_string()),
+            runtime_source_context: runtime_source_context(),
             batch_eligibility: Some(batch_profile()),
             ready_at_ms: 1,
         })
@@ -691,6 +686,7 @@ mod tests {
                 non_runtime_task_template: None,
                 source_input_task_template: None,
                 inference_descriptor_fingerprint: None,
+                runtime_source_context: None,
                 diagnostics: Vec::new(),
             }],
         }
@@ -767,6 +763,14 @@ mod tests {
             estimated_loaded_runtime_bytes: 8_589_934_592,
             context_shape_key: "txt2img.1024x1024.steps30".to_string(),
             operation_type: "image-generation.txt2img".to_string(),
+            cancellation_mode: "per-run-fanout".to_string(),
+        }
+    }
+
+    fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
+        crate::graph::WorkflowRuntimeSourceContext {
+            operation_type: "image-generation.txt2img".to_string(),
+            context_shape_key: "txt2img.1024x1024.steps30".to_string(),
             cancellation_mode: "per-run-fanout".to_string(),
         }
     }
