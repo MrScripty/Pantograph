@@ -2684,6 +2684,54 @@ becomes a hard requirement. Option 2 is not the current source-context design;
 dispatch assignments own handoff and execution lifecycle facts, not the
 semantic run-scoped source context.
 
+2026-06-10 Option 3 source-context projection re-plan trigger: stop before
+implementing the source-context contract split. Inspection found that
+runtime-branch task events and task-attempt source-context validation can hold
+the intended split, but admission/recovery currently receives
+`WorkflowSchedulerTask` records that do not carry explicit
+`operation_type`, `context_shape_key`, or `cancellation_mode` fields. The
+validated executable snapshot and scheduler inference task projection also do
+not currently expose those fields. Implementing the split only inside
+runtime-branch task events would require deriving source facts from task kind,
+node type, batching key, graph shape, request data, or worker/runtime-host
+state, which is forbidden by the selected Option 3 decision and the
+no-fallback/no-legacy rule. Implementing it correctly requires expanding the
+next slice to include the canonical projection owner that carries run-scoped
+source-context fields into `WorkflowSchedulerTask` before event admission.
+
+Re-plan options:
+1. Promote explicit source-context fields onto the executable validation
+   snapshot node and ready inference task projection, then project them into
+   `WorkflowSchedulerTask` and persist them on runtime-branch task events at
+   admission/recovery. This keeps the validated backend snapshot as the
+   canonical owner before scheduling and preserves the Option 3 split, but it
+   broadens the next contract slice to include snapshot/projection/task-graph
+   contracts and focused tests.
+2. Add a narrower workflow-service runtime source-context projection adjacent
+   to the task graph, keyed by workflow run and scheduler task id, and have
+   runtime-branch admission consume it alongside `WorkflowSchedulerTask`. This
+   avoids changing `WorkflowSchedulerTask` immediately, but it introduces a
+   second projection that must be kept correlated with the task graph and may
+   create avoidable ownership friction.
+3. Reconsider Option 1 from the previous decision and add a full backend-owned
+   planning snapshot that owns both run-scoped source facts and selected
+   compatibility facts before dispatch. This is strict and replayable from one
+   snapshot, but it duplicates selected-candidate evidence that is already
+   owned by dispatch selection and is broader than needed for the current
+   assignment-owned execution unblocker.
+
+Recommended path: use Option 1. The next slice should explicitly add the
+run-scoped source-context fields to the validated executable snapshot ->
+ready inference projection -> scheduler task graph -> runtime-branch event
+admission path, then update rehydration/task-attempt source-context validation
+to combine event-owned source facts with selected-candidate evidence. This is
+the smallest standards-compliant path that avoids derivation, keeps one
+backend-owned source of truth for run-scoped semantics, and preserves the
+selected-candidate evidence owner for runtime/model/resource compatibility.
+Do not implement Option 3 by adding defaults, deriving source-context fields
+from task type or node type, making source fields optional, or letting the
+worker fill missing fields.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
