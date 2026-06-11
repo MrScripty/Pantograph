@@ -2732,6 +2732,50 @@ Do not implement Option 3 by adding defaults, deriving source-context fields
 from task type or node type, making source fields optional, or letting the
 worker fill missing fields.
 
+2026-06-10 upstream source-context ownership re-plan trigger: stop before
+adding the source-context fields to the executable validation snapshot.
+Inspection found that the snapshot is built from
+`InferenceInterfaceNodeProjectionRecord`, which is built from inference
+interface descriptors and authored inference snapshots. None of those upstream
+contracts currently own `operation_type`, `context_shape_key`, or
+`cancellation_mode`. Adding the fields only at the executable snapshot layer
+would still require deriving them from task kind, node type, graph shape,
+request data, or defaults before snapshot construction. That would violate the
+selected Option 3 source-context split and the no-fallback/no-legacy rule.
+
+Re-plan options:
+1. Add an explicit workflow runtime source-context contract to the workflow
+   graph/projection path before executable validation snapshot construction.
+   The contract would carry `operation_type`, `context_shape_key`, and
+   `cancellation_mode` as validated authored/planned workflow facts, then
+   project those facts through the executable validation snapshot, ready
+   inference projection, scheduler task graph, and runtime-branch event. This
+   keeps run-scoped semantics owned by workflow-service planning instead of the
+   worker and avoids treating model/interface metadata as workflow execution
+   semantics. It requires a broader but coherent contract slice.
+2. Promote the fields into `pantograph-inference-interface-contracts`
+   descriptors and authored inference snapshots, then flow them through
+   `InferenceInterfaceNodeProjectionRecord`. This is appropriate only if
+   operation/context/cancellation are properties of the model interface itself.
+   It is likely too broad for the current worker unblocker and risks putting
+   workflow-run semantics into a reusable interface descriptor.
+3. Put the fields into dependency-readiness proof/projection records. This
+   keeps them near an existing validated upstream record, but dependency
+   readiness owns environment/materialization proof, not execution semantics;
+   using it as the owner would blur responsibility and make future planning
+   harder to reason about.
+
+Recommended path: use Option 1. Add the explicit workflow runtime
+source-context contract at the workflow-service planning/projection boundary,
+then carry it forward as a required fact through the already selected
+snapshot/projection/task-graph/event path. The next implementation slice must
+start by identifying the narrowest existing workflow graph/projection record
+that can own authored or planned runtime source context without changing Pumas
+contracts, scheduler DTOs outside the workflow-service task graph, generated
+files, lockfiles, or workflow fixtures. If no existing workflow-service owner
+can carry those explicit facts without derivation, stop again and split out a
+dedicated source-context planning contract before rehydration work resumes.
+
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
 runtime-branch task-event contract from bridge-style `Claimed` directly to
