@@ -4,13 +4,21 @@ use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoffState;
 
 use super::{
-    RuntimeHostDispatchError, RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+    validate_batch_response_matches_request, RuntimeHostDispatchError,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, SchedulerRuntimeHostDispatcher,
 };
 use crate::{
+    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
+    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionRequest,
+    RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
+    RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationDisposition,
+    RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
     RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
-    RuntimeHostExecutionContractError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState,
+    RuntimeHostExecutionContractError, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    RuntimeHostExecutionTerminalMetadata, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
 #[derive(Default)]
@@ -165,6 +173,51 @@ async fn dispatcher_rejects_mismatched_runtime_host_response_correlation() {
     ));
 }
 
+#[test]
+fn dispatcher_batch_response_correlation_accepts_member_fanout() {
+    let request = runtime_host_batch_request_fixture();
+    let response = runtime_host_batch_response_fixture(&request);
+
+    validate_batch_response_matches_request(&request, &response)
+        .expect("batch response must correlate to request members");
+}
+
+#[test]
+fn dispatcher_batch_response_correlation_rejects_unknown_member() {
+    let request = runtime_host_batch_request_fixture();
+    let mut response = runtime_host_batch_response_fixture(&request);
+    response.members[1].execution_request_id = "runtime-host.request.unknown".to_string();
+
+    let error = validate_batch_response_matches_request(&request, &response)
+        .expect_err("unknown batch member must fail correlation");
+
+    assert!(matches!(
+        error,
+        RuntimeHostDispatchError::InvalidResponseCorrelation {
+            field: "members.execution_request_id",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn dispatcher_batch_response_correlation_rejects_member_workflow_run_mismatch() {
+    let request = runtime_host_batch_request_fixture();
+    let mut response = runtime_host_batch_response_fixture(&request);
+    response.members[0].workflow_run_id = "run.mismatched".parse().expect("workflow run id");
+
+    let error = validate_batch_response_matches_request(&request, &response)
+        .expect_err("member workflow run mismatch must fail correlation");
+
+    assert!(matches!(
+        error,
+        RuntimeHostDispatchError::InvalidResponseCorrelation {
+            field: "members.workflow_run_id",
+            ..
+        }
+    ));
+}
+
 fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
     serde_json::from_str(include_str!(
         "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -177,4 +230,114 @@ fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
         "../tests/fixtures/runtime_host_execution_response_accepted.json"
     ))
     .expect("runtime host response fixture")
+}
+
+fn runtime_host_completed_response_fixture() -> RuntimeHostExecutionResponse {
+    serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_response_completed_outputs.json"
+    ))
+    .expect("runtime host completed response fixture")
+}
+
+fn runtime_host_batch_request_fixture() -> RuntimeHostBatchExecutionRequest {
+    let base_request = runtime_host_request_fixture();
+    RuntimeHostBatchExecutionRequest {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: "runtime-host.batch.request.001".to_string(),
+        anchor_execution_request_id: "runtime-host.request.001".to_string(),
+        cancellation_context: crate::RuntimeHostExecutionCancellationContext::workflow_service(
+            "runtime-host.batch.request.001",
+        ),
+        members: vec![
+            RuntimeHostBatchExecutionMemberRequest {
+                execution_request_id: "runtime-host.request.001".to_string(),
+                assignment_id: "assignment.1".to_string(),
+                handoff: base_request.handoff.clone(),
+                materialized_inputs: base_request.materialized_inputs.clone(),
+                timeout_ms: Some(30_000),
+                failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+                reservation_policy: RuntimeHostBatchMemberReservationPolicy::RetainForRuntimeReuse,
+            },
+            RuntimeHostBatchExecutionMemberRequest {
+                execution_request_id: "runtime-host.request.002".to_string(),
+                assignment_id: "assignment.2".to_string(),
+                handoff: base_request.handoff,
+                materialized_inputs: base_request.materialized_inputs,
+                timeout_ms: Some(30_000),
+                failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+                reservation_policy: RuntimeHostBatchMemberReservationPolicy::RetainForRuntimeReuse,
+            },
+        ],
+    }
+}
+
+fn runtime_host_batch_response_fixture(
+    request: &RuntimeHostBatchExecutionRequest,
+) -> RuntimeHostBatchExecutionResponse {
+    let outputs = runtime_host_completed_response_fixture().outputs;
+    RuntimeHostBatchExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: request.batch_execution_request_id.clone(),
+        state: RuntimeHostBatchExecutionState::PartiallyCompleted,
+        members: vec![
+            RuntimeHostBatchExecutionMemberResponse {
+                execution_request_id: request.members[0].execution_request_id.clone(),
+                assignment_id: request.members[0].assignment_id.clone(),
+                workflow_id: request.members[0].handoff.workflow_id.clone(),
+                workflow_run_id: request.members[0].handoff.workflow_run_id.clone(),
+                node_id: request.members[0].handoff.node_id.clone(),
+                task_id: request.members[0].handoff.task_id.clone(),
+                state: RuntimeHostBatchExecutionMemberState::Completed,
+                retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                reservation_disposition:
+                    RuntimeHostBatchMemberReservationDisposition::RetainedForRuntimeReuse,
+                outputs,
+                diagnostics: vec![runtime_host_batch_diagnostic(
+                    RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+                    "batch member completed",
+                )],
+                terminal_metadata: Some(RuntimeHostExecutionTerminalMetadata {
+                    completed_at_ms: Some(1_000),
+                    attempt: Some(1),
+                }),
+            },
+            RuntimeHostBatchExecutionMemberResponse {
+                execution_request_id: request.members[1].execution_request_id.clone(),
+                assignment_id: request.members[1].assignment_id.clone(),
+                workflow_id: request.members[1].handoff.workflow_id.clone(),
+                workflow_run_id: request.members[1].handoff.workflow_run_id.clone(),
+                node_id: request.members[1].handoff.node_id.clone(),
+                task_id: request.members[1].handoff.task_id.clone(),
+                state: RuntimeHostBatchExecutionMemberState::Failed,
+                retry_disposition: RuntimeHostBatchMemberRetryDisposition::Retryable,
+                reservation_disposition:
+                    RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler,
+                outputs: Vec::new(),
+                diagnostics: vec![runtime_host_batch_diagnostic(
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    "batch member failed",
+                )],
+                terminal_metadata: Some(RuntimeHostExecutionTerminalMetadata {
+                    completed_at_ms: Some(1_001),
+                    attempt: Some(1),
+                }),
+            },
+        ],
+        diagnostics: vec![runtime_host_batch_diagnostic(
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "batch partially completed",
+        )],
+    }
+}
+
+fn runtime_host_batch_diagnostic(
+    code: RuntimeHostExecutionDiagnosticCode,
+    message: &str,
+) -> RuntimeHostExecutionDiagnostic {
+    RuntimeHostExecutionDiagnostic {
+        severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+        code,
+        message: message.to_string(),
+        hint: None,
+    }
 }

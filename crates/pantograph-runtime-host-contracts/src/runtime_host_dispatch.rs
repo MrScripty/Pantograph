@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoff;
 use thiserror::Error;
 
+#[cfg(test)]
+use crate::{RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse};
 use crate::{
     RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationSnapshot,
     RuntimeHostExecutionCancellationState, RuntimeHostExecutionContractError,
@@ -157,6 +159,68 @@ fn validate_response_matches_request(
             field: "task_id",
             reason: "runtime-host response must match scheduler handoff task id",
         });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn validate_batch_response_matches_request(
+    request: &RuntimeHostBatchExecutionRequest,
+    response: &RuntimeHostBatchExecutionResponse,
+) -> Result<(), RuntimeHostDispatchError> {
+    if response.batch_execution_request_id != request.batch_execution_request_id {
+        return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+            field: "batch_execution_request_id",
+            reason: "runtime-host batch response must match batch request id",
+        });
+    }
+    if response.members.len() != request.members.len() {
+        return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+            field: "members",
+            reason:
+                "runtime-host batch response must include exactly one response per request member",
+        });
+    }
+    for response_member in &response.members {
+        let request_member = request
+            .members
+            .iter()
+            .find(|member| member.execution_request_id == response_member.execution_request_id)
+            .ok_or(RuntimeHostDispatchError::InvalidResponseCorrelation {
+                field: "members.execution_request_id",
+                reason: "runtime-host batch response member must match a request member",
+            })?;
+        if response_member.assignment_id != request_member.assignment_id {
+            return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+                field: "members.assignment_id",
+                reason: "runtime-host batch response member must match request assignment id",
+            });
+        }
+        let handoff = &request_member.handoff;
+        if response_member.workflow_id != handoff.workflow_id {
+            return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+                field: "members.workflow_id",
+                reason: "runtime-host batch response member must match handoff workflow id",
+            });
+        }
+        if response_member.workflow_run_id != handoff.workflow_run_id {
+            return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+                field: "members.workflow_run_id",
+                reason: "runtime-host batch response member must match handoff workflow run id",
+            });
+        }
+        if response_member.node_id != handoff.node_id {
+            return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+                field: "members.node_id",
+                reason: "runtime-host batch response member must match handoff node id",
+            });
+        }
+        if response_member.task_id != handoff.task_id {
+            return Err(RuntimeHostDispatchError::InvalidResponseCorrelation {
+                field: "members.task_id",
+                reason: "runtime-host batch response member must match handoff task id",
+            });
+        }
     }
     Ok(())
 }

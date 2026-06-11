@@ -334,6 +334,77 @@ fn runtime_host_batch_execution_request_rejects_missing_anchor_member() {
 }
 
 #[test]
+fn runtime_host_batch_execution_request_requires_member_materialized_inputs_field() {
+    let request = runtime_host_batch_request_fixture();
+    let mut value = serde_json::to_value(request).expect("batch request value");
+    value["members"][0]
+        .as_object_mut()
+        .expect("member must be object")
+        .remove("materialized_inputs");
+
+    let error = serde_json::from_value::<RuntimeHostBatchExecutionRequest>(value)
+        .expect_err("batch member inputs must be explicit");
+
+    assert!(
+        error
+            .to_string()
+            .contains("missing field `materialized_inputs`"),
+        "{error}"
+    );
+}
+
+#[test]
+fn runtime_host_batch_execution_request_rejects_readiness_only_member_handoff() {
+    let mut request = runtime_host_batch_request_fixture();
+    request.members[0].handoff.state = SchedulerRuntimeHandoffState::ReadinessAdmitted;
+    request.members[0].handoff.dispatch_decision = None;
+
+    let error = ValidatedRuntimeHostBatchExecutionRequest::try_from(request)
+        .expect_err("batch members require dispatch-selected handoffs");
+
+    assert_eq!(
+        error,
+        RuntimeHostExecutionContractError::InvalidField {
+            field: "member.handoff.state",
+            reason: "runtime host batch members require dispatch-selected scheduler handoffs"
+        }
+    );
+}
+
+#[test]
+fn runtime_host_batch_execution_request_rejects_duplicate_member_identity() {
+    let mut request = runtime_host_batch_request_fixture();
+    request.members[1].assignment_id = request.members[0].assignment_id.clone();
+
+    let error = ValidatedRuntimeHostBatchExecutionRequest::try_from(request)
+        .expect_err("batch member assignment ids must be unique");
+
+    assert_eq!(
+        error,
+        RuntimeHostExecutionContractError::InvalidField {
+            field: "members.assignment_id",
+            reason: "batch member assignment ids must be unique"
+        }
+    );
+}
+
+#[test]
+fn runtime_host_batch_execution_request_carries_batch_cancellation_context() {
+    let request = runtime_host_batch_request_fixture();
+
+    let validated = ValidatedRuntimeHostBatchExecutionRequest::try_from(request)
+        .expect("runtime host batch request must validate");
+
+    assert_eq!(
+        validated
+            .as_ref()
+            .cancellation_context
+            .cancellation_context_id,
+        "runtime-host-cancellation.runtime-host.batch.request.001"
+    );
+}
+
+#[test]
 fn runtime_host_batch_execution_response_accepts_partial_member_failure_fanout() {
     let response = runtime_host_batch_response_fixture();
 

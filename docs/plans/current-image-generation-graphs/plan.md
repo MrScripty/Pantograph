@@ -5911,6 +5911,57 @@ tests require generated contract changes, frontend/Tauri DTOs, lockfile
 updates, saved workflow fixture updates, physical-device/runtime-residency
 tables, or embedded-runtime implementation changes.
 
+2026-06-11 runtime-host batch boundary tests slice: completed sequence step
+4. Smallest useful vertical slice: add focused contract and dispatcher-boundary
+tests for runtime-host batch execution without adding a runtime-host batch port
+method or worker execution. Allowed files touched:
+`crates/pantograph-runtime-host-contracts/src/runtime_host_execution_tests.rs`,
+`crates/pantograph-runtime-host-contracts/src/runtime_host_dispatch.rs`,
+`crates/pantograph-runtime-host-contracts/src/runtime_host_dispatch_tests.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice remains contract/boundary
+coverage only. It does not add runtime-host batch execution, does not call the
+embedded runtime, does not wire the task-execution worker, does not change
+generated contracts, scheduler DTOs, frontend/Tauri DTOs, lockfiles, or saved
+fixtures, and does not carry workflow inputs forward from a runtime-loading
+workflow run.
+
+Focused test updates: batch request tests now reject missing member
+`materialized_inputs`, readiness-only member handoffs, duplicate member
+identity, and validate batch cancellation-context shape. Dispatcher-boundary
+tests now validate response/member correlation and reject unknown members and
+workflow-run mismatches. Existing partial-failure fan-out coverage remains in
+the contract tests.
+
+Verification passed:
+`cargo test -p pantograph-runtime-host-contracts runtime_host_execution --lib`;
+`cargo test -p pantograph-runtime-host-contracts runtime_host_dispatch --lib`;
+`cargo check -p pantograph-runtime-host-contracts`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-runtime-host-contracts -- --check`; and
+`git diff --check`.
+
+Discovered sequencing gap: sequence step 5 says the worker should call a
+runtime-host batch operation, but the plan also rejects adding the batch API
+and worker grouped execution in the same slice. Insert a runtime-host batch
+port/dispatcher operation slice before worker wiring. This is a decomposition
+change, not an objective change: it preserves the selected contract-first path
+and keeps worker execution from introducing the API it consumes.
+
+Next thin slice: add the runtime-host batch port and scheduler dispatcher
+operation only. Allowed files should remain limited to
+`crates/pantograph-runtime-host-contracts/src/runtime_host_dispatch.rs`,
+`crates/pantograph-runtime-host-contracts/src/runtime_host_dispatch_tests.rs`,
+possibly `crates/pantograph-runtime-host-contracts/src/lib.rs` if public
+exports are needed, and this plan. The operation must validate the batch
+request before the port call, pass the batch cancellation handle, validate
+response/request member correlation, and validate the batch response contract.
+Do not wire task-execution worker grouped execution, do not implement embedded
+runtime batch execution, and stop/re-plan if this requires generated contract
+updates, frontend/Tauri DTOs, lockfile updates, saved fixture changes, or
+physical-device/runtime-residency tables.
+
 ## Standards Rule
 
 The standards constraints in
