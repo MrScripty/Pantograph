@@ -6007,6 +6007,55 @@ generated contracts, scheduler DTOs, frontend/Tauri DTOs, lockfiles, saved
 fixtures, or physical-device/runtime-residency tables unless explicitly
 replanned.
 
+2026-06-11 worker grouped-execution inspection re-plan trigger: inspection
+found that worker grouped execution cannot be implemented as the next code
+slice without violating the no-fallback/no-legacy rule. The task-execution
+worker currently creates one dispatch assignment, rehydrates one runtime
+branch, and executes it through `WorkflowTaskExecutionOwner` and
+`WorkflowSchedulerSessionRunner::run_started_runtime_dispatch_task_to_completion`,
+which spawn a single runtime task supervisor and call the single
+`SchedulerRuntimeHostDispatcher`. The embedded composition configures only a
+single `RuntimeHostExecutionPort`, and `EmbeddedRuntimeHostExecutionPort`
+implements only `execute_runtime_host_request`. There is no real embedded
+`RuntimeHostBatchExecutionPort`, no workflow-service composition slot for a
+batch dispatcher, and no batch execution owner that can persist and notify
+each member independently after one grouped runtime-host call.
+
+Do not implement a batch port by looping over
+`execute_runtime_host_request`, do not execute only the anchor member and mark
+peers claimed, and do not fall back to request-scoped or `WorkflowHost`
+runtime execution. Those paths would preserve the legacy single-task execution
+method behind a batch-shaped API and would break the selected reservation-level
+batching architecture.
+
+Re-plan options aligned with the coding standards:
+
+1. Preferred: implement a real embedded runtime-host batch execution port
+   before worker wiring. Thin slices should add fail-closed batch composition
+   plumbing, then a real `EmbeddedRuntimeHostBatchExecutionPort` that validates
+   a grouped request, resolves shared package/load-target facts once per
+   compatible batch, executes each member through a batch-owned gateway
+   operation without calling the single runtime-host port as fallback, writes
+   member artifacts independently, and returns member-level retry and
+   reservation dispositions. Follow with workflow-service batch owner/wiring
+   slices that claim compatible assignments and persist each member result.
+2. Contract-first workflow-service plumbing: add the workflow-service
+   batch-dispatcher dependency and fail-closed worker guard first, but keep
+   grouped assignment claiming disabled until a real embedded batch port
+   exists. This is standards-compliant because it fails closed, but it does
+   not deliver usable grouped execution until the embedded batch port lands.
+3. Defer worker wiring and deepen mapping tests first: add tests/contracts for
+   converting assignment batches into runtime-host batch member requests and
+   converting member responses into task result, reservation lifecycle, and
+   notification mutations. This reduces integration risk but still leaves
+   execution blocked on the real embedded batch port.
+
+Recommended path: choose option 1 unless there is a reason to stage
+workflow-service dependency injection first. It is the shortest standards-
+compliant route to usable grouped execution because it creates the missing
+canonical executor instead of adding more fail-closed surfaces around an absent
+implementation.
+
 ## Standards Rule
 
 The standards constraints in
