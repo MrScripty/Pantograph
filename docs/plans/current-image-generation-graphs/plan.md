@@ -5517,6 +5517,49 @@ reservation lease ids across runs, by deriving compatibility from runtime ids
 or batching keys, or by adding grouped claims before the compatibility
 contract is updated and tested.
 
+2026-06-11 batch-eligibility task-attempt derivation re-plan decision: use
+Option 1. Replace the legacy singular-device runtime-branch batch profile with
+a reservation-level compatibility profile derived from
+`WorkflowRuntimeTaskAttemptFactRecord`. Batch compatibility must be based on
+durable task-attempt facts, not event-admission bridge data, provisional
+batching keys, runtime id strings, selected-candidate side fields, or
+workflow inputs from any previous keep-alive run. Reservation lease ids remain
+per-attempt ownership evidence and must not be used as equality keys for
+cross-run batch grouping.
+
+Selected implementation sequence:
+1. Add a workflow-service-owned reservation-level batch compatibility contract
+   that can be built from `WorkflowRuntimeTaskAttemptFactRecord`. It should
+   carry model artifact id, runtime family, backend id, runtime residency key,
+   loaded-runtime memory estimate, operation type, context shape,
+   cancellation mode, timeout policy, and normalized reservation compatibility
+   entries with device id, resource kind, and reserved bytes. It must not
+   carry `reservation_lease_id` or a singular `device_load_target`.
+2. Replace or narrow `WorkflowRuntimeBranchBatchEligibilityProfile` usages so
+   compatibility checks consume the new task-attempt-derived profile. Existing
+   tests that compare canonical batch facts must migrate to multi-reservation
+   compatibility, and tests must prove matching provisional `batching_key`
+   values never authorize grouping.
+3. Add focused fail-closed tests for missing task-attempt facts, mismatched
+   runtime residency, mismatched context shape/operation/cancellation, timeout
+   mismatch, and reservation incompatibility across device id/resource kind/
+   reserved bytes. Add a positive split-placement case to prove multi-device
+   facts are preserved.
+4. Only after the compatibility contract is validated, continue to durable
+   grouped claiming over assignment-owned task-attempt facts. Grouped claims
+   must not compare per-attempt reservation lease ids and must not rehydrate
+   bridge-only event batch profiles.
+5. Defer physical-device inventory/runtime-residency table work until a later
+   serial architecture slice unless the reservation-level compatibility
+   contract cannot express the required batching decision without it.
+
+Next thin slice: implement sequence step 1 only. Allowed files should be
+limited to workflow-service runtime-branch/task-attempt lifecycle modules,
+focused tests, and this plan. Do not change Pumas contracts, scheduler DTOs,
+generated files, lockfiles, saved workflow fixtures, runtime-host APIs, or
+grouped-claim execution. Stop and re-plan if compatibility requires facts not
+owned by `WorkflowRuntimeTaskAttemptFactRecord`.
+
 ## Standards Rule
 
 The standards constraints in
