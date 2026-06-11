@@ -5133,6 +5133,50 @@ Verification passed:
 `cargo test -p pantograph-workflow-service session_execution --lib`; and
 `cargo test -p pantograph-workflow-service workflow::runtime_branch_task_event::tests --lib`.
 
+2026-06-11 runtime task-attempt reservation identity re-plan decision: use
+Option 1, making scheduler reservation lease identity the canonical
+reservation fact for the current worker-owned bridge. The planned
+task-attempt fact construction slice cannot safely require a separate
+`reservation_id`, because the selected dispatch, selected candidate fact, and
+scheduler reservation evidence expose `SchedulerReservationLeaseId` but no
+separate backend-owned reservation id. Synthesizing one from request, graph,
+runtime-host, or lease text would create a fake fact and violate the
+no-fallback/no-legacy rule.
+
+Immediate sequence:
+1. Narrow `WorkflowRuntimeTaskAttemptReservationFact` to
+   `reservation_lease_id`, `resource_kind`, and `reserved_bytes`, with focused
+   validation/tests. This keeps the fact contract aligned with the canonical
+   scheduler reservation evidence available at the worker dispatch boundary.
+2. Build `WorkflowRuntimeTaskAttemptFactRecord` from the rehydrated source
+   context and selected candidate fact using the scheduler reservation lease
+   evidence. Do not introduce a separate reservation id until the later durable
+   dispatch assignment/reservation lifecycle architecture owns one explicitly.
+
+No-fallback/no-legacy confirmation: the bridge may record only facts already
+owned by runtime-branch events, scheduler task attempts, selected dispatch
+selection, and scheduler reservation leases. It must not fabricate reservation
+ids or preserve parallel reservation owners.
+
+2026-06-11 runtime task-attempt reservation fact contract slice: completed.
+Smallest useful vertical slice: remove the non-canonical separate
+`reservation_id`/`lease_id` pair from workflow-service runtime task-attempt
+reservation facts and replace it with a single `reservation_lease_id` field.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_task_attempt_fact.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not build task-attempt
+facts yet, does not change scheduler DTOs, runtime-host request fields, Pumas
+contracts, generated files, lockfiles, saved workflow fixtures, or worker
+dispatch behavior, and does not synthesize a separate reservation id.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service workflow::runtime_task_attempt_fact::tests --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and
+`git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

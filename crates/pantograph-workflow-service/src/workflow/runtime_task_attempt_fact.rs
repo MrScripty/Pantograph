@@ -115,8 +115,7 @@ pub(super) enum WorkflowRuntimeTaskAttemptResourceFitState {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 #[must_use]
 pub(super) struct WorkflowRuntimeTaskAttemptReservationFact {
-    pub(super) reservation_id: String,
-    pub(super) lease_id: String,
+    pub(super) reservation_lease_id: String,
     pub(super) resource_kind: WorkflowRuntimeTaskAttemptResourceKind,
     pub(super) reserved_bytes: u64,
 }
@@ -431,13 +430,8 @@ fn validate_reservation(
 ) -> Result<(), WorkflowRuntimeTaskAttemptFactDiagnostic> {
     validate_non_blank(
         WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact,
-        format!("reservations[{index}].reservation_id"),
-        &reservation.reservation_id,
-    )?;
-    validate_non_blank(
-        WorkflowRuntimeTaskAttemptFactDiagnosticCode::InvalidReservationFact,
-        format!("reservations[{index}].lease_id"),
-        &reservation.lease_id,
+        format!("reservations[{index}].reservation_lease_id"),
+        &reservation.reservation_lease_id,
     )?;
     if reservation.reserved_bytes == 0 {
         return Err(WorkflowRuntimeTaskAttemptFactDiagnostic::new(
@@ -756,8 +750,7 @@ mod tests {
                 diagnostic_codes: Vec::new(),
             },
             reservations: vec![WorkflowRuntimeTaskAttemptReservationFact {
-                reservation_id: "reservation.runtime.1".to_string(),
-                lease_id: "reservation-lease.runtime.1".to_string(),
+                reservation_lease_id: "reservation-lease.runtime.1".to_string(),
                 resource_kind: WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
                 reserved_bytes: 8_589_934_592,
             }],
