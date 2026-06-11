@@ -5263,6 +5263,50 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 runtime task-attempt fact persistence re-plan trigger: stop before
+worker-side task-attempt fact persistence. The workflow-service contract can
+now build `WorkflowRuntimeTaskAttemptFactRecord` from canonical rehydrated
+source context, selected candidate reservations, scheduler attempt identity,
+and timestamps, but there is no canonical persistence owner for the built
+fact. Inspection found that `WorkflowRuntimeDispatchAssignmentRepository`
+exists, but the task-execution worker currently only links a generated
+dispatch-assignment id onto the runtime-branch event; it does not create a
+durable dispatch-assignment record. Building the fact in the worker and
+discarding it would not advance durable task-attempt facts, while silently
+adding a store would decide ownership outside the plan.
+
+Standards-aligned re-plan options:
+1. Add a dedicated workflow-service runtime task-attempt fact repository now.
+   The worker would build and persist a fact after rehydration and before
+   marking the runtime-branch event `Running`. This is the smallest direct
+   persistence slice, but it creates a second durable owner beside the
+   dispatch-assignment target architecture and would need a later serial
+   migration to avoid parallel lifecycle ownership.
+2. Promote the durable dispatch-assignment record now and make it the owner of
+   task-attempt selected runtime/resource facts. The worker would create a real
+   `WorkflowRuntimeDispatchAssignmentRecord` after selected evidence is
+   recorded and before rehydration/linking, then persist or derive the
+   `WorkflowRuntimeTaskAttemptFactRecord` from that assignment-owned source.
+   This is larger, but it aligns with the planned worker/scheduler
+   architecture, keeps claim generation, selected candidate evidence,
+   scheduler attempt identity, reservation binding, and lifecycle state under
+   one backend-owned dispatch record, and avoids a temporary parallel
+   task-attempt fact owner.
+3. Record task-attempt facts as another field on runtime-branch events. This
+   is the smallest mechanical worker edit, but it is not standards-aligned for
+   the target architecture because runtime-branch events are already bridge
+   state scheduled for replacement by durable dispatch assignments; adding
+   more fact ownership there would preserve legacy bridge behavior.
+
+Recommended direction: Option 2. The implementation should be split into
+serial slices: first make the worker create and persist
+`WorkflowRuntimeDispatchAssignmentRecord` using existing selected candidate,
+runtime handoff, reservation lease, readiness proof, claim, and scheduler
+attempt facts; then build/persist or derive the task-attempt fact from that
+assignment-owned evidence; then update rehydration/worker tests to consume the
+assignment-backed fact path. Do not add a standalone fact store or bridge-field
+fact persistence unless the plan explicitly chooses that ownership model.
+
 ## Standards Rule
 
 The standards constraints in
