@@ -2641,11 +2641,48 @@ Re-plan options:
 Do not continue by making `batch_eligibility` optional in rehydration, deriving
 context shape from `batching_key`, deriving operation/cancellation policy from
 graph/request/runtime-host state, or letting assignment-owned execution fall
-back to the old request-scoped runner. The next plan decision must choose the
-canonical owner for runtime-branch operation/context/cancellation profile facts
-before source implementation resumes. Exploratory source edits for the failed
+back to the old request-scoped runner. Exploratory source edits for the failed
 assignment-owned execution attempt were reverted; no unverified code slice was
 kept.
+
+Decision: use Option 3. Runtime-branch events will own only the run-scoped
+source facts needed to explain what this branch is attempting:
+`operation_type`, `context_shape_key`, `cancellation_mode`, and timeout
+correlation. Durable selected-candidate evidence remains the owner of
+runtime/model/resource compatibility, scheduler selection, reservation, and
+dispatch-decision facts. Rehydration must combine those two durable fact
+sources and return typed diagnostics when either side is missing or
+inconsistent. The worker remains forbidden from synthesizing run-scoped facts
+from request payloads, graph shape, provisional batching keys, runtime-host
+inputs, or selected candidate facts.
+
+Standards alignment for Option 3:
+- Plan standards: this is a prerequisite contract slice before the larger
+  assignment-owned execution slice. It keeps the next implementation thin by
+  validating the source-context contract first instead of mixing contract
+  reshaping with worker lifecycle replacement.
+- Coding standards: runtime-branch admission/recovery is the single owner of
+  run-scoped execution semantics, selected-candidate persistence is the single
+  owner of scheduler/runtime compatibility evidence, and rehydration is a
+  reader that validates the joined facts rather than inventing defaults.
+- Testing standards: add focused contract tests for successful rehydration from
+  the two durable fact sources plus fail-closed diagnostics for missing
+  run-scoped source facts, missing selected-candidate evidence, and
+  inconsistent selected-candidate/runtime-branch data.
+
+Next thin slice: implement the Option 3 source-context contract split before
+resuming worker-owned assignment execution. Allowed files should be limited to
+runtime-branch task-event source profile records, runtime-branch rehydration,
+task-attempt source-context DTO/validation, runtime-branch event
+admission/recovery where the run-scoped facts are persisted, focused
+workflow-service tests for the new contract and diagnostics, and this plan.
+The slice must not change Pumas contracts, change scheduler DTOs, edit
+generated/lock/workflow fixture files, make source-context fields optional,
+derive source facts inside the worker, or preserve request-scoped runtime
+dispatch fallback. Option 1 remains deferred unless replay-from-event-alone
+becomes a hard requirement. Option 2 is not the current source-context design;
+dispatch assignments own handoff and execution lifecycle facts, not the
+semantic run-scoped source context.
 
 2026-06-07 runtime-branch durable active-state slice: completed the first
 Option 3 promotion step. Smallest useful vertical slice: extend the durable
