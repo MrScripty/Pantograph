@@ -1571,15 +1571,39 @@ mod tests {
         let mut right = task_attempt_fact(default_reservation_facts());
         right.timeout_ms = Some(60_000);
 
-        let error = WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
-            Some(&left),
-            Some(&right),
-        )
-            .expect_err("timeout mismatch must fail");
+        assert_task_attempt_compatibility_error(
+            &left,
+            &right,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch,
+        );
+    }
 
-        assert_eq!(
-            error.code,
-            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch
+    #[test]
+    fn runtime_branch_task_attempt_batch_compatibility_rejects_source_context_mismatches() {
+        let left = task_attempt_fact(default_reservation_facts());
+
+        let mut right = task_attempt_fact(default_reservation_facts());
+        right.operation_type = "image-generation.img2img".to_string();
+        assert_task_attempt_compatibility_error(
+            &left,
+            &right,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::OperationTypeMismatch,
+        );
+
+        let mut right = task_attempt_fact(default_reservation_facts());
+        right.context_shape_key = "txt2img.512x512.steps20".to_string();
+        assert_task_attempt_compatibility_error(
+            &left,
+            &right,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ContextShapeMismatch,
+        );
+
+        let mut right = task_attempt_fact(default_reservation_facts());
+        right.cancellation_mode = "whole-batch".to_string();
+        assert_task_attempt_compatibility_error(
+            &left,
+            &right,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::CancellationModeMismatch,
         );
     }
 
@@ -1769,6 +1793,36 @@ mod tests {
         assert_eq!(
             error.code,
             WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMismatch
+        );
+
+        let left = task_attempt_fact(vec![reservation_fact(
+            "reservation.left.gpu",
+            "cuda:0",
+            WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+            6_442_450_944,
+        )]);
+        let right = task_attempt_fact(vec![reservation_fact(
+            "reservation.right.shared",
+            "cuda:0",
+            WorkflowRuntimeTaskAttemptResourceKind::DeviceSharedMemory,
+            6_442_450_944,
+        )]);
+        assert_task_attempt_compatibility_error(
+            &left,
+            &right,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMismatch,
+        );
+
+        let right = task_attempt_fact(vec![reservation_fact(
+            "reservation.right.gpu",
+            "cuda:0",
+            WorkflowRuntimeTaskAttemptResourceKind::DeviceVram,
+            3_221_225_472,
+        )]);
+        assert_task_attempt_compatibility_error(
+            &left,
+            &right,
+            WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMismatch,
         );
     }
 
@@ -2833,6 +2887,21 @@ mod tests {
                 2_147_483_648,
             ),
         ]
+    }
+
+    fn assert_task_attempt_compatibility_error(
+        left: &WorkflowRuntimeTaskAttemptFactRecord,
+        right: &WorkflowRuntimeTaskAttemptFactRecord,
+        expected_code: WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
+    ) {
+        let error =
+            WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+                Some(left),
+                Some(right),
+            )
+            .expect_err("task-attempt facts must fail compatibility");
+
+        assert_eq!(error.code, expected_code);
     }
 
     fn reservation_fact(

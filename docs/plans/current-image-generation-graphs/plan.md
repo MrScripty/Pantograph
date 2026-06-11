@@ -5641,6 +5641,38 @@ split-placement case. Keep the slice to workflow-service runtime-branch/
 task-attempt lifecycle tests and this plan unless a missing diagnostic requires
 a small runtime-branch contract change.
 
+2026-06-11 task-attempt batch compatibility fail-closed coverage slice:
+completed sequence step 3. Smallest useful vertical slice: add the remaining
+focused tests for canonical task-attempt compatibility mismatches without
+changing production grouping behavior. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_task_event.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the tests continue to drive compatibility
+through `WorkflowRuntimeTaskAttemptFactRecord` only. They do not reintroduce
+event-owned batch-profile comparison, do not use `batching_key` as authority,
+and do not compare reservation lease ids across workflow runs.
+
+Focused test updates: coverage now includes missing task-attempt facts,
+runtime residency mismatch, context shape mismatch, operation type mismatch,
+cancellation mode mismatch, timeout mismatch, missing reservation evidence,
+reservation device id mismatch, reservation resource kind mismatch, reservation
+reserved-byte mismatch, and a positive split-placement case.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_task_event --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
+Next thin slice: implement sequence step 4 by introducing durable grouped
+claiming over assignment-owned task-attempt facts. The first grouped-claim
+slice should remain repository/contract-level if possible: use existing
+assignment-owned `task_attempt_fact` as compatibility authority, reject missing
+facts through typed diagnostics, and do not dispatch grouped execution yet.
+Stop and re-plan if grouped claiming requires a new physical-device inventory,
+runtime-residency table, scheduler DTO change, generated contract, workflow
+fixture update, or runtime-host API change.
+
 ## Standards Rule
 
 The standards constraints in
