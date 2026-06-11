@@ -717,7 +717,7 @@ async fn claim_and_execute_runtime_branch_event(
         service.as_ref(),
         &evidence_record.event_id,
         &claimed.claim,
-        dispatch_assignment.assignment_id,
+        dispatch_assignment.assignment_id.clone(),
         started_dispatch
             .started_runtime_task
             .attempt_id()
@@ -758,6 +758,18 @@ async fn claim_and_execute_runtime_branch_event(
             );
         }
     };
+
+    if let Err(diagnostic) = mark_runtime_branch_dispatch_assignment_running(
+        service.as_ref(),
+        &dispatch_assignment.assignment_id,
+        unix_timestamp_ms(),
+    ) {
+        return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            "runtime branch dispatch-assignment running persistence failed",
+            vec![diagnostic],
+        );
+    }
 
     if let Err(diagnostic) = mark_claimed_runtime_branch_task_event_running(
         service.as_ref(),
@@ -1146,7 +1158,8 @@ fn runtime_dispatch_assignment_diagnostic(
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::DuplicateAssignment
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::DuplicateActiveAssignment
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotFound
-        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidTransition => {
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidTransition
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::TaskAttemptFactInvalid => {
             WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable
         }
     };
@@ -1157,6 +1170,25 @@ fn runtime_dispatch_assignment_diagnostic(
             diagnostic.code, diagnostic.message
         ),
     )
+}
+
+fn mark_runtime_branch_dispatch_assignment_running(
+    service: &WorkflowService,
+    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime dispatch-assignment repository lock poisoned",
+            )
+        })?;
+    repository
+        .mark_running(assignment_id, now_ms)
+        .map_err(runtime_dispatch_assignment_diagnostic)
 }
 
 fn mark_claimed_runtime_branch_task_event_running(

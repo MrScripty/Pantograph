@@ -952,6 +952,27 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         assignment.reservation_lease_id.as_str(),
         "reservation.runtime_session_test"
     );
+    let task_attempt_fact = assignment
+        .task_attempt_fact
+        .as_ref()
+        .expect("runtime dispatch assignment should persist task-attempt fact when running");
+    assert_eq!(task_attempt_fact.workflow_id, workflow_id);
+    assert_eq!(task_attempt_fact.workflow_run_id, response.workflow_run_id);
+    assert_eq!(task_attempt_fact.scheduler_task_id, "infer");
+    assert_eq!(
+        task_attempt_fact.scheduler_task_attempt_id,
+        assignment.scheduler_task_attempt_id
+    );
+    assert_eq!(
+        task_attempt_fact.runtime_residency_key,
+        "test-runtime:image/example/tiny-diffusion"
+    );
+    assert_eq!(task_attempt_fact.reservations.len(), 1);
+    assert_eq!(
+        task_attempt_fact.reservations[0].reservation_lease_id,
+        "reservation.runtime_session_test"
+    );
+    assert_eq!(task_attempt_fact.reservations[0].device_id, "cuda:0");
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     let work_item = dependency_readiness_work_queue
         .pop_next()

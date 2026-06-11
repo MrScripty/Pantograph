@@ -5429,6 +5429,40 @@ Verification passed:
 `cargo check -p pantograph-workflow-service`;
 `cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
 
+2026-06-11 dispatch-assignment running task-attempt fact persistence slice:
+completed. Smallest useful vertical slice: make the persisted
+`WorkflowRuntimeDispatchAssignmentRecord` own the durable
+`WorkflowRuntimeTaskAttemptFactRecord` when the assignment transitions from
+`Prepared` to `Running`, and make the task-execution worker perform that
+assignment transition before marking the runtime-branch task event running.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not add a standalone
+task-attempt fact repository, does not persist task-attempt facts on
+runtime-branch events, does not infer device/runtime/model facts outside the
+assignment-owned selected candidate evidence, and does not restore
+request-scoped runtime execution. Prepared assignments have no task-attempt
+fact; the fact is recorded only at the canonical running transition from
+assignment-owned evidence and typed validation failures fail closed.
+
+Focused test updates: dispatch-assignment repository tests now prove
+`mark_running` records and stores the derived task-attempt fact, and the
+runtime scheduler-selection session test proves the worker-created assignment
+contains the persisted task-attempt fact with scheduler attempt, residency, and
+reservation-level device evidence.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo test -p pantograph-workflow-service workflow::tests::session_execution::workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib -- --exact`;
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+`cargo test -p pantograph-workflow-service runtime_branch_rehydration --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

@@ -69,6 +69,7 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) selected_runtime_handoff: SchedulerRuntimeHandoff,
     pub(super) reservation_lease_id: SchedulerReservationLeaseId,
     pub(super) selected_candidate_id: Option<SchedulerDispatchCandidateId>,
+    pub(super) task_attempt_fact: Option<WorkflowRuntimeTaskAttemptFactRecord>,
     pub(super) state: WorkflowRuntimeDispatchAssignmentState,
     pub(super) created_at_ms: u64,
     pub(super) updated_at_ms: u64,
@@ -99,6 +100,7 @@ pub(super) enum WorkflowRuntimeDispatchAssignmentDiagnosticCode {
     DuplicateActiveAssignment,
     AssignmentNotFound,
     InvalidTransition,
+    TaskAttemptFactInvalid,
 }
 
 pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
@@ -216,6 +218,7 @@ impl WorkflowRuntimeDispatchAssignmentRepository
             selected_runtime_handoff: request.selected_runtime_handoff,
             reservation_lease_id: request.reservation_lease_id,
             selected_candidate_id: request.selected_candidate_id,
+            task_attempt_fact: None,
             state: WorkflowRuntimeDispatchAssignmentState::Prepared,
             created_at_ms: request.created_at_ms,
             updated_at_ms: request.created_at_ms,
@@ -323,6 +326,19 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
                 WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidTransition,
                 message,
             ));
+        }
+        if next_state == WorkflowRuntimeDispatchAssignmentState::Running {
+            record.task_attempt_fact = Some(record.task_attempt_fact_record(now_ms).map_err(
+                |diagnostic| {
+                    WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                        WorkflowRuntimeDispatchAssignmentDiagnosticCode::TaskAttemptFactInvalid,
+                        format!(
+                            "runtime dispatch assignment task-attempt fact is invalid: {}",
+                            diagnostic.message
+                        ),
+                    )
+                },
+            )?);
         }
         record.state = next_state;
         record.updated_at_ms = now_ms;
@@ -599,6 +615,7 @@ mod tests {
             WorkflowRuntimeDispatchAssignmentState::Prepared
         );
         assert_eq!(record.timeout_ms, Some(30_000));
+        assert!(record.task_attempt_fact.is_none());
         assert_eq!(
             record.runtime_source_context.context_shape_key,
             "txt2img.1024x1024.steps30"
@@ -610,6 +627,41 @@ mod tests {
                 .expect("stored assignment")
                 .selected_candidate_fact,
             request.selected_candidate_fact
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_mark_running_records_task_attempt_fact() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let record = repository
+            .create(assignment_request("assignment.1"))
+            .expect("assignment");
+
+        let running = repository
+            .mark_running(&record.assignment_id, 130)
+            .expect("running assignment");
+
+        assert_eq!(
+            running.state,
+            WorkflowRuntimeDispatchAssignmentState::Running
+        );
+        let fact = running
+            .task_attempt_fact
+            .as_ref()
+            .expect("task attempt fact");
+        assert_eq!(fact.scheduler_task_attempt_id, "attempt.image.1");
+        assert_eq!(fact.recorded_at_ms, 130);
+        assert_eq!(fact.reservations.len(), 1);
+        assert_eq!(fact.reservations[0].device_id, "cuda:0");
+        assert_eq!(
+            repository
+                .get(&record.assignment_id)
+                .expect("stored assignment")
+                .task_attempt_fact
+                .as_ref()
+                .expect("stored fact")
+                .recorded_at_ms,
+            130
         );
     }
 
