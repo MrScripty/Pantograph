@@ -5673,6 +5673,56 @@ Stop and re-plan if grouped claiming requires a new physical-device inventory,
 runtime-residency table, scheduler DTO change, generated contract, workflow
 fixture update, or runtime-host API change.
 
+2026-06-11 assignment-owned grouped-claim repository slice: completed the
+first repository/contract-level part of sequence step 4. Smallest useful
+vertical slice: add durable batch-claim identity, owner, lease, outcome, and
+in-memory repository claiming for compatible running
+`WorkflowRuntimeDispatchAssignmentRecord` values using their persisted
+`task_attempt_fact` records as the compatibility authority. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`, and
+this plan.
+
+No-fallback/no-legacy confirmation: grouped claims compare
+assignment-owned task-attempt facts through
+`WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile`, do not read
+runtime-branch event batch profiles, do not compare `batching_key`, do not
+compare reservation lease ids as batch identity, do not add a runtime-host
+batch API, and do not execute coalesced runtime work. Incompatible running
+assignments remain unclaimed; missing task-attempt facts fail closed through a
+typed `MissingTaskAttemptFact` diagnostic.
+
+Focused test updates: dispatch-assignment repository tests now prove compatible
+running assignments can be claimed under a shared batch lease, incompatible
+task-attempt facts are skipped, missing task-attempt facts fail closed, and an
+active batch claim prevents reentry. The worker diagnostic mapping was extended
+only to keep the new assignment repository diagnostics exhaustively typed.
+
+Discovered follow-up: the current scheduler readiness-proof fixture used by
+dispatch-assignment tests is workflow-run-specific. The grouped-claim
+repository test therefore varies event id, scheduler attempt id, and
+reservation lease under the fixture's existing workflow run instead of
+fabricating readiness-proof internals for a second workflow run. Add a proper
+multi-run readiness-proof fixture or fixture builder before using this coverage
+as proof of cross-run grouped claiming.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
+Re-plan checkpoint: the remaining path toward actual coalesced execution now
+needs a standards-aligned decision before implementation. The repository can
+durably claim compatible assignment groups, but the worker still executes the
+anchor assignment through the existing single-runtime dispatch path. Continuing
+to worker-level grouped claiming or runtime-host batch execution may require a
+new composition-root runtime-host batch operation and fan-out/error semantics.
+Do not proceed by implicitly executing only the anchor while marking peers
+claimed, by adding a runtime-host batch API in the same slice as worker grouped
+claiming, or by preserving single-run behavior behind a grouped-claim shim.
+
 ## Standards Rule
 
 The standards constraints in

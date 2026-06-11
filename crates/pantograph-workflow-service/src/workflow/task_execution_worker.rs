@@ -1159,7 +1159,12 @@ fn runtime_dispatch_assignment_diagnostic(
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::DuplicateActiveAssignment
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotFound
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidTransition
-        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::TaskAttemptFactInvalid => {
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::TaskAttemptFactInvalid
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotRunning
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AlreadyBatchClaimed
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected => {
             WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable
         }
     };

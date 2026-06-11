@@ -10,7 +10,10 @@ use uuid::Uuid;
 use crate::graph::WorkflowRuntimeSourceContext;
 
 use super::runtime_branch_task_event::{
-    WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventId,
+    WorkflowRuntimeBranchBatchEligibilityDiagnostic,
+    WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
+    WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile, WorkflowRuntimeBranchTaskEventClaim,
+    WorkflowRuntimeBranchTaskEventId,
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::runtime_task_attempt_fact::{
@@ -24,6 +27,14 @@ pub(super) const WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_SCHEMA_VERSION: u16 = 1;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[must_use]
 pub(super) struct WorkflowRuntimeDispatchAssignmentId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchClaimId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId(String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
@@ -50,6 +61,23 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchClaim {
+    pub(super) batch_claim_id: WorkflowRuntimeDispatchAssignmentBatchClaimId,
+    pub(super) owner_id: WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+    pub(super) anchor_assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    pub(super) claimed_at_ms: u64,
+    pub(super) lease_expires_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchClaimOutcome {
+    pub(super) batch_claim: WorkflowRuntimeDispatchAssignmentBatchClaim,
+    pub(super) assignments: Vec<WorkflowRuntimeDispatchAssignmentRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) schema_version: u16,
     pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
@@ -70,6 +98,7 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) reservation_lease_id: SchedulerReservationLeaseId,
     pub(super) selected_candidate_id: Option<SchedulerDispatchCandidateId>,
     pub(super) task_attempt_fact: Option<WorkflowRuntimeTaskAttemptFactRecord>,
+    pub(super) batch_claim: Option<WorkflowRuntimeDispatchAssignmentBatchClaim>,
     pub(super) state: WorkflowRuntimeDispatchAssignmentState,
     pub(super) created_at_ms: u64,
     pub(super) updated_at_ms: u64,
@@ -101,6 +130,11 @@ pub(super) enum WorkflowRuntimeDispatchAssignmentDiagnosticCode {
     AssignmentNotFound,
     InvalidTransition,
     TaskAttemptFactInvalid,
+    InvalidBatchClaim,
+    AssignmentNotRunning,
+    AlreadyBatchClaimed,
+    MissingTaskAttemptFact,
+    BatchCompatibilityRejected,
 }
 
 pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
@@ -133,6 +167,18 @@ pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
         now_ms: u64,
     ) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentDiagnostic>;
 
+    fn claim_compatible_running_batch(
+        &mut self,
+        anchor_assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+        owner_id: WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+        max_assignments: usize,
+    ) -> Result<
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeDispatchAssignmentDiagnostic,
+    >;
+
     fn get(
         &self,
         assignment_id: &WorkflowRuntimeDispatchAssignmentId,
@@ -164,6 +210,38 @@ impl WorkflowRuntimeDispatchAssignmentId {
             return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
                 WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidAssignment,
                 "runtime dispatch assignment id must be non-empty",
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl WorkflowRuntimeDispatchAssignmentBatchClaimId {
+    fn new() -> Self {
+        Self(format!(
+            "runtime-dispatch-assignment-batch-claim.{}",
+            Uuid::new_v4()
+        ))
+    }
+
+    pub(super) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId {
+    pub(super) fn parse(
+        value: impl Into<String>,
+    ) -> Result<Self, WorkflowRuntimeDispatchAssignmentDiagnostic> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
+                "runtime dispatch assignment batch-claim owner id must be non-empty",
             ));
         }
         Ok(Self(value))
@@ -219,6 +297,7 @@ impl WorkflowRuntimeDispatchAssignmentRepository
             reservation_lease_id: request.reservation_lease_id,
             selected_candidate_id: request.selected_candidate_id,
             task_attempt_fact: None,
+            batch_claim: None,
             state: WorkflowRuntimeDispatchAssignmentState::Prepared,
             created_at_ms: request.created_at_ms,
             updated_at_ms: request.created_at_ms,
@@ -291,6 +370,26 @@ impl WorkflowRuntimeDispatchAssignmentRepository
         )
     }
 
+    fn claim_compatible_running_batch(
+        &mut self,
+        anchor_assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+        owner_id: WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+        max_assignments: usize,
+    ) -> Result<
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeDispatchAssignmentDiagnostic,
+    > {
+        self.claim_compatible_running_batch_record(
+            anchor_assignment_id,
+            owner_id,
+            now_ms,
+            lease_duration_ms,
+            max_assignments,
+        )
+    }
+
     fn get(
         &self,
         assignment_id: &WorkflowRuntimeDispatchAssignmentId,
@@ -300,6 +399,95 @@ impl WorkflowRuntimeDispatchAssignmentRepository
 }
 
 impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
+    fn claim_compatible_running_batch_record(
+        &mut self,
+        anchor_assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+        owner_id: WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+        max_assignments: usize,
+    ) -> Result<
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeDispatchAssignmentDiagnostic,
+    > {
+        if now_ms == 0 {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
+                "runtime dispatch assignment batch claim timestamp must be greater than zero",
+            ));
+        }
+        if lease_duration_ms == 0 {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
+                "runtime dispatch assignment batch claim lease duration must be greater than zero",
+            ));
+        }
+        if max_assignments == 0 {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
+                "runtime dispatch assignment batch claim size must be greater than zero",
+            ));
+        }
+
+        let anchor = self.records.get(anchor_assignment_id).ok_or_else(|| {
+            WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotFound,
+                "runtime dispatch assignment batch anchor was not found",
+            )
+        })?;
+        ensure_batch_claimable(anchor, now_ms)?;
+        let anchor_fact = task_attempt_fact(anchor)?;
+        let mut selected_assignment_ids = vec![anchor_assignment_id.clone()];
+
+        for (assignment_id, candidate) in &self.records {
+            if selected_assignment_ids.len() >= max_assignments {
+                break;
+            }
+            if assignment_id == anchor_assignment_id
+                || candidate.state != WorkflowRuntimeDispatchAssignmentState::Running
+                || candidate.has_active_batch_claim(now_ms)
+            {
+                continue;
+            }
+            let candidate_fact = task_attempt_fact(candidate)?;
+            match WorkflowRuntimeBranchTaskAttemptBatchCompatibilityProfile::ensure_task_attempt_facts_compatible(
+                Some(anchor_fact),
+                Some(candidate_fact),
+            ) {
+                Ok(()) => selected_assignment_ids.push(assignment_id.clone()),
+                Err(diagnostic) if is_batch_compatibility_mismatch(diagnostic.code) => {}
+                Err(diagnostic) => {
+                    return Err(batch_compatibility_error(diagnostic));
+                }
+            }
+        }
+
+        let batch_claim = WorkflowRuntimeDispatchAssignmentBatchClaim {
+            batch_claim_id: WorkflowRuntimeDispatchAssignmentBatchClaimId::new(),
+            owner_id,
+            anchor_assignment_id: anchor_assignment_id.clone(),
+            claimed_at_ms: now_ms,
+            lease_expires_at_ms: now_ms.saturating_add(lease_duration_ms),
+        };
+        let mut assignments = Vec::with_capacity(selected_assignment_ids.len());
+        for assignment_id in selected_assignment_ids {
+            let record = self.records.get_mut(&assignment_id).ok_or_else(|| {
+                WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                    WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotFound,
+                    "runtime dispatch assignment selected for batch claim was not found",
+                )
+            })?;
+            record.batch_claim = Some(batch_claim.clone());
+            record.updated_at_ms = now_ms;
+            assignments.push(record.clone());
+        }
+
+        Ok(WorkflowRuntimeDispatchAssignmentBatchClaimOutcome {
+            batch_claim,
+            assignments,
+        })
+    }
+
     fn transition(
         &mut self,
         assignment_id: &WorkflowRuntimeDispatchAssignmentId,
@@ -371,6 +559,12 @@ impl WorkflowRuntimeDispatchAssignmentRecord {
                 recorded_at_ms,
             },
         )
+    }
+
+    fn has_active_batch_claim(&self, now_ms: u64) -> bool {
+        self.batch_claim
+            .as_ref()
+            .is_some_and(|claim| now_ms < claim.lease_expires_at_ms)
     }
 }
 
@@ -576,6 +770,74 @@ fn invalid_assignment<T>(
     ))
 }
 
+fn ensure_batch_claimable(
+    record: &WorkflowRuntimeDispatchAssignmentRecord,
+    now_ms: u64,
+) -> Result<(), WorkflowRuntimeDispatchAssignmentDiagnostic> {
+    if record.state != WorkflowRuntimeDispatchAssignmentState::Running {
+        return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotRunning,
+            "runtime dispatch assignment batch anchor must be running",
+        ));
+    }
+    if record.has_active_batch_claim(now_ms) {
+        return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::AlreadyBatchClaimed,
+            "runtime dispatch assignment batch anchor already has an active batch claim",
+        ));
+    }
+    let _fact = task_attempt_fact(record)?;
+    Ok(())
+}
+
+fn task_attempt_fact(
+    record: &WorkflowRuntimeDispatchAssignmentRecord,
+) -> Result<&WorkflowRuntimeTaskAttemptFactRecord, WorkflowRuntimeDispatchAssignmentDiagnostic> {
+    record.task_attempt_fact.as_ref().ok_or_else(|| {
+        WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact,
+            "runtime dispatch assignment is missing task-attempt facts required for batch claiming",
+        )
+    })
+}
+
+fn is_batch_compatibility_mismatch(
+    code: WorkflowRuntimeBranchBatchEligibilityDiagnosticCode,
+) -> bool {
+    matches!(
+        code,
+        WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ModelArtifactMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeFamilyMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::BackendMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::RuntimeResidencyMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MemoryEstimateMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ContextShapeMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::OperationTypeMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::CancellationModeMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::TimeoutMismatch
+            | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMismatch
+    )
+}
+
+fn batch_compatibility_error(
+    diagnostic: WorkflowRuntimeBranchBatchEligibilityDiagnostic,
+) -> WorkflowRuntimeDispatchAssignmentDiagnostic {
+    let code = match diagnostic.code {
+        WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::MissingTaskAttemptFact
+        | WorkflowRuntimeBranchBatchEligibilityDiagnosticCode::ReservationProfileMissing => {
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
+        }
+        _ => WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected,
+    };
+    WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+        code,
+        format!(
+            "runtime dispatch assignment batch compatibility failed: {}",
+            diagnostic.message
+        ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use pantograph_dependency_planning::{
@@ -662,6 +924,168 @@ mod tests {
                 .expect("stored fact")
                 .recorded_at_ms,
             130
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_repository_claims_compatible_running_batch() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let second = repository
+            .create(assignment_request_for_run(
+                "assignment.2",
+                "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.002",
+                "run.2026-05-22.001",
+                "attempt.image.2",
+                "reservation-lease.runtime.2",
+            ))
+            .expect("second assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let second = repository
+            .mark_running(&second.assignment_id, 131)
+            .expect("second running");
+
+        let outcome = repository
+            .claim_compatible_running_batch(&first.assignment_id, batch_owner_id(), 140, 1_000, 8)
+            .expect("batch claim");
+
+        assert_eq!(outcome.assignments.len(), 2);
+        assert_eq!(
+            outcome.batch_claim.anchor_assignment_id,
+            first.assignment_id
+        );
+        assert_eq!(outcome.batch_claim.claimed_at_ms, 140);
+        assert_eq!(outcome.batch_claim.lease_expires_at_ms, 1_140);
+        assert!(
+            !outcome
+                .batch_claim
+                .batch_claim_id
+                .as_str()
+                .trim()
+                .is_empty(),
+            "batch claim id must be stable"
+        );
+        assert_eq!(
+            outcome.batch_claim.owner_id.as_str(),
+            "workflow-service.batch-claimer"
+        );
+        assert_eq!(
+            repository
+                .get(&first.assignment_id)
+                .expect("stored first")
+                .batch_claim
+                .as_ref(),
+            Some(&outcome.batch_claim)
+        );
+        assert_eq!(
+            repository
+                .get(&second.assignment_id)
+                .expect("stored second")
+                .batch_claim
+                .as_ref(),
+            Some(&outcome.batch_claim)
+        );
+        assert_eq!(
+            outcome
+                .assignments
+                .iter()
+                .map(|record| record.assignment_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![first.assignment_id.as_str(), second.assignment_id.as_str()]
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_repository_skips_incompatible_batch_candidates() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let anchor = repository
+            .create(assignment_request("assignment.1"))
+            .expect("anchor assignment");
+        let mut incompatible_request = assignment_request_for_run(
+            "assignment.2",
+            "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.002",
+            "run.2026-05-22.001",
+            "attempt.image.2",
+            "reservation-lease.runtime.2",
+        );
+        incompatible_request
+            .runtime_source_context
+            .context_shape_key = "txt2img.512x512.steps20".to_string();
+        let incompatible = repository
+            .create(incompatible_request)
+            .expect("incompatible assignment");
+        let anchor = repository
+            .mark_running(&anchor.assignment_id, 130)
+            .expect("anchor running");
+        let incompatible = repository
+            .mark_running(&incompatible.assignment_id, 131)
+            .expect("incompatible running");
+
+        let outcome = repository
+            .claim_compatible_running_batch(&anchor.assignment_id, batch_owner_id(), 140, 1_000, 8)
+            .expect("batch claim");
+
+        assert_eq!(outcome.assignments.len(), 1);
+        assert_eq!(outcome.assignments[0].assignment_id, anchor.assignment_id);
+        assert!(
+            repository
+                .get(&incompatible.assignment_id)
+                .expect("stored incompatible")
+                .batch_claim
+                .is_none(),
+            "incompatible assignment must remain unclaimed"
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_repository_rejects_batch_claim_without_task_attempt_facts() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let record = repository
+            .create(assignment_request("assignment.1"))
+            .expect("assignment");
+        let running = repository
+            .mark_running(&record.assignment_id, 130)
+            .expect("running assignment");
+        repository
+            .records
+            .get_mut(&running.assignment_id)
+            .expect("stored assignment")
+            .task_attempt_fact = None;
+
+        let error = repository
+            .claim_compatible_running_batch(&running.assignment_id, batch_owner_id(), 140, 1_000, 8)
+            .expect_err("missing task-attempt facts must fail closed");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_repository_rejects_active_batch_claim_reentry() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let record = repository
+            .create(assignment_request("assignment.1"))
+            .expect("assignment");
+        let running = repository
+            .mark_running(&record.assignment_id, 130)
+            .expect("running assignment");
+        let _first_claim = repository
+            .claim_compatible_running_batch(&running.assignment_id, batch_owner_id(), 140, 1_000, 8)
+            .expect("first batch claim");
+
+        let error = repository
+            .claim_compatible_running_batch(&running.assignment_id, batch_owner_id(), 141, 1_000, 8)
+            .expect_err("active batch claim must block reentry");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::AlreadyBatchClaimed
         );
     }
 
@@ -858,6 +1282,47 @@ mod tests {
             selected_candidate_id,
             created_at_ms: 120,
         }
+    }
+
+    fn assignment_request_for_run(
+        assignment_id: &str,
+        runtime_branch_event_id: &str,
+        workflow_run_id: &str,
+        scheduler_task_attempt_id: &str,
+        reservation_lease_id: &str,
+    ) -> WorkflowRuntimeDispatchAssignmentRequest {
+        let mut request = assignment_request(assignment_id);
+        let workflow_run_id =
+            SchedulerWorkflowRunId::parse(workflow_run_id).expect("workflow run id");
+        let reservation_lease_id =
+            SchedulerReservationLeaseId::parse(reservation_lease_id).expect("reservation lease id");
+        request.runtime_branch_event_id =
+            WorkflowRuntimeBranchTaskEventId::parse(runtime_branch_event_id).expect("event id");
+        request.workflow_run_id = workflow_run_id.as_str().to_string();
+        request.scheduler_task_attempt_id = scheduler_task_attempt_id.to_string();
+        request.reservation_lease_id = reservation_lease_id.clone();
+        request
+            .selected_candidate_fact
+            .resource_fit_assessment
+            .workflow_run_id = workflow_run_id.clone();
+        for reservation in &mut request.selected_candidate_fact.reservations {
+            reservation.workflow_run_id = workflow_run_id.clone();
+            reservation.reservation_lease_id = reservation_lease_id.clone();
+        }
+        request.selected_runtime_handoff.workflow_run_id = workflow_run_id.clone();
+        request.selected_runtime_handoff.task_intent.workflow_run_id = workflow_run_id.clone();
+        if let Some(dispatch_decision) = &mut request.selected_runtime_handoff.dispatch_decision {
+            dispatch_decision.workflow_run_id = workflow_run_id.clone();
+            dispatch_decision.task_intent.workflow_run_id = workflow_run_id.clone();
+            dispatch_decision.reservation_lease_id = reservation_lease_id;
+            dispatch_decision.reservations = request.selected_candidate_fact.reservations.clone();
+        }
+        request
+    }
+
+    fn batch_owner_id() -> WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId {
+        WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId::parse("workflow-service.batch-claimer")
+            .expect("batch owner id")
     }
 
     fn runtime_source_context() -> WorkflowRuntimeSourceContext {
