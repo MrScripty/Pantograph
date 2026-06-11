@@ -5723,6 +5723,66 @@ Do not proceed by implicitly executing only the anchor while marking peers
 claimed, by adding a runtime-host batch API in the same slice as worker grouped
 claiming, or by preserving single-run behavior behind a grouped-claim shim.
 
+2026-06-11 coalesced runtime execution re-plan decision: use the fixture-first
+then contract-first path. First add a proper multi-run readiness-proof fixture
+or fixture builder and cross-run acceptance coverage for grouped claims. Then
+define the composition-root-owned runtime-host batch execution contract before
+worker-level grouped execution calls it. This sequence keeps the grouped-claim
+repository boundary validated with real cross-run evidence before adding a
+runtime-host batch API, and it keeps the batch API frozen before the worker
+uses it.
+
+Selected implementation sequence:
+1. Add a standards-compliant multi-run scheduler readiness-proof fixture or
+   fixture builder for dispatch-assignment tests. The fixture must produce
+   internally consistent workflow/run/task/readiness/reservation facts for at
+   least two simultaneous runs without mutating fixture internals inside tests.
+   It must remain a serial integration-owner change because workflow fixtures
+   are shared contract artifacts.
+2. Add a cross-run grouped-claim acceptance test that uses the fixture/builder
+   to prove compatible assignment-owned task-attempt facts from distinct
+   workflow runs can be claimed under one batch lease, while incompatible facts
+   and missing task-attempt facts fail closed. This test must still avoid
+   coalesced runtime execution.
+3. Define the runtime-host batch execution contract at the composition-root
+   boundary before implementation. The contract must include the grouped
+   runtime-host request, per-member inputs, per-member output fan-out,
+   per-member diagnostics, cancellation, timeout, partial failure, retry/defer,
+   and lease/release semantics. It must not carry workflow inputs from the run
+   that first loaded a runtime, must not derive identity from `batching_key`,
+   and must not use reservation lease ids as cross-run compatibility identity.
+4. Add focused contract and boundary tests for the runtime-host batch request
+   and response shape, including fail-closed diagnostics for missing member
+   inputs, stale readiness proof, mismatched handoff facts, cancellation, and
+   partial failure fan-out. Do this before wiring worker execution.
+5. Wire the task-execution worker to claim a compatible assignment group and
+   call the runtime-host batch operation once. The worker must persist and
+   notify each member assignment/result independently, release or retain
+   reservations according to the batch contract, and avoid marking peers
+   claimed unless they are actually included in the runtime-host batch request.
+6. Only after worker-level batch execution passes acceptance checks, continue
+   runtime residency and keep-alive refinements needed for loaded-runtime reuse
+   across future compatible workflow runs.
+
+Rejected paths:
+- Do not continue with anchor-only execution while marking compatible peers as
+  batch claimed.
+- Do not add a runtime-host batch API and worker grouped-claim execution in
+  the same implementation slice.
+- Do not treat repository grouped claims as proof of cross-run batching until
+  a real multi-run fixture or builder exists.
+- Do not introduce scheduler DTO, generated contract, lockfile, saved workflow
+  fixture, or runtime-host API changes as incidental edits inside worker
+  grouped execution.
+
+Next thin slice: implement sequence step 1 only. Allowed files should be
+limited to the scheduler/workflow-service test fixture builder or fixture
+artifact that owns readiness-proof construction, focused tests proving the
+fixture produces internally consistent multi-run facts, and this plan. Stop
+and re-plan if fixture construction requires scheduler DTO changes, generated
+contract changes, lockfile updates, saved workflow fixture updates, runtime
+host API changes, or physical-device/runtime-residency tables.
+
 ## Standards Rule
 
 The standards constraints in

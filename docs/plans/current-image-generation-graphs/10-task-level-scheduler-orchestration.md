@@ -3333,6 +3333,30 @@ workflow-service supervisor still needs await/abort, panic observation,
 retry/defer idempotency, replay/bootstrap, and diagnostics-ledger
 attempt/timing facts.
 
+2026-06-11 coalesced runtime execution sequencing decision: repository-level
+grouped claims now exist over assignment-owned task-attempt facts, but worker
+runtime execution must not advance through an anchor-only shim. The next
+architecture sequence is fixture-first, then contract-first:
+
+1. Add a real multi-run readiness-proof fixture or fixture builder so grouped
+   claim tests can prove compatible task-attempt facts across distinct workflow
+   runs without mutating saved fixture internals.
+2. Add cross-run grouped-claim acceptance coverage that still stops before
+   runtime execution.
+3. Define the composition-root runtime-host batch execution contract before the
+   worker uses it. The contract must include grouped request shape, per-member
+   materialized inputs, output fan-out, diagnostics, cancellation, timeout,
+   partial failure, retry/defer, and lease/release semantics.
+4. Wire worker grouped execution only after the batch contract and boundary
+   tests are frozen.
+
+This preserves the target ownership model: scheduler/workflow-service facts
+decide compatibility, the composition root owns runtime-host execution ports,
+runtime hosts consume only dispatch-selected handoffs and materialized member
+inputs, and runtime residency may keep model/runtime instances warm without
+carrying any source inputs or upstream results from the workflow that first
+loaded them.
+
 ## Effects On Existing Systems
 
 ### Scheduler
