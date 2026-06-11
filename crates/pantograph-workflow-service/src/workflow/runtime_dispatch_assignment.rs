@@ -957,19 +957,14 @@ mod tests {
     }
 
     #[test]
-    fn runtime_dispatch_assignment_repository_claims_compatible_running_batch() {
+    fn runtime_dispatch_assignment_repository_claims_compatible_cross_run_batch() {
         let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let second_member = DispatchAssignmentFixtureMember::second();
         let first = repository
             .create(assignment_request("assignment.1"))
             .expect("first assignment");
         let second = repository
-            .create(assignment_request_for_run(
-                "assignment.2",
-                "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.002",
-                "run.2026-05-22.001",
-                "attempt.image.2",
-                "reservation-lease.runtime.2",
-            ))
+            .create(assignment_request_for_member(&second_member))
             .expect("second assignment");
         let first = repository
             .mark_running(&first.assignment_id, 130)
@@ -977,6 +972,7 @@ mod tests {
         let second = repository
             .mark_running(&second.assignment_id, 131)
             .expect("second running");
+        assert_ne!(first.workflow_run_id, second.workflow_run_id);
 
         let outcome = repository
             .claim_compatible_running_batch(&first.assignment_id, batch_owner_id(), 140, 1_000, 8)
@@ -1026,6 +1022,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![first.assignment_id.as_str(), second.assignment_id.as_str()]
         );
+        assert_eq!(
+            outcome
+                .assignments
+                .iter()
+                .map(|record| record.workflow_run_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["run.2026-05-22.001", second_member.workflow_run_id]
+        );
     }
 
     #[test]
@@ -1034,13 +1038,8 @@ mod tests {
         let anchor = repository
             .create(assignment_request("assignment.1"))
             .expect("anchor assignment");
-        let mut incompatible_request = assignment_request_for_run(
-            "assignment.2",
-            "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.002",
-            "run.2026-05-22.001",
-            "attempt.image.2",
-            "reservation-lease.runtime.2",
-        );
+        let second_member = DispatchAssignmentFixtureMember::second();
+        let mut incompatible_request = assignment_request_for_member(&second_member);
         incompatible_request
             .runtime_source_context
             .context_shape_key = "txt2img.512x512.steps20".to_string();
@@ -1053,6 +1052,7 @@ mod tests {
         let incompatible = repository
             .mark_running(&incompatible.assignment_id, 131)
             .expect("incompatible running");
+        assert_ne!(anchor.workflow_run_id, incompatible.workflow_run_id);
 
         let outcome = repository
             .claim_compatible_running_batch(&anchor.assignment_id, batch_owner_id(), 140, 1_000, 8)
@@ -1092,6 +1092,56 @@ mod tests {
         assert_eq!(
             error.code,
             WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_repository_rejects_cross_run_batch_candidate_without_task_attempt_facts(
+    ) {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let anchor = repository
+            .create(assignment_request("assignment.1"))
+            .expect("anchor assignment");
+        let second_member = DispatchAssignmentFixtureMember::second();
+        let candidate = repository
+            .create(assignment_request_for_member(&second_member))
+            .expect("candidate assignment");
+        let anchor = repository
+            .mark_running(&anchor.assignment_id, 130)
+            .expect("anchor running");
+        let candidate = repository
+            .mark_running(&candidate.assignment_id, 131)
+            .expect("candidate running");
+        repository
+            .records
+            .get_mut(&candidate.assignment_id)
+            .expect("stored candidate")
+            .task_attempt_fact = None;
+
+        let error = repository
+            .claim_compatible_running_batch(&anchor.assignment_id, batch_owner_id(), 140, 1_000, 8)
+            .expect_err("missing candidate task-attempt facts must fail closed");
+
+        assert_ne!(anchor.workflow_run_id, candidate.workflow_run_id);
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
+        );
+        assert!(
+            repository
+                .get(&anchor.assignment_id)
+                .expect("stored anchor")
+                .batch_claim
+                .is_none(),
+            "anchor must not be claimed when a cross-run candidate is missing facts"
+        );
+        assert!(
+            repository
+                .get(&candidate.assignment_id)
+                .expect("stored candidate")
+                .batch_claim
+                .is_none(),
+            "candidate must not be claimed when facts are missing"
         );
     }
 

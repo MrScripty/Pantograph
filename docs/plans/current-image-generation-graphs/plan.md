@@ -5822,6 +5822,48 @@ not add runtime-host batch execution, scheduler DTO changes, generated
 contracts, lockfile updates, saved workflow fixture updates, runtime
 residency/device inventory tables, or worker grouped execution in this slice.
 
+2026-06-11 cross-run grouped-claim acceptance slice: completed sequence step
+2. Smallest useful vertical slice: update dispatch-assignment repository tests
+to use the multi-run fixture builder for grouped-claim acceptance, proving the
+repository can claim compatible assignment-owned task-attempt facts from two
+distinct workflow runs under one batch lease. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice remains repository/test-level
+only. It does not add coalesced runtime execution, does not mark peer work as
+claimed without a repository batch lease, does not add runtime-host batch APIs,
+does not change scheduler DTOs or saved workflow fixtures, and still derives
+compatibility from assignment-owned task-attempt facts rather than
+`batching_key`, reservation lease id, or runtime-host state.
+
+Focused test updates:
+`runtime_dispatch_assignment_repository_claims_compatible_cross_run_batch`
+now proves two distinct workflow runs can be included in one compatible batch
+claim; `runtime_dispatch_assignment_repository_skips_incompatible_batch_candidates`
+now proves a cross-run incompatible context-shape candidate remains unclaimed;
+and
+`runtime_dispatch_assignment_repository_rejects_cross_run_batch_candidate_without_task_attempt_facts`
+proves missing candidate task-attempt facts fail closed without claiming the
+anchor or candidate.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and `git diff --check`.
+
+Next thin slice: implement sequence step 3 by defining the runtime-host batch
+execution contract at the composition-root boundary before worker execution
+uses it. Allowed files should be limited to the workflow-service or embedded
+runtime boundary module that owns runtime-host dispatch contracts, focused
+contract tests, and this plan. The contract must include grouped request
+identity, anchor/member assignments, per-member inputs and output fan-out,
+per-member diagnostics, cancellation, timeout, partial failure, retry/defer,
+and lease/release semantics. Stop and re-plan if this requires generated
+contract updates, frontend/Tauri DTO changes, lockfile updates, saved workflow
+fixture changes, physical-device/runtime-residency tables, or wiring the
+task-execution worker to execute grouped batches in the same slice.
+
 ## Standards Rule
 
 The standards constraints in
