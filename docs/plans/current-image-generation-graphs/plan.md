@@ -6050,11 +6050,63 @@ Re-plan options aligned with the coding standards:
    notification mutations. This reduces integration risk but still leaves
    execution blocked on the real embedded batch port.
 
-Recommended path: choose option 1 unless there is a reason to stage
-workflow-service dependency injection first. It is the shortest standards-
-compliant route to usable grouped execution because it creates the missing
-canonical executor instead of adding more fail-closed surfaces around an absent
-implementation.
+2026-06-11 worker grouped-execution re-plan decision: use option 1. Build the
+real embedded runtime-host batch execution port before worker grouped execution
+is wired. The batch port is the canonical executor for grouped runtime-host
+work; it must not call `RuntimeHostExecutionPort::execute_runtime_host_request`
+in a member loop, must not execute only the anchor member while claiming peers,
+must not fall back to request-scoped or `WorkflowHost` runtime execution, and
+must not carry workflow inputs or ownership forward from the workflow run that
+first caused a runtime/model to be loaded. Runtime/model residency remains
+scheduler and reservation controlled; physical device inventory and runtime
+residency tables remain out of scope unless a later explicit re-plan adds
+them.
+
+Option 1 execution sequence:
+
+1. Add fail-closed batch composition plumbing without enabling grouped worker
+   execution. The workflow-service scheduler task orchestrator should be able
+   to own a `SchedulerRuntimeHostBatchDispatcher` backed by an unavailable
+   `RuntimeHostBatchExecutionPort`, and service config/composition should be
+   able to inject a real batch port later. Allowed files for this slice should
+   remain limited to workflow-service scheduler/service configuration tests and
+   code, embedded composition injection code if needed, README traceability,
+   and this plan. Do not claim runtime dispatch assignment batches in the
+   worker yet.
+2. Implement the real embedded runtime-host batch execution port. This port
+   must validate the grouped request, handle the shared cancellation context,
+   resolve package/load-target facts through batch-owned logic, preserve
+   member-specific materialized inputs and outputs, write member artifacts
+   independently, and return member-level retry and reservation dispositions.
+   It may share pure projection/artifact helper functions with the single-task
+   port after refactoring, but it must not delegate execution to the
+   single-task runtime-host port. If the inference gateway cannot execute
+   multiple batch members against the selected runtime/model without preserving
+   the single-task port path, stop and re-plan for a gateway-level batch
+   operation.
+3. Add workflow-service batch request/response mapping ownership before worker
+   dispatch. Convert claimed compatible assignment groups into
+   `RuntimeHostBatchExecutionRequest` members, and convert batch member
+   responses into scheduler task result mutations, reservation lifecycle
+   events, retry/defer decisions, and per-run notifications. Keep this owner in
+   backend workflow-service code and cover boundary invariants before worker
+   activation.
+4. Wire the task-execution worker to claim compatible running assignment
+   groups and call `SchedulerRuntimeHostBatchDispatcher` once per group. Each
+   member must persist, notify, retry/defer, and release/retain reservations
+   independently. The worker must fail closed when a real batch dispatcher is
+   unavailable or when group correlation is invalid.
+5. Run focused batch-port, workflow-service mapping, worker grouped execution,
+   and existing runtime-branch dispatch checks. Then run the relevant crate
+   checks and format checks before resuming later milestones.
+
+Next thin slice: implement sequence step 1 only. Identify the smallest
+fail-closed composition slice and allowed write set before editing. Do not
+change generated contracts, scheduler DTOs, frontend/Tauri DTOs, lockfiles,
+saved workflow fixtures, physical-device/runtime-residency tables, or worker
+grouped execution in this slice. Stop and re-plan if adding the fail-closed
+batch dispatcher requires changing the public runtime-host contract API that
+was just stabilized.
 
 ## Standards Rule
 
