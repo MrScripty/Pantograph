@@ -5,12 +5,16 @@ use async_trait::async_trait;
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
 #[cfg(test)]
 use pantograph_runtime_host_contracts::RuntimeHostExecutionInput;
+#[cfg(test)]
+use pantograph_runtime_host_contracts::ValidatedRuntimeHostBatchExecutionResponse;
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplicationState, ReservationLifecycleContractError,
     ReservationLifecycleDiagnostic, ReservationLifecycleDiagnosticCode,
     ReservationLifecycleDiagnosticSeverity, ReservationLifecycleEvent, ReservationLifecycleOutcome,
-    ReservationLifecyclePort, ReservationLifecyclePortError, RuntimeHostDispatchError,
+    ReservationLifecyclePort, ReservationLifecyclePortError, RuntimeHostBatchExecutionPort,
+    RuntimeHostBatchExecutionRequest, RuntimeHostDispatchError,
     RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
     SchedulerRuntimeHostDispatcher, ValidatedReservationLifecycleApplication,
     ValidatedReservationLifecycleEvent, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
@@ -68,6 +72,7 @@ use super::{
 #[must_use]
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
+    runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
     scheduler_lifecycle: WorkflowSchedulerLifecycleComponentRegistryHandle,
     task_lifecycle: Arc<Mutex<WorkflowSchedulerTaskLifecycleManager>>,
@@ -193,6 +198,9 @@ impl WorkflowSchedulerTaskOrchestrator {
         );
         Self {
             runtime_host_dispatcher,
+            runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher::new(Arc::new(
+                UnavailableRuntimeHostBatchExecutionPort,
+            )),
             reservation_lifecycle_port: Arc::new(UnavailableReservationLifecyclePort),
             scheduler_lifecycle: scheduler_lifecycle.clone(),
             task_lifecycle: Arc::new(Mutex::new(
@@ -210,6 +218,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
     ) -> Self {
         self.runtime_host_dispatcher = runtime_host_dispatcher;
+        self
+    }
+
+    pub(crate) fn with_runtime_host_batch_dispatcher(
+        mut self,
+        runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher,
+    ) -> Self {
+        self.runtime_host_batch_dispatcher = runtime_host_batch_dispatcher;
         self
     }
 
@@ -412,6 +428,18 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)?;
         runtime_host_response_to_task_result(&response)
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn dispatch_runtime_batch_request(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+    ) -> Result<ValidatedRuntimeHostBatchExecutionResponse, WorkflowSchedulerTaskOrchestratorError>
+    {
+        self.runtime_host_batch_dispatcher
+            .dispatch_batch(request)
+            .await
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)
     }
 
     #[cfg(test)]
@@ -2060,6 +2088,26 @@ impl ReservationLifecyclePort for UnavailableReservationLifecyclePort {
     > {
         Err(ReservationLifecyclePortError::Failed {
             message: "reservation lifecycle port is not configured for workflow-service"
+                .to_string(),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct UnavailableRuntimeHostBatchExecutionPort;
+
+#[async_trait]
+impl RuntimeHostBatchExecutionPort for UnavailableRuntimeHostBatchExecutionPort {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        _request: RuntimeHostBatchExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<
+        pantograph_runtime_host_contracts::RuntimeHostBatchExecutionResponse,
+        RuntimeHostExecutionPortError,
+    > {
+        Err(RuntimeHostExecutionPortError::ExecutionFailed {
+            message: "runtime-host batch execution port is not configured for workflow-service"
                 .to_string(),
         })
     }

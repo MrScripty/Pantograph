@@ -142,6 +142,12 @@ runtime-host contracts port. Workflow-service owns event emission only; the
 default lifecycle port fails closed before runtime-host dispatch, and
 production reservation release/retention side effects remain embedded-runtime
 or runtime-registry responsibilities.
+The scheduler task orchestrator now also has a fail-closed runtime-host batch
+dispatcher dependency slot. Default workflow-service construction backs that
+slot with an unavailable batch port, and tests cover explicit injection before
+any task-execution worker grouped-claim path is enabled. Batch execution must
+come from a real runtime-host batch port rather than looping through the
+single-task runtime-host port.
 The scheduler task orchestrator also owns the workflow-service bridge from
 `WaitingDependencyReadiness` into scheduler readiness admission. It consumes
 only a path-free `DependencyPreflightResult`, applies

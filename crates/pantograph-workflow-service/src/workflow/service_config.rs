@@ -9,9 +9,10 @@ use pantograph_dependency_environment_service::{
 };
 use pantograph_dependency_planning::ValidatedDependencyEnvironmentResult;
 use pantograph_runtime_host_contracts::{
-    ReservationLifecyclePort, RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+    ReservationLifecyclePort, RuntimeHostBatchExecutionPort,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
     RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    SchedulerRuntimeHostDispatcher,
+    SchedulerRuntimeHostBatchDispatcher, SchedulerRuntimeHostDispatcher,
 };
 
 use crate::graph::{
@@ -90,6 +91,16 @@ impl WorkflowService {
         self.scheduler_task_orchestrator = self
             .scheduler_task_orchestrator
             .with_runtime_host_dispatcher(SchedulerRuntimeHostDispatcher::new(port));
+        self
+    }
+
+    pub fn with_runtime_host_batch_execution_port(
+        mut self,
+        port: Arc<dyn RuntimeHostBatchExecutionPort>,
+    ) -> Self {
+        self.scheduler_task_orchestrator = self
+            .scheduler_task_orchestrator
+            .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(port));
         self
     }
 
@@ -426,6 +437,157 @@ fn dependency_requirements_registry_error(
     WorkflowServiceError::InvalidRequest(format!(
         "dependency requirements registry seed failed: {error}"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+    use pantograph_runtime_host_contracts::{
+        RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
+        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+        RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
+        RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
+        RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
+        RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionCancellationContext,
+        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionDiagnostic,
+        RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+        RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
+        RuntimeHostExecutionTerminalMetadata, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    };
+
+    use super::WorkflowService;
+
+    #[derive(Default)]
+    struct RecordingRuntimeHostBatchPort {
+        request_ids: Mutex<Vec<String>>,
+        response: Mutex<Option<RuntimeHostBatchExecutionResponse>>,
+    }
+
+    impl RecordingRuntimeHostBatchPort {
+        fn with_response(response: RuntimeHostBatchExecutionResponse) -> Self {
+            Self {
+                request_ids: Mutex::new(Vec::new()),
+                response: Mutex::new(Some(response)),
+            }
+        }
+
+        fn request_ids(&self) -> Vec<String> {
+            self.request_ids
+                .lock()
+                .expect("batch request id lock")
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl RuntimeHostBatchExecutionPort for RecordingRuntimeHostBatchPort {
+        async fn execute_runtime_host_batch_request(
+            &self,
+            request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+            self.request_ids
+                .lock()
+                .expect("batch request id lock")
+                .push(request.batch_execution_request_id);
+            self.response
+                .lock()
+                .expect("batch response lock")
+                .clone()
+                .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
+                    message: "missing test batch response".to_string(),
+                })
+        }
+    }
+
+    #[tokio::test]
+    async fn workflow_service_injects_runtime_host_batch_execution_port() {
+        let request = runtime_host_batch_request_fixture();
+        let response = runtime_host_batch_response_fixture(&request);
+        let port = Arc::new(RecordingRuntimeHostBatchPort::with_response(response));
+        let service = WorkflowService::new().with_runtime_host_batch_execution_port(port.clone());
+
+        let validated = service
+            .scheduler_task_orchestrator
+            .dispatch_runtime_batch_request(request.clone())
+            .await
+            .expect("service-configured batch port should receive request");
+
+        assert_eq!(
+            validated.as_ref().batch_execution_request_id,
+            request.batch_execution_request_id
+        );
+        assert_eq!(
+            port.request_ids(),
+            vec![request.batch_execution_request_id.clone()]
+        );
+    }
+
+    fn runtime_host_batch_request_fixture() -> RuntimeHostBatchExecutionRequest {
+        let base_request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
+            "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+        ))
+        .expect("runtime host request fixture");
+        RuntimeHostBatchExecutionRequest {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: "workflow-service-config-batch-request-1".to_string(),
+            anchor_execution_request_id: "workflow-service-config-request-1".to_string(),
+            cancellation_context: RuntimeHostExecutionCancellationContext::workflow_service(
+                "workflow-service-config-batch-request-1",
+            ),
+            members: vec![RuntimeHostBatchExecutionMemberRequest {
+                execution_request_id: "workflow-service-config-request-1".to_string(),
+                assignment_id: "workflow-service-config-assignment-1".to_string(),
+                handoff: base_request.handoff,
+                materialized_inputs: base_request.materialized_inputs,
+                timeout_ms: Some(30_000),
+                failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+                reservation_policy: RuntimeHostBatchMemberReservationPolicy::RetainForRuntimeReuse,
+            }],
+        }
+    }
+
+    fn runtime_host_batch_response_fixture(
+        request: &RuntimeHostBatchExecutionRequest,
+    ) -> RuntimeHostBatchExecutionResponse {
+        let member = &request.members[0];
+        RuntimeHostBatchExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: request.batch_execution_request_id.clone(),
+            state: RuntimeHostBatchExecutionState::Completed,
+            diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+                code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+                message: "service-configured batch completed".to_string(),
+                hint: None,
+            }],
+            members: vec![RuntimeHostBatchExecutionMemberResponse {
+                execution_request_id: member.execution_request_id.clone(),
+                assignment_id: member.assignment_id.clone(),
+                workflow_id: member.handoff.workflow_id.clone(),
+                workflow_run_id: member.handoff.workflow_run_id.clone(),
+                node_id: member.handoff.node_id.clone(),
+                task_id: member.handoff.task_id.clone(),
+                state: RuntimeHostBatchExecutionMemberState::Completed,
+                retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                reservation_disposition:
+                    RuntimeHostBatchMemberReservationDisposition::RetainedForRuntimeReuse,
+                outputs: Vec::new(),
+                diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                    severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+                    code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+                    message: "service-configured batch member completed".to_string(),
+                    hint: None,
+                }],
+                terminal_metadata: Some(RuntimeHostExecutionTerminalMetadata {
+                    completed_at_ms: Some(1_000),
+                    attempt: Some(1),
+                }),
+            }],
+        }
+    }
 }
 
 fn load_artifact_format_settings(

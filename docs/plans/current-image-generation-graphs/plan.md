@@ -6108,6 +6108,52 @@ grouped execution in this slice. Stop and re-plan if adding the fail-closed
 batch dispatcher requires changing the public runtime-host contract API that
 was just stabilized.
 
+2026-06-11 fail-closed runtime-host batch composition slice: completed option
+1 sequence step 1. Smallest useful vertical slice: give
+`WorkflowSchedulerTaskOrchestrator` an owned `SchedulerRuntimeHostBatchDispatcher`
+slot backed by an unavailable `RuntimeHostBatchExecutionPort` by default, add
+`WorkflowService::with_runtime_host_batch_execution_port` for later real port
+injection, and cover both default fail-closed behavior and explicit injection
+with focused tests. Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+`crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+`crates/pantograph-workflow-service/src/scheduler/README.md`, and this plan.
+
+No-fallback/no-legacy confirmation: no worker grouped assignment claiming was
+enabled, no embedded runtime batch executor was faked, no single-task
+`RuntimeHostExecutionPort` loop was added behind the batch API, no anchor-only
+batch execution path was added, and no generated contracts, scheduler DTOs,
+frontend/Tauri DTOs, lockfiles, saved fixtures, physical-device tables, or
+runtime-residency tables were changed. Embedded runtime composition injection
+is intentionally deferred until the real embedded batch port exists, so this
+slice does not require a fake embedded batch dependency.
+
+Focused test updates:
+`orchestrator_fails_closed_when_runtime_host_batch_port_is_unconfigured`
+proves default construction rejects batch dispatch through the unavailable
+batch port; `orchestrator_dispatches_runtime_batch_through_injected_batch_port`
+proves explicit orchestrator injection passes a validated batch request and
+running cancellation snapshot to the batch port; and
+`workflow_service_injects_runtime_host_batch_execution_port` proves the
+workflow-service configuration hook wires the batch port into the orchestrator.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service orchestrator_fails_closed_when_runtime_host_batch_port_is_unconfigured --lib`;
+`cargo test -p pantograph-workflow-service orchestrator_dispatches_runtime_batch_through_injected_batch_port --lib`;
+`cargo test -p pantograph-workflow-service workflow_service_injects_runtime_host_batch_execution_port --lib`;
+`cargo check -p pantograph-workflow-service`;
+`cargo fmt -p pantograph-workflow-service -- --check`; and
+`git diff --check`.
+
+Next thin slice: begin option 1 sequence step 2 by inspecting the embedded
+runtime-host single execution port, image projection, media artifact sink,
+package/load-target resolvers, and inference gateway API to identify the
+smallest real batch-port slice. Do not implement batch execution by delegating
+to `execute_runtime_host_request`, do not preserve request-scoped or
+`WorkflowHost` runtime execution, and stop/re-plan if the inference gateway
+cannot accept a batch-owned operation without a gateway-level contract change.
+
 ## Standards Rule
 
 The standards constraints in

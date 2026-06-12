@@ -10,11 +10,21 @@ use pantograph_dependency_planning::{
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecyclePort, ReservationLifecyclePortError,
-    RuntimeHostDispatchError, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
+    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+    RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
+    RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
+    RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
+    RuntimeHostBatchMemberRetryDisposition, RuntimeHostDispatchError,
+    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
     RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
-    RuntimeHostExecutionContractError, RuntimeHostExecutionInputValue, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionContractError, RuntimeHostExecutionDiagnostic,
+    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionInputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+    RuntimeHostExecutionTerminalMetadata, SchedulerRuntimeHostBatchDispatcher,
     SchedulerRuntimeHostDispatcher, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     select_scheduler_dispatch, SchedulableTaskIntent, SchedulerDispatchSelectionRequest,
@@ -49,6 +59,13 @@ struct RecordingRuntimeHostPort {
     requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
     cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
     response: Mutex<Option<RuntimeHostExecutionResponse>>,
+}
+
+#[derive(Default)]
+struct RecordingRuntimeHostBatchPort {
+    requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+    cancellation_snapshots: Mutex<Vec<RuntimeHostExecutionCancellationSnapshot>>,
+    response: Mutex<Option<RuntimeHostBatchExecutionResponse>>,
 }
 
 #[tokio::test]
@@ -134,6 +151,52 @@ impl RuntimeHostExecutionPort for RecordingRuntimeHostPort {
             .clone()
             .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
                 message: "missing test response".to_string(),
+            })
+    }
+}
+
+impl RecordingRuntimeHostBatchPort {
+    fn with_response(response: RuntimeHostBatchExecutionResponse) -> Self {
+        Self {
+            requests: Mutex::new(Vec::new()),
+            cancellation_snapshots: Mutex::new(Vec::new()),
+            response: Mutex::new(Some(response)),
+        }
+    }
+
+    fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
+        self.requests.lock().expect("batch request lock").clone()
+    }
+
+    fn cancellation_snapshots(&self) -> Vec<RuntimeHostExecutionCancellationSnapshot> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("batch cancellation snapshot lock")
+            .clone()
+    }
+}
+
+#[async_trait]
+impl RuntimeHostBatchExecutionPort for RecordingRuntimeHostBatchPort {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+        self.cancellation_snapshots
+            .lock()
+            .expect("batch cancellation snapshot lock")
+            .push(cancellation.snapshot());
+        self.requests
+            .lock()
+            .expect("batch request lock")
+            .push(request);
+        self.response
+            .lock()
+            .expect("batch response lock")
+            .clone()
+            .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
+                message: "missing test batch response".to_string(),
             })
     }
 }
@@ -232,6 +295,65 @@ async fn orchestrator_rejects_readiness_only_handoff_before_runtime_host_port() 
         )
     ));
     assert!(port.requests().is_empty());
+}
+
+#[tokio::test]
+async fn orchestrator_fails_closed_when_runtime_host_batch_port_is_unconfigured() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let request = runtime_host_batch_request_fixture();
+
+    let error = orchestrator
+        .dispatch_runtime_batch_request(request)
+        .await
+        .expect_err("default batch port should fail closed");
+
+    assert!(matches!(
+        error,
+        WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch(
+            RuntimeHostDispatchError::Port(RuntimeHostExecutionPortError::ExecutionFailed { .. })
+        )
+    ));
+    assert!(
+        error.to_string().contains("runtime-host dispatch failed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn orchestrator_dispatches_runtime_batch_through_injected_batch_port() {
+    let request = runtime_host_batch_request_fixture();
+    let response = runtime_host_batch_response_fixture(&request);
+    let port = Arc::new(RecordingRuntimeHostBatchPort::with_response(response));
+    let orchestrator = orchestrator_without_runtime_host_response()
+        .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(port.clone()));
+
+    let validated = orchestrator
+        .dispatch_runtime_batch_request(request.clone())
+        .await
+        .expect("valid batch request should reach injected batch port");
+
+    assert_eq!(
+        validated.as_ref().batch_execution_request_id,
+        request.batch_execution_request_id
+    );
+    assert_eq!(validated.as_ref().members.len(), 2);
+    let recorded = port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].batch_execution_request_id,
+        request.batch_execution_request_id
+    );
+    assert_eq!(recorded[0].members.len(), 2);
+    let cancellation_snapshots = port.cancellation_snapshots();
+    assert_eq!(cancellation_snapshots.len(), 1);
+    assert_eq!(
+        cancellation_snapshots[0].cancellation_context_id,
+        request.cancellation_context.cancellation_context_id
+    );
+    assert_eq!(
+        cancellation_snapshots[0].state,
+        RuntimeHostExecutionCancellationState::Running
+    );
 }
 
 #[tokio::test]
@@ -2072,6 +2194,82 @@ fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_completed_outputs.json"
     ))
     .expect("runtime host response fixture")
+}
+
+fn runtime_host_batch_request_fixture() -> RuntimeHostBatchExecutionRequest {
+    let base_request = runtime_host_request_fixture();
+    RuntimeHostBatchExecutionRequest {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: "workflow-service-runtime-batch-request-1".to_string(),
+        anchor_execution_request_id: "workflow-service-runtime-request-1".to_string(),
+        cancellation_context: RuntimeHostExecutionCancellationContext::workflow_service(
+            "workflow-service-runtime-batch-request-1",
+        ),
+        members: vec![
+            RuntimeHostBatchExecutionMemberRequest {
+                execution_request_id: "workflow-service-runtime-request-1".to_string(),
+                assignment_id: "workflow-service-assignment-1".to_string(),
+                handoff: base_request.handoff.clone(),
+                materialized_inputs: base_request.materialized_inputs.clone(),
+                timeout_ms: Some(30_000),
+                failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+                reservation_policy: RuntimeHostBatchMemberReservationPolicy::RetainForRuntimeReuse,
+            },
+            RuntimeHostBatchExecutionMemberRequest {
+                execution_request_id: "workflow-service-runtime-request-2".to_string(),
+                assignment_id: "workflow-service-assignment-2".to_string(),
+                handoff: base_request.handoff,
+                materialized_inputs: base_request.materialized_inputs,
+                timeout_ms: Some(30_000),
+                failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+                reservation_policy: RuntimeHostBatchMemberReservationPolicy::RetainForRuntimeReuse,
+            },
+        ],
+    }
+}
+
+fn runtime_host_batch_response_fixture(
+    request: &RuntimeHostBatchExecutionRequest,
+) -> RuntimeHostBatchExecutionResponse {
+    RuntimeHostBatchExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: request.batch_execution_request_id.clone(),
+        state: RuntimeHostBatchExecutionState::Completed,
+        diagnostics: vec![RuntimeHostExecutionDiagnostic {
+            severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+            code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+            message: "workflow-service test batch completed".to_string(),
+            hint: None,
+        }],
+        members: request
+            .members
+            .iter()
+            .enumerate()
+            .map(|(index, member)| RuntimeHostBatchExecutionMemberResponse {
+                execution_request_id: member.execution_request_id.clone(),
+                assignment_id: member.assignment_id.clone(),
+                workflow_id: member.handoff.workflow_id.clone(),
+                workflow_run_id: member.handoff.workflow_run_id.clone(),
+                node_id: member.handoff.node_id.clone(),
+                task_id: member.handoff.task_id.clone(),
+                state: RuntimeHostBatchExecutionMemberState::Completed,
+                retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                reservation_disposition:
+                    RuntimeHostBatchMemberReservationDisposition::RetainedForRuntimeReuse,
+                outputs: runtime_host_response_fixture().outputs,
+                diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                    severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+                    code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+                    message: format!("batch member {index} completed"),
+                    hint: None,
+                }],
+                terminal_metadata: Some(RuntimeHostExecutionTerminalMetadata {
+                    completed_at_ms: Some(1_000 + u64::try_from(index).expect("fixture index")),
+                    attempt: Some(1),
+                }),
+            })
+            .collect(),
+    }
 }
 
 fn dispatch_selection_request_fixture() -> SchedulerDispatchSelectionRequest {
