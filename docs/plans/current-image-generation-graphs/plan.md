@@ -6154,6 +6154,51 @@ to `execute_runtime_host_request`, do not preserve request-scoped or
 `WorkflowHost` runtime execution, and stop/re-plan if the inference gateway
 cannot accept a batch-owned operation without a gateway-level contract change.
 
+2026-06-11 embedded batch-port inspection re-plan trigger: inspection found
+that the current inference gateway cannot yet support a real multi-member
+runtime-host batch operation without adding a gateway-level batch contract.
+`EmbeddedRuntimeHostExecutionPort` projects exactly one validated
+`RuntimeHostExecutionRequest` into one `ImageGenerationPlanningInput` and then
+calls `InferenceGateway::generate_image_from_planning_input_with_cancellation`.
+The inference gateway and `InferenceBackend` trait expose single planned image
+generation calls (`generate_image_from_plan_with_cancellation` and
+`generate_image_from_plan`) for one `ImageGenerationExecutionPlan`; there is no
+gateway-owned operation that accepts multiple planned image-generation members
+as one scheduler-owned batch. A real embedded `RuntimeHostBatchExecutionPort`
+therefore cannot be implemented next without either adding a gateway/backend
+batch contract or violating the plan by looping single-member execution.
+
+Rejected paths: do not implement embedded batch execution by looping
+`RuntimeHostExecutionPort::execute_runtime_host_request`, do not loop
+`InferenceGateway::generate_image_from_planning_input_with_cancellation` once
+per batch member behind the batch port, do not execute only the anchor member,
+and do not use `ImageGenerationRequest` image count as a substitute for
+multiple workflow/task members. Image count is one member's output cardinality,
+not a scheduler batch of independently persisted workflow runs.
+
+Re-plan options aligned with the coding standards:
+
+1. Preferred: add a gateway-level image-generation batch contract first. Define
+   explicit request/member/response DTOs in the inference crate, add a gateway
+   operation that validates/plans all members before backend execution,
+   preserves member-specific inputs/results/diagnostics, and fails closed when
+   the active backend lacks batch support. Then implement backend support in a
+   separate slice and wire the embedded runtime-host batch port to that
+   gateway operation.
+2. Add a fail-closed gateway batch facade now, with no backend execution. This
+   would let the embedded batch port compile against the intended boundary and
+   return typed unsupported diagnostics until real backend batch execution
+   lands. It is standards-compliant but does not produce usable grouped
+   execution.
+3. Re-scope the immediate runtime-host batch port to planning/projection only.
+   Build and test conversion from runtime-host batch members into planned
+   image-generation members, then stop before execution. This reduces mapping
+   risk but keeps execution blocked on option 1.
+
+Recommended path: use option 1. It creates the missing canonical gateway
+boundary required for a real batch executor and avoids adding another
+fail-closed layer around an absent backend capability.
+
 ## Standards Rule
 
 The standards constraints in
