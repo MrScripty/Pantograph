@@ -7682,6 +7682,52 @@ ownership coupling. If canonical planning cannot produce a valid per-member
 finalization decision, the implementation must return typed diagnostics and
 leave retryable/deferred members in explicit non-terminal states.
 
+2026-06-14 host-aware batch run finalization slice completed. Smallest useful
+vertical slice: add an async host-aware batch finalization boundary on the
+runtime-branch batch execution owner that consumes an already validated batch
+plan and runtime-host batch response after scheduler mutation and durable
+assignment terminal marking. Completed members use the canonical
+`completed_scheduler_run_response` output projection with `WorkflowHost`, then
+all terminal completed/failed/cancelled members finalize through
+`finalize_admitted_workflow_run`. Retryable and deferred members remain active
+for scheduler retry. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable runtime-host
+batch dispatch, does not call legacy `run_workflow`, does not project outputs
+without a host, does not add single-member fallback dispatch, and does not
+carry anchor-run inputs, runtime, or device state between members. Accepted or
+unsupported runtime-host member states fail closed with typed batch
+finalization diagnostics.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_run_finalization --lib`,
+`cargo test -p pantograph-workflow-service session_scheduler_runner --lib`
+(0 matching tests),
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added host-aware batch finalization tests proving two
+completed batched active runs finalize independently through host output
+projection and leave no active workflow runs, while a mixed non-retryable
+failed/retryable response finalizes only the terminal failed run and preserves
+the retryable active run for scheduler retry. The local test host panics if
+the legacy `run_workflow` path is called.
+
+Deviation resolved in-slice: option 1 from the re-plan was viable without
+extracting a separate projection helper. The existing canonical completed-run
+projection and finalization helper were reused directly, so option 2 is not
+needed for this milestone.
+
+Remaining follow-up: final runtime-host batch dispatch enablement remains
+blocked until the owner wires request dispatch to response mutation and
+host-aware run finalization as one validated path, with no single-member
+fallback and typed diagnostics for invalid canonical decisions.
+
 ## Standards Rule
 
 The standards constraints in

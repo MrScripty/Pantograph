@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::time::Instant;
 
 use crate::scheduler::task_orchestrator::{
     SelectedRuntimeTaskDispatch, StartedRuntimeTaskBatchMember,
@@ -6,6 +7,7 @@ use crate::scheduler::task_orchestrator::{
     WorkflowSchedulerTaskOrchestratorError,
 };
 use crate::scheduler::unix_timestamp_ms;
+use pantograph_runtime_attribution::WorkflowRunId;
 use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
     RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionRequest,
@@ -18,6 +20,7 @@ use pantograph_scheduler::{
     SchedulerTaskStateRecord,
 };
 
+use super::runtime_branch_run_finalization::completed_scheduler_run_response;
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchClaim,
     WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
@@ -27,10 +30,15 @@ use super::runtime_dispatch_assignment::{
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::runtime_task_attempt_fact::WorkflowRuntimeTaskAttemptFactRecord;
-use super::{
-    materialize_runtime_host_inputs, WorkflowSchedulerTask, WorkflowSchedulerTaskResult,
-    WorkflowService,
+use super::workflow_run_finalization::{
+    finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
 };
+use super::{
+    materialize_runtime_host_inputs, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowRunResponse, WorkflowSchedulerTask, WorkflowSchedulerTaskResult, WorkflowService,
+    WorkflowServiceError,
+};
+use crate::scheduler::WorkflowExecutionSessionActiveRunContext;
 
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchExecutionOwner<'a, R>
@@ -117,6 +125,12 @@ pub(super) struct WorkflowRuntimeBranchBatchResponseMutationOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub(super) struct WorkflowRuntimeBranchBatchRunFinalizationOutcome {
+    pub(super) member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchExecutionFailure {
     pub(super) diagnostics: Vec<WorkflowRuntimeBranchBatchExecutionDiagnostic>,
     pub(super) member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
@@ -153,6 +167,7 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     RuntimeHostBatchMemberResponseUnknown,
     RuntimeHostBatchMemberMutationInvalid,
     RuntimeDispatchAssignmentTerminalStateInvalid,
+    WorkflowRunFinalizationInvalid,
     ResponderFanOutUnavailable,
 }
 
@@ -269,6 +284,71 @@ where
         drop(store);
         mark_terminal_service_assignments(service, plan, response)?;
         Ok(WorkflowRuntimeBranchBatchResponseMutationOutcome {
+            member_outcomes: outcomes,
+        })
+    }
+
+    pub(super) async fn finalize_batch_member_runs<H>(
+        &self,
+        service: &WorkflowService,
+        host: &H,
+        plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+        response: &RuntimeHostBatchExecutionResponse,
+    ) -> Result<
+        WorkflowRuntimeBranchBatchRunFinalizationOutcome,
+        WorkflowRuntimeBranchBatchExecutionFailure,
+    >
+    where
+        H: WorkflowHost + ?Sized,
+    {
+        validate_batch_response_matches_plan(plan, response)?;
+        let mut outcomes = Vec::with_capacity(plan.members.len());
+        for member in &plan.members {
+            let response_member =
+                response_member_for_assignment(response, member.assignment_id.as_str())
+                    .expect("response membership was validated before finalization");
+            let Some(run_result) =
+                batch_member_run_result(service, host, member, response_member).await?
+            else {
+                outcomes.push(member_outcome_from_response(member, response_member));
+                continue;
+            };
+            let context = finalization_context_for_member(service, member)?;
+            let workflow_run_id =
+                WorkflowRunId::try_from(member.workflow_run_id.clone()).map_err(|error| {
+                    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                        member,
+                        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+                            format!(
+                                "runtime branch batch member '{}' has invalid workflow run id: {error}",
+                                member.assignment_id.as_str()
+                            ),
+                        ),
+                    )
+                })?;
+            let run_snapshot = service
+                .workflow_run_snapshot_for_execution_resume_if_configured(&workflow_run_id)
+                .map_err(|error| workflow_run_finalization_failure(member, error))?;
+            let finalization = finalize_admitted_workflow_run(
+                service,
+                WorkflowRunFinalizationRequest {
+                    session: &context.session,
+                    run_snapshot: run_snapshot.as_ref(),
+                    session_id: &member.session_id,
+                    workflow_run_id: &member.workflow_run_id,
+                    workflow_semantic_version: &context.active_run.workflow_semantic_version,
+                    io_artifact_inputs: Some(&context.active_run.inputs),
+                    run_result,
+                },
+            )
+            .map_err(|error| workflow_run_finalization_failure(member, error))?;
+            outcomes.push(member_outcome_from_run_result(
+                member,
+                finalization.run_result.as_ref(),
+            ));
+        }
+        Ok(WorkflowRuntimeBranchBatchRunFinalizationOutcome {
             member_outcomes: outcomes,
         })
     }
@@ -803,6 +883,192 @@ fn assignment_terminal_failure(
     )
 }
 
+struct WorkflowRuntimeBranchBatchRunFinalizationContext {
+    session: WorkflowExecutionSessionSummary,
+    active_run: WorkflowExecutionSessionActiveRunContext,
+}
+
+fn finalization_context_for_member(
+    service: &WorkflowService,
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+) -> Result<
+    WorkflowRuntimeBranchBatchRunFinalizationContext,
+    WorkflowRuntimeBranchBatchExecutionFailure,
+> {
+    let store = service.session_store_guard().map_err(|error| {
+        WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+            member,
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+                format!("runtime branch batch finalization could not read session store: {error}"),
+            ),
+        )
+    })?;
+    let session = store.session_summary(&member.session_id).map_err(|error| {
+        WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+            member,
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+                format!("runtime branch batch finalization session is unavailable: {error}"),
+            ),
+        )
+    })?;
+    let active_run = store
+        .active_run_context(&member.session_id, &member.workflow_run_id)
+        .map_err(|error| {
+            WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                member,
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+                    format!("runtime branch batch finalization active run is unavailable: {error}"),
+                ),
+            )
+        })?;
+    Ok(WorkflowRuntimeBranchBatchRunFinalizationContext {
+        session,
+        active_run,
+    })
+}
+
+async fn batch_member_run_result<H>(
+    service: &WorkflowService,
+    host: &H,
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<
+    Option<Result<WorkflowRunResponse, WorkflowServiceError>>,
+    WorkflowRuntimeBranchBatchExecutionFailure,
+>
+where
+    H: WorkflowHost + ?Sized,
+{
+    let result = match response.state {
+        RuntimeHostBatchExecutionMemberState::Completed => {
+            let context = finalization_context_for_member(service, member)?;
+            completed_scheduler_run_response(
+                service,
+                host,
+                &member.session_id,
+                &member.workflow_run_id,
+                &member.workflow_id,
+                context.active_run.output_targets.as_deref(),
+                Instant::now(),
+            )
+            .await
+        }
+        RuntimeHostBatchExecutionMemberState::Cancelled => Err(WorkflowServiceError::Cancelled(
+            response_diagnostic_message(response, "runtime-host batch member cancelled"),
+        )),
+        RuntimeHostBatchExecutionMemberState::Failed
+        | RuntimeHostBatchExecutionMemberState::Rejected => match response.retry_disposition {
+            pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::Retryable
+            | pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::Deferred => {
+                return Ok(None);
+            }
+            _ => Err(WorkflowServiceError::CapabilityViolation(
+                response_diagnostic_message(response, "runtime-host batch member failed"),
+            )),
+        },
+        RuntimeHostBatchExecutionMemberState::Deferred => return Ok(None),
+        RuntimeHostBatchExecutionMemberState::Accepted => {
+            return Err(WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                member,
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+                    format!(
+                        "runtime branch batch assignment '{}' cannot finalize accepted runtime-host member response",
+                        member.assignment_id.as_str()
+                    ),
+                ),
+            ));
+        }
+        _ => {
+            return Err(WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                member,
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+                    format!(
+                        "runtime branch batch assignment '{}' received unsupported runtime-host member state for finalization",
+                        member.assignment_id.as_str()
+                    ),
+                ),
+            ));
+        }
+    };
+    Ok(Some(result))
+}
+
+fn response_diagnostic_message(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+    default_message: &str,
+) -> String {
+    response
+        .diagnostics
+        .first()
+        .map(|diagnostic| diagnostic.message.clone())
+        .unwrap_or_else(|| default_message.to_string())
+}
+
+fn member_outcome_from_run_result(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    run_result: Result<&WorkflowRunResponse, &WorkflowServiceError>,
+) -> WorkflowRuntimeBranchBatchMemberExecutionOutcome {
+    let state = match run_result {
+        Ok(_response) => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+        Err(WorkflowServiceError::Cancelled(_message)) => {
+            WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled
+        }
+        Err(_error) => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+    };
+    WorkflowRuntimeBranchBatchMemberExecutionOutcome {
+        assignment_id: member.assignment_id.clone(),
+        session_id: member.session_id.clone(),
+        workflow_id: member.workflow_id.clone(),
+        workflow_run_id: member.workflow_run_id.clone(),
+        state,
+        diagnostics: Vec::new(),
+    }
+}
+
+fn member_outcome_from_response(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> WorkflowRuntimeBranchBatchMemberExecutionOutcome {
+    WorkflowRuntimeBranchBatchMemberExecutionOutcome {
+        assignment_id: member.assignment_id.clone(),
+        session_id: member.session_id.clone(),
+        workflow_id: member.workflow_id.clone(),
+        workflow_run_id: member.workflow_run_id.clone(),
+        state: match response.state {
+            RuntimeHostBatchExecutionMemberState::Deferred => {
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Deferred
+            }
+            RuntimeHostBatchExecutionMemberState::Failed
+            | RuntimeHostBatchExecutionMemberState::Rejected => {
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Retryable
+            }
+            _ => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+        },
+        diagnostics: Vec::new(),
+    }
+}
+
+fn workflow_run_finalization_failure(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    error: WorkflowServiceError,
+) -> WorkflowRuntimeBranchBatchExecutionFailure {
+    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+        member,
+        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::WorkflowRunFinalizationInvalid,
+            format!(
+                "runtime branch batch assignment '{}' workflow run finalization failed: {error}",
+                member.assignment_id.as_str()
+            ),
+        ),
+    )
+}
+
 fn response_member_for_assignment<'a>(
     response: &'a RuntimeHostBatchExecutionResponse,
     assignment_id: &str,
@@ -974,6 +1240,7 @@ fn batch_execution_request_id(batch_claim: &WorkflowRuntimeDispatchAssignmentBat
 mod tests {
     use std::sync::Mutex;
 
+    use async_trait::async_trait;
     use pantograph_dependency_planning::{
         DependencyEnvironmentId, DependencyEnvironmentRef, DependencyReadinessProofEnvelope,
         DependencyReadinessProofId, DependencyReadinessWorkflowRunId, DependencyTaskId,
@@ -985,6 +1252,7 @@ mod tests {
         RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
         RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
         RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionInputValue,
+        RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue,
     };
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerDispatchDecision,
@@ -1012,12 +1280,13 @@ mod tests {
         WorkflowRuntimeDispatchCandidateFact, WorkflowRuntimeDispatchLoadState,
     };
     use super::super::{
-        WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowPortBinding,
+        WorkflowExecutionSessionRunRequest, WorkflowIoNode, WorkflowIoPort, WorkflowIoResponse,
+        WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
         WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
         WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
         WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskResult,
         WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
-        WorkflowSchedulerTaskResultValue, WorkflowService,
+        WorkflowSchedulerTaskResultValue, WorkflowService, WorkflowServiceError,
         WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
         WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
     };
@@ -1282,6 +1551,101 @@ mod tests {
         assert_eq!(
             persisted_assignment_state(&service, &plan.members[1].assignment_id),
             WorkflowRuntimeDispatchAssignmentState::Running
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_finalizes_completed_batch_member_runs() {
+        let service = WorkflowService::new();
+        let host = BatchFinalizationHost::default();
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let members = active_batch_members(&service);
+        let plan = owner
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .expect("claimed batch execution plan");
+        let response = runtime_host_batch_response_from_plan(&plan);
+        let _mutation = owner
+            .apply_batch_response_mutations(&service, &plan, &response)
+            .expect("apply batch response mutations");
+
+        let outcome = owner
+            .finalize_batch_member_runs(&service, &host, &plan, &response)
+            .await
+            .expect("finalize completed batch runs");
+
+        assert_eq!(
+            outcome
+                .member_outcomes
+                .iter()
+                .map(|outcome| outcome.state)
+                .collect::<Vec<_>>(),
+            vec![
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+            ]
+        );
+        assert_eq!(host.workflow_io_call_count(), 2);
+        assert!(
+            service
+                .session_store_guard()
+                .expect("session store")
+                .active_workflow_run_ids()
+                .is_empty(),
+            "completed batch member finalization must finish both active runs"
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_preserves_retryable_run_during_finalization() {
+        let service = WorkflowService::new();
+        let host = BatchFinalizationHost::default();
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let members = active_batch_members(&service);
+        let plan = owner
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .expect("claimed batch execution plan");
+        let mut response = runtime_host_batch_response_from_plan(&plan);
+        response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
+        response.members[0].retry_disposition =
+            RuntimeHostBatchMemberRetryDisposition::NotRetryable;
+        response.members[1].state = RuntimeHostBatchExecutionMemberState::Failed;
+        response.members[1].retry_disposition = RuntimeHostBatchMemberRetryDisposition::Retryable;
+        let _mutation = owner
+            .apply_batch_response_mutations(&service, &plan, &response)
+            .expect("apply mixed response mutations");
+
+        let outcome = owner
+            .finalize_batch_member_runs(&service, &host, &plan, &response)
+            .await
+            .expect("finalize mixed batch runs");
+
+        assert_eq!(
+            outcome
+                .member_outcomes
+                .iter()
+                .map(|outcome| outcome.state)
+                .collect::<Vec<_>>(),
+            vec![
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Retryable,
+            ]
+        );
+        assert_eq!(host.workflow_io_call_count(), 0);
+        assert_eq!(
+            service
+                .session_store_guard()
+                .expect("session store")
+                .active_workflow_run_ids(),
+            vec![plan.members[1].workflow_run_id.clone()],
+            "retryable batch member must remain active for scheduler retry"
         );
     }
 
@@ -1574,6 +1938,61 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct BatchFinalizationHost {
+        workflow_io_calls: Mutex<usize>,
+    }
+
+    impl BatchFinalizationHost {
+        fn workflow_io_call_count(&self) -> usize {
+            *self
+                .workflow_io_calls
+                .lock()
+                .expect("workflow io call count")
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for BatchFinalizationHost {
+        async fn workflow_io(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+            *self
+                .workflow_io_calls
+                .lock()
+                .expect("workflow io call count") += 1;
+            Ok(WorkflowIoResponse {
+                inputs: Vec::new(),
+                outputs: vec![WorkflowIoNode {
+                    node_id: "node.llm_inference".to_string(),
+                    node_type: "llm-inference".to_string(),
+                    name: Some("Image".to_string()),
+                    description: None,
+                    ports: vec![WorkflowIoPort {
+                        port_id: "image".to_string(),
+                        name: Some("Image".to_string()),
+                        description: None,
+                        data_type: Some("string".to_string()),
+                        required: Some(true),
+                        multiple: Some(false),
+                    }],
+                }],
+            })
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            unreachable!("batch finalization must not call legacy workflow execution")
+        }
+    }
+
     #[derive(Debug, Clone, Copy)]
     struct DispatchAssignmentFixtureSpec {
         assignment_id: &'static str,
@@ -1824,7 +2243,7 @@ mod tests {
                 value: serde_json::Value::String(prompt_text.to_string()),
             }],
             output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "image.output".to_string(),
+                node_id: "node.llm_inference".to_string(),
                 port_id: "image".to_string(),
             }]),
             override_selection: None,
@@ -2009,7 +2428,13 @@ mod tests {
                     retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
                     reservation_disposition:
                         RuntimeHostBatchMemberReservationDisposition::RetainedForRuntimeReuse,
-                    outputs: Vec::new(),
+                    outputs: vec![RuntimeHostExecutionOutput {
+                        port_id: "image".to_string(),
+                        value: RuntimeHostExecutionOutputValue::String(format!(
+                            "image for {}",
+                            member.handoff.workflow_run_id
+                        )),
+                    }],
                     diagnostics: Vec::new(),
                     terminal_metadata: None,
                 })
