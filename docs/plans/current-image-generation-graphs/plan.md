@@ -7916,6 +7916,40 @@ step that consumes a `ReadyToClaim` decision, rejects one-member claims under
 the current policy, and calls the existing mutating claim API only after the
 non-mutating broker decision has selected a valid group.
 
+2026-06-14 scheduler batch broker claim slice completed. Smallest useful
+vertical slice: add the broker-owned claim request and repository method that
+consumes a `ReadyToClaim` broker decision, revalidates the selected assignment
+group against current durable running facts, rejects `WaitingForPeers`, and
+rejects one-member ready decisions under the current grouped-dispatch policy.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not wire the worker, does
+not dispatch runtime-host requests, does not call legacy single-run execution,
+and does not permit one-member batch claims as a compatibility path. The
+mutating batch claim is now reachable from the broker path only after a
+non-mutating ready decision has selected a valid group and that group still
+matches current scheduler-owned assignment facts.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added repository coverage proving a ready broker decision
+claims both compatible assignments with one shared durable batch claim, while
+waiting decisions and one-member ready decisions fail closed without mutating
+assignment batch state.
+
+Remaining follow-up: continue Option 2 step 4 by wiring the runtime-branch
+worker to evaluate broker readiness after creating/running an assignment,
+attach responders by assignment id, and return a typed non-terminal
+`WaitingForPeers` outcome without runtime-host dispatch or legacy single-run
+execution.
+
 ## Standards Rule
 
 The standards constraints in

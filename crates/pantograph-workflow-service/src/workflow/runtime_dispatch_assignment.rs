@@ -100,6 +100,15 @@ pub(super) enum WorkflowRuntimeDispatchAssignmentBatchBrokerDecision {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest {
+    pub(super) decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    pub(super) owner_id: WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+    pub(super) now_ms: u64,
+    pub(super) lease_duration_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) schema_version: u16,
     pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
@@ -206,6 +215,14 @@ pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
         request: WorkflowRuntimeDispatchAssignmentBatchBrokerRequest,
     ) -> Result<
         WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+        WorkflowRuntimeDispatchAssignmentDiagnostic,
+    >;
+
+    fn claim_batch_broker_decision(
+        &mut self,
+        request: WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest,
+    ) -> Result<
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
         WorkflowRuntimeDispatchAssignmentDiagnostic,
     >;
 
@@ -470,6 +487,57 @@ impl WorkflowRuntimeDispatchAssignmentRepository
             },
         )
     }
+
+    fn claim_batch_broker_decision(
+        &mut self,
+        request: WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest,
+    ) -> Result<
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeDispatchAssignmentDiagnostic,
+    > {
+        validate_batch_claim_request(request.now_ms, request.lease_duration_ms, 1)?;
+        let WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::ReadyToClaim { assignments } =
+            request.decision
+        else {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
+                "runtime dispatch assignment batch broker cannot claim a waiting decision",
+            ));
+        };
+        if assignments.len() < 2 {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
+                "runtime dispatch assignment batch broker requires at least two assignments before claiming",
+            ));
+        }
+        let anchor_assignment_id = assignments
+            .first()
+            .expect("ready broker decision must include an anchor")
+            .assignment_id
+            .clone();
+        let selected_assignment_ids = assignments
+            .iter()
+            .map(|assignment| assignment.assignment_id.clone())
+            .collect::<Vec<_>>();
+        let current_selection = self.select_compatible_running_batch_assignment_ids(
+            &anchor_assignment_id,
+            request.now_ms,
+            selected_assignment_ids.len(),
+        )?;
+        if current_selection != selected_assignment_ids {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected,
+                "runtime dispatch assignment batch broker selected assignments are no longer claimable",
+            ));
+        }
+        self.claim_selected_running_batch_assignment_ids(
+            selected_assignment_ids,
+            request.owner_id,
+            request.now_ms,
+            request.lease_duration_ms,
+            anchor_assignment_id,
+        )
+    }
 }
 
 impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
@@ -490,11 +558,30 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
             now_ms,
             max_assignments,
         )?;
+        self.claim_selected_running_batch_assignment_ids(
+            selected_assignment_ids,
+            owner_id,
+            now_ms,
+            lease_duration_ms,
+            anchor_assignment_id.clone(),
+        )
+    }
 
+    fn claim_selected_running_batch_assignment_ids(
+        &mut self,
+        selected_assignment_ids: Vec<WorkflowRuntimeDispatchAssignmentId>,
+        owner_id: WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+        anchor_assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    ) -> Result<
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeDispatchAssignmentDiagnostic,
+    > {
         let batch_claim = WorkflowRuntimeDispatchAssignmentBatchClaim {
             batch_claim_id: WorkflowRuntimeDispatchAssignmentBatchClaimId::new(),
             owner_id,
-            anchor_assignment_id: anchor_assignment_id.clone(),
+            anchor_assignment_id,
             claimed_at_ms: now_ms,
             lease_expires_at_ms: now_ms.saturating_add(lease_duration_ms),
         };
@@ -1358,6 +1445,129 @@ mod tests {
     }
 
     #[test]
+    fn runtime_dispatch_assignment_batch_broker_claims_ready_decision() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let second_member = DispatchAssignmentFixtureMember::second();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let second = repository
+            .create(assignment_request_for_member(&second_member))
+            .expect("second assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let second = repository
+            .mark_running(&second.assignment_id, 131)
+            .expect("second running");
+        let decision = repository
+            .evaluate_running_batch_broker_decision(batch_broker_request(
+                first.assignment_id.clone(),
+                140,
+                2,
+                8,
+            ))
+            .expect("broker decision");
+
+        let outcome = repository
+            .claim_batch_broker_decision(batch_broker_claim_request(decision, 150, 1_000))
+            .expect("broker claim");
+
+        assert_eq!(outcome.assignments.len(), 2);
+        assert_eq!(
+            outcome
+                .assignments
+                .iter()
+                .map(|record| record.assignment_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![first.assignment_id.as_str(), second.assignment_id.as_str()]
+        );
+        assert_eq!(
+            outcome.batch_claim.anchor_assignment_id,
+            first.assignment_id
+        );
+        assert_eq!(outcome.batch_claim.claimed_at_ms, 150);
+        assert_eq!(outcome.batch_claim.lease_expires_at_ms, 1_150);
+        assert_eq!(
+            repository
+                .get(&first.assignment_id)
+                .expect("stored first")
+                .batch_claim
+                .as_ref(),
+            Some(&outcome.batch_claim)
+        );
+        assert_eq!(
+            repository
+                .get(&second.assignment_id)
+                .expect("stored second")
+                .batch_claim
+                .as_ref(),
+            Some(&outcome.batch_claim)
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_batch_broker_rejects_waiting_claim_without_mutating() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let decision = repository
+            .evaluate_running_batch_broker_decision(batch_broker_request(
+                first.assignment_id.clone(),
+                140,
+                2,
+                8,
+            ))
+            .expect("broker decision");
+
+        let error = repository
+            .claim_batch_broker_decision(batch_broker_claim_request(decision, 150, 1_000))
+            .expect_err("waiting decision must not claim");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim
+        );
+        assert!(repository
+            .get(&first.assignment_id)
+            .expect("stored first")
+            .batch_claim
+            .is_none());
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_batch_broker_rejects_one_member_ready_claim_without_mutating() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let decision = WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::ReadyToClaim {
+            assignments: vec![first.clone()],
+        };
+
+        let error = repository
+            .claim_batch_broker_decision(batch_broker_claim_request(decision, 150, 1_000))
+            .expect_err("one-member ready decision must not claim");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim
+        );
+        assert!(repository
+            .get(&first.assignment_id)
+            .expect("stored first")
+            .batch_claim
+            .is_none());
+    }
+
+    #[test]
     fn runtime_dispatch_assignment_repository_skips_incompatible_batch_candidates() {
         let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
         let anchor = repository
@@ -1764,6 +1974,19 @@ mod tests {
             now_ms,
             min_assignments,
             max_assignments,
+        }
+    }
+
+    fn batch_broker_claim_request(
+        decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+        now_ms: u64,
+        lease_duration_ms: u64,
+    ) -> WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest {
+        WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest {
+            decision,
+            owner_id: batch_owner_id(),
+            now_ms,
+            lease_duration_ms,
         }
     }
 
