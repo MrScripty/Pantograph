@@ -8700,6 +8700,46 @@ recovery tests to compatible peer recovery or split their recovery-plan
 assertions from runtime-host completion; rewrite the shutdown test at the
 grouped batch owner/worker level if it must observe runtime-host cancellation.
 
+2026-06-14 bootstrap dependency-readiness grouped recovery slice completed.
+Smallest useful vertical slice: migrate
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`
+to create two compatible runtime runs paused on missing readiness facts, then
+recover them together through the grouped runtime-host batch path after a fresh
+readiness snapshot is available. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: dependency-readiness bootstrap recovery
+now proves the canonical grouped recovery path for runtime completion. It does
+not restore single-request runtime-host dispatch, reduce broker minimums,
+fabricate a peer response, bypass the task-execution runtime owner, or preserve
+the stale solo recovery completion behavior.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification:
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`
+now fails with 36 passed and 2 failed, improving from the prior 35 passed and
+3 failed. Remaining stale failures:
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`
+and `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
+Focused test update: the dependency-readiness bootstrap recovery test now
+asserts two resume requests, two resumed workflow run IDs, one grouped
+runtime-host batch request with two members, and an empty dependency-readiness
+resume-candidate list after recovery.
+
+Remaining follow-up: migrate the progress-loop bootstrap recovery test to
+compatible peer recovery after the progress loop resumes active task state;
+rewrite the shutdown test at the grouped batch owner/worker level if it must
+observe runtime-host cancellation.
+
 ## Standards Rule
 
 The standards constraints in
