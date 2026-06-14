@@ -358,6 +358,7 @@ fn image_runtime_validation_snapshot(
             .expect("valid descriptor fingerprint"),
             task_kind: InferenceTaskKind::parse("image_generation").expect("valid task kind"),
             model_ref,
+            runtime_source_context: runtime_source_context(),
             constraints: pantograph_scheduler::SchedulerRuntimeDeviceConstraints {
                 requested_runtime_id: Some(
                     RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
@@ -384,6 +385,14 @@ fn image_runtime_validation_snapshot(
             dependency_override_fingerprint: dependency_proof.dependency_override_fingerprint,
             blocking_diagnostics: Vec::new(),
         }],
+    }
+}
+
+fn runtime_source_context() -> pantograph_workflow_service::graph::WorkflowRuntimeSourceContext {
+    pantograph_workflow_service::graph::WorkflowRuntimeSourceContext {
+        operation_type: "image-generation.txt2img".to_string(),
+        context_shape_key: "txt2img.1024x1024.steps30".to_string(),
+        cancellation_mode: "per-run-fanout".to_string(),
     }
 }
 

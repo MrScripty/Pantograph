@@ -6621,6 +6621,68 @@ artifact-writing helpers with the single-task port, but it must not delegate
 execution to `RuntimeHostExecutionPort` or call the single gateway operation
 per member.
 
+2026-06-14 embedded runtime-host batch execution port slice completed.
+Smallest useful vertical slice: implement the real embedded
+`RuntimeHostBatchExecutionPort` against the canonical inference gateway batch
+operation, with focused port tests and README traceability. The port now
+validates grouped scheduler handoff requests, checks shared runtime/model/
+variant/device compatibility before fact resolution, resolves Pumas package
+facts and load target once through the anchor member, projects each member from
+its own materialized inputs, plans each member synchronously through the
+canonical image planner, calls
+`InferenceGateway::generate_image_batch_from_execution_request_with_cancellation`
+once, maps member diagnostics/results back to runtime-host batch members, and
+writes generated image artifacts independently per member.
+
+No-fallback/no-legacy confirmation: the batch port does not call
+`RuntimeHostExecutionPort::execute_runtime_host_request`, does not call the
+single-image gateway operation per member, does not execute only the anchor
+member, does not carry workflow inputs from one run into another, and does not
+change scheduler DTOs, generated contracts, frontend/Tauri DTOs, lockfiles,
+saved workflow fixtures, physical-device tables, or runtime-residency tables.
+Unsupported or incompatible batches return typed runtime-host diagnostics
+instead of falling back to single-member execution.
+
+Embedded batch-port verification:
+`cargo fmt -p inference -p pantograph-embedded-runtime` passed,
+`cargo fmt -p pantograph-embedded-runtime -p inference -- --check` passed,
+`cargo check -p pantograph-embedded-runtime` passed,
+`cargo check -p inference` passed,
+`cargo test -p pantograph-embedded-runtime batch_port --lib` passed,
+`cargo test -p pantograph-embedded-runtime port_completes_image_execution_with_sink_backed_media_ref --lib`
+passed, and
+`cargo test -p pantograph-embedded-runtime runtime_host_execution_port --lib`
+passed.
+
+Embedded batch-port files touched:
+`crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`,
+`crates/pantograph-embedded-runtime/src/README.md`, and this plan.
+
+Verification unblocker deviations:
+`cargo check -p pantograph-embedded-runtime` initially failed because
+`crates/inference/src/backend/candle.rs` still had an exhaustive
+`BackendCapabilities` literal missing the already-added
+`image_generation_batch` field. The slice widened only to set Candle
+`image_generation_batch: false`; this does not enable Candle batch execution.
+Focused embedded-runtime test compilation then exposed two stale fixture
+initializers missing the required `runtime_source_context` field:
+`crates/pantograph-embedded-runtime/src/runtime_dispatch_candidate_provider.rs`
+and
+`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`.
+The slice widened only to add `None` to the old scheduler-task fixture and the
+canonical image-generation runtime source context to the executable snapshot
+fixture. These fixes were required to run the affected crate tests and do not
+change batch scheduling, worker grouped claiming, runtime residency, or device
+selection behavior.
+
+Next thin slice: resume option 1 sequence step 3 by adding workflow-service
+batch request/response mapping ownership before worker dispatch. Convert
+claimed compatible assignment groups into `RuntimeHostBatchExecutionRequest`
+members and convert batch member responses into task result, reservation
+lifecycle, retry/defer, and notification mutations behind focused boundary
+tests. Do not enable worker grouped assignment claiming until this mapping
+owner is covered and fail-closed when no real batch dispatcher is configured.
+
 ## Standards Rule
 
 The standards constraints in

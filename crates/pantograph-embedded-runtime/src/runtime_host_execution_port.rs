@@ -1,13 +1,25 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use inference::{
+    ImageGenerationBatchDiagnostic, ImageGenerationBatchDiagnosticCode,
+    ImageGenerationBatchDiagnosticSeverity, ImageGenerationBatchExecutionMemberRequest,
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+    ImageGenerationBatchMemberExecutionState, ImageGenerationPlanningOutcome,
+};
 use pantograph_runtime_host_contracts::{
-    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionCancellationSnapshot,
-    RuntimeHostExecutionCancellationState, RuntimeHostExecutionDiagnostic,
-    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
-    RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort,
-    RuntimeHostExecutionPortError, RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, ValidatedRuntimeHostExecutionRequest,
+    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
+    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+    RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
+    RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
+    RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
+    RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
+    RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
+    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostExecutionRequest,
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
@@ -42,6 +54,12 @@ const IMAGE_PROJECTION_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.image_projection_failed";
 const GATEWAY_EXECUTION_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.gateway_execution_failed";
+const BATCH_COMPATIBILITY_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.batch_compatibility_failed";
+const BATCH_PLANNING_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.batch_planning_failed";
+const BATCH_GATEWAY_EXECUTION_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.batch_gateway_execution_failed";
 const MEDIA_ARTIFACT_WRITE_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.media_artifact_write_failed";
 const RUNTIME_EXECUTION_UNAVAILABLE_HINT: &str =
@@ -258,6 +276,180 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
     }
 }
 
+#[async_trait]
+impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+        let validated_request = ValidatedRuntimeHostBatchExecutionRequest::try_from(request)
+            .map_err(|error| RuntimeHostExecutionPortError::ExecutionFailed {
+                message: format!("embedded runtime-host batch request failed validation: {error}"),
+            })?;
+        let request = validated_request.as_ref();
+
+        if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
+            return Ok(response);
+        }
+
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host batch execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(media_artifact_sink) = self.media_artifact_sink.as_ref() else {
+            return Ok(rejected_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host batch execution requires a media artifact sink before generated media can be returned",
+                MISSING_MEDIA_ARTIFACT_SINK_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host batch execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host batch execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
+
+        let member_requests = validated_member_requests_from_batch(request)?;
+        if let Some(message) = shared_batch_runtime_context_error(&member_requests) {
+            return Ok(rejected_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &message,
+                BATCH_COMPATIBILITY_FAILED_HINT,
+            ));
+        }
+        let anchor_member_request = anchor_member_request(request, &member_requests)?;
+
+        let load_target = match load_target_resolver.resolve(anchor_member_request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_batch_response(
+                    request,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(anchor_member_request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_batch_response(
+                    request,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
+            return Ok(response);
+        }
+
+        let mut inference_members = Vec::with_capacity(member_requests.len());
+        for member_request in &member_requests {
+            let projection = match project_runtime_host_image_generation(
+                member_request,
+                package_facts.clone(),
+                load_target.clone(),
+            ) {
+                Ok(projection) => projection,
+                Err(error) => {
+                    return Ok(rejected_batch_member_response(
+                        request,
+                        member_request.as_ref().execution_request_id.as_str(),
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &image_projection_error_message(error),
+                        IMAGE_PROJECTION_FAILED_HINT,
+                    ));
+                }
+            };
+            let plan = match inference::plan_image_generation_execution(projection.planning_input())
+            {
+                ImageGenerationPlanningOutcome::Planned { plan } => plan,
+                ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
+                    return Ok(rejected_batch_member_response(
+                        request,
+                        member_request.as_ref().execution_request_id.as_str(),
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &image_planning_diagnostics_message(&diagnostics),
+                        BATCH_PLANNING_FAILED_HINT,
+                    ));
+                }
+            };
+            inference_members.push(ImageGenerationBatchExecutionMemberRequest {
+                member_id: member_request.as_ref().execution_request_id.clone(),
+                request: projection.request().clone(),
+                plan,
+            });
+        }
+        if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
+            return Ok(response);
+        }
+
+        let inference_request = ImageGenerationBatchExecutionRequest {
+            batch_execution_id: request.batch_execution_request_id.clone(),
+            anchor_member_id: request.anchor_execution_request_id.clone(),
+            members: inference_members,
+        };
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let inference_response = match gateway
+            .generate_image_batch_from_execution_request_with_cancellation(
+                inference_request,
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        batch_cancellation_rejection_response(request, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_batch_response(
+                    request,
+                    &batch_gateway_error_message(error),
+                    BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+                ));
+            }
+        };
+
+        Ok(runtime_host_batch_response_from_inference(
+            request,
+            inference_response,
+            media_artifact_sink.as_ref(),
+        ))
+    }
+}
+
 #[derive(Clone)]
 struct RuntimeHostInferenceCancellationSignal {
     cancellation: RuntimeHostExecutionCancellationHandle,
@@ -290,6 +482,627 @@ fn inference_cancellation_handle_from_runtime_host(
     inference::InferenceExecutionCancellationHandle::with_signal(Arc::new(
         RuntimeHostInferenceCancellationSignal { cancellation },
     ))
+}
+
+fn validated_member_requests_from_batch(
+    request: &RuntimeHostBatchExecutionRequest,
+) -> Result<Vec<ValidatedRuntimeHostExecutionRequest>, RuntimeHostExecutionPortError> {
+    request
+        .members
+        .iter()
+        .map(|member| {
+            ValidatedRuntimeHostExecutionRequest::try_from(RuntimeHostExecutionRequest {
+                contract_version: request.contract_version,
+                execution_request_id: member.execution_request_id.clone(),
+                cancellation_context: request.cancellation_context.clone(),
+                handoff: member.handoff.clone(),
+                materialized_inputs: member.materialized_inputs.clone(),
+            })
+            .map_err(|error| RuntimeHostExecutionPortError::ExecutionFailed {
+                message: format!(
+                    "embedded runtime-host batch member '{}' failed single-request validation: {error}",
+                    member.execution_request_id
+                ),
+            })
+        })
+        .collect()
+}
+
+fn shared_batch_runtime_context_error(
+    member_requests: &[ValidatedRuntimeHostExecutionRequest],
+) -> Option<String> {
+    let first = member_requests.first()?.as_ref();
+    let first_decision = match first.handoff.dispatch_decision.as_ref() {
+        Some(decision) => decision,
+        None => {
+            return Some(format!(
+                "embedded runtime-host batch member '{}' is missing a scheduler dispatch decision",
+                first.execution_request_id
+            ));
+        }
+    };
+
+    for member_request in &member_requests[1..] {
+        let member = member_request.as_ref();
+        let Some(decision) = member.handoff.dispatch_decision.as_ref() else {
+            return Some(format!(
+                "embedded runtime-host batch member '{}' is missing a scheduler dispatch decision",
+                member.execution_request_id
+            ));
+        };
+        if decision.task_intent.task_type != first_decision.task_intent.task_type {
+            return Some(format!(
+                "embedded runtime-host batch members must share task type; member '{}' selected '{}'",
+                member.execution_request_id, decision.task_intent.task_type
+            ));
+        }
+        if decision.selected_model_ref != first_decision.selected_model_ref {
+            return Some(format!(
+                "embedded runtime-host batch members must share selected model ref; member '{}' selected '{}'",
+                member.execution_request_id, decision.selected_model_ref.model_id
+            ));
+        }
+        if decision.selected_runtime_id != first_decision.selected_runtime_id {
+            return Some(format!(
+                "embedded runtime-host batch members must share selected runtime; member '{}' selected '{}'",
+                member.execution_request_id, decision.selected_runtime_id
+            ));
+        }
+        if decision.selected_runtime_variant_id != first_decision.selected_runtime_variant_id {
+            return Some(format!(
+                "embedded runtime-host batch members must share selected runtime variant; member '{}' selected {:?}",
+                member.execution_request_id, decision.selected_runtime_variant_id
+            ));
+        }
+        if decision.selected_device_ids != first_decision.selected_device_ids {
+            return Some(format!(
+                "embedded runtime-host batch members must share selected device set; member '{}' selected {:?}",
+                member.execution_request_id, decision.selected_device_ids
+            ));
+        }
+    }
+
+    None
+}
+
+fn anchor_member_request<'a>(
+    request: &RuntimeHostBatchExecutionRequest,
+    member_requests: &'a [ValidatedRuntimeHostExecutionRequest],
+) -> Result<&'a ValidatedRuntimeHostExecutionRequest, RuntimeHostExecutionPortError> {
+    member_requests
+        .iter()
+        .find(|member| member.as_ref().execution_request_id == request.anchor_execution_request_id)
+        .ok_or_else(|| RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host batch anchor '{}' was not present after validation",
+                request.anchor_execution_request_id
+            ),
+        })
+}
+
+fn batch_cancellation_rejection_response(
+    request: &RuntimeHostBatchExecutionRequest,
+    cancellation: &RuntimeHostExecutionCancellationHandle,
+) -> Result<Option<RuntimeHostBatchExecutionResponse>, RuntimeHostExecutionPortError> {
+    let snapshot = cancellation.snapshot();
+    snapshot
+        .validate()
+        .map_err(|error| RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host batch cancellation snapshot failed validation: {error}"
+            ),
+        })?;
+    if snapshot.cancellation_context_id != request.cancellation_context.cancellation_context_id {
+        return Err(RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host batch cancellation context mismatch: request '{}' but signal '{}'",
+                request.cancellation_context.cancellation_context_id,
+                snapshot.cancellation_context_id
+            ),
+        });
+    }
+
+    Ok(batch_cancellation_rejection_from_snapshot(
+        request, &snapshot,
+    ))
+}
+
+fn batch_cancellation_rejection_from_snapshot(
+    request: &RuntimeHostBatchExecutionRequest,
+    snapshot: &RuntimeHostExecutionCancellationSnapshot,
+) -> Option<RuntimeHostBatchExecutionResponse> {
+    let reason = snapshot.reason.as_deref().unwrap_or("no reason provided");
+    match snapshot.state {
+        RuntimeHostExecutionCancellationState::Running => None,
+        RuntimeHostExecutionCancellationState::CancellationRequested => Some(
+            cancelled_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+                &format!(
+                    "embedded runtime-host batch execution cancelled before completion: {reason}"
+                ),
+                CANCELLATION_REQUESTED_HINT,
+            ),
+        ),
+        RuntimeHostExecutionCancellationState::ShutdownRequested => Some(cancelled_batch_response(
+            request,
+            RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+            &format!(
+                "embedded runtime-host batch execution stopped for workflow-service shutdown: {reason}"
+            ),
+            SHUTDOWN_REQUESTED_HINT,
+        )),
+        _ => Some(rejected_batch_response(
+            request,
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "embedded runtime-host batch execution rejected an unknown cancellation state",
+            UNKNOWN_CANCELLATION_STATE_HINT,
+        )),
+    }
+}
+
+fn rejected_batch_response(
+    request: &RuntimeHostBatchExecutionRequest,
+    diagnostic_code: RuntimeHostExecutionDiagnosticCode,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostBatchExecutionResponse {
+    terminal_batch_response_for_all_members(
+        request,
+        RuntimeHostBatchExecutionState::Rejected,
+        RuntimeHostBatchExecutionMemberState::Rejected,
+        diagnostic_code,
+        message,
+        hint,
+    )
+}
+
+fn rejected_batch_member_response(
+    request: &RuntimeHostBatchExecutionRequest,
+    rejected_execution_request_id: &str,
+    diagnostic_code: RuntimeHostExecutionDiagnosticCode,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostBatchExecutionResponse {
+    let top_diagnostic = runtime_host_diagnostic(diagnostic_code.clone(), message, hint);
+    let members = request
+        .members
+        .iter()
+        .map(|member| {
+            let member_message = if member.execution_request_id == rejected_execution_request_id {
+                message.to_string()
+            } else {
+                format!(
+                    "embedded runtime-host batch execution rejected because member '{}' could not be planned",
+                    rejected_execution_request_id
+                )
+            };
+            batch_member_response(
+                member,
+                RuntimeHostBatchExecutionMemberState::Rejected,
+                Vec::new(),
+                vec![runtime_host_diagnostic(
+                    diagnostic_code.clone(),
+                    &member_message,
+                    hint,
+                )],
+            )
+        })
+        .collect();
+
+    RuntimeHostBatchExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: request.batch_execution_request_id.clone(),
+        state: RuntimeHostBatchExecutionState::Rejected,
+        members,
+        diagnostics: vec![top_diagnostic],
+    }
+}
+
+fn cancelled_batch_response(
+    request: &RuntimeHostBatchExecutionRequest,
+    diagnostic_code: RuntimeHostExecutionDiagnosticCode,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostBatchExecutionResponse {
+    terminal_batch_response_for_all_members(
+        request,
+        RuntimeHostBatchExecutionState::Cancelled,
+        RuntimeHostBatchExecutionMemberState::Cancelled,
+        diagnostic_code,
+        message,
+        hint,
+    )
+}
+
+fn failed_batch_response(
+    request: &RuntimeHostBatchExecutionRequest,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostBatchExecutionResponse {
+    terminal_batch_response_for_all_members(
+        request,
+        RuntimeHostBatchExecutionState::Failed,
+        RuntimeHostBatchExecutionMemberState::Failed,
+        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+        message,
+        hint,
+    )
+}
+
+fn terminal_batch_response_for_all_members(
+    request: &RuntimeHostBatchExecutionRequest,
+    batch_state: RuntimeHostBatchExecutionState,
+    member_state: RuntimeHostBatchExecutionMemberState,
+    diagnostic_code: RuntimeHostExecutionDiagnosticCode,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostBatchExecutionResponse {
+    let diagnostic = runtime_host_diagnostic(diagnostic_code, message, hint);
+    RuntimeHostBatchExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: request.batch_execution_request_id.clone(),
+        state: batch_state,
+        members: request
+            .members
+            .iter()
+            .map(|member| {
+                batch_member_response(
+                    member,
+                    member_state.clone(),
+                    Vec::new(),
+                    vec![diagnostic.clone()],
+                )
+            })
+            .collect(),
+        diagnostics: vec![diagnostic],
+    }
+}
+
+fn runtime_host_batch_response_from_inference(
+    request: &RuntimeHostBatchExecutionRequest,
+    response: ImageGenerationBatchExecutionResponse,
+    media_artifact_sink: &dyn RuntimeHostMediaArtifactSink,
+) -> RuntimeHostBatchExecutionResponse {
+    let mut members = Vec::with_capacity(request.members.len());
+    let mut diagnostics = runtime_host_diagnostics_from_image_batch(&response.diagnostics);
+
+    for member_request in &request.members {
+        let Some(member_response) = response
+            .members
+            .iter()
+            .find(|member| member.member_id == member_request.execution_request_id)
+        else {
+            let diagnostic = runtime_host_diagnostic(
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &format!(
+                    "embedded runtime-host batch gateway response omitted member '{}'",
+                    member_request.execution_request_id
+                ),
+                BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+            );
+            diagnostics.push(diagnostic.clone());
+            members.push(batch_member_response(
+                member_request,
+                RuntimeHostBatchExecutionMemberState::Failed,
+                Vec::new(),
+                vec![diagnostic],
+            ));
+            continue;
+        };
+
+        match member_response.state {
+            ImageGenerationBatchMemberExecutionState::Completed => {
+                let Some(result) = member_response.result.clone() else {
+                    let diagnostic = runtime_host_diagnostic(
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        "embedded runtime-host batch gateway completed a member without an image result",
+                        BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+                    );
+                    diagnostics.push(diagnostic.clone());
+                    members.push(batch_member_response(
+                        member_request,
+                        RuntimeHostBatchExecutionMemberState::Failed,
+                        Vec::new(),
+                        vec![diagnostic],
+                    ));
+                    continue;
+                };
+                match completed_image_batch_member_response(
+                    member_request,
+                    result,
+                    media_artifact_sink,
+                ) {
+                    Ok(member) => members.push(member),
+                    Err(error) => {
+                        let diagnostic = runtime_host_diagnostic(
+                            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                            &media_artifact_sink_error_message(error),
+                            MEDIA_ARTIFACT_WRITE_FAILED_HINT,
+                        );
+                        diagnostics.push(diagnostic.clone());
+                        members.push(batch_member_response(
+                            member_request,
+                            RuntimeHostBatchExecutionMemberState::Failed,
+                            Vec::new(),
+                            vec![diagnostic],
+                        ));
+                    }
+                }
+            }
+            ImageGenerationBatchMemberExecutionState::Rejected => {
+                members.push(batch_member_response(
+                    member_request,
+                    RuntimeHostBatchExecutionMemberState::Rejected,
+                    Vec::new(),
+                    runtime_host_diagnostics_from_image_batch(&member_response.diagnostics),
+                ));
+            }
+            ImageGenerationBatchMemberExecutionState::Failed => {
+                members.push(batch_member_response(
+                    member_request,
+                    RuntimeHostBatchExecutionMemberState::Failed,
+                    Vec::new(),
+                    runtime_host_diagnostics_from_image_batch(&member_response.diagnostics),
+                ));
+            }
+            ImageGenerationBatchMemberExecutionState::Cancelled => {
+                members.push(batch_member_response(
+                    member_request,
+                    RuntimeHostBatchExecutionMemberState::Cancelled,
+                    Vec::new(),
+                    runtime_host_diagnostics_from_image_batch(&member_response.diagnostics),
+                ));
+            }
+            ImageGenerationBatchMemberExecutionState::Accepted
+            | ImageGenerationBatchMemberExecutionState::Running => {
+                let diagnostic = runtime_host_diagnostic(
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    "embedded runtime-host batch gateway returned a non-terminal member state after awaited execution",
+                    BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+                );
+                diagnostics.push(diagnostic.clone());
+                members.push(batch_member_response(
+                    member_request,
+                    RuntimeHostBatchExecutionMemberState::Failed,
+                    Vec::new(),
+                    vec![diagnostic],
+                ));
+            }
+            _ => {
+                let diagnostic = runtime_host_diagnostic(
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    "embedded runtime-host batch gateway returned an unknown member state",
+                    BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+                );
+                diagnostics.push(diagnostic.clone());
+                members.push(batch_member_response(
+                    member_request,
+                    RuntimeHostBatchExecutionMemberState::Failed,
+                    Vec::new(),
+                    vec![diagnostic],
+                ));
+            }
+        }
+    }
+
+    let state = runtime_host_batch_state_from_members(&members);
+    if matches!(
+        state,
+        RuntimeHostBatchExecutionState::Rejected | RuntimeHostBatchExecutionState::Failed
+    ) && diagnostics.is_empty()
+    {
+        diagnostics.push(runtime_host_diagnostic(
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "embedded runtime-host batch execution ended without a completed member",
+            BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+        ));
+    }
+
+    RuntimeHostBatchExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: request.batch_execution_request_id.clone(),
+        state,
+        members,
+        diagnostics,
+    }
+}
+
+fn completed_image_batch_member_response(
+    member: &RuntimeHostBatchExecutionMemberRequest,
+    result: inference::ImageGenerationResult,
+    media_artifact_sink: &dyn RuntimeHostMediaArtifactSink,
+) -> Result<RuntimeHostBatchExecutionMemberResponse, RuntimeHostMediaArtifactSinkError> {
+    let dispatch_decision = member.handoff.dispatch_decision.as_ref();
+    let model_id = dispatch_decision.map(|decision| decision.selected_model_ref.model_id.as_str());
+    let runtime_id = dispatch_decision.map(|decision| decision.selected_runtime_id.as_str());
+    let mut outputs = Vec::with_capacity(result.images.len());
+    for (image_index, image) in result.images.iter().enumerate() {
+        let artifact_ref =
+            media_artifact_sink.write_image_output(RuntimeHostImageArtifactWriteRequest {
+                workflow_run_id: member.handoff.workflow_run_id.as_str(),
+                workflow_id: member.handoff.workflow_id.as_str(),
+                node_id: member.handoff.node_id.as_str(),
+                task_id: member.handoff.task_id.as_str(),
+                port_id: "image",
+                image_index,
+                image,
+                model_id,
+                runtime_id,
+            })?;
+        outputs.push(RuntimeHostExecutionOutput {
+            port_id: "image".to_string(),
+            value: RuntimeHostExecutionOutputValue::MediaArtifactRef(artifact_ref),
+        });
+    }
+
+    Ok(batch_member_response(
+        member,
+        RuntimeHostBatchExecutionMemberState::Completed,
+        outputs,
+        vec![RuntimeHostExecutionDiagnostic {
+            severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+            code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+            message: "embedded runtime-host image batch member completed".to_string(),
+            hint: None,
+        }],
+    ))
+}
+
+fn batch_member_response(
+    member: &RuntimeHostBatchExecutionMemberRequest,
+    state: RuntimeHostBatchExecutionMemberState,
+    outputs: Vec<RuntimeHostExecutionOutput>,
+    diagnostics: Vec<RuntimeHostExecutionDiagnostic>,
+) -> RuntimeHostBatchExecutionMemberResponse {
+    RuntimeHostBatchExecutionMemberResponse {
+        execution_request_id: member.execution_request_id.clone(),
+        assignment_id: member.assignment_id.clone(),
+        workflow_id: member.handoff.workflow_id.clone(),
+        workflow_run_id: member.handoff.workflow_run_id.clone(),
+        node_id: member.handoff.node_id.clone(),
+        task_id: member.handoff.task_id.clone(),
+        retry_disposition: retry_disposition_for_member(member, &state),
+        reservation_disposition: reservation_disposition_for_member(member),
+        state,
+        outputs,
+        diagnostics,
+        terminal_metadata: None,
+    }
+}
+
+fn retry_disposition_for_member(
+    member: &RuntimeHostBatchExecutionMemberRequest,
+    state: &RuntimeHostBatchExecutionMemberState,
+) -> RuntimeHostBatchMemberRetryDisposition {
+    if matches!(state, RuntimeHostBatchExecutionMemberState::Completed) {
+        return RuntimeHostBatchMemberRetryDisposition::NotRetryable;
+    }
+    match &member.failure_policy {
+        RuntimeHostBatchMemberFailurePolicy::TerminalOnly => {
+            RuntimeHostBatchMemberRetryDisposition::NotRetryable
+        }
+        RuntimeHostBatchMemberFailurePolicy::Retryable => {
+            RuntimeHostBatchMemberRetryDisposition::Retryable
+        }
+        RuntimeHostBatchMemberFailurePolicy::Deferrable => {
+            RuntimeHostBatchMemberRetryDisposition::Deferred
+        }
+        _ => RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+    }
+}
+
+fn reservation_disposition_for_member(
+    member: &RuntimeHostBatchExecutionMemberRequest,
+) -> RuntimeHostBatchMemberReservationDisposition {
+    match &member.reservation_policy {
+        RuntimeHostBatchMemberReservationPolicy::ReleaseOnTerminal => {
+            RuntimeHostBatchMemberReservationDisposition::Released
+        }
+        RuntimeHostBatchMemberReservationPolicy::RetainForRuntimeReuse => {
+            RuntimeHostBatchMemberReservationDisposition::RetainedForRuntimeReuse
+        }
+        RuntimeHostBatchMemberReservationPolicy::DeferToScheduler => {
+            RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler
+        }
+        _ => RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler,
+    }
+}
+
+fn runtime_host_batch_state_from_members(
+    members: &[RuntimeHostBatchExecutionMemberResponse],
+) -> RuntimeHostBatchExecutionState {
+    if members
+        .iter()
+        .all(|member| member.state == RuntimeHostBatchExecutionMemberState::Completed)
+    {
+        return RuntimeHostBatchExecutionState::Completed;
+    }
+    if members
+        .iter()
+        .all(|member| member.state == RuntimeHostBatchExecutionMemberState::Cancelled)
+    {
+        return RuntimeHostBatchExecutionState::Cancelled;
+    }
+    if members
+        .iter()
+        .all(|member| member.state == RuntimeHostBatchExecutionMemberState::Rejected)
+    {
+        return RuntimeHostBatchExecutionState::Rejected;
+    }
+    if members
+        .iter()
+        .all(|member| member.state == RuntimeHostBatchExecutionMemberState::Deferred)
+    {
+        return RuntimeHostBatchExecutionState::Deferred;
+    }
+    if members
+        .iter()
+        .any(|member| member.state == RuntimeHostBatchExecutionMemberState::Completed)
+    {
+        return RuntimeHostBatchExecutionState::PartiallyCompleted;
+    }
+    RuntimeHostBatchExecutionState::Failed
+}
+
+fn runtime_host_diagnostics_from_image_batch(
+    diagnostics: &[ImageGenerationBatchDiagnostic],
+) -> Vec<RuntimeHostExecutionDiagnostic> {
+    diagnostics
+        .iter()
+        .map(runtime_host_diagnostic_from_image_batch)
+        .collect()
+}
+
+fn runtime_host_diagnostic_from_image_batch(
+    diagnostic: &ImageGenerationBatchDiagnostic,
+) -> RuntimeHostExecutionDiagnostic {
+    RuntimeHostExecutionDiagnostic {
+        severity: match diagnostic.severity {
+            ImageGenerationBatchDiagnosticSeverity::Info => {
+                RuntimeHostExecutionDiagnosticSeverity::Info
+            }
+            ImageGenerationBatchDiagnosticSeverity::Warning => {
+                RuntimeHostExecutionDiagnosticSeverity::Warning
+            }
+            ImageGenerationBatchDiagnosticSeverity::Error => {
+                RuntimeHostExecutionDiagnosticSeverity::Error
+            }
+            _ => RuntimeHostExecutionDiagnosticSeverity::Error,
+        },
+        code: match diagnostic.code {
+            ImageGenerationBatchDiagnosticCode::MemberCancelled => {
+                RuntimeHostExecutionDiagnosticCode::CancellationRequested
+            }
+            ImageGenerationBatchDiagnosticCode::UnsupportedBatchExecution
+            | ImageGenerationBatchDiagnosticCode::BatchPlanningRejected
+            | ImageGenerationBatchDiagnosticCode::BatchExecutionRejected
+            | ImageGenerationBatchDiagnosticCode::MemberPlanningRejected
+            | ImageGenerationBatchDiagnosticCode::MemberExecutionFailed
+            | ImageGenerationBatchDiagnosticCode::ContractViolation => {
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed
+            }
+            _ => RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+        },
+        message: format!(
+            "image-generation batch diagnostic at {}: {}",
+            diagnostic.field_path, diagnostic.message
+        ),
+        hint: Some(BATCH_GATEWAY_EXECUTION_FAILED_HINT.to_string()),
+    }
+}
+
+fn runtime_host_diagnostic(
+    code: RuntimeHostExecutionDiagnosticCode,
+    message: &str,
+    hint: &str,
+) -> RuntimeHostExecutionDiagnostic {
+    RuntimeHostExecutionDiagnostic {
+        severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+        code,
+        message: message.to_string(),
+        hint: Some(hint.to_string()),
+    }
 }
 
 fn rejected_response(
@@ -475,6 +1288,53 @@ fn gateway_error_message(error: inference::GatewayError) -> String {
     }
 }
 
+fn batch_gateway_error_message(error: inference::GatewayError) -> String {
+    match error {
+        inference::GatewayError::ImageGenerationBatchExecution {
+            diagnostic_count,
+            diagnostics,
+        } => {
+            let details = diagnostics
+                .iter()
+                .take(4)
+                .map(|diagnostic| {
+                    format!(
+                        "{:?} at {}: {}",
+                        diagnostic.code, diagnostic.field_path, diagnostic.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            format!(
+                "embedded runtime-host image batch gateway execution failed with {diagnostic_count} diagnostic(s): {details}"
+            )
+        }
+        other => {
+            format!("embedded runtime-host image batch gateway execution failed: {other}")
+        }
+    }
+}
+
+fn image_planning_diagnostics_message(
+    diagnostics: &[inference::ImageGenerationPlannerDiagnostic],
+) -> String {
+    let details = diagnostics
+        .iter()
+        .take(4)
+        .map(|diagnostic| {
+            format!(
+                "{:?} at {}: {}",
+                diagnostic.code, diagnostic.field_path, diagnostic.message
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!(
+        "embedded runtime-host image batch planning failed with {} diagnostic(s): {details}",
+        diagnostics.len()
+    )
+}
+
 fn media_artifact_sink_error_message(error: RuntimeHostMediaArtifactSinkError) -> String {
     format!("embedded runtime-host media artifact write failed: {error}")
 }
@@ -489,8 +1349,9 @@ mod tests {
     };
     use inference::process::ProcessSpawner;
     use inference::{
-        BackendExecutionContext, ImageGenerationExecutionPlan, ImageGenerationResult,
-        RerankRequest, RerankResponse,
+        BackendExecutionContext, ImageGenerationBatchExecutionResponse,
+        ImageGenerationBatchExecutionState, ImageGenerationBatchMemberExecutionState,
+        ImageGenerationExecutionPlan, ImageGenerationResult, RerankRequest, RerankResponse,
     };
     use pantograph_runtime_host_contracts::{
         RuntimeHostExecutionCancellationSignal, RuntimeHostExecutionContractError,
@@ -503,6 +1364,7 @@ mod tests {
         PumasArtifactLoadPathKind, PumasArtifactLoadTarget, StorageKind,
     };
     use std::pin::Pin;
+    use std::sync::Mutex;
 
     use crate::runtime_host_media_artifact_sink::{
         RuntimeHostImageArtifactWriteRequest, RuntimeHostMediaArtifactSinkError,
@@ -846,6 +1708,136 @@ mod tests {
         assert_eq!(body.response.media_type, "image/png");
     }
 
+    #[tokio::test]
+    async fn batch_port_rejects_without_load_target_resolver() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation = runtime_host_batch_cancellation(&request);
+        let port = EmbeddedRuntimeHostExecutionPort::fail_closed();
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("missing resolver should be a typed rejected batch response");
+
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Rejected);
+        assert_eq!(
+            response.batch_execution_request_id,
+            "runtime-host.batch.001"
+        );
+        assert_eq!(response.members.len(), 2);
+        assert!(response
+            .members
+            .iter()
+            .all(|member| member.state == RuntimeHostBatchExecutionMemberState::Rejected));
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired
+        );
+        assert_eq!(
+            response.diagnostics[0].hint.as_deref(),
+            Some(MISSING_LOAD_TARGET_RESOLVER_HINT)
+        );
+    }
+
+    #[tokio::test]
+    async fn batch_port_executes_one_gateway_batch_and_writes_member_outputs() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation = runtime_host_batch_cancellation(&request);
+        let media_sink = Arc::new(RecordingMediaArtifactSink::default());
+        let backend = RecordingBatchImageBackend::default();
+        let recorded_batches = backend.recorded_batches.clone();
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            media_sink.clone(),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("batch execution should complete through gateway batch operation");
+
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Completed);
+        assert_eq!(response.members.len(), 2);
+        assert!(response
+            .members
+            .iter()
+            .all(|member| member.state == RuntimeHostBatchExecutionMemberState::Completed));
+        assert!(response
+            .members
+            .iter()
+            .all(|member| member.outputs.len() == 1));
+        let recorded_batches = recorded_batches.lock().expect("recorded batches");
+        assert_eq!(recorded_batches.len(), 1);
+        assert_eq!(recorded_batches[0].members.len(), 2);
+        assert_eq!(
+            recorded_batches[0]
+                .members
+                .iter()
+                .map(|member| member.request.prompt.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "a cinematic image of a red cube on a white table",
+                "a cinematic image of a blue cube on a white table"
+            ]
+        );
+        let writes = media_sink.writes.lock().expect("recorded image writes");
+        assert_eq!(writes.len(), 2);
+        assert_eq!(writes[0].image_data_base64, "aGVsbG8tMA==");
+        assert_eq!(writes[1].image_data_base64, "aGVsbG8tMQ==");
+    }
+
+    #[tokio::test]
+    async fn batch_port_rejects_incompatible_members_before_gateway_dispatch() {
+        let mut request = runtime_host_batch_request_fixture();
+        let incompatible_variant = "diffusers-pytorch.other"
+            .parse()
+            .expect("runtime variant id");
+        request.members[1]
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("fixture has dispatch decision")
+            .selected_runtime_variant_id = Some(incompatible_variant);
+        let cancellation = runtime_host_batch_cancellation(&request);
+        let backend = RecordingBatchImageBackend::default();
+        let recorded_batches = backend.recorded_batches.clone();
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(RecordingMediaArtifactSink::default()),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("incompatible batch should be a typed rejected response");
+
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Rejected);
+        assert!(response.diagnostics[0]
+            .message
+            .contains("must share selected runtime variant"));
+        assert_eq!(
+            response.diagnostics[0].hint.as_deref(),
+            Some(BATCH_COMPATIBILITY_FAILED_HINT)
+        );
+        assert!(
+            recorded_batches
+                .lock()
+                .expect("recorded batches")
+                .is_empty(),
+            "incompatible members must not reach gateway batch dispatch"
+        );
+    }
+
     fn runtime_host_request_fixture() -> RuntimeHostExecutionRequest {
         serde_json::from_str(include_str!(
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -853,8 +1845,72 @@ mod tests {
         .expect("runtime host request fixture should deserialize")
     }
 
+    fn runtime_host_batch_request_fixture() -> RuntimeHostBatchExecutionRequest {
+        let mut first = runtime_host_request_fixture();
+        clear_runtime_trait_settings(&mut first);
+        let mut second = runtime_host_request_fixture();
+        second.execution_request_id = "runtime-host.request.002".to_string();
+        clear_runtime_trait_settings(&mut second);
+        set_prompt_input(
+            &mut second,
+            "a cinematic image of a blue cube on a white table",
+        );
+
+        RuntimeHostBatchExecutionRequest {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: "runtime-host.batch.001".to_string(),
+            anchor_execution_request_id: first.execution_request_id.clone(),
+            cancellation_context:
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationContext::workflow_service(
+                    "runtime-host.batch.001",
+                ),
+            members: vec![
+                runtime_host_batch_member_from_request(first, "assignment.image.001"),
+                runtime_host_batch_member_from_request(second, "assignment.image.002"),
+            ],
+        }
+    }
+
+    fn runtime_host_batch_member_from_request(
+        request: RuntimeHostExecutionRequest,
+        assignment_id: &str,
+    ) -> RuntimeHostBatchExecutionMemberRequest {
+        RuntimeHostBatchExecutionMemberRequest {
+            execution_request_id: request.execution_request_id,
+            assignment_id: assignment_id.to_string(),
+            handoff: request.handoff,
+            materialized_inputs: request.materialized_inputs,
+            timeout_ms: None,
+            failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+            reservation_policy: RuntimeHostBatchMemberReservationPolicy::ReleaseOnTerminal,
+        }
+    }
+
+    fn clear_runtime_trait_settings(request: &mut RuntimeHostExecutionRequest) {
+        if let Some(dispatch_decision) = request.handoff.dispatch_decision.as_mut() {
+            dispatch_decision.runtime_trait_settings.clear();
+        }
+    }
+
+    fn set_prompt_input(request: &mut RuntimeHostExecutionRequest, prompt: &str) {
+        let input = request
+            .materialized_inputs
+            .iter_mut()
+            .find(|input| input.port_id == "prompt")
+            .expect("fixture has prompt input");
+        input.value = pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::String(
+            prompt.to_string(),
+        );
+    }
+
     fn runtime_host_cancellation(
         request: &RuntimeHostExecutionRequest,
+    ) -> RuntimeHostExecutionCancellationHandle {
+        RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone())
+    }
+
+    fn runtime_host_batch_cancellation(
+        request: &RuntimeHostBatchExecutionRequest,
     ) -> RuntimeHostExecutionCancellationHandle {
         RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone())
     }
@@ -1082,6 +2138,162 @@ mod tests {
             RuntimeHostMediaArtifactSinkError,
         > {
             panic!("media sink must not be called before runtime execution is wired")
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingMediaArtifactSink {
+        writes: Mutex<Vec<RecordedImageWrite>>,
+    }
+
+    struct RecordedImageWrite {
+        image_data_base64: String,
+    }
+
+    impl RuntimeHostMediaArtifactSink for RecordingMediaArtifactSink {
+        fn write_image_output(
+            &self,
+            request: RuntimeHostImageArtifactWriteRequest<'_>,
+        ) -> Result<
+            pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef,
+            RuntimeHostMediaArtifactSinkError,
+        > {
+            let mut writes = self.writes.lock().expect("record image write");
+            let index = writes.len();
+            writes.push(RecordedImageWrite {
+                image_data_base64: request.image.data_base64.clone(),
+            });
+            Ok(
+                pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef {
+                    artifact_id: format!("runtime-host-batch-artifact.{index}"),
+                    media_type: Some("image_png".to_string()),
+                },
+            )
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingBatchImageBackend {
+        recorded_batches: Arc<Mutex<Vec<inference::ImageGenerationBatchExecutionRequest>>>,
+    }
+
+    #[async_trait]
+    impl InferenceBackend for RecordingBatchImageBackend {
+        fn name(&self) -> &'static str {
+            "MockBatch"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock image batch backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities {
+                image_generation: true,
+                image_generation_batch: true,
+                ..BackendCapabilities::default()
+            }
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_mock_batch_runtime".to_string()),
+            })
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<
+            Pin<Box<dyn futures_util::Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+            BackendError,
+        > {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
+        async fn generate_image_from_plan(
+            &self,
+            _plan: ImageGenerationExecutionPlan,
+            _context: BackendExecutionContext,
+        ) -> Result<ImageGenerationResult, BackendError> {
+            panic!("batch runtime-host execution must not call single image generation")
+        }
+
+        async fn generate_image_batch_from_execution_request(
+            &self,
+            request: inference::ImageGenerationBatchExecutionRequest,
+            _context: BackendExecutionContext,
+        ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+            self.recorded_batches
+                .lock()
+                .expect("record batch request")
+                .push(request.clone());
+            Ok(ImageGenerationBatchExecutionResponse {
+                batch_execution_id: request.batch_execution_id,
+                state: ImageGenerationBatchExecutionState::Completed,
+                members: request
+                    .members
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, member)| {
+                        let image_data_base64 = if index == 0 {
+                            "aGVsbG8tMA=="
+                        } else {
+                            "aGVsbG8tMQ=="
+                        };
+                        inference::ImageGenerationBatchExecutionMemberResponse {
+                            member_id: member.member_id,
+                            state: ImageGenerationBatchMemberExecutionState::Completed,
+                            result: Some(ImageGenerationResult {
+                                images: vec![inference::EncodedImage {
+                                    data_base64: image_data_base64.to_string(),
+                                    mime_type: "image/png".to_string(),
+                                    width: member.plan.width,
+                                    height: member.plan.height,
+                                }],
+                                seed_used: member.plan.seed,
+                                metadata: serde_json::Value::Null,
+                            }),
+                            diagnostics: Vec::new(),
+                        }
+                    })
+                    .collect(),
+                diagnostics: Vec::new(),
+            })
         }
     }
 
