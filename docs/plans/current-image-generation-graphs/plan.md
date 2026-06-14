@@ -7045,6 +7045,38 @@ workflow terminal diagnostics, and artifact diagnostics. Do not wire grouped
 batch execution until these helpers cover the full per-run finalization
 contract.
 
+2026-06-14 completed scheduler-run response finalization helper slice
+completed. Smallest useful vertical slice: move completed scheduler-run output
+projection, output-target validation, completed-task-state validation, and
+`WorkflowRunResponse` construction into the reusable workflow-service-owned
+runtime-branch run-finalization helper, then keep the existing non-runtime and
+single-runtime session runner paths calling that helper. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, does not add
+request-scoped runtime execution, and does not preserve single-member fallback
+after batch dispatch. It only moves the canonical backend-owned completed-run
+response projection into a helper that grouped finalization can reuse later.
+The session runner keeps its local active-run task-state helper for progress
+and readiness checks; only response finalization moved.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service completed_scheduler_run_response_rejects_incomplete_scheduler_task_state --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: continue option 1 step 2 by extracting reservation cleanup
+application, active-run finish, workflow terminal diagnostics, and artifact
+diagnostics into backend-owned finalization helpers before grouped assignment
+claiming is enabled.
+
 ## Standards Rule
 
 The standards constraints in

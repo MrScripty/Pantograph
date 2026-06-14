@@ -27,23 +27,17 @@ use crate::scheduler::{
     WorkflowSchedulerRetryLifecycle, WorkflowSchedulerTaskTerminalMutation,
 };
 
-use super::io_contract::validate_workflow_io;
 use super::runtime_branch_run_finalization::{
-    scheduler_task_attempt_terminal_diagnostic_event,
+    completed_scheduler_run_response, scheduler_task_attempt_terminal_diagnostic_event,
     WorkflowSchedulerTaskAttemptDiagnosticAttribution,
     WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest,
 };
-use super::validation::{
-    validate_host_output_bindings, validate_output_targets_against_io,
-    validate_requested_outputs_produced,
-};
 use super::{
-    project_scheduler_task_results_to_outputs, WorkflowHost, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunResponse, WorkflowRuntimeDispatchPreselectionError,
-    WorkflowRuntimeDispatchSelectionBoundary, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
-    WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskRunSummary, WorkflowService,
-    WorkflowServiceError,
+    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse,
+    WorkflowRuntimeDispatchPreselectionError, WorkflowRuntimeDispatchSelectionBoundary,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultStatus,
+    WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
 pub(super) struct WorkflowSchedulerSessionRunner<'a> {
@@ -248,27 +242,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             .run_progress_loop(session_id, workflow_run_id)
             .await?;
 
-        let (task_graph, records) =
-            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
-        ensure_all_scheduler_tasks_completed(&records)?;
-        let results = {
-            let mut store = self.service.session_store_guard()?;
-            store.active_run_scheduler_task_results(session_id, workflow_run_id)?
-        };
-        let targets = scheduler_output_targets_for_run(host, workflow_id, output_targets).await?;
-        let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
-            .map_err(|error| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "scheduler task output projection failed: {error}"
-                ))
-            })?;
-        validate_host_output_bindings(&outputs, "outputs")?;
-        validate_requested_outputs_produced(&targets, &outputs)?;
-        Ok(WorkflowRunResponse {
-            workflow_run_id: workflow_run_id.to_string(),
-            outputs,
-            timing_ms: started_at.elapsed().as_millis(),
-        })
+        completed_scheduler_run_response(
+            self.service,
+            host,
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            started_at,
+        )
+        .await
     }
 
     pub(super) async fn resume_runtime_dependency_readiness(
@@ -1098,27 +1081,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 }
             }
         }
-        let (task_graph, records) =
-            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
-        ensure_all_scheduler_tasks_completed(&records)?;
-        let results = {
-            let mut store = self.service.session_store_guard()?;
-            store.active_run_scheduler_task_results(session_id, workflow_run_id)?
-        };
-        let targets = scheduler_output_targets_for_run(host, workflow_id, output_targets).await?;
-        let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
-            .map_err(|error| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "scheduler task output projection failed: {error}"
-                ))
-            })?;
-        validate_host_output_bindings(&outputs, "outputs")?;
-        validate_requested_outputs_produced(&targets, &outputs)?;
-        Ok(WorkflowRunResponse {
-            workflow_run_id: workflow_run_id.to_string(),
-            outputs,
-            timing_ms: started_at.elapsed().as_millis(),
-        })
+        completed_scheduler_run_response(
+            self.service,
+            host,
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            started_at,
+        )
+        .await
     }
 
     pub(super) async fn run_started_runtime_dispatch_task_to_completion(
@@ -1291,27 +1263,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 )));
             }
         }
-        let (task_graph, records) =
-            active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
-        ensure_all_scheduler_tasks_completed(&records)?;
-        let results = {
-            let mut store = self.service.session_store_guard()?;
-            store.active_run_scheduler_task_results(session_id, workflow_run_id)?
-        };
-        let targets = scheduler_output_targets_for_run(host, workflow_id, output_targets).await?;
-        let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
-            .map_err(|error| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "scheduler task output projection failed: {error}"
-                ))
-            })?;
-        validate_host_output_bindings(&outputs, "outputs")?;
-        validate_requested_outputs_produced(&targets, &outputs)?;
-        Ok(WorkflowRunResponse {
-            workflow_run_id: workflow_run_id.to_string(),
-            outputs,
-            timing_ms: started_at.elapsed().as_millis(),
-        })
+        completed_scheduler_run_response(
+            self.service,
+            host,
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            started_at,
+        )
+        .await
     }
 
     fn record_scheduler_task_attempt_started(
@@ -1675,22 +1636,6 @@ fn dependency_environment_request_from_readiness_envelope(
     .map_err(DependencyReadinessWorkQueueError::from)
 }
 
-fn ensure_all_scheduler_tasks_completed(
-    records: &[SchedulerTaskStateRecord],
-) -> Result<(), WorkflowServiceError> {
-    if let Some(record) = records
-        .iter()
-        .find(|record| record.state.kind() != SchedulerTaskStateKind::Completed)
-    {
-        return Err(WorkflowServiceError::InvalidRequest(format!(
-            "scheduler task '{}' did not complete; final state was {:?}",
-            record.task_id.as_str(),
-            record.state.kind()
-        )));
-    }
-    Ok(())
-}
-
 fn active_run_scheduler_task_state_required(
     service: &WorkflowService,
     session_id: &str,
@@ -1705,27 +1650,4 @@ fn active_run_scheduler_task_state_required(
                 workflow_run_id
             ))
         })
-}
-
-async fn scheduler_output_targets_for_run<H: WorkflowHost + ?Sized>(
-    host: &H,
-    workflow_id: &str,
-    output_targets: Option<&[WorkflowOutputTarget]>,
-) -> Result<Vec<WorkflowOutputTarget>, WorkflowServiceError> {
-    let io = host.workflow_io(workflow_id).await?;
-    validate_workflow_io(&io)?;
-    if let Some(targets) = output_targets {
-        validate_output_targets_against_io(targets, &io)?;
-        return Ok(targets.to_vec());
-    }
-    Ok(io
-        .outputs
-        .iter()
-        .flat_map(|node| {
-            node.ports.iter().map(|port| WorkflowOutputTarget {
-                node_id: node.node_id.clone(),
-                port_id: port.port_id.clone(),
-            })
-        })
-        .collect())
 }

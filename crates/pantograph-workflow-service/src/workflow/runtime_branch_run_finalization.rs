@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
@@ -7,10 +9,20 @@ use pantograph_diagnostics_ledger::{
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
 };
+use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 
 use crate::scheduler::{unix_timestamp_ms, WorkflowSchedulerTaskTerminalMutation};
 
-use super::{WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowServiceError};
+use super::io_contract::validate_workflow_io;
+use super::validation::{
+    validate_host_output_bindings, validate_output_targets_against_io,
+    validate_requested_outputs_produced,
+};
+use super::{
+    project_scheduler_task_results_to_outputs, WorkflowHost, WorkflowOutputTarget,
+    WorkflowRunResponse, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskGraph, WorkflowService, WorkflowServiceError,
+};
 use crate::scheduler::task_orchestrator::SelectedRuntimeTaskDispatch;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +61,38 @@ pub(super) fn scheduler_task_attempt_terminal_diagnostic_event(
 ) -> Result<DiagnosticEventAppendRequest, WorkflowServiceError> {
     let ended_at_ms = unix_timestamp_ms();
     scheduler_task_attempt_terminal_diagnostic_event_at(request, ended_at_ms)
+}
+
+pub(super) async fn completed_scheduler_run_response<H: WorkflowHost + ?Sized>(
+    service: &WorkflowService,
+    host: &H,
+    session_id: &str,
+    workflow_run_id: &str,
+    workflow_id: &str,
+    output_targets: Option<&[WorkflowOutputTarget]>,
+    started_at: Instant,
+) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+    let (task_graph, records) =
+        active_run_scheduler_task_state_required(service, session_id, workflow_run_id)?;
+    ensure_all_scheduler_tasks_completed(&records)?;
+    let results = {
+        let mut store = service.session_store_guard()?;
+        store.active_run_scheduler_task_results(session_id, workflow_run_id)?
+    };
+    let targets = scheduler_output_targets_for_run(host, workflow_id, output_targets).await?;
+    let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
+        .map_err(|error| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task output projection failed: {error}"
+            ))
+        })?;
+    validate_host_output_bindings(&outputs, "outputs")?;
+    validate_requested_outputs_produced(&targets, &outputs)?;
+    Ok(WorkflowRunResponse {
+        workflow_run_id: workflow_run_id.to_string(),
+        outputs,
+        timing_ms: started_at.elapsed().as_millis(),
+    })
 }
 
 fn scheduler_task_attempt_terminal_diagnostic_event_at(
@@ -146,6 +190,61 @@ fn scheduler_task_attempt_terminal_diagnostic_event_at(
     })
 }
 
+fn active_run_scheduler_task_state_required(
+    service: &WorkflowService,
+    session_id: &str,
+    workflow_run_id: &str,
+) -> Result<(WorkflowSchedulerTaskGraph, Vec<SchedulerTaskStateRecord>), WorkflowServiceError> {
+    let store = service.session_store_guard()?;
+    store
+        .active_run_scheduler_task_state(session_id, workflow_run_id)?
+        .ok_or_else(|| {
+            WorkflowServiceError::Internal(format!(
+                "active workflow run '{}' has no scheduler task state",
+                workflow_run_id
+            ))
+        })
+}
+
+fn ensure_all_scheduler_tasks_completed(
+    records: &[SchedulerTaskStateRecord],
+) -> Result<(), WorkflowServiceError> {
+    if let Some(record) = records
+        .iter()
+        .find(|record| record.state.kind() != SchedulerTaskStateKind::Completed)
+    {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "scheduler task '{}' did not complete; final state was {:?}",
+            record.task_id.as_str(),
+            record.state.kind()
+        )));
+    }
+    Ok(())
+}
+
+async fn scheduler_output_targets_for_run<H: WorkflowHost + ?Sized>(
+    host: &H,
+    workflow_id: &str,
+    output_targets: Option<&[WorkflowOutputTarget]>,
+) -> Result<Vec<WorkflowOutputTarget>, WorkflowServiceError> {
+    let io = host.workflow_io(workflow_id).await?;
+    validate_workflow_io(&io)?;
+    if let Some(targets) = output_targets {
+        validate_output_targets_against_io(targets, &io)?;
+        return Ok(targets.to_vec());
+    }
+    Ok(io
+        .outputs
+        .iter()
+        .flat_map(|node| {
+            node.ports.iter().map(|port| WorkflowOutputTarget {
+                node_id: node.node_id.clone(),
+                port_id: port.port_id.clone(),
+            })
+        })
+        .collect())
+}
+
 fn reservation_id_from_terminal_context(
     terminal_mutation: Option<&WorkflowSchedulerTaskTerminalMutation>,
     selected_dispatch: Option<&SelectedRuntimeTaskDispatch>,
@@ -180,7 +279,9 @@ fn scheduler_task_attempt_execution_class(
 mod tests {
     use pantograph_diagnostics_ledger::DiagnosticEventPayload;
     use pantograph_scheduler::{
-        SchedulerNodeId, SchedulerTaskId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+        SchedulerNodeId, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateRecord,
+        SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
+        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
 
     use super::*;
@@ -232,6 +333,25 @@ mod tests {
         assert!(payload.reservation_id.is_none());
     }
 
+    #[test]
+    fn completed_scheduler_run_response_rejects_incomplete_scheduler_task_state() {
+        let record = scheduler_task_state_record(
+            "task.image",
+            SchedulerTaskState::TerminalFailed {
+                diagnostics: Vec::new(),
+            },
+        );
+        let error = ensure_all_scheduler_tasks_completed(&[record])
+            .expect_err("incomplete scheduler task state should be rejected");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::InvalidRequest(message)
+                if message.contains("scheduler task 'task.image' did not complete")
+                    && message.contains("TerminalFailed")
+        ));
+    }
+
     fn runtime_task() -> WorkflowSchedulerTask {
         WorkflowSchedulerTask {
             workflow_id: SchedulerWorkflowId::parse("workflow.image").expect("workflow id"),
@@ -249,6 +369,23 @@ mod tests {
             inference_descriptor_fingerprint: None,
             runtime_source_context: None,
             diagnostics: Vec::new(),
+        }
+    }
+
+    fn scheduler_task_state_record(
+        task_id: &str,
+        state: SchedulerTaskState,
+    ) -> SchedulerTaskStateRecord {
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow.image").expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse("run.image.1").expect("run id"),
+            node_id: SchedulerNodeId::parse("node.image").expect("node id"),
+            task_id: SchedulerTaskId::parse(task_id).expect("task id"),
+            state,
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse("transition.terminal")
+                .expect("transition id"),
         }
     }
 }
