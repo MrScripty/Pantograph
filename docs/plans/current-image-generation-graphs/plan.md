@@ -8152,6 +8152,74 @@ Verification passed:
 Discovered issues and follow-ups: none in this slice. The
 `pantograph-workflow-service` package check is warning-free after this cleanup.
 
+2026-06-14 grouped broker session_execution validation re-plan trigger:
+after the runtime-branch worker batch broker wiring and active-run diagnostic
+cleanup commits, broader validation
+`cargo test -p pantograph-workflow-service session_execution --lib` was run.
+The run reported
+`workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor` as failed, then
+multiple runtime-owned session execution tests remained running past the
+validation window:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`,
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`,
+`workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task`,
+`workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`,
+`workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing`,
+`workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure`,
+and
+`workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure`.
+The hung validation parent and test binary were terminated manually after
+process inspection; no source files were edited after the failed validation.
+
+Likely interpretation: the worker now correctly routes runtime-branch execution
+through the scheduler-owned batch broker, and a single compatible assignment is
+retained as `WaitingForPeers` instead of being executed as a one-member
+runtime-host batch. Several remaining `session_execution` tests still model one
+runtime-containing workflow run as enough to reach runtime-host dispatch,
+failure, recovery, or shutdown completion. Restoring the removed direct
+single-branch rehydration helper, executing singleton batches as an implicit
+fallback, or completing responders without a broker-owned grouped claim would
+violate the no-fallback/no-legacy rule. Continue only after choosing the
+canonical solo-runtime-branch behavior for the grouped broker.
+
+Standards-aligned options:
+- Option 1: migrate affected `session_execution` tests to provide compatible
+  peer runtime branches wherever the test purpose is successful runtime-host
+  dispatch, runtime-host failure fan-out, or restart/recovery of a ready
+  grouped batch. Choose this when the intended production contract is strict
+  grouped execution and the existing `WaitingForPeers` state is the complete
+  answer for solo runs.
+- Option 2: add an explicit typed waiting projection for solo runtime branches,
+  keeping the durable assignment in `WaitingForPeers` while returning an
+  observable non-terminal diagnostic/status to the session runtime boundary.
+  Choose this when callers and tests must not hang indefinitely, but scheduler
+  policy still intentionally waits for future compatible peers and never
+  dispatches a singleton fallback.
+- Option 3: add scheduler-owned broker window/timeout semantics. A solo
+  runtime branch may wait for compatible peers only until the configured broker
+  policy expires; on expiry it transitions to a typed deferred, timed-out, or
+  unsatisfied-batch diagnostic without runtime-host dispatch. Choose this when
+  production requests need bounded lifecycle behavior and cleanup while
+  preserving the grouped-only execution rule.
+- Option 4: add an admission-time matchability/capacity gate before assignment
+  running. If scheduler policy can determine that no compatible batch can form,
+  the run is rejected or deferred with a typed diagnostic before a responder is
+  retained. Choose this when fail-fast behavior is preferable to waiting, and
+  only for cases where the scheduler has enough durable facts to make that
+  decision without predicting unrelated future workflows.
+
+Recommended next direction: Option 3, with targeted Option 1 test migration for
+tests whose purpose is explicitly grouped runtime-host completion. Option 3
+adds the missing lifecycle ownership required by the standards: the scheduler
+starts the wait, owns the wait limit, records the terminal or deferred
+diagnostic, and prevents indefinite responders without adding a compatibility
+shim or singleton runtime fallback. Option 2 is a smaller interim slice if the
+window/timeout policy needs to be introduced in two commits; Option 4 should
+remain narrow because broad admission prediction can over-couple scheduler
+policy to future workflow arrivals.
+
+Re-plan decision required before the next implementation slice.
+
 ## Standards Rule
 
 The standards constraints in
