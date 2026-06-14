@@ -2618,11 +2618,12 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
         )
         .await
         .expect("create session");
+    let session_id = created.session_id.clone();
     let response = service
         .run_workflow_execution_session(
             &host,
             WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
+                session_id: session_id.clone(),
                 workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
@@ -2640,6 +2641,12 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
         )
         .await
         .expect("run session");
+    let status = service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest { session_id })
+        .await
+        .expect("session status after finalized run");
+    assert_eq!(status.session.run_count, 1);
+    assert_eq!(status.session.queued_runs, 0);
 
     let diagnostic_events = {
         let ledger = service

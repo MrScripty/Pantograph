@@ -7111,6 +7111,41 @@ finalization helpers. Grouped assignment claiming remains blocked until those
 per-run finalization responsibilities are reusable from the batch owner without
 private runner duplication.
 
+2026-06-14 non-runtime workflow-run finalization helper slice completed.
+Smallest useful vertical slice: introduce a generic workflow-service-owned
+workflow-run finalization helper for active-run finish, run terminal diagnostic
+recording, diagnostic-link attachment when terminal recording fails, and
+optional IO artifact diagnostics on successful runs, then route the existing
+non-runtime owner path through that helper. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/workflow_run_finalization.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, and does not alter
+runtime worker execution. It extracts the existing backend-owned non-runtime
+terminal wrapper without moving workflow terminal or artifact policy into the
+runner, worker, runtime-host adapter, frontend/Tauri, or request-scoped
+compatibility code. The helper returns only the finish-state unload decision
+needed by callers instead of exposing the scheduler store's private finish
+state type.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_repeated_runs_create_distinct_backend_run_ids --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: route runtime-branch worker completion and direct runtime
+resume completion through the same workflow-run finalization helper, including
+success artifact diagnostics where canonical behavior requires them. Grouped
+assignment claiming remains blocked until every per-run finalization path is
+callable without private runner or request-scoped duplication.
+
 ## Standards Rule
 
 The standards constraints in

@@ -84,6 +84,7 @@ mod task_result_output_projection;
 mod task_run_summary;
 mod task_state_read_model;
 mod validation;
+mod workflow_run_finalization;
 
 pub use self::artifact_contracts::*;
 pub use self::artifact_store::{

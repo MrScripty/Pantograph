@@ -8,6 +8,9 @@ use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRecord};
 
 use super::runtime_branch_rehydration::WorkflowRuntimeBranchRehydratedContext;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
+use super::workflow_run_finalization::{
+    finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
+};
 use super::{
     WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionSummary, WorkflowHost,
     WorkflowPortBinding, WorkflowRunResponse, WorkflowSchedulerTaskRunSummary, WorkflowService,
@@ -77,38 +80,20 @@ impl WorkflowTaskExecutionOwner {
         } else {
             run_future.await
         };
-        let finish_state = {
-            let mut store = service.session_store_guard()?;
-            store.finish_run(session_id, workflow_run_id)?
-        };
-        if let Err(record_error) = service.record_run_terminal_event_if_configured(
-            session,
-            run_snapshot,
-            workflow_run_id,
-            Some(&queued_workflow_semantic_version),
-            &run_result,
-        ) {
-            if let Err(error) = run_result {
-                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                    workflow_run_id: Some(workflow_run_id.to_string()),
-                    diagnostic_event_id: None,
-                    diagnostics_unavailable: Some(record_error.message().to_string()),
-                }));
-            }
-            return Err(record_error);
-        }
-        if let Ok(response) = run_result.as_ref() {
-            service.record_workflow_io_artifact_events_if_configured(
+        let finalization = finalize_admitted_workflow_run(
+            service,
+            WorkflowRunFinalizationRequest {
                 session,
                 run_snapshot,
+                session_id,
                 workflow_run_id,
-                &queued_workflow_semantic_version,
-                &queued_workflow_inputs,
-                &response.outputs,
-            )?;
-        }
-        debug_assert!(!finish_state.unload_runtime);
-        run_result
+                workflow_semantic_version: &queued_workflow_semantic_version,
+                io_artifact_inputs: Some(&queued_workflow_inputs),
+                run_result,
+            },
+        )?;
+        debug_assert!(!finalization.unload_runtime);
+        finalization.run_result
     }
 
     pub(super) async fn run_rehydrated_started_runtime_branch_to_completion<
