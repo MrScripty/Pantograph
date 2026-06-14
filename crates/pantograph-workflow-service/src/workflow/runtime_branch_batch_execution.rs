@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use crate::scheduler::WorkflowSchedulerTaskOrchestrator;
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerRuntimeHandoff,
+    SchedulerTaskStateKind, SchedulerTaskStateRecord,
 };
 
 use super::runtime_dispatch_assignment::{
@@ -12,6 +13,10 @@ use super::runtime_dispatch_assignment::{
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::runtime_task_attempt_fact::WorkflowRuntimeTaskAttemptFactRecord;
+use super::{
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskResult,
+    WorkflowService,
+};
 
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchExecutionOwner<'a, R>
@@ -35,6 +40,16 @@ pub(super) struct WorkflowRuntimeBranchBatchExecutionPlan {
     pub(super) batch_execution_request_id: String,
     pub(super) batch_claim: WorkflowRuntimeDispatchAssignmentBatchClaim,
     pub(super) members: Vec<WorkflowRuntimeBranchBatchExecutionMember>,
+    pub(super) active_run_members: Vec<WorkflowRuntimeBranchBatchActiveRunMember>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeBranchBatchActiveRunMember {
+    pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    pub(super) runtime_task: WorkflowSchedulerTask,
+    pub(super) running_task_record: SchedulerTaskStateRecord,
+    pub(super) materialized_results: Vec<WorkflowSchedulerTaskResult>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,6 +114,11 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     AssignmentNotRunning,
     MissingTaskAttemptFact,
     TaskAttemptFactMismatch,
+    ActiveRunTaskStateUnavailable,
+    ActiveRunTaskUnavailable,
+    ActiveRunTaskNotRunning,
+    ActiveRunTaskAttemptMismatch,
+    ActiveRunMaterializedInputsUnavailable,
     ResponderFanOutUnavailable,
 }
 
@@ -118,11 +138,13 @@ where
 
     pub(super) fn prepare_claimed_batch(
         &self,
+        service: &WorkflowService,
         claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
     ) -> Result<WorkflowRuntimeBranchBatchExecutionPlan, WorkflowRuntimeBranchBatchExecutionFailure>
     {
         let _selected_batch_dispatcher_owner = self.scheduler_task_orchestrator;
         let members = validate_claimed_assignments(&claim_outcome)?;
+        let active_run_members = rehydrate_batch_members_from_active_runs(service, &members)?;
         self.responder_fan_out
             .ensure_assignment_responders_registered(&members)
             .map_err(WorkflowRuntimeBranchBatchExecutionFailure::global)?;
@@ -130,6 +152,7 @@ where
             batch_execution_request_id: batch_execution_request_id(&claim_outcome.batch_claim),
             batch_claim: claim_outcome.batch_claim,
             members,
+            active_run_members,
         })
     }
 }
@@ -153,6 +176,23 @@ impl WorkflowRuntimeBranchBatchExecutionFailure {
                 session_id: record.session_id.clone(),
                 workflow_id: record.workflow_id.clone(),
                 workflow_run_id: record.workflow_run_id.clone(),
+                state: WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                diagnostics: vec![diagnostic],
+            }],
+        }
+    }
+
+    fn active_run_member(
+        member: &WorkflowRuntimeBranchBatchExecutionMember,
+        diagnostic: WorkflowRuntimeBranchBatchExecutionDiagnostic,
+    ) -> Self {
+        Self {
+            diagnostics: vec![diagnostic.clone()],
+            member_outcomes: vec![WorkflowRuntimeBranchBatchMemberExecutionOutcome {
+                assignment_id: member.assignment_id.clone(),
+                session_id: member.session_id.clone(),
+                workflow_id: member.workflow_id.clone(),
+                workflow_run_id: member.workflow_run_id.clone(),
                 state: WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
                 diagnostics: vec![diagnostic],
             }],
@@ -254,6 +294,184 @@ fn batch_execution_member_from_assignment(
         selected_candidate_id: record.selected_candidate_id.clone(),
         task_attempt_fact: task_attempt_fact.clone(),
     })
+}
+
+fn rehydrate_batch_members_from_active_runs(
+    service: &WorkflowService,
+    members: &[WorkflowRuntimeBranchBatchExecutionMember],
+) -> Result<
+    Vec<WorkflowRuntimeBranchBatchActiveRunMember>,
+    WorkflowRuntimeBranchBatchExecutionFailure,
+> {
+    let mut store = service.session_store_guard().map_err(|error| {
+        WorkflowRuntimeBranchBatchExecutionFailure::global(
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
+                format!("runtime branch batch execution could not read session store: {error}"),
+            ),
+        )
+    })?;
+    let mut active_run_members = Vec::with_capacity(members.len());
+    for member in members {
+        let (task_graph, task_records) = store
+            .active_run_scheduler_task_state(&member.session_id, &member.workflow_run_id)
+            .map_err(|error| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
+                        format!(
+                            "runtime branch batch member '{}' active scheduler state is unavailable: {error}",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                )
+            })?
+            .ok_or_else(|| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
+                        format!(
+                            "runtime branch batch member '{}' has no active scheduler task state",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                )
+            })?;
+        let runtime_task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == member.scheduler_task_id)
+            .ok_or_else(|| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
+                        format!(
+                            "runtime branch batch member '{}' scheduler task '{}' is not present in the active run",
+                            member.assignment_id.as_str(),
+                            member.scheduler_task_id
+                        ),
+                    ),
+                )
+            })?;
+        if runtime_task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
+                        format!(
+                            "runtime branch batch member '{}' scheduler task '{}' is not a runtime inference task",
+                            member.assignment_id.as_str(),
+                            member.scheduler_task_id
+                        ),
+                    ),
+                ),
+            );
+        }
+        let running_task_record = task_records
+            .iter()
+            .find(|record| record.task_id.as_str() == member.scheduler_task_id)
+            .ok_or_else(|| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
+                        format!(
+                            "runtime branch batch member '{}' scheduler task '{}' has no active task-state record",
+                            member.assignment_id.as_str(),
+                            member.scheduler_task_id
+                        ),
+                    ),
+                )
+            })?;
+        if running_task_record.state.kind() != SchedulerTaskStateKind::Running {
+            return Err(
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskNotRunning,
+                        format!(
+                            "runtime branch batch member '{}' scheduler task '{}' must be running before batch execution",
+                            member.assignment_id.as_str(),
+                            member.scheduler_task_id
+                        ),
+                    ),
+                ),
+            );
+        }
+        let task_attempt_facts = store
+            .active_run_scheduler_task_attempt_read_facts(
+                &member.session_id,
+                &member.workflow_run_id,
+            )
+            .map_err(|error| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch,
+                        format!(
+                            "runtime branch batch member '{}' active scheduler attempt facts are unavailable: {error}",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                )
+            })?;
+        let task_attempt = task_attempt_facts
+            .get(&member.scheduler_task_id)
+            .ok_or_else(|| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch,
+                        format!(
+                            "runtime branch batch member '{}' scheduler task '{}' has no active attempt fact",
+                            member.assignment_id.as_str(),
+                            member.scheduler_task_id
+                        ),
+                    ),
+                )
+            })?;
+        if task_attempt.attempt_id.as_str() != member.scheduler_task_attempt_id
+            || task_attempt.started_at_ms != member.scheduler_task_attempt_started_at_ms
+        {
+            return Err(
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch,
+                        format!(
+                            "runtime branch batch member '{}' scheduler attempt does not match the active run attempt",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                ),
+            );
+        }
+        let materialized_results = store
+            .active_run_scheduler_task_results(&member.session_id, &member.workflow_run_id)
+            .map_err(|error| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunMaterializedInputsUnavailable,
+                        format!(
+                            "runtime branch batch member '{}' active scheduler task results are unavailable: {error}",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                )
+            })?;
+        active_run_members.push(WorkflowRuntimeBranchBatchActiveRunMember {
+            assignment_id: member.assignment_id.clone(),
+            runtime_task: runtime_task.clone(),
+            running_task_record: running_task_record.clone(),
+            materialized_results,
+        });
+    }
+    Ok(active_run_members)
 }
 
 fn validate_assignment_ready_for_batch_finalization(
@@ -392,9 +610,12 @@ mod tests {
         SchedulerDispatchDiagnosticSeverity, SchedulerNodeId, SchedulerResourceFitAssessment,
         SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
         SchedulerRuntimeDeviceConstraints, SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState,
-        SchedulerRuntimeVariantId, SchedulerTaskId, SchedulerWorkflowId, SchedulerWorkflowRunId,
-        SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION, SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION,
-        SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
+        SchedulerRuntimeVariantId, SchedulerTaskExecutionIntent, SchedulerTaskId,
+        SchedulerTaskState, SchedulerTaskStateKind, SchedulerTaskStateRecord,
+        SchedulerTaskStateTransition, SchedulerTaskStateTransitionId, SchedulerWorkflowId,
+        SchedulerWorkflowRunId, SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+        SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION, SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
+        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
 
     use super::super::runtime_branch_task_event::{
@@ -409,9 +630,18 @@ mod tests {
     use super::super::runtime_dispatch_selection::{
         WorkflowRuntimeDispatchCandidateFact, WorkflowRuntimeDispatchLoadState,
     };
-    use super::super::WorkflowService;
+    use super::super::{
+        WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowPortBinding,
+        WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask, WorkflowSchedulerTaskGraph,
+        WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskResult,
+        WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
+        WorkflowSchedulerTaskResultValue, WorkflowService,
+        WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+    };
     use super::*;
     use crate::graph::WorkflowRuntimeSourceContext;
+    use crate::scheduler::WorkflowSchedulerTaskAttemptId;
 
     #[test]
     fn runtime_branch_batch_execution_owner_accepts_claimed_running_members_with_facts() {
@@ -421,10 +651,11 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let claim_outcome = batch_claim_outcome();
+        let members = active_batch_members(&service);
+        let claim_outcome = batch_claim_outcome(&members);
 
         let plan = owner
-            .prepare_claimed_batch(claim_outcome.clone())
+            .prepare_claimed_batch(&service, claim_outcome.clone())
             .expect("claimed batch execution plan");
 
         assert_eq!(plan.batch_claim, claim_outcome.batch_claim);
@@ -477,6 +708,40 @@ mod tests {
             vec!["reservation-lease.runtime.1", "reservation-lease.runtime.2"]
         );
         assert_eq!(
+            plan.active_run_members
+                .iter()
+                .map(|member| member.assignment_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["assignment.1", "assignment.2"]
+        );
+        assert_eq!(
+            plan.active_run_members
+                .iter()
+                .map(|member| member.runtime_task.workflow_run_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["run.2026-05-22.001", "run.2026-05-22.002"]
+        );
+        assert_eq!(
+            plan.active_run_members
+                .iter()
+                .map(|member| member.running_task_record.state.kind())
+                .collect::<Vec<_>>(),
+            vec![
+                SchedulerTaskStateKind::Running,
+                SchedulerTaskStateKind::Running
+            ]
+        );
+        assert_eq!(
+            plan.active_run_members
+                .iter()
+                .map(|member| prompt_text_from_materialized_results(&member.materialized_results))
+                .collect::<Vec<_>>(),
+            vec![
+                "prompt owned by run.2026-05-22.001".to_string(),
+                "prompt owned by run.2026-05-22.002".to_string(),
+            ]
+        );
+        assert_eq!(
             responder_fan_out.observed_assignment_ids(),
             vec![vec!["assignment.1".to_string(), "assignment.2".to_string()]]
         );
@@ -490,11 +755,11 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome();
+        let mut claim_outcome = batch_claim_outcome(&static_batch_members());
         claim_outcome.assignments[1].task_attempt_fact = None;
 
         let failure = owner
-            .prepare_claimed_batch(claim_outcome)
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect_err("missing durable member fact must fail closed");
 
         assert_eq!(
@@ -524,7 +789,7 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome();
+        let mut claim_outcome = batch_claim_outcome(&static_batch_members());
         claim_outcome.assignments[1]
             .task_attempt_fact
             .as_mut()
@@ -532,7 +797,7 @@ mod tests {
             .workflow_run_id = "run.unrelated".to_string();
 
         let failure = owner
-            .prepare_claimed_batch(claim_outcome)
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect_err("mismatched task-attempt fact must fail closed");
 
         assert_eq!(
@@ -551,6 +816,71 @@ mod tests {
     }
 
     #[test]
+    fn runtime_branch_batch_execution_owner_rejects_missing_active_run_state() {
+        let service = WorkflowService::new();
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+
+        let failure = owner
+            .prepare_claimed_batch(&service, batch_claim_outcome(&static_batch_members()))
+            .expect_err("missing active run state must fail closed");
+
+        assert_eq!(
+            failure.diagnostics[0].code,
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable
+        );
+        assert_eq!(failure.member_outcomes.len(), 1);
+        assert_eq!(
+            failure.member_outcomes[0].assignment_id.as_str(),
+            "assignment.1"
+        );
+        assert!(
+            responder_fan_out.observed_assignment_ids().is_empty(),
+            "fan-out must not be consulted before active-run state rehydration"
+        );
+    }
+
+    #[test]
+    fn runtime_branch_batch_execution_owner_rejects_stale_active_attempt_facts() {
+        let service = WorkflowService::new();
+        let members = active_batch_members(&service);
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let mut claim_outcome = batch_claim_outcome(&members);
+        claim_outcome.assignments[0].scheduler_task_attempt_id =
+            "scheduler-task-attempt.stale".to_string();
+        claim_outcome.assignments[0]
+            .task_attempt_fact
+            .as_mut()
+            .expect("first assignment task-attempt fact")
+            .scheduler_task_attempt_id = "scheduler-task-attempt.stale".to_string();
+
+        let failure = owner
+            .prepare_claimed_batch(&service, claim_outcome)
+            .expect_err("stale scheduler attempt fact must fail closed");
+
+        assert_eq!(
+            failure.diagnostics[0].code,
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch
+        );
+        assert_eq!(failure.member_outcomes.len(), 1);
+        assert_eq!(
+            failure.member_outcomes[0].assignment_id.as_str(),
+            "assignment.1"
+        );
+        assert!(
+            responder_fan_out.observed_assignment_ids().is_empty(),
+            "fan-out must not be consulted after active attempt mismatch"
+        );
+    }
+
+    #[test]
     fn runtime_branch_batch_execution_owner_fails_closed_when_responder_is_missing() {
         let service = WorkflowService::new();
         let responder_fan_out = RecordingResponderFanOut::fail_with(
@@ -563,9 +893,10 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
+        let members = active_batch_members(&service);
 
         let failure = owner
-            .prepare_claimed_batch(batch_claim_outcome())
+            .prepare_claimed_batch(&service, batch_claim_outcome(&members))
             .expect_err("missing responder must fail closed");
 
         assert_eq!(
@@ -623,22 +954,20 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Copy)]
-    struct DispatchAssignmentFixtureMember<'a> {
-        assignment_id: &'a str,
-        runtime_branch_event_id: &'a str,
-        workflow_run_id: &'a str,
-        scheduler_task_attempt_id: &'a str,
-        reservation_lease_id: &'a str,
+    struct DispatchAssignmentFixtureSpec {
+        assignment_id: &'static str,
+        runtime_branch_event_id: &'static str,
+        workflow_run_id: &'static str,
+        reservation_lease_id: &'static str,
     }
 
-    impl DispatchAssignmentFixtureMember<'_> {
+    impl DispatchAssignmentFixtureSpec {
         fn first() -> Self {
             Self {
                 assignment_id: "assignment.1",
                 runtime_branch_event_id:
                     "runtime-branch-task-event.run.2026-05-22.001.task.image_generation.001",
                 workflow_run_id: "run.2026-05-22.001",
-                scheduler_task_attempt_id: "attempt.image.1",
                 reservation_lease_id: "reservation-lease.runtime.1",
             }
         }
@@ -649,23 +978,100 @@ mod tests {
                 runtime_branch_event_id:
                     "runtime-branch-task-event.run.2026-05-22.002.task.image_generation.001",
                 workflow_run_id: "run.2026-05-22.002",
-                scheduler_task_attempt_id: "attempt.image.2",
                 reservation_lease_id: "reservation-lease.runtime.2",
             }
         }
     }
 
-    fn batch_claim_outcome() -> WorkflowRuntimeDispatchAssignmentBatchClaimOutcome {
+    #[derive(Debug, Clone)]
+    struct DispatchAssignmentFixtureMember {
+        assignment_id: String,
+        runtime_branch_event_id: String,
+        session_id: String,
+        workflow_run_id: String,
+        scheduler_task_attempt_id: String,
+        scheduler_task_attempt_started_at_ms: u64,
+        reservation_lease_id: String,
+    }
+
+    fn active_batch_members(service: &WorkflowService) -> Vec<DispatchAssignmentFixtureMember> {
+        [
+            DispatchAssignmentFixtureSpec::first(),
+            DispatchAssignmentFixtureSpec::second(),
+        ]
+        .into_iter()
+        .map(|spec| active_batch_member(service, &spec))
+        .collect()
+    }
+
+    fn active_batch_member(
+        service: &WorkflowService,
+        spec: &DispatchAssignmentFixtureSpec,
+    ) -> DispatchAssignmentFixtureMember {
+        let prompt_text = format!("prompt owned by {}", spec.workflow_run_id);
+        let session_id = prepare_active_runtime_run(service, spec.workflow_run_id, &prompt_text);
+        let task_attempt = service
+            .session_store_guard()
+            .expect("session store")
+            .active_run_scheduler_task_attempt_read_facts(&session_id, spec.workflow_run_id)
+            .expect("task attempt facts")
+            .get("task.image_generation.001")
+            .expect("runtime task attempt")
+            .clone();
+        DispatchAssignmentFixtureMember {
+            assignment_id: spec.assignment_id.to_string(),
+            runtime_branch_event_id: spec.runtime_branch_event_id.to_string(),
+            session_id,
+            workflow_run_id: spec.workflow_run_id.to_string(),
+            scheduler_task_attempt_id: task_attempt.attempt_id.as_str().to_string(),
+            scheduler_task_attempt_started_at_ms: task_attempt.started_at_ms,
+            reservation_lease_id: spec.reservation_lease_id.to_string(),
+        }
+    }
+
+    fn static_batch_members() -> Vec<DispatchAssignmentFixtureMember> {
+        vec![
+            static_batch_member(
+                &DispatchAssignmentFixtureSpec::first(),
+                "session.image.1",
+                "attempt.image.1",
+                100,
+            ),
+            static_batch_member(
+                &DispatchAssignmentFixtureSpec::second(),
+                "session.image.2",
+                "attempt.image.2",
+                101,
+            ),
+        ]
+    }
+
+    fn static_batch_member(
+        spec: &DispatchAssignmentFixtureSpec,
+        session_id: &str,
+        attempt_id: &str,
+        started_at_ms: u64,
+    ) -> DispatchAssignmentFixtureMember {
+        DispatchAssignmentFixtureMember {
+            assignment_id: spec.assignment_id.to_string(),
+            runtime_branch_event_id: spec.runtime_branch_event_id.to_string(),
+            session_id: session_id.to_string(),
+            workflow_run_id: spec.workflow_run_id.to_string(),
+            scheduler_task_attempt_id: attempt_id.to_string(),
+            scheduler_task_attempt_started_at_ms: started_at_ms,
+            reservation_lease_id: spec.reservation_lease_id.to_string(),
+        }
+    }
+
+    fn batch_claim_outcome(
+        members: &[DispatchAssignmentFixtureMember],
+    ) -> WorkflowRuntimeDispatchAssignmentBatchClaimOutcome {
         let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
         let first = repository
-            .create(assignment_request_for_member(
-                &DispatchAssignmentFixtureMember::first(),
-            ))
+            .create(assignment_request_for_member(&members[0]))
             .expect("first assignment");
         let second = repository
-            .create(assignment_request_for_member(
-                &DispatchAssignmentFixtureMember::second(),
-            ))
+            .create(assignment_request_for_member(&members[1]))
             .expect("second assignment");
         let first = repository
             .mark_running(&first.assignment_id, 130)
@@ -679,7 +1085,7 @@ mod tests {
     }
 
     fn assignment_request_for_member(
-        member: &DispatchAssignmentFixtureMember<'_>,
+        member: &DispatchAssignmentFixtureMember,
     ) -> WorkflowRuntimeDispatchAssignmentRequest {
         let readiness_proof = readiness_proof_for_member(member);
         let selected_candidate_fact = selected_candidate_fact_for_member(member);
@@ -688,18 +1094,18 @@ mod tests {
             .clone();
         let selected_candidate_id = Some(selected_candidate_fact.candidate_id.clone());
         WorkflowRuntimeDispatchAssignmentRequest {
-            assignment_id: WorkflowRuntimeDispatchAssignmentId::parse(member.assignment_id)
+            assignment_id: WorkflowRuntimeDispatchAssignmentId::parse(&member.assignment_id)
                 .expect("assignment id"),
             runtime_branch_event_id: WorkflowRuntimeBranchTaskEventId::parse(
-                member.runtime_branch_event_id,
+                &member.runtime_branch_event_id,
             )
             .expect("event id"),
-            session_id: "session.image.1".to_string(),
+            session_id: member.session_id.clone(),
             workflow_id: "workflow.image_generation".to_string(),
-            workflow_run_id: member.workflow_run_id.to_string(),
+            workflow_run_id: member.workflow_run_id.clone(),
             scheduler_task_id: "task.image_generation.001".to_string(),
-            scheduler_task_attempt_id: member.scheduler_task_attempt_id.to_string(),
-            scheduler_task_attempt_started_at_ms: 100,
+            scheduler_task_attempt_id: member.scheduler_task_attempt_id.clone(),
+            scheduler_task_attempt_started_at_ms: member.scheduler_task_attempt_started_at_ms,
             task_attempt_generation: 1,
             timeout_ms: Some(30_000),
             runtime_source_context: runtime_source_context(),
@@ -714,6 +1120,217 @@ mod tests {
             reservation_lease_id,
             selected_candidate_id,
             created_at_ms: 120,
+        }
+    }
+
+    fn prepare_active_runtime_run(
+        service: &WorkflowService,
+        workflow_run_id: &str,
+        prompt_text: &str,
+    ) -> String {
+        let mut store = service.session_store_guard().expect("session store");
+        let session_id = store
+            .create_session(
+                "workflow.image_generation".to_string(),
+                None,
+                None,
+                vec!["pytorch".to_string()],
+                vec!["stable-diffusion-xl".to_string()],
+                true,
+            )
+            .expect("create session");
+        let queued_run_id = store
+            .enqueue_run_with_id(
+                &session_id,
+                &run_request(&session_id, prompt_text),
+                workflow_run_id.to_string(),
+            )
+            .expect("enqueue run");
+        store
+            .begin_queued_run(&session_id, &queued_run_id)
+            .expect("begin run")
+            .expect("dequeued run");
+        store
+            .set_active_run_scheduler_task_state(
+                &session_id,
+                workflow_run_id,
+                active_runtime_task_graph(workflow_run_id),
+                vec![ready_runtime_task_record(workflow_run_id)],
+            )
+            .expect("set scheduler task state");
+        store
+            .set_active_run_scheduler_task_results(
+                &session_id,
+                workflow_run_id,
+                vec![prompt_task_result(workflow_run_id, prompt_text)],
+            )
+            .expect("set scheduler task results");
+        let _started = store
+            .start_active_run_scheduler_task_attempt(
+                &session_id,
+                workflow_run_id,
+                WorkflowSchedulerTaskAttemptId::new(),
+                running_runtime_task_transition(workflow_run_id),
+            )
+            .expect("start runtime task attempt");
+        session_id
+    }
+
+    fn run_request(session_id: &str, prompt_text: &str) -> WorkflowExecutionSessionRunRequest {
+        WorkflowExecutionSessionRunRequest {
+            session_id: session_id.to_string(),
+            workflow_semantic_version: "0.1.0".to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt.input".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::Value::String(prompt_text.to_string()),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "image.output".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: Some(30_000),
+            priority: None,
+        }
+    }
+
+    fn active_runtime_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {
+        WorkflowSchedulerTaskGraph {
+            schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                .expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            tasks: vec![
+                WorkflowSchedulerTask {
+                    workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                        .expect("workflow id"),
+                    workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
+                        .expect("run id"),
+                    node_id: SchedulerNodeId::parse("prompt.input").expect("node id"),
+                    task_id: SchedulerTaskId::parse("prompt.input").expect("task id"),
+                    node_type: "source-input".to_string(),
+                    execution_class: WorkflowSchedulerTaskExecutionClass::SourceInput,
+                    dependency_task_ids: Vec::new(),
+                    input_bindings: Vec::new(),
+                    schedulable_intent: None,
+                    schedulable_intent_template: None,
+                    non_runtime_task_template: None,
+                    source_input_task_template: Some(WorkflowSchedulerSourceInputTemplate::Text {
+                        port_id: "text".to_string(),
+                    }),
+                    inference_descriptor_fingerprint: None,
+                    runtime_source_context: None,
+                    diagnostics: Vec::new(),
+                },
+                WorkflowSchedulerTask {
+                    workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                        .expect("workflow id"),
+                    workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
+                        .expect("run id"),
+                    node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+                    task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
+                    node_type: "llm-inference".to_string(),
+                    execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+                    dependency_task_ids: vec![
+                        SchedulerTaskId::parse("prompt.input").expect("source task id")
+                    ],
+                    input_bindings: vec![WorkflowSchedulerTaskInputBinding {
+                        source_node_id: SchedulerNodeId::parse("prompt.input")
+                            .expect("source node id"),
+                        source_task_id: SchedulerTaskId::parse("prompt.input")
+                            .expect("source task id"),
+                        source_port_id: "text".to_string(),
+                        target_port_id: "prompt".to_string(),
+                    }],
+                    schedulable_intent: Some(task_intent_for_run(workflow_run_id)),
+                    schedulable_intent_template: None,
+                    non_runtime_task_template: None,
+                    source_input_task_template: None,
+                    inference_descriptor_fingerprint: None,
+                    runtime_source_context: Some(runtime_source_context()),
+                    diagnostics: Vec::new(),
+                },
+            ],
+        }
+    }
+
+    fn ready_runtime_task_record(workflow_run_id: &str) -> SchedulerTaskStateRecord {
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                .expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+            task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
+            state: SchedulerTaskState::Ready {
+                execution_intent: runtime_execution_intent(workflow_run_id),
+            },
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse(format!(
+                "transition.ready.{workflow_run_id}"
+            ))
+            .expect("transition id"),
+        }
+    }
+
+    fn running_runtime_task_transition(workflow_run_id: &str) -> SchedulerTaskStateTransition {
+        SchedulerTaskStateTransition {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            transition_id: SchedulerTaskStateTransitionId::parse(format!(
+                "transition.running.{workflow_run_id}"
+            ))
+            .expect("transition id"),
+            workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
+                .expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id).expect("run id"),
+            node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
+            task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
+            expected_previous_state: Some(SchedulerTaskStateKind::Ready),
+            next_state: SchedulerTaskState::Running {
+                execution_intent: runtime_execution_intent(workflow_run_id),
+            },
+        }
+    }
+
+    fn runtime_execution_intent(workflow_run_id: &str) -> SchedulerTaskExecutionIntent {
+        SchedulerTaskExecutionIntent::Runtime {
+            task_intent: task_intent_for_run(workflow_run_id),
+        }
+    }
+
+    fn prompt_task_result(workflow_run_id: &str, prompt_text: &str) -> WorkflowSchedulerTaskResult {
+        WorkflowSchedulerTaskResult {
+            schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+            workflow_id: "workflow.image_generation".to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
+            node_id: "prompt.input".to_string(),
+            task_id: "prompt.input".to_string(),
+            status: WorkflowSchedulerTaskResultStatus::Completed,
+            outputs: vec![WorkflowSchedulerTaskResultOutput {
+                port_id: "text".to_string(),
+                value: WorkflowSchedulerTaskResultValue::String(prompt_text.to_string()),
+            }],
+            diagnostics: Vec::new(),
+            terminal_metadata: None,
+        }
+    }
+
+    fn prompt_text_from_materialized_results(
+        materialized_results: &[WorkflowSchedulerTaskResult],
+    ) -> String {
+        let result = materialized_results
+            .iter()
+            .find(|result| result.task_id == "prompt.input")
+            .expect("prompt result");
+        let output = result
+            .outputs
+            .iter()
+            .find(|output| output.port_id == "text")
+            .expect("prompt output");
+        match &output.value {
+            WorkflowSchedulerTaskResultValue::String(value) => value.clone(),
+            other => panic!("unexpected prompt output value: {other:?}"),
         }
     }
 
@@ -745,14 +1362,14 @@ mod tests {
     }
 
     fn selected_runtime_handoff_for_member(
-        member: &DispatchAssignmentFixtureMember<'_>,
+        member: &DispatchAssignmentFixtureMember,
         readiness_proof: DependencyReadinessProofEnvelope,
         reservation_lease_id: pantograph_scheduler::SchedulerReservationLeaseId,
     ) -> SchedulerRuntimeHandoff {
         let intent = task_intent_for_member(member);
         let environment_ref = environment_ref();
         let workflow_run_id =
-            SchedulerWorkflowRunId::parse(member.workflow_run_id).expect("run id");
+            SchedulerWorkflowRunId::parse(&member.workflow_run_id).expect("run id");
         SchedulerRuntimeHandoff {
             contract_version: SCHEDULER_RUNTIME_HANDOFF_CONTRACT_VERSION,
             workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
@@ -795,14 +1412,16 @@ mod tests {
         }
     }
 
-    fn task_intent_for_member(
-        member: &DispatchAssignmentFixtureMember<'_>,
-    ) -> SchedulableTaskIntent {
+    fn task_intent_for_member(member: &DispatchAssignmentFixtureMember) -> SchedulableTaskIntent {
+        task_intent_for_run(&member.workflow_run_id)
+    }
+
+    fn task_intent_for_run(workflow_run_id: &str) -> SchedulableTaskIntent {
         SchedulableTaskIntent {
             contract_version: SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
             workflow_id: SchedulerWorkflowId::parse("workflow.image_generation")
                 .expect("workflow id"),
-            workflow_run_id: SchedulerWorkflowRunId::parse(member.workflow_run_id)
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
                 .expect("workflow run id"),
             node_id: SchedulerNodeId::parse("node.llm_inference").expect("node id"),
             task_id: SchedulerTaskId::parse("task.image_generation.001").expect("task id"),
@@ -820,7 +1439,7 @@ mod tests {
     }
 
     fn selected_candidate_fact_for_member(
-        member: &DispatchAssignmentFixtureMember<'_>,
+        member: &DispatchAssignmentFixtureMember,
     ) -> WorkflowRuntimeDispatchCandidateFact {
         let workflow_run_id: SchedulerWorkflowRunId =
             member.workflow_run_id.parse().expect("run id");
@@ -846,7 +1465,7 @@ mod tests {
             environment_ref: environment_ref(),
             reservations: vec![SchedulerResourceReservation {
                 reservation_lease_id: pantograph_scheduler::SchedulerReservationLeaseId::parse(
-                    member.reservation_lease_id,
+                    &member.reservation_lease_id,
                 )
                 .expect("reservation lease id"),
                 workflow_run_id: workflow_run_id.clone(),
@@ -892,11 +1511,11 @@ mod tests {
     }
 
     fn readiness_proof_for_member(
-        member: &DispatchAssignmentFixtureMember<'_>,
+        member: &DispatchAssignmentFixtureMember,
     ) -> DependencyReadinessProofEnvelope {
         let mut proof = readiness_proof();
         proof.execution_context.workflow_run_id =
-            DependencyReadinessWorkflowRunId::parse(member.workflow_run_id)
+            DependencyReadinessWorkflowRunId::parse(&member.workflow_run_id)
                 .expect("readiness workflow run id");
         proof.readiness_proof_id =
             DependencyReadinessProofId::parse(format!("readiness-proof.{}", member.assignment_id))

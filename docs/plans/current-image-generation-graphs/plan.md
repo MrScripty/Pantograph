@@ -7325,6 +7325,50 @@ assignment facts to active-run scheduler state so each member can be rehydrated
 with its own current task record and materialized inputs before any runtime-host
 batch request is built.
 
+2026-06-14 batch execution active-run member rehydration slice completed.
+Smallest useful vertical slice: join each claimed durable batch assignment to
+its own active-run scheduler state before responder fan-out, carrying the
+runtime task, running task-state record, and active materialized task results
+on `WorkflowRuntimeBranchBatchActiveRunMember`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, does not build
+single-member fallback requests, and does not carry anchor-run workflow inputs
+or runtime/device state across members. Each member is validated against its
+own session id, workflow run id, scheduler task id, scheduler attempt id, and
+attempt start timestamp before any responder fan-out.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the batch execution owner now prepares two active runs in
+separate sessions, creates durable assignments from their actual scheduler
+attempt facts, asserts active-run members retain distinct workflow-run ids and
+materialized prompt results, and fails closed before responder fan-out when
+active-run state is missing or durable scheduler attempt facts are stale.
+
+Discovered follow-up: `WorkflowSchedulerTaskLifecycleManager` currently keys
+active task lifecycle handles by scheduler task id only. That is incompatible
+with the final batch-response mutation goal when simultaneous workflow runs
+share the same scheduler task id. Do not construct scheduler
+`StartedRuntimeTaskBatchMember` values or apply batch response mutations until
+the lifecycle handle key is normalized to a run/task/attempt identity, or an
+equivalent scheduler-owned reservation-level identity, with tests proving two
+runs can complete concurrently without handle collisions.
+
+Remaining follow-up: continue option 1 step 3 by materializing typed
+runtime-host batch member requests from the active-run member projection,
+while preserving per-member inputs and still failing closed instead of falling
+back if materialized input mapping or handoff correlation is invalid. Before
+batch response mutation, complete the lifecycle-key normalization follow-up
+above.
+
 ## Standards Rule
 
 The standards constraints in
