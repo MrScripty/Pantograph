@@ -7814,6 +7814,74 @@ non-mutating readiness/threshold evaluation, persist the broker-selected claim,
 wire the worker to the broker result, then dispatch through
 `execute_claimed_batch` with responder fan-out.
 
+2026-06-14 re-plan decision: use Option 2, the scheduler-owned runtime
+dispatch batch broker/window. The broker owns grouped execution decisions over
+durable runtime dispatch assignment facts after workers have created and marked
+assignments running. The worker must not call the mutating batch claim API
+directly as an opportunistic fallback, must not dispatch one-member batches
+unless a later explicit canonical policy selects that behavior, and must not
+carry any workflow-run input, runtime instance state, model state, or physical
+device placement from one run into another. Runtime/model keep-alive remains a
+scheduler policy over reusable loaded runtime instances, not ownership by the
+workflow that first requested persistence.
+
+Option 2 execution checklist:
+1. Define the broker decision contract in the workflow-service runtime
+   dispatch assignment area. It must distinguish `ReadyToClaim`,
+   `WaitingForPeers`, and fail-closed diagnostic outcomes from durable
+   scheduler facts, without mutating assignment state during readiness
+   evaluation.
+2. Add non-mutating compatibility/threshold evaluation over running
+   assignments. The first validated slice should prove that compatible
+   cross-run assignments are discovered without claiming them, incompatible
+   assignments remain available for their own future groups, and missing or
+   stale task-attempt facts return typed diagnostics.
+3. Add the broker-owned claim step. It may call the existing mutating claim API
+   only after the broker decision is `ReadyToClaim`, and it must reject
+   one-member claims unless the broker policy explicitly permits them in a
+   later plan update.
+4. Wire the runtime-branch worker to the broker. After a worker creates and
+   marks a dispatch assignment running, it should register the responder by
+   assignment id and hand control to the broker decision. `WaitingForPeers`
+   must be a typed non-terminal outcome that leaves the assignment/event in a
+   retryable scheduler-owned state, not a fallback to single-run execution.
+5. Dispatch broker-selected claims through
+   `WorkflowRuntimeBranchBatchExecutionOwner::execute_claimed_batch`, then fan
+   out per-assignment completions through the responder registry. Focused
+   tests must prove two simultaneous compatible runtime branches complete from
+   one grouped runtime-host batch request.
+6. Remove or retire the old single runtime branch execution path only after the
+   broker-owned grouped path has equivalent terminal success, failure,
+   retry/defer, diagnostic, cleanup, and responder behavior covered by focused
+   tests.
+
+Option 2 verification plan:
+- Broker contract/unit tests for ready, waiting, incompatible, stale/missing
+  facts, active batch-claim reentry, and threshold behavior.
+- Runtime dispatch assignment repository tests proving readiness evaluation is
+  non-mutating and claim persistence is broker-owned.
+- Worker tests proving `WaitingForPeers` does not call runtime-host dispatch,
+  does not call legacy `run_workflow`, and does not complete the responder as a
+  terminal success or failure.
+- Vertical worker acceptance test proving two compatible runtime branch
+  commands are batched into one runtime-host request and fan out independent
+  completed outcomes.
+- Regression tests for unsupported one-member batch policy and for preserving
+  physical-device/runtime/model separation.
+
+Re-plan triggers for Option 2:
+- The broker cannot express a non-terminal waiting state without leaving
+  assignments/events in a recoverable durable state.
+- The worker cannot safely park a runtime branch without blocking responder
+  ownership or leaking active claims.
+- One-member batch dispatch becomes necessary to remove the old single-run
+  path before grouped batching is ready.
+- Broker policy needs physical-device memory accounting, runtime keep-alive
+  eviction, or multi-device placement decisions before the current scheduler
+  contracts can represent those facts.
+- Any implementation requires request-scoped runtime execution, compatibility
+  shims, anchor-run input carry-forward, or workflow-owned runtime instances.
+
 ## Standards Rule
 
 The standards constraints in
