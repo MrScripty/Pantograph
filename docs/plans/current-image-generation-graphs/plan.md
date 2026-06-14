@@ -6303,6 +6303,70 @@ execution next, inspect the PyTorch image-generation worker envelope and stop
 to re-plan if true multi-member diffusion batching requires Python-side
 contract or scheduler/runtime-residency changes.
 
+2026-06-13 backend batch execution re-plan decision: implement real backend
+batch execution next, with a PyTorch/Diffusers worker-envelope inspection gate
+before any source changes. This chooses the standards-aligned contract-first
+path that can make grouped workflow execution actually usable. Do not return
+to embedded runtime-host batch wiring as a usable execution path until a real
+backend batch executor exists. Do not add a Rust-side loop over
+`generate_image_from_plan`, do not execute only the anchor member, do not use
+workflow-service or embedded runtime to manufacture backend batch semantics,
+and do not enable `BackendCapabilities::image_generation_batch` for PyTorch
+until the backend method executes a true multi-member batch contract.
+
+Backend batch execution sequence:
+
+1. Inspection gate only: inspect
+   `crates/inference/src/backend/pytorch_image_generation.rs`,
+   `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+   `crates/inference/torch/worker_image_contract.py`, the focused
+   PyTorch worker contract/python tests, and the worker JSON fixtures to
+   determine whether the existing worker envelope can represent a
+   multi-member image-generation batch without preserving member state from
+   unrelated workflow runs. Record the finding in this plan before source
+   edits. If true batch execution requires a new Python/Rust envelope, stop
+   and run step 2 instead of modifying backend execution.
+2. If the inspection gate finds the current worker envelope cannot express
+   true batch execution, add a dedicated PyTorch image batch worker contract
+   first. Allowed files should be limited to
+   `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+   `crates/inference/torch/worker_image_contract.py`, focused Rust/Python
+   contract tests, worker JSON fixtures, `crates/inference/src/README.md`, and
+   this plan. The contract must preserve stable batch/member ids, member-local
+   inputs and planned execution facts, per-member success/failure diagnostics,
+   cancellation behavior, and resource-observation semantics. Do not call the
+   worker from the backend in this slice.
+3. Implement PyTorch backend batch execution against the frozen batch worker
+   contract. Allowed files should be limited to PyTorch image backend/worker
+   bridge files, focused PyTorch backend tests, capability facts, README, and
+   this plan. The backend may set `image_generation_batch: true` only in the
+   same slice that proves the batch method executes the new backend-owned
+   batch operation. It must not loop through the gateway or single planned
+   image backend method.
+4. After a real backend batch method passes verification, implement
+   `EmbeddedRuntimeHostBatchExecutionPort` against the gateway batch operation.
+   The embedded port may share pure projection and artifact-writing helpers
+   with the single-task port, but it must not delegate execution to
+   `RuntimeHostExecutionPort` or call the single gateway operation per member.
+5. Resume workflow-service batch mapping and worker grouped dispatch only
+   after the embedded batch port is backed by the real gateway/backend batch
+   operation and has focused fan-out, partial-failure, cancellation, and
+   diagnostics tests.
+
+Rejected paths:
+- Do not implement embedded runtime-host batch execution first as a usable path
+  while every backend remains unsupported; that would only move the fail-closed
+  boundary outward and would not deliver grouped execution.
+- Do not use a compatibility shim that loops over single-image gateway or
+  backend calls behind a batch-shaped API.
+- Do not change generated runtime-host contracts, workflow-service worker
+  behavior, frontend/Tauri DTOs, lockfiles, saved workflow fixtures,
+  physical-device tables, or runtime-residency tables during the PyTorch
+  worker inspection or worker-envelope contract slices.
+- Do not use sub-agents for the worker-envelope contract, generated DTOs,
+  shared gateway/backend contracts, lockfiles, saved workflow fixtures, or this
+  plan; those remain serial integration-owner work.
+
 ## Standards Rule
 
 The standards constraints in
