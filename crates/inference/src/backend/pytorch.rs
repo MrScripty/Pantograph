@@ -42,6 +42,9 @@ use crate::device_contracts::{
     DeviceResolutionDiagnosticCode, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
     RuntimeVariantCapability,
 };
+use crate::image_generation_batch::{
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
@@ -54,7 +57,7 @@ use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationResult, InferenceUsage,
     RerankRequest, RerankResponse,
 };
-use crate::{BackendHintLabel, ModelArtifactKind};
+use crate::{BackendExecutionContext, BackendHintLabel, ModelArtifactKind};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
 #[path = "pytorch_image_generation.rs"]
@@ -1016,7 +1019,7 @@ impl PyTorchBackend {
         BackendCapabilities {
             vision: false,
             image_generation: true,
-            image_generation_batch: false,
+            image_generation_batch: true,
             embeddings: false,
             reranking: false,
             gpu: true,
@@ -2728,6 +2731,14 @@ impl InferenceBackend for PyTorchBackend {
 
     fn capabilities(&self) -> BackendCapabilities {
         Self::static_capabilities()
+    }
+
+    async fn generate_image_batch_from_execution_request(
+        &self,
+        request: ImageGenerationBatchExecutionRequest,
+        context: BackendExecutionContext,
+    ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+        PyTorchBackend::generate_image_batch_from_execution_request(self, request, context).await
     }
 
     async fn start(

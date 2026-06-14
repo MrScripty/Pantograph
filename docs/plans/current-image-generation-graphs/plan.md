@@ -6574,6 +6574,53 @@ until that backend method calls a real `generate_image_batch` worker operation
 and validates batch/member response correlation without looping through
 `generate_image_from_plan` or the single-image worker operation.
 
+2026-06-14 PyTorch backend batch execution slice completed. Smallest useful
+vertical slice: wire PyTorch backend batch execution from the canonical
+`ImageGenerationBatchExecutionRequest` through a dedicated Rust worker envelope
+and Python `generate_image_batch_from_envelope` function, with focused Rust
+and Python tests. The backend now sets `image_generation_batch: true` only
+because it calls the dedicated `generate_image_batch` worker operation. The
+Python worker executes compatible batches with one Diffusers pipeline call
+using list-valued prompts and returns member-correlated results. It does not
+loop through `generate_image_from_plan`, does not call the single-image worker
+operation per member, and does not execute only the anchor member.
+
+Compatibility limits for this initial backend executor: PyTorch batch members
+must share the same model/load target, image family, pipeline class, required
+component roles, selected device, dimensions, denoising settings, step count,
+guidance scale, and one-image-per-member shape. Members may vary prompt,
+negative prompt, and seed when every member is seeded. Unsupported shapes
+return typed batch/member rejection diagnostics before worker dispatch instead
+of silently falling back to single-image execution.
+
+PyTorch backend batch execution verification:
+`cargo fmt -p inference` passed,
+`cargo fmt -p inference -- --check` passed,
+`cargo check -p inference` passed,
+`cargo check -p inference --features backend-pytorch` passed,
+`cargo test -p inference --features backend-pytorch pytorch_image_generation --lib`
+passed,
+`cargo test -p inference --features backend-pytorch pytorch_worker_image_python --lib`
+passed,
+`cargo test -p inference --features backend-pytorch generate_image_batch --lib`
+passed,
+`cargo test -p inference generate_image_batch --lib` passed, and
+`git diff --check` passed.
+
+PyTorch backend batch execution files touched:
+`crates/inference/src/backend/pytorch_image_generation.rs`,
+`crates/inference/src/backend/pytorch.rs`,
+`crates/inference/torch/worker.py`,
+`crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+`crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+`crates/inference/src/README.md`, and this plan.
+
+Next thin slice: implement `EmbeddedRuntimeHostBatchExecutionPort` against the
+gateway batch operation. The embedded port may share pure projection and
+artifact-writing helpers with the single-task port, but it must not delegate
+execution to `RuntimeHostExecutionPort` or call the single gateway operation
+per member.
+
 ## Standards Rule
 
 The standards constraints in

@@ -135,9 +135,10 @@ The PyTorch/Diffusers image worker contract now has separate single-image and
 batch image operations. `generate_image_batch` carries stable batch/member ids,
 member-local planned execution facts, per-member success/failure records,
 envelope cancellation intent, and worker resource-observation semantics. The
-contract is validation-only until backend execution is wired through the same
-explicit operation; backend capability flags must remain closed until that
-execution path exists.
+PyTorch backend advertises image batch capability only for compatible batches
+that can execute as one worker `generate_image_batch` operation with list
+prompts. Unsupported batch shapes return typed batch diagnostics instead of
+looping through single-image execution.
 
 ## Alternatives Rejected
 

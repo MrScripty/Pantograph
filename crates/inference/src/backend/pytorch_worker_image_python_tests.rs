@@ -9,7 +9,9 @@ use crate::resource_observation::{
 };
 
 use super::pytorch_worker_contract::{PyTorchWorkerFailure, PyTorchWorkerResponse};
-use super::pytorch_worker_image_contract::PyTorchGenerateImageResult;
+use super::pytorch_worker_image_contract::{
+    PyTorchGenerateImageBatchResult, PyTorchGenerateImageResult,
+};
 
 fn load_worker_module_with_image_stubs<'py>(py: Python<'py>) -> Bound<'py, PyModule> {
     let setup = CString::new(
@@ -127,7 +129,9 @@ class _Image:
 class _Pipeline:
     def __call__(self, **kwargs):
         self.last_kwargs = kwargs
-        return types.SimpleNamespace(images=[_Image()])
+        prompt = kwargs.get("prompt")
+        count = len(prompt) if isinstance(prompt, list) else 1
+        return types.SimpleNamespace(images=[_Image() for _ in range(count)])
 
 pipeline = _Pipeline()
 def load_diffusion_model(path, device=None, torch_dtype=None):
@@ -155,6 +159,72 @@ def load_diffusion_model(path, device=None, torch_dtype=None):
                 .expect("load_diffusion_model should exist"),
         )
         .expect("load_diffusion_model should attach");
+}
+
+#[test]
+fn test_python_worker_generate_image_batch_from_envelope_returns_worker_response() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+
+        let response_json: String = module
+            .call_method1(
+                "generate_image_batch_from_envelope",
+                (include_str!(
+                    "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json"
+                ),),
+            )
+            .expect("generate_image_batch_from_envelope should return JSON")
+            .extract()
+            .expect("response should be a string");
+        let response: PyTorchWorkerResponse<PyTorchGenerateImageBatchResult> =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        let PyTorchWorkerResponse::Ok(success) = response else {
+            panic!("expected generate_image_batch worker success, got {response_json}");
+        };
+        assert_eq!(success.request_id, "req-image-batch-001");
+        assert_eq!(success.result.batch_execution_id, "image-batch-001");
+        assert_eq!(success.result.members.len(), 2);
+        assert_eq!(success.result.members[0].member_id, "member-001");
+        assert_eq!(success.result.members[1].member_id, "member-002");
+        assert_eq!(
+            success.result.members[0]
+                .result
+                .as_ref()
+                .expect("first member result")
+                .images
+                .len(),
+            1
+        );
+        assert_eq!(
+            success.result.members[1]
+                .result
+                .as_ref()
+                .expect("second member result")
+                .seed_used,
+            Some(43)
+        );
+
+        let pipeline = module
+            .getattr("_diffusion_pipeline")
+            .expect("pipeline should exist");
+        let last_kwargs = pipeline
+            .getattr("last_kwargs")
+            .expect("pipeline should record kwargs");
+        let prompts = last_kwargs
+            .get_item("prompt")
+            .expect("prompt key should exist")
+            .extract::<Vec<String>>()
+            .expect("batch prompt should be a string list");
+        assert_eq!(
+            prompts,
+            vec![
+                "a compact test image".to_string(),
+                "a second compact test image".to_string()
+            ]
+        );
+    });
 }
 
 #[test]

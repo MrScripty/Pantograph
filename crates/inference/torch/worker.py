@@ -74,6 +74,7 @@ from worker_contract import (
     worker_success_response_json,
 )
 from worker_image_contract import generate_image_kwargs_from_envelope
+from worker_image_contract import generate_image_batch_kwargs_from_envelope
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pantograph.pytorch")
@@ -1494,6 +1495,237 @@ def generate_image(
         "images": encoded_images,
         "seed_used": int(seed) if seed is not None else None,
     }
+
+
+def _batch_shared_generation_value(planned_members, key):
+    values = [
+        member["planned"]["generation_kwargs"].get(key)
+        for member in planned_members
+    ]
+    first = values[0]
+    if any(value != first for value in values[1:]):
+        raise ValueError(
+            "PyTorch worker generate_image_batch requires matching "
+            f"generation_kwargs.{key} across members"
+        )
+    return first
+
+
+def _batch_shared_planned_value(planned_members, key):
+    values = [member["planned"].get(key) for member in planned_members]
+    first = values[0]
+    if any(value != first for value in values[1:]):
+        raise ValueError(
+            f"PyTorch worker generate_image_batch requires matching {key} across members"
+        )
+    return first
+
+
+def _batch_pipeline_call_kwargs(planned_members):
+    image_count = _batch_shared_generation_value(
+        planned_members, "num_images_per_prompt"
+    )
+    if image_count is None:
+        image_count = 1
+    if int(image_count) != 1:
+        raise ValueError(
+            "PyTorch worker generate_image_batch supports exactly one image per member"
+        )
+
+    denoising_scheduler = _batch_shared_generation_value(
+        planned_members, "denoising_scheduler"
+    )
+    if denoising_scheduler is not None:
+        raise ValueError(
+            "PyTorch worker image batch generation does not support explicit "
+            "denoising_scheduler changes yet"
+        )
+
+    call_kwargs = {
+        "prompt": [
+            member["planned"]["generation_kwargs"]["prompt"]
+            for member in planned_members
+        ],
+        "num_inference_steps": int(
+            _batch_shared_generation_value(
+                planned_members, "num_inference_steps"
+            )
+            or 30
+        ),
+        "num_images_per_prompt": 1,
+    }
+    negative_prompts = [
+        member["planned"]["generation_kwargs"].get("negative_prompt")
+        for member in planned_members
+    ]
+    if any(isinstance(prompt, str) and prompt.strip() for prompt in negative_prompts):
+        call_kwargs["negative_prompt"] = [
+            prompt.strip() if isinstance(prompt, str) else ""
+            for prompt in negative_prompts
+        ]
+
+    for key in ("width", "height"):
+        value = _batch_shared_generation_value(planned_members, key)
+        if value is not None:
+            call_kwargs[key] = int(value)
+
+    guidance_scale = _batch_shared_generation_value(
+        planned_members, "guidance_scale"
+    )
+    if guidance_scale is not None:
+        call_kwargs["guidance_scale"] = float(guidance_scale)
+
+    seeds = [
+        member["planned"]["generation_kwargs"].get("seed")
+        for member in planned_members
+    ]
+    if any(seed is not None for seed in seeds):
+        if any(seed is None for seed in seeds):
+            raise ValueError(
+                "PyTorch worker generate_image_batch requires all members to provide "
+                "seeds when any member is seeded"
+            )
+        call_kwargs["generator"] = [
+            torch.Generator(device="cpu").manual_seed(int(seed))
+            for seed in seeds
+        ]
+
+    return call_kwargs
+
+
+def _batch_member_metadata(planned):
+    return {
+        "artifact_load_target": planned["artifact_load_target"],
+        "family": planned["family"],
+        "pipeline_class": planned["pipeline_class"],
+        "denoising_scheduler": planned["generation_kwargs"].get("denoising_scheduler"),
+        "device": planned["device"],
+    }
+
+
+def _batch_member_error(member_id, kind, message, canonical_code):
+    return {
+        "member_id": member_id,
+        "status": "failed" if kind != "cancelled" else "cancelled",
+        "error": {
+            "kind": kind,
+            "message": str(message),
+            "canonical_code": canonical_code,
+        },
+    }
+
+
+def _failed_batch_members(planned_members, kind, message, canonical_code):
+    return [
+        _batch_member_error(
+            member["member_id"],
+            kind,
+            message,
+            canonical_code,
+        )
+        for member in planned_members
+    ]
+
+
+def generate_image_batch_from_envelope(envelope):
+    """Generate a compatible image batch from the Rust-planned worker envelope."""
+    request_id = "unknown"
+    planned_device = None
+    planned_batch = None
+    resource_observation = None
+    try:
+        decoded, request_id = decode_worker_envelope(envelope)
+        planned_batch = generate_image_batch_kwargs_from_envelope(decoded)
+        planned_members = planned_batch["members"]
+        _batch_shared_planned_value(planned_members, "local_load_path")
+        _batch_shared_planned_value(planned_members, "family")
+        _batch_shared_planned_value(planned_members, "pipeline_class")
+        planned_device = _batch_shared_planned_value(planned_members, "device")
+        _reset_resource_peak_stats_for_device(planned_device)
+        load_diffusion_model(
+            planned_members[0]["planned"]["local_load_path"], device=planned_device
+        )
+
+        call_kwargs = _batch_pipeline_call_kwargs(planned_members)
+        result = _diffusion_pipeline(**call_kwargs)
+        images = getattr(result, "images", None)
+        expected_images = len(planned_members)
+        if not images or len(images) != expected_images:
+            raise RuntimeError(
+                "Diffusion pipeline returned "
+                f"{0 if not images else len(images)} images for {expected_images} "
+                "batch members"
+            )
+
+        encoded_images = [_encode_image(image) for image in images]
+        resource_observation = _resource_observation_for_device(planned_device)
+        return worker_success_response_json(
+            request_id,
+            {
+                "batch_execution_id": planned_batch["batch_execution_id"],
+                "members": [
+                    {
+                        "member_id": member["member_id"],
+                        "status": "succeeded",
+                        "result": {
+                            "images": [encoded],
+                            "seed_used": member["planned"]["generation_kwargs"].get("seed"),
+                            "metadata": _batch_member_metadata(member["planned"]),
+                        },
+                    }
+                    for member, encoded in zip(planned_members, encoded_images)
+                ],
+            },
+            resource_observation=resource_observation,
+        )
+    except ValueError as exc:
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_generate_image_batch_request",
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if resource_observation is None:
+            resource_observation = _resource_observation_for_device(planned_device)
+        resource_observation = _resource_observation_with_memory_failure(
+            resource_observation, exc
+        )
+        if planned_batch is not None:
+            return worker_success_response_json(
+                request_id,
+                {
+                    "batch_execution_id": planned_batch["batch_execution_id"],
+                    "members": _failed_batch_members(
+                        planned_batch["members"],
+                        "generation_failed",
+                        message,
+                        "pytorch_worker_generate_image_batch_failed",
+                    ),
+                },
+                resource_observation=resource_observation,
+            )
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            message,
+            "pytorch_worker_generate_image_batch_failed",
+            resource_observation=resource_observation,
+        )
+    except Exception as exc:
+        if resource_observation is None:
+            resource_observation = _resource_observation_for_device(planned_device)
+        resource_observation = _resource_observation_with_memory_failure(
+            resource_observation, exc
+        )
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_generate_image_batch_internal",
+            resource_observation=resource_observation,
+        )
 
 
 def generate_image_from_envelope(envelope):
