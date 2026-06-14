@@ -6856,6 +6856,37 @@ batch owner can notify every registered waiter from per-member durable mutation
 outcomes. Do not enable grouped assignment claiming until fan-out has focused
 coverage and stale/missing responder diagnostics are fail-closed.
 
+2026-06-14 runtime-branch responder fan-out slice completed. Smallest useful
+vertical slice: add worker-owned assignment-key fan-out completion for
+runtime-branch responders and route the existing assignment-attached single-run
+completion through that same one-member fan-out path. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: grouped assignment claiming remains
+disabled and runtime-host batch dispatch remains disabled. Fan-out validates
+duplicate assignment completions, missing assignment responders, and changed
+registration scope with typed worker diagnostics before removing responders;
+it does not use request-scoped runtime state, carry workflow inputs between
+runs, or fall back to per-member direct execution.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_responder_registry --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: wire grouped assignment claiming only now that
+concurrent runtime-branch execution, assignment-key registration, and
+assignment-key fan-out are covered. The next slice must claim compatible
+running assignments, rebuild each member from its own durable active-run facts,
+dispatch through the injected batch dispatcher once, apply per-member durable
+task/reservation mutations, and fan out per-member outcomes. Remove temporary
+batch mapping `dead_code` allowances in the grouped integration slice if the
+production path now calls those helpers.
+
 ## Standards Rule
 
 The standards constraints in

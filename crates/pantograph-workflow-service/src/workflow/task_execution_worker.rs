@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -271,11 +271,20 @@ struct WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration {
     session_id: String,
     workflow_run_id: String,
     workflow_id: String,
+    runtime_dispatch_assignment_id: Option<WorkflowRuntimeDispatchAssignmentId>,
 }
 
 #[derive(Debug)]
 struct WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistrationFailure {
     completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
+    outcome: WorkflowTaskExecutionWorkerOutcome,
+}
+
+struct WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+    assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    session_id: String,
+    workflow_run_id: String,
+    workflow_id: String,
     outcome: WorkflowTaskExecutionWorkerOutcome,
 }
 
@@ -518,6 +527,7 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
                 session_id: command.session_id.clone(),
                 workflow_run_id: command.workflow_run_id.clone(),
                 workflow_id: command.workflow_id.clone(),
+                runtime_dispatch_assignment_id: None,
             },
         )
     }
@@ -620,8 +630,114 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
                 session_id: registration.session_id.clone(),
                 workflow_run_id: registration.workflow_run_id.clone(),
                 workflow_id: registration.workflow_id.clone(),
+                runtime_dispatch_assignment_id: Some(assignment_id.clone()),
             },
         )
+    }
+
+    fn complete_runtime_dispatch_assignments(
+        &self,
+        completions: Vec<WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion>,
+    ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+        if completions.is_empty() {
+            return Ok(());
+        }
+
+        let mut seen_assignment_ids = BTreeSet::new();
+        for completion in &completions {
+            if !seen_assignment_ids.insert(completion.assignment_id.clone()) {
+                return Err(runtime_branch_responder_failure_outcome(
+                    &completion.session_id,
+                    &completion.workflow_run_id,
+                    &completion.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderRegistrationFailed,
+                    format!(
+                        "runtime branch responder assignment completion contains duplicate dispatch assignment '{}'",
+                        completion.assignment_id.as_str()
+                    ),
+                ));
+            }
+        }
+
+        let mut responders = self.responders.lock().map_err(|_| {
+            let completion = completions
+                .first()
+                .expect("non-empty runtime branch responder completions");
+            runtime_branch_responder_failure_outcome(
+                &completion.session_id,
+                &completion.workflow_run_id,
+                &completion.workflow_id,
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                "runtime branch responder registry lock poisoned",
+            )
+        })?;
+
+        for completion in &completions {
+            let key =
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::runtime_dispatch_assignment(
+                    &completion.assignment_id,
+                );
+            let registered = responders.get(&key).ok_or_else(|| {
+                runtime_branch_responder_failure_outcome(
+                    &completion.session_id,
+                    &completion.workflow_run_id,
+                    &completion.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                    format!(
+                        "runtime branch responder is not registered for dispatch assignment '{}'",
+                        completion.assignment_id.as_str()
+                    ),
+                )
+            })?;
+            if registered.session_id != completion.session_id
+                || registered.workflow_run_id != completion.workflow_run_id
+                || registered.workflow_id != completion.workflow_id
+            {
+                return Err(runtime_branch_responder_failure_outcome(
+                    &completion.session_id,
+                    &completion.workflow_run_id,
+                    &completion.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                    format!(
+                        "runtime branch responder registration for dispatch assignment '{}' changed before completion",
+                        completion.assignment_id.as_str()
+                    ),
+                ));
+            }
+        }
+
+        let mut pending_notifications = Vec::with_capacity(completions.len());
+        for completion in completions {
+            let key =
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::runtime_dispatch_assignment(
+                    &completion.assignment_id,
+                );
+            let registered = responders.remove(&key).ok_or_else(|| {
+                runtime_branch_responder_failure_outcome(
+                    &completion.session_id,
+                    &completion.workflow_run_id,
+                    &completion.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                    format!(
+                        "runtime branch responder is not registered for dispatch assignment '{}'",
+                        completion.assignment_id.as_str()
+                    ),
+                )
+            })?;
+            pending_notifications.push((registered.completion_responder, completion.outcome));
+        }
+        drop(responders);
+
+        let mut first_error = None;
+        for (completion_responder, outcome) in pending_notifications {
+            if let Err(outcome) = completion_responder.complete(outcome) {
+                first_error.get_or_insert(outcome);
+            }
+        }
+        match first_error {
+            Some(outcome) => Err(outcome),
+            None => Ok(()),
+        }
     }
 
     #[cfg(test)]
@@ -813,8 +929,23 @@ async fn task_execution_worker_loop(
                                 &runtime_branch_responder_registry,
                                 &mut registration,
                             ).await;
-                            let _ = runtime_branch_responder_registry
-                                .complete(registration, outcome);
+                            if let Some(assignment_id) =
+                                registration.runtime_dispatch_assignment_id.clone()
+                            {
+                                let completion =
+                                    WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+                                        assignment_id,
+                                        session_id: registration.session_id,
+                                        workflow_run_id: registration.workflow_run_id,
+                                        workflow_id: registration.workflow_id,
+                                        outcome,
+                                    };
+                                let _ = runtime_branch_responder_registry
+                                    .complete_runtime_dispatch_assignments(vec![completion]);
+                            } else {
+                                let _ = runtime_branch_responder_registry
+                                    .complete(registration, outcome);
+                            }
                         });
                     }
                     Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
@@ -2415,13 +2546,91 @@ mod tests {
 
         assert_eq!(registry.active_responder_count(), 1);
         registry
-            .complete(assignment_registration, expected.clone())
-            .expect("complete attached responder");
+            .complete_runtime_dispatch_assignments(vec![
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+                    assignment_id: assignment_registration
+                        .runtime_dispatch_assignment_id
+                        .expect("attached assignment id"),
+                    session_id: command.session_id.clone(),
+                    workflow_run_id: command.workflow_run_id.clone(),
+                    workflow_id: command.workflow_id.clone(),
+                    outcome: expected.clone(),
+                },
+            ])
+            .expect("fan out attached responder");
 
         assert_eq!(registry.active_responder_count(), 0);
         assert_eq!(
             completion_rx.await.expect("attached responder outcome"),
             expected
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_responder_registry_fans_out_assignment_completions() {
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let first_command = runtime_branch_command_for_run("run.fanout.first");
+        let second_command = runtime_branch_command_for_run("run.fanout.second");
+        let first_assignment_id =
+            WorkflowRuntimeDispatchAssignmentId::parse("assignment.fanout.first")
+                .expect("first assignment id");
+        let second_assignment_id =
+            WorkflowRuntimeDispatchAssignmentId::parse("assignment.fanout.second")
+                .expect("second assignment id");
+        let (first_responder, first_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let (second_responder, second_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let first_registration = registry
+            .register_workflow_run(&first_command, first_responder)
+            .expect("register first workflow run responder");
+        let second_registration = registry
+            .register_workflow_run(&second_command, second_responder)
+            .expect("register second workflow run responder");
+        let _first_assignment_registration = registry
+            .attach_runtime_dispatch_assignment(&first_registration, &first_assignment_id)
+            .expect("attach first assignment responder");
+        let _second_assignment_registration = registry
+            .attach_runtime_dispatch_assignment(&second_registration, &second_assignment_id)
+            .expect("attach second assignment responder");
+        let first_expected = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            &first_command,
+            "first runtime branch failed after batch",
+            Vec::new(),
+        );
+        let second_expected = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            &second_command,
+            "second runtime branch failed after batch",
+            Vec::new(),
+        );
+
+        registry
+            .complete_runtime_dispatch_assignments(vec![
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+                    assignment_id: first_assignment_id,
+                    session_id: first_command.session_id.clone(),
+                    workflow_run_id: first_command.workflow_run_id.clone(),
+                    workflow_id: first_command.workflow_id.clone(),
+                    outcome: first_expected.clone(),
+                },
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+                    assignment_id: second_assignment_id,
+                    session_id: second_command.session_id.clone(),
+                    workflow_run_id: second_command.workflow_run_id.clone(),
+                    workflow_id: second_command.workflow_id.clone(),
+                    outcome: second_expected.clone(),
+                },
+            ])
+            .expect("fan out assignment completions");
+
+        assert_eq!(registry.active_responder_count(), 0);
+        assert_eq!(
+            first_completion_rx.await.expect("first fan-out outcome"),
+            first_expected
+        );
+        assert_eq!(
+            second_completion_rx.await.expect("second fan-out outcome"),
+            second_expected
         );
     }
 
