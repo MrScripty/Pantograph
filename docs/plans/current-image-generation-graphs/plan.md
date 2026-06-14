@@ -8391,6 +8391,42 @@ expiry scan/timer path with clear shutdown behavior, or re-plan if that
 lifecycle owner cannot fit inside the current task-execution worker/scheduler
 broker boundary.
 
+2026-06-14 owned batch broker wait-window expiry pump slice completed.
+Smallest useful vertical slice: add a task-execution-worker-owned expiry scan
+interval that snapshots retained runtime-dispatch assignment responders,
+re-evaluates scheduler-owned broker wait windows at or after `expires_at_ms`,
+and completes expired responders through the existing assignment-keyed registry
+with the typed `BatchBrokerWaitWindowExpired` outcome. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: the expiry scan is owned by the existing
+task-execution worker loop, stops with worker shutdown, uses the durable broker
+decision as authority, and ignores only races where another path already
+claimed or completed the assignment. It does not add detached background tasks,
+does not call the runtime host, does not claim one-member batches, does not
+fabricate responses, and does not attach workflow input, anchor-run state, or
+runtime ownership to the wait record.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the expired wait worker test now exercises the owned scan
+path directly: a retained assignment responder whose durable wait window has
+expired is completed with `BatchBrokerWaitWindowExpired`, its runtime-branch
+event is deferred, its assignment is marked failed, the responder registry is
+emptied, and no runtime-host dispatch is made.
+
+Remaining follow-up: continue the Option 3 wait-window sequence by running the
+broader runtime/session verification and migrating or repairing any stale tests
+that still assume direct runtime execution, singleton fallback, or request-owned
+runtime completion.
+
 ## Standards Rule
 
 The standards constraints in

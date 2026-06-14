@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerLifecycleComponentKind,
@@ -49,6 +50,7 @@ const TASK_EXECUTION_WORKER_CLAIM_OWNER_ID: &str = "workflow-service.task-execut
 const RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS: usize = 2;
 const RUNTIME_BRANCH_BATCH_BROKER_MAX_ASSIGNMENTS: usize = 8;
 const RUNTIME_BRANCH_BATCH_CLAIM_LEASE_MS: u64 = 1_000;
+const RUNTIME_BRANCH_BATCH_WAIT_EXPIRY_SCAN_INTERVAL_MS: u64 = 250;
 const RUNTIME_BRANCH_BATCH_CLAIM_OWNER_ID: &str =
     "workflow-service.task-execution-worker.batch-broker";
 
@@ -278,6 +280,7 @@ struct WorkflowTaskExecutionWorkerRuntimeBranchRegisteredResponder {
     session_id: String,
     workflow_run_id: String,
     workflow_id: String,
+    runtime_dispatch_assignment_id: Option<WorkflowRuntimeDispatchAssignmentId>,
     completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
 }
 
@@ -302,6 +305,14 @@ struct WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
     workflow_run_id: String,
     workflow_id: String,
     outcome: WorkflowTaskExecutionWorkerOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentRegistration {
+    assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    session_id: String,
+    workflow_run_id: String,
+    workflow_id: String,
 }
 
 enum WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
@@ -514,6 +525,7 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
             session_id: command.session_id.clone(),
             workflow_run_id: command.workflow_run_id.clone(),
             workflow_id: command.workflow_id.clone(),
+            runtime_dispatch_assignment_id: None,
             completion_responder,
         };
         let mut responders = match self.responders.lock() {
@@ -639,7 +651,7 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
                 ),
             ));
         }
-        let registered = responders.remove(&registration.key).ok_or_else(|| {
+        let mut registered = responders.remove(&registration.key).ok_or_else(|| {
             runtime_branch_responder_failure_outcome(
                 &registration.session_id,
                 &registration.workflow_run_id,
@@ -651,6 +663,7 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
                 ),
             )
         })?;
+        registered.runtime_dispatch_assignment_id = Some(assignment_id.clone());
         responders.insert(assignment_key.clone(), registered);
         Ok(
             WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration {
@@ -766,6 +779,30 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
             Some(outcome) => Err(outcome),
             None => Ok(()),
         }
+    }
+
+    fn runtime_dispatch_assignment_registrations(
+        &self,
+    ) -> Vec<WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentRegistration> {
+        let Ok(responders) = self.responders.lock() else {
+            return Vec::new();
+        };
+        responders
+            .values()
+            .filter_map(|registered| {
+                registered
+                    .runtime_dispatch_assignment_id
+                    .as_ref()
+                    .map(|assignment_id| {
+                        WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentRegistration {
+                            assignment_id: assignment_id.clone(),
+                            session_id: registered.session_id.clone(),
+                            workflow_run_id: registered.workflow_run_id.clone(),
+                            workflow_id: registered.workflow_id.clone(),
+                        }
+                    })
+            })
+            .collect()
     }
 
     #[cfg(test)]
@@ -912,6 +949,10 @@ async fn task_execution_worker_loop(
     let mut runtime_branch_tasks = tokio::task::JoinSet::new();
     let runtime_branch_responder_registry =
         WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+    let mut wait_expiry_interval = tokio::time::interval(Duration::from_millis(
+        RUNTIME_BRANCH_BATCH_WAIT_EXPIRY_SCAN_INTERVAL_MS,
+    ));
+    wait_expiry_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut accepting_commands = true;
 
     loop {
@@ -924,6 +965,13 @@ async fn task_execution_worker_loop(
                 if changed.is_err() || *shutdown_rx.borrow() {
                     accepting_commands = false;
                 }
+            }
+            _ = wait_expiry_interval.tick(), if accepting_commands => {
+                expire_due_runtime_branch_batch_wait_windows_once(
+                    &runtime_branch_environment,
+                    &runtime_branch_responder_registry,
+                    unix_timestamp_ms(),
+                );
             }
             maybe_command = command_rx.recv(), if accepting_commands => {
                 match maybe_command {
@@ -993,6 +1041,53 @@ async fn task_execution_worker_loop(
         WorkflowSchedulerLifecycleComponentKind::TaskExecutionWorker,
         WorkflowSchedulerLifecycleComponentState::Shutdown,
     );
+}
+
+fn expire_due_runtime_branch_batch_wait_windows_once(
+    environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
+    runtime_branch_responder_registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
+    now_ms: u64,
+) {
+    let service = environment.service();
+    for registration in
+        runtime_branch_responder_registry.runtime_dispatch_assignment_registrations()
+    {
+        let decision = match evaluate_runtime_branch_batch_broker(
+            service.as_ref(),
+            &registration.assignment_id,
+            now_ms,
+        ) {
+            Ok(decision) => decision,
+            Err(_diagnostic) => continue,
+        };
+        let WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitWindowExpired {
+            anchor_assignment,
+            expiry_diagnostic,
+        } = decision
+        else {
+            continue;
+        };
+        let outcome = expire_runtime_branch_batch_broker_wait_window_for_assignment(
+            service.as_ref(),
+            &registration.session_id,
+            &registration.workflow_run_id,
+            &registration.workflow_id,
+            &anchor_assignment.runtime_branch_event_id,
+            &anchor_assignment.runtime_branch_claim,
+            &anchor_assignment.assignment_id,
+            expiry_diagnostic,
+            now_ms,
+        );
+        let _ = runtime_branch_responder_registry.complete_runtime_dispatch_assignments(vec![
+            WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+                assignment_id: anchor_assignment.assignment_id,
+                session_id: registration.session_id,
+                workflow_run_id: registration.workflow_run_id,
+                workflow_id: registration.workflow_id,
+                outcome,
+            },
+        ]);
+    }
 }
 
 async fn claim_and_execute_runtime_branch_event(
@@ -1385,6 +1480,30 @@ fn expire_runtime_branch_batch_broker_wait_window_at(
     expiry_diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
     deferred_at_ms: u64,
 ) -> WorkflowTaskExecutionWorkerOutcome {
+    expire_runtime_branch_batch_broker_wait_window_for_assignment(
+        service,
+        &command.session_id,
+        &command.workflow_run_id,
+        &command.workflow_id,
+        event_id,
+        claim,
+        assignment_id,
+        expiry_diagnostic,
+        deferred_at_ms,
+    )
+}
+
+fn expire_runtime_branch_batch_broker_wait_window_for_assignment(
+    service: &WorkflowService,
+    session_id: &str,
+    workflow_run_id: &str,
+    _workflow_id: &str,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+    expiry_diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
+    deferred_at_ms: u64,
+) -> WorkflowTaskExecutionWorkerOutcome {
     let mut diagnostics = vec![runtime_branch_batch_broker_wait_expiry_diagnostic(
         expiry_diagnostic,
     )];
@@ -1392,10 +1511,14 @@ fn expire_runtime_branch_batch_broker_wait_window_at(
         mark_runtime_branch_batch_broker_wait_window_expired(service, assignment_id, deferred_at_ms)
     {
         diagnostics.push(diagnostic);
-        return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-            command,
-            "runtime branch batch broker wait-window expiry persistence failed",
-            diagnostics,
+        return WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+            WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                session_id: session_id.to_string(),
+                workflow_run_id: workflow_run_id.to_string(),
+                error_message: "runtime branch batch broker wait-window expiry persistence failed"
+                    .to_string(),
+                diagnostics,
+            },
         );
     }
     match defer_claimed_runtime_branch_task_event(
@@ -1405,18 +1528,27 @@ fn expire_runtime_branch_batch_broker_wait_window_at(
         deferred_at_ms,
         deferred_at_ms.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS),
     ) {
-        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
-            command,
-            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::BatchBrokerWaitWindowExpired,
-            Vec::new(),
-            diagnostics,
+        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(
+            WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
+                session_id: session_id.to_string(),
+                workflow_run_id: workflow_run_id.to_string(),
+                reason:
+                    WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::BatchBrokerWaitWindowExpired,
+                deferred_task_ids: Vec::new(),
+                diagnostics,
+            },
         ),
         Err(diagnostic) => {
             diagnostics.push(diagnostic);
-            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch task event defer persistence failed after batch broker wait expiry",
-                diagnostics,
+            WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                    session_id: session_id.to_string(),
+                    workflow_run_id: workflow_run_id.to_string(),
+                    error_message:
+                        "runtime branch task event defer persistence failed after batch broker wait expiry"
+                            .to_string(),
+                    diagnostics,
+                },
             )
         }
     }
@@ -2736,62 +2868,11 @@ mod tests {
             .as_ref()
             .expect("wait window")
             .clone();
-        let expired_decision = evaluate_runtime_branch_batch_broker(
-            service.as_ref(),
-            &waiting_assignment.assignment_id,
-            wait_window.expires_at_ms,
-        )
-        .expect("expired broker decision");
-        let WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitWindowExpired {
-            anchor_assignment,
-            expiry_diagnostic,
-        } = expired_decision
-        else {
-            panic!("expected expired wait-window decision");
-        };
-        let claim = service
-            .runtime_branch_task_event_repository
-            .lock()
-            .expect("runtime branch task event repository")
-            .get(&event_id)
-            .expect("runtime branch task event")
-            .claim
-            .expect("runtime branch claim");
-
-        let outcome = expire_runtime_branch_batch_broker_wait_window_at(
-            &command,
-            service.as_ref(),
-            &event_id,
-            &claim,
-            &anchor_assignment.assignment_id,
-            expiry_diagnostic,
+        expire_due_runtime_branch_batch_wait_windows_once(
+            &environment,
+            &registry,
             wait_window.expires_at_ms,
         );
-        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(deferred) = &outcome else {
-            panic!("expected runtime branch deferred outcome");
-        };
-        assert_eq!(
-            deferred.reason,
-            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::BatchBrokerWaitWindowExpired
-        );
-        assert!(
-            deferred.diagnostics[0]
-                .message
-                .contains("batch broker wait expiry"),
-            "unexpected diagnostic: {:?}",
-            deferred.diagnostics
-        );
-        registry
-            .complete_runtime_dispatch_assignments(vec![
-                WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
-                    assignment_id: anchor_assignment.assignment_id.clone(),
-                    session_id: command.session_id.clone(),
-                    workflow_run_id: command.workflow_run_id.clone(),
-                    workflow_id: command.workflow_id.clone(),
-                    outcome,
-                },
-            ])
-            .expect("complete expired wait responder");
         let completed = tokio::time::timeout(Duration::from_secs(1), &mut completion_rx)
             .await
             .expect("expired wait completion")
@@ -2808,7 +2889,7 @@ mod tests {
             WorkflowRuntimeBranchTaskEventState::Deferred
         );
         assert_eq!(
-            runtime_dispatch_assignment_by_id(service.as_ref(), &anchor_assignment.assignment_id)
+            runtime_dispatch_assignment_by_id(service.as_ref(), &waiting_assignment.assignment_id)
                 .state,
             WorkflowRuntimeDispatchAssignmentState::Failed
         );
