@@ -412,6 +412,12 @@ async fn run_image_request(
   or `ImageGenerationPlanningInput` built from the request, Pumas package
   facts, and the scheduler-owned backend/runtime/device decision. Streaming
   progress is not yet part of the facade.
+- Image-generation batch execution uses `ImageGenerationBatchExecutionRequest`
+  and related response/member DTOs to preserve stable batch/member correlation.
+  A batch member owns both the original image request and planned execution
+  facts, and validation rejects correlation drift before any backend call. The
+  contract is not a fallback loop over single-image generation; backends must
+  explicitly support true batch execution before gateway dispatch can use it.
 - Image-generation request and worker-envelope sampling intent uses
   `denoising_scheduler`. The older overloaded `scheduler` field name is not a
   request compatibility alias; source package facts may still use factual

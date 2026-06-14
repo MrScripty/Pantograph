@@ -6209,13 +6209,18 @@ runtime-host calls.
 
 Option 1 gateway-batch execution sequence:
 
-1. Add inference-crate image-generation batch DTOs and validation tests. The
-   contract must use owned member DTOs, stable member ids, member-specific
-   inputs/planning facts, bounded diagnostics, and explicit batch/member
-   terminal states. Do not use borrowed `ImageGenerationPlanningInput` as a
-   persisted/shared DTO, do not conflate one member's image count with multiple
-   workflow/task members, and do not change generated runtime-host contracts in
-   this slice.
+1. Completed 2026-06-13: add inference-crate image-generation batch DTOs and
+   validation tests. The new `image_generation_batch` module defines owned
+   `ImageGenerationBatchExecutionRequest` / response/member DTOs with stable
+   batch and member ids, original request plus planned execution facts per
+   member, bounded diagnostics, and explicit batch/member states. Validation
+   rejects duplicate member ids, unknown anchors, request/plan correlation
+   drift, invalid terminal member results, missing terminal diagnostics, and
+   inconsistent batch terminal states. This slice did not use borrowed
+   `ImageGenerationPlanningInput` as a shared DTO, did not conflate one
+   member's image count with multiple workflow/task members, did not change
+   generated runtime-host contracts, and did not add any loop-based fallback
+   execution path.
 2. Add a gateway operation that validates and plans every batch member before
    backend execution, preserves member correlation, and returns typed
    diagnostics when any member cannot be planned. The gateway must fail closed
@@ -6233,14 +6238,29 @@ Option 1 gateway-batch execution sequence:
    after the embedded batch port is backed by the canonical gateway batch
    operation.
 
-Next thin slice: start sequence step 1 in the inference crate. Allowed files
-must be identified after inspecting `crates/inference/src/gateway.rs`,
-`crates/inference/src/backend/mod.rs`, existing image-generation planner
-contracts, and gateway tests. Keep the slice contract/test focused; stop and
-re-plan if the batch DTO requires changing scheduler DTOs, generated
-runtime-host contracts, workflow-service worker code, frontend/Tauri DTOs,
-lockfiles, saved workflow fixtures, physical-device tables, or
-runtime-residency tables.
+Step 1 verification:
+`cargo test -p inference image_generation_batch --lib` passed,
+`cargo check -p inference` passed, and
+`cargo fmt -p inference -- --check` passed.
+
+Step 1 files touched:
+`crates/inference/src/image_generation_batch.rs`,
+`crates/inference/src/image_generation_batch_tests.rs`,
+`crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+plan.
+
+Next thin slice: start sequence step 2 in the inference crate by adding a
+gateway batch operation that accepts the new batch contract, validates every
+member, preserves batch/member correlation, and fails closed with typed
+diagnostics when planning or backend batch capability is unavailable. Allowed
+files should be limited to `crates/inference/src/gateway.rs`, focused gateway
+tests, the batch contract only if step-2 validation needs a small additive
+diagnostic/state fix, `crates/inference/src/README.md`, and this plan. Do not
+change backend trait execution, generated runtime-host contracts,
+workflow-service worker code, frontend/Tauri DTOs, lockfiles, saved workflow
+fixtures, physical-device tables, or runtime-residency tables in the gateway
+operation slice. Stop and re-plan if gateway operation support requires a
+backend trait method or worker envelope change in the same slice.
 
 ## Standards Rule
 

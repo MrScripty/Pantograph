@@ -34,6 +34,7 @@ pub mod embedding_runtime;
 pub mod execution_evidence;
 pub mod execution_telemetry;
 pub mod gateway;
+pub mod image_generation_batch;
 mod image_generation_family_adapters;
 mod image_generation_family_rules;
 pub mod image_generation_planner;
@@ -114,6 +115,15 @@ pub use execution_telemetry::{
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
     InferenceStartRequest, SharedGateway,
+};
+pub use image_generation_batch::{
+    ImageGenerationBatchContractError, ImageGenerationBatchDiagnostic,
+    ImageGenerationBatchDiagnosticCode, ImageGenerationBatchDiagnosticSeverity,
+    ImageGenerationBatchExecutionMemberRequest, ImageGenerationBatchExecutionMemberResponse,
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+    ImageGenerationBatchExecutionState, ImageGenerationBatchMemberExecutionState,
+    IMAGE_GENERATION_BATCH_ID_MAX_LEN, IMAGE_GENERATION_BATCH_MAX_DIAGNOSTICS,
+    IMAGE_GENERATION_BATCH_MAX_MEMBERS, IMAGE_GENERATION_BATCH_MEMBER_ID_MAX_LEN,
 };
 pub use image_generation_planner::{
     plan_image_generation_execution, DenoisingSchedulerOptionId, DenoisingSchedulerOptionIdError,
