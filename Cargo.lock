@@ -7575,6 +7575,7 @@ dependencies = [
  "async-trait",
  "blake3",
  "chrono",
+ "futures-util",
  "node-engine",
  "pantograph-dependency-environment-service",
  "pantograph-dependency-planning",

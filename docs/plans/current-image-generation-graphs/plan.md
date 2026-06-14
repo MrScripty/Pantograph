@@ -8652,6 +8652,54 @@ completion; rewrite the shutdown test at the grouped batch owner/worker level
 if it must observe cancellation; add dedicated grouped batch diagnostics parity
 coverage for scheduler-attempt terminal diagnostics if required by consumers.
 
+2026-06-14 bootstrap redispatch grouped recovery slice completed. Smallest
+useful vertical slice: let bootstrap recovery submit runtime resume requests
+concurrently through the existing task-execution runtime owner so compatible
+recovered runtime branches can satisfy the scheduler-owned batch broker, then
+migrate
+`workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task`
+to two compatible ready recovered runs and the grouped runtime-host batch
+port. Allowed files touched: `crates/pantograph-workflow-service/Cargo.toml`,
+`Cargo.lock`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: bootstrap recovery now preserves the
+broker minimum by polling recovered runtime resumes concurrently instead of
+serially awaiting a singleton branch until wait-window expiry. The slice uses
+the existing task-execution runtime owner and worker broker path, does not
+reduce the batch minimum, does not restore single-request runtime-host
+dispatch, does not fabricate peer responses, and does not add detached
+background work. The direct service recovery gate still rejects runtime
+redispatch when the composition-root runtime owner is absent.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification:
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`
+now fails with 35 passed and 3 failed, improving from the prior 34 passed and
+4 failed. Remaining stale failures:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`,
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`,
+and `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
+Focused test update: the redispatch bootstrap recovery test now constructs two
+ready recovered runtime branches, verifies the direct service entrypoint still
+fails closed without the runtime owner, asserts two redispatched scheduler
+attempt lifecycle events, and asserts one grouped runtime-host batch request
+with two members.
+
+Remaining follow-up: migrate dependency-readiness and progress-loop bootstrap
+recovery tests to compatible peer recovery or split their recovery-plan
+assertions from runtime-host completion; rewrite the shutdown test at the
+grouped batch owner/worker level if it must observe runtime-host cancellation.
+
 ## Standards Rule
 
 The standards constraints in

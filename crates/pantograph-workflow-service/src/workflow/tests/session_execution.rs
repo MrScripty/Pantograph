@@ -1674,7 +1674,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
@@ -1687,7 +1687,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
         .with_runtime_dispatch_candidate_provider(Arc::new(
             SingleCanonicalRuntimeDispatchCandidateProvider,
         ))
-        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port);
     let runtime = WorkflowSessionExecutionRuntime::new(service, Arc::clone(&host));
     let service = runtime.service();
@@ -1705,7 +1705,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
         .scheduler_inference_task_projections()
         .expect("scheduler inference task projections");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -1715,15 +1715,27 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
             },
         )
         .await
-        .expect("create session");
-    let session_id = created.session_id.clone();
-    let request = WorkflowExecutionSessionRunRequest {
-        session_id: session_id.clone(),
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create second session");
+    let first_session_id = first_created.session_id.clone();
+    let second_session_id = second_created.session_id.clone();
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
         workflow_semantic_version: workflow_semantic_version.to_string(),
         inputs: vec![WorkflowPortBinding {
             node_id: "prompt".to_string(),
             port_id: "text".to_string(),
-            value: serde_json::json!("paint a red cube"),
+            value: serde_json::json!(prompt),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
             node_id: "infer".to_string(),
@@ -1733,30 +1745,8 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
         timeout_ms: None,
         priority: None,
     };
-    let workflow_run_id = {
-        let mut store = service.session_store_guard().expect("session store");
-        let workflow_run_id = store
-            .enqueue_run(&session_id, &request)
-            .expect("enqueue run");
-        store
-            .begin_queued_run(&session_id, &workflow_run_id)
-            .expect("begin run")
-            .expect("dequeued run");
-        workflow_run_id
-    };
-    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
-        &pantograph_runtime_attribution::WorkflowId::try_from(workflow_id.to_string())
-            .expect("workflow id"),
-        &pantograph_runtime_attribution::WorkflowRunId::try_from(workflow_run_id.clone())
-            .expect("workflow run id"),
-        &graph,
-        &projections,
-    )
-    .expect("scheduler task graph");
-    let initial_records = service
-        .scheduler_task_orchestrator
-        .initial_task_state_records(&task_graph)
-        .expect("initial task state");
+    let first_request = run_request(first_session_id.clone(), "paint a red cube");
+    let second_request = run_request(second_session_id.clone(), "paint a blue cube");
     let dependency_request = runtime_dependency_environment_request(&version);
     dependency_readiness_provider
         .insert_snapshot(
@@ -1768,60 +1758,91 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
             .expect("dependency readiness snapshot should validate"),
         )
         .expect("store dependency readiness snapshot");
-    {
-        let mut store = service.session_store_guard().expect("session store");
-        store
-            .set_active_run_scheduler_task_state(
-                &session_id,
-                &workflow_run_id,
-                task_graph,
-                initial_records,
+
+    let prepare_ready_recovery_run =
+        |session_id: &str, request: &WorkflowExecutionSessionRunRequest| {
+            let workflow_run_id = {
+                let mut store = service.session_store_guard().expect("session store");
+                let workflow_run_id = store.enqueue_run(session_id, request).expect("enqueue run");
+                store
+                    .begin_queued_run(session_id, &workflow_run_id)
+                    .expect("begin run")
+                    .expect("dequeued run");
+                workflow_run_id
+            };
+            let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+                &pantograph_runtime_attribution::WorkflowId::try_from(workflow_id.to_string())
+                    .expect("workflow id"),
+                &pantograph_runtime_attribution::WorkflowRunId::try_from(workflow_run_id.clone())
+                    .expect("workflow run id"),
+                &graph,
+                &projections,
             )
-            .expect("store active task state");
-        service
-            .scheduler_task_orchestrator
-            .materialize_external_inputs_for_active_run(
-                &mut store,
-                &session_id,
-                &workflow_run_id,
-                &request.inputs,
-            )
-            .expect("materialize source input");
-        service
-            .scheduler_task_orchestrator
-            .advance_awaiting_runtime_task_inputs(
-                &mut store,
-                &session_id,
-                &workflow_run_id,
-                "infer",
-            )
-            .expect("advance runtime task inputs")
-            .expect("runtime task should wait for readiness");
-        let lifecycle =
-            WorkflowDependencyReadinessLifecycle::new(service.scheduler_task_orchestrator.clone());
-        let ready_record = lifecycle
-            .resolve_and_admit_active_runtime_task(
-                &mut store,
-                service.dependency_readiness_provider.as_ref(),
-                &session_id,
-                &workflow_run_id,
-                "infer",
-                DependencyReadinessPolicy::CheckOnly,
-            )
-            .expect("admit ready runtime task");
-        assert_eq!(ready_record.state.kind(), SchedulerTaskStateKind::Ready);
-    }
+            .expect("scheduler task graph");
+            let initial_records = service
+                .scheduler_task_orchestrator
+                .initial_task_state_records(&task_graph)
+                .expect("initial task state");
+
+            let mut store = service.session_store_guard().expect("session store");
+            store
+                .set_active_run_scheduler_task_state(
+                    session_id,
+                    &workflow_run_id,
+                    task_graph,
+                    initial_records,
+                )
+                .expect("store active task state");
+            service
+                .scheduler_task_orchestrator
+                .materialize_external_inputs_for_active_run(
+                    &mut store,
+                    session_id,
+                    &workflow_run_id,
+                    &request.inputs,
+                )
+                .expect("materialize source input");
+            service
+                .scheduler_task_orchestrator
+                .advance_awaiting_runtime_task_inputs(
+                    &mut store,
+                    session_id,
+                    &workflow_run_id,
+                    "infer",
+                )
+                .expect("advance runtime task inputs")
+                .expect("runtime task should wait for readiness");
+            let lifecycle = WorkflowDependencyReadinessLifecycle::new(
+                service.scheduler_task_orchestrator.clone(),
+            );
+            let ready_record = lifecycle
+                .resolve_and_admit_active_runtime_task(
+                    &mut store,
+                    service.dependency_readiness_provider.as_ref(),
+                    session_id,
+                    &workflow_run_id,
+                    "infer",
+                    DependencyReadinessPolicy::CheckOnly,
+                )
+                .expect("admit ready runtime task");
+            assert_eq!(ready_record.state.kind(), SchedulerTaskStateKind::Ready);
+            workflow_run_id
+        };
+    let first_workflow_run_id = prepare_ready_recovery_run(&first_session_id, &first_request);
+    let second_workflow_run_id = prepare_ready_recovery_run(&second_session_id, &second_request);
 
     let recovery_plan = service
         .workflow_execution_session_bootstrap_recovery_plan()
         .expect("recovery plan before ready redispatch");
     assert_eq!(recovery_plan.blocking_decision_count, 0);
-    assert_eq!(recovery_plan.decisions.len(), 1);
-    assert_eq!(
-        recovery_plan.decisions[0].decision_kind,
-        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
-    );
-    assert!(recovery_plan.decisions[0].runtime_dispatch_recovery_state_available);
+    assert_eq!(recovery_plan.decisions.len(), 2);
+    for decision in &recovery_plan.decisions {
+        assert_eq!(
+            decision.decision_kind,
+            WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
+        );
+        assert!(decision.runtime_dispatch_recovery_state_available);
+    }
 
     let direct_recovery_error = service
         .recover_workflow_execution_session_bootstrap(host.as_ref())
@@ -1834,24 +1855,33 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
         "unexpected direct recovery error: {}",
         direct_recovery_error.message()
     );
-    assert_eq!(runtime_host_port.requests().len(), 0);
+    assert_eq!(runtime_host_batch_port.requests().len(), 0);
 
     let recovery_result = runtime
         .recover_workflow_execution_session_bootstrap()
         .await
         .expect("bootstrap recovery should redispatch ready runtime task");
 
-    assert_eq!(
-        recovery_result.plan.decisions[0].decision_kind,
-        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
-    );
-    assert_eq!(recovery_result.resumed_runs.len(), 1);
-    assert_eq!(
-        recovery_result.resumed_runs[0].workflow_run_id,
-        workflow_run_id
-    );
+    assert!(recovery_result.plan.decisions.iter().all(|decision| {
+        decision.decision_kind
+            == WorkflowExecutionSessionBootstrapRecoveryDecisionKind::RedispatchReadyRuntime
+    }));
+    let mut resumed_run_ids = recovery_result
+        .resumed_runs
+        .iter()
+        .map(|run| run.workflow_run_id.clone())
+        .collect::<Vec<_>>();
+    resumed_run_ids.sort();
+    let mut expected_run_ids = vec![
+        first_workflow_run_id.clone(),
+        second_workflow_run_id.clone(),
+    ];
+    expected_run_ids.sort();
+    assert_eq!(resumed_run_ids, expected_run_ids);
     assert!(recovery_result.final_plan.decisions.is_empty());
-    assert_eq!(runtime_host_port.requests().len(), 1);
+    let recorded_batches = runtime_host_batch_port.requests();
+    assert_eq!(recorded_batches.len(), 1);
+    assert_eq!(recorded_batches[0].members.len(), 2);
     let diagnostic_events = {
         let ledger = service
             .diagnostics_ledger_guard()
@@ -1861,28 +1891,31 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
         )
         .expect("diagnostic events")
     };
-    let redispatched_attempt_event = diagnostic_events
+    let redispatched_attempt_events = diagnostic_events
         .iter()
-        .find(|event| {
+        .filter(|event| {
             event.event_kind
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
                 && event.node_id.as_deref() == Some("infer")
                 && event.payload_json.contains("\"transition\":\"redispatched\"")
         })
-        .expect("runtime scheduler attempt redispatched event");
-    assert_eq!(
-        redispatched_attempt_event.source_component,
-        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
-    );
-    assert!(redispatched_attempt_event
-        .payload_json
-        .contains("\"execution_class\":\"runtime\""));
-    assert!(redispatched_attempt_event
-        .payload_json
-        .contains("\"scheduler_attempt_id\":\"scheduler-task-attempt."));
-    assert!(redispatched_attempt_event
-        .payload_json
-        .contains("\"started_at_ms\":"));
+        .collect::<Vec<_>>();
+    assert_eq!(redispatched_attempt_events.len(), 2);
+    for redispatched_attempt_event in redispatched_attempt_events {
+        assert_eq!(
+            redispatched_attempt_event.source_component,
+            pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+        );
+        assert!(redispatched_attempt_event
+            .payload_json
+            .contains("\"execution_class\":\"runtime\""));
+        assert!(redispatched_attempt_event
+            .payload_json
+            .contains("\"scheduler_attempt_id\":\"scheduler-task-attempt."));
+        assert!(redispatched_attempt_event
+            .payload_json
+            .contains("\"started_at_ms\":"));
+    }
     assert!(
         !diagnostic_events.iter().any(|event| {
             event.event_kind

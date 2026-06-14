@@ -17,6 +17,7 @@ use crate::technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimateKind,
     WorkflowTechnicalFitResourceEstimateState,
 };
+use futures_util::future::try_join_all;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
@@ -676,18 +677,20 @@ impl WorkflowService {
                     .to_string(),
             ));
         }
-        let mut resumed_runs = Vec::new();
-        for runtime_resume in runtime_resume_requests {
-            resumed_runs.push(
+        let resumed_runs = if let Some(task_execution_runtime_owner) = task_execution_runtime_owner
+        {
+            try_join_all(runtime_resume_requests.into_iter().map(|runtime_resume| {
                 self.resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition(
                     host,
                     runtime_resume.request,
                     runtime_resume.attempt_start_transition,
-                    task_execution_runtime_owner,
+                    Some(task_execution_runtime_owner),
                 )
-                .await?,
-            );
-        }
+            }))
+            .await?
+        } else {
+            Vec::new()
+        };
 
         let final_plan = self.workflow_execution_session_bootstrap_recovery_plan()?;
         Ok(WorkflowExecutionSessionBootstrapRecoveryResult {

@@ -21,6 +21,7 @@ tokio.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 parking_lot.workspace = true
+futures-util.workspace = true
 sysinfo = "0.32"
 
 # Shared framework/domain crates
