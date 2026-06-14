@@ -6928,6 +6928,58 @@ helpers. That would violate the no-fallback/no-legacy rule by bypassing
 canonical run finalization or forcing per-member fallback through the old
 single-run completion path after a batch dispatch.
 
+2026-06-14 grouped batch finalization re-plan decision: use option 1,
+a backend-owned runtime-branch batch execution/finalization owner in
+workflow-service. This owner must sit behind the task-execution worker and
+accept durable claimed assignment groups; it must not move scheduling policy
+to frontend/Tauri, request handlers, runtime-host ports, or batch DTO adapters.
+It must rehydrate every member from that member's own active-run/session facts,
+dispatch through the injected runtime-host batch dispatcher once, apply
+per-member task and reservation mutations, finalize each workflow run through
+the canonical workflow-service run-finalization behavior, and fan out typed
+per-member outcomes to assignment-key responders. This preserves backend-owned
+data as the source of truth, keeps runtime scheduling decisions in the
+composition-root/backend worker boundary, and avoids fallback through
+single-member runtime execution.
+
+Option 1 implementation sequence:
+1. Define the workflow-service runtime-branch batch execution/finalization
+   owner contract and focused tests. The contract must accept a durable
+   `WorkflowRuntimeDispatchAssignmentBatchClaimOutcome`, an assignment-key
+   responder fan-out boundary, and the already-selected batch dispatcher
+   dependency. It must return typed per-member completion outcomes and fail
+   closed when any member lacks durable facts needed for finalization.
+2. Extract or wrap the existing single-runtime run-finalization behavior behind
+   a reusable workflow-service-owned finalization helper without changing the
+   public runtime path. This helper must cover terminal diagnostics,
+   reservation cleanup, active-run finish, output projection, workflow terminal
+   diagnostics, and artifact diagnostics. Keep the helper backend-only and
+   tested with single-member behavior before grouping is enabled.
+3. Implement the batch execution owner using durable member rehydration:
+   rebuild each `StartedRuntimeTaskBatchMember` from that member's dispatch
+   assignment, active-run scheduler state, selected dispatch fact, and current
+   materialized inputs. Do not read inputs from the anchor run and do not carry
+   workflow input, output target, runtime, model, or device state across
+   members.
+4. Dispatch exactly one runtime-host batch request through the injected batch
+   dispatcher, map each response back to its assignment/member, apply
+   per-member task/reservation mutation, finalize each affected workflow run,
+   mark dispatch assignments terminal, mark runtime-branch task events
+   terminal or deferred as appropriate, and fan out responder outcomes.
+5. Enable grouped assignment claiming in the worker only after the owner has
+   boundary tests for successful multi-member completion, retry/defer member
+   handling, missing responder diagnostics, incompatible member rejection,
+   stale durable facts, and no single-dispatch fallback. Remove the temporary
+   batch mapping `dead_code` allowances once production grouped execution calls
+   those helpers.
+
+Re-plan triggers for option 1: stop if finalization cannot be reused without
+duplicating private session-runner logic in the worker, if grouped execution
+requires request-scoped runtime state, if any member needs anchor-run inputs,
+if runtime/model/device residency must be hard-linked to workflow ownership,
+or if grouped claiming requires generated DTO, saved workflow fixture,
+lockfile, frontend/Tauri, or runtime-host contract changes in the same slice.
+
 ## Standards Rule
 
 The standards constraints in
