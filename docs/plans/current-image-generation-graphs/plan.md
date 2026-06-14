@@ -7950,6 +7950,41 @@ attach responders by assignment id, and return a typed non-terminal
 `WaitingForPeers` outcome without runtime-host dispatch or legacy single-run
 execution.
 
+2026-06-14 re-plan trigger: worker batch responder completion payload. The
+runtime-branch worker can attach responders by durable dispatch assignment id
+and can leave a waiting branch registered for later fan-out, but the current
+batch execution owner returns only per-member execution states and diagnostics.
+Successful runtime-branch responders require a `WorkflowRunResponse` per
+workflow run. Since `execute_claimed_batch` finalizes each run internally but
+does not return the finalized response payload, the worker cannot complete
+successful batched responders without either inventing a response, rereading an
+unstated side channel, or falling back to single-run execution. That would
+violate the no-fallback/no-legacy rule.
+
+Standards-aligned options:
+- Option 1: extend the batch finalization outcome to carry the canonical
+  `WorkflowRunResponse` for completed members, while failed/cancelled/deferred
+  members keep typed diagnostics and states. Choose this when the worker should
+  remain the responder owner and the batch owner should remain the canonical
+  run finalization owner.
+- Option 2: extend the batch responder fan-out trait so the batch owner sends
+  worker responder completions directly. Choose this only if responder
+  ownership intentionally moves into the batch owner; otherwise it couples
+  finalization to worker transport concerns.
+- Option 3: persist finalized run responses in a durable run-completion store
+  and have the worker read them after batch finalization. Choose this if
+  restart/replay semantics require durable completion replay before worker
+  fan-out.
+- Option 4: defer worker integration until the full scheduler broker/runtime
+  completion ledger exists. Choose this if response durability and responder
+  ownership need to be solved together with restart semantics.
+
+Recommended next direction: Option 1 as the next thin slice. It preserves the
+existing ownership split: batch finalization owns canonical run completion and
+the worker owns responder transport. It also avoids adding a side channel or
+direct responder coupling while giving the worker the exact payload it needs to
+fan out successful grouped runtime branches.
+
 ## Standards Rule
 
 The standards constraints in
